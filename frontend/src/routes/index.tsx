@@ -2,7 +2,12 @@ import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createFileRoute, Link } from '@tanstack/react-router'
 
-export const Route = createFileRoute('/')({ component: Home })
+export const Route = createFileRoute('/')({
+  component: Home,
+  staticData: {
+    title: 'Home',
+  },
+})
 
 function Home() {
   const { isAuthenticated } = Route.useRouteContext().auth
@@ -21,7 +26,7 @@ function Home() {
       </div>
       <div className="flex gap-3">
         <Link
-          to={isAuthenticated ? '/dashboard' : '/login'}
+          to={isAuthenticated ? '/dashboard' : '/'}
           search={isAuthenticated ? undefined : { redirect: '/dashboard' }}
           className={cn(buttonVariants())}
         >

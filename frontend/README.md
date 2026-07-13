@@ -194,3 +194,15 @@ Files prefixed with `demo` can be safely deleted. They are there to provide a st
 You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
 
 For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
+
+## Sidebar & Breadcrumbs (Added)
+
+This project includes a shadcn-styled responsive Sidebar and a router-driven Breadcrumbs component integrated into the root layout.
+
+- Sidebar: `src/components/sidebar.tsx` — responsive, persistent on desktop, togglable on mobile, includes links to Home, Dashboard, and Users.
+- Breadcrumbs: `src/components/breadcrumbs.tsx` — derives breadcrumb trail from the current pathname and maps common segments to friendly labels.
+
+Notes:
+- Breadcrumb labels prefer explicit mappings in `LABELS` inside `breadcrumbs.tsx`. To improve labels, add route metadata or extend `LABELS`.
+- The root layout (`src/routes/__root.tsx`) renders the Sidebar and Breadcrumbs above the route outlet.
+

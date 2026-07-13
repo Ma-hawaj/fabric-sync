@@ -11,6 +11,9 @@ export const Route = createFileRoute('/_authenticated/users')({
     return [{ id: 1, name: 'ma' }] as User[]
   },
   component: Users,
+  staticData: {
+    title: 'Users',
+  },
 })
 
 function Users() {
