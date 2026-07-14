@@ -12,6 +12,7 @@ import Breadcrumbs from '@/components/breadcrumbs'
 import type { AuthState } from '@/lib/auth'
 import type { QueryClient } from '@tanstack/react-query'
 import { SidebarInset, SidebarTrigger } from '#/components/ui/sidebar'
+import { NuqsAdapter } from 'nuqs/adapters/tanstack-router'
 
 type RouterContext = {
   auth: AuthState
@@ -78,7 +79,7 @@ function Header() {
 
 function RootComponent() {
   return (
-    <>
+    <NuqsAdapter>
       <Sidebar />
       <SidebarInset>
         <Header />
@@ -95,6 +96,6 @@ function RootComponent() {
           },
         ]}
       />
-    </>
+    </NuqsAdapter>
   )
 }
