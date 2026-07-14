@@ -32,9 +32,16 @@ export function AppSidebar() {
           </SidebarMenuItem>
 
           <SidebarMenuItem>
-            <SidebarMenuButton render={<Link to="/orders" />}>
+            <SidebarMenuButton render={<Link to="/dashboard/orders" />}>
               <ShoppingCart />
               <span>Orders</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem>
+            <SidebarMenuButton render={<Link to="/customers" />}>
+              <UsersIcon />
+              <span>Customers</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
 
