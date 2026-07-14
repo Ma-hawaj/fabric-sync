@@ -7,7 +7,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar'
-import { HomeIcon, UsersIcon, Grid } from 'lucide-react'
+import { HomeIcon, UsersIcon, Grid, ShoppingCart } from 'lucide-react'
 
 export function AppSidebar() {
   return (
@@ -28,6 +28,13 @@ export function AppSidebar() {
             <SidebarMenuButton render={<Link to="/dashboard" />}>
               <Grid />
               <span>Dashboard</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem>
+            <SidebarMenuButton render={<Link to="/orders" />}>
+              <ShoppingCart />
+              <span>Orders</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
 
