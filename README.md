@@ -21,10 +21,25 @@ Fabric Sync is a full-stack workspace for building a protected data synchronizat
 └── frontend/
     ├── public/              # Static browser assets
     ├── src/
-    │   ├── components/      # Shared React UI components
+    │   ├── components/
+    │   │   ├── data-table/  # Reusable data table building blocks
+    │   │   ├── ui/          # Base UI / shadcn-style primitives
+    │   │   ├── breadcrumbs.tsx
+    │   │   └── sidebar.tsx
+    │   ├── config/          # Data table and other feature config
+    │   ├── features/        # Feature modules (e.g. customers, orders)
+    │   │   └── <feature>/
+    │   │       ├── components/
+    │   │       ├── hooks/
+    │   │       ├── types/
+    │   │       └── <feature>.tsx
+    │   ├── hooks/           # Shared React hooks
     │   ├── lib/             # Shared frontend utilities and auth state
     │   ├── routes/          # TanStack Router file routes
+    │   │   └── _authenticated/  # Protected routes
+    │   ├── types/           # Shared TypeScript types
     │   ├── main.tsx         # React application bootstrap
+    │   ├── router.tsx       # TanStack Router setup
     │   └── styles.css       # Tailwind CSS theme and globals
     ├── package.json
     └── vite.config.ts
