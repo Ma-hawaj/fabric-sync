@@ -65,6 +65,20 @@ Frontend:
 - Base UI and local shadcn-style primitives
 - ESLint, Prettier, and Vitest
 
+## Local Infrastructure
+
+`docker-compose.yml` runs a local Zitadel instance (OAuth2/OIDC issuer) and the Postgres database, adapted from the [official Zitadel compose reference](https://github.com/zitadel/zitadel/tree/main/deploy/compose):
+
+```bash
+cp .env.example .env
+docker compose up -d --wait
+```
+
+- Zitadel console: `http://localhost:8080/ui/console`
+- Postgres: `postgres://postgres:postgres@localhost:5432/fabric_sync` (matches the backend's default `DATABASE_URL`)
+
+After the stack is up, create an OAuth application in the Zitadel console and set `OAUTH_CLIENT_ID`/`OAUTH_CLIENT_SECRET` for the backend accordingly.
+
 ## Backend
 
 The backend reads configuration from environment variables.
