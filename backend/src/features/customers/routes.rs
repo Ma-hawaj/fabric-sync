@@ -5,5 +5,5 @@ use crate::state::AppState;
 use super::handlers;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/users", get(handlers::list_users))
+    Router::new().route("/customers", get(handlers::list_customers))
 }
