@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fabric_sync
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      # A live, schema-matching database at build time is what makes sqlx's
+      # compile-time query checks (`query!`/`query_as!`) work, and is also
+      # required for `cargo test`. Migrations are applied below via sqlx-cli
+      # before any cargo command runs, using the same `_sqlx_migrations`
+      # bookkeeping the app itself relies on at startup (main.rs).
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/fabric_sync
+    steps:
+      - uses: actions/checkout@v4
+
+      # ubuntu-latest ships a stable Rust toolchain with rustfmt/clippy
+      # preinstalled, so there's no separate toolchain setup step.
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+
+      - name: Install sqlx-cli
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: sqlx-cli
+          # Pinned to match the sqlx version in Cargo.lock, since prepare's
+          # query-metadata format is version-sensitive.
+          version: "^0.8"
+          features: postgres,rustls
+          args: --no-default-features
+          locked: true
+
+      - name: Run migrations
+        run: sqlx migrate run
+
+      - name: Check .sqlx cache is up to date
+        run: cargo sqlx prepare --check
+
+      - name: cargo fmt --check
+        run: cargo fmt --check
+
+      - name: cargo check
+        run: cargo check --all-targets
+
+      - name: cargo test
+        run: cargo test --all-targets
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      # ubuntu-latest ships Node.js preinstalled and on PATH, so there's no
+      # separate Node setup step. pnpm isn't preinstalled though, so it
+      # still needs this.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Get pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm run check
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Test
+        run: pnpm exec vitest run --passWithNoTests
+
+      - name: Build
+        run: pnpm run build
