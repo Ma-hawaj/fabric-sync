@@ -110,6 +110,16 @@ cargo check
 
 Migrations live in `backend/migrations` and are run at startup through SQLx.
 
+Queries use `sqlx::query!`, which are checked against a real database at compile time. This needs either a running, migrated Postgres reachable via `DATABASE_URL`, or the offline cache committed at `backend/.sqlx` (used automatically when `DATABASE_URL` isn't set). After adding or editing a query, regenerate the cache and commit the result:
+
+```bash
+cd backend
+cargo install sqlx-cli --version "^0.8" --no-default-features --features postgres,rustls
+cargo sqlx prepare
+```
+
+`cargo sqlx prepare --check` (run in CI) fails if `backend/.sqlx` is out of sync with the queries in code.
+
 ## Frontend
 
 Install dependencies and start the dev server:

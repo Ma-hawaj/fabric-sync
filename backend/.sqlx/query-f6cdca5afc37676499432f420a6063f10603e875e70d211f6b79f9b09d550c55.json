@@ -1,0 +1,284 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            id::text AS \"id!\",\n            customer_id::text AS \"customer_id!\",\n            measurement_date AS \"date!\",\n            length_fl::float8 AS length_fl,\n            length_bl::float8 AS length_bl,\n            chest::float8 AS chest,\n            waist::float8 AS waist,\n            hips::float8 AS hips,\n            shoulder::float8 AS shoulder,\n            sleeve_length::float8 AS sleeve_length,\n            neck::float8 AS neck,\n            open_hand::float8 AS open_hand,\n            cuffling,\n            thobe_type_1,\n            f_pocket_1,\n            collar_1,\n            sleeve_1,\n            patti_1,\n            more_details_1,\n            thobe_type_2,\n            f_pocket_2,\n            collar_2,\n            sleeve_2,\n            patti_2,\n            more_details_2,\n            thobe_type_3,\n            f_pocket_3,\n            collar_3,\n            sleeve_3,\n            patti_3,\n            more_details_3,\n            full_body,\n            chest_up::float8 AS chest_up,\n            open_fold,\n            cuff_width::float8 AS cuff_width,\n            neck_width::float8 AS neck_width,\n            aram_hole::float8 AS aram_hole,\n            sleeve_haff_button,\n            button_fold,\n            fo,\n            fo_width::float8 AS fo_width,\n            frant_pocket_length::float8 AS frant_pocket_length,\n            farnt_pocket_length_by_width,\n            side_pocket,\n            mobile_pocket_length_by_width\n        FROM measurements\n        ORDER BY customer_id, measurement_date DESC, id DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "customer_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "date!",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 3,
+        "name": "length_fl",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "length_bl",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "chest",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "waist",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "hips",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 8,
+        "name": "shoulder",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 9,
+        "name": "sleeve_length",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 10,
+        "name": "neck",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 11,
+        "name": "open_hand",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 12,
+        "name": "cuffling",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "thobe_type_1",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 14,
+        "name": "f_pocket_1",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "collar_1",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 16,
+        "name": "sleeve_1",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 17,
+        "name": "patti_1",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 18,
+        "name": "more_details_1",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 19,
+        "name": "thobe_type_2",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 20,
+        "name": "f_pocket_2",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 21,
+        "name": "collar_2",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 22,
+        "name": "sleeve_2",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 23,
+        "name": "patti_2",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 24,
+        "name": "more_details_2",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 25,
+        "name": "thobe_type_3",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 26,
+        "name": "f_pocket_3",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 27,
+        "name": "collar_3",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 28,
+        "name": "sleeve_3",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 29,
+        "name": "patti_3",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 30,
+        "name": "more_details_3",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 31,
+        "name": "full_body",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 32,
+        "name": "chest_up",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 33,
+        "name": "open_fold",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 34,
+        "name": "cuff_width",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 35,
+        "name": "neck_width",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 36,
+        "name": "aram_hole",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 37,
+        "name": "sleeve_haff_button",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 38,
+        "name": "button_fold",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 39,
+        "name": "fo",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 40,
+        "name": "fo_width",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 41,
+        "name": "frant_pocket_length",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 42,
+        "name": "farnt_pocket_length_by_width",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 43,
+        "name": "side_pocket",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 44,
+        "name": "mobile_pocket_length_by_width",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null,
+      true,
+      null,
+      null,
+      null,
+      true,
+      true,
+      true,
+      null,
+      null,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "f6cdca5afc37676499432f420a6063f10603e875e70d211f6b79f9b09d550c55"
+}

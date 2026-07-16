@@ -5,7 +5,7 @@ mod error;
 mod features;
 mod state;
 
-use std::{net::SocketAddr, path::PathBuf};
+use std::net::SocketAddr;
 
 use config::Config;
 use sqlx::postgres::PgPoolOptions;
@@ -26,11 +26,7 @@ async fn main() -> Result<(), error::AppError> {
         .max_connections(5)
         .connect(&config.database_url)
         .await?;
-    let migrations_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations");
-    sqlx::migrate::Migrator::new(migrations_path)
-        .await?
-        .run(&db)
-        .await?;
+    sqlx::migrate!().run(&db).await?;
     let token_introspection = auth::TokenIntrospection::discover(&config)
         .await
         .map_err(error::AppError::Auth)?;

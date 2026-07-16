@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 use serde::Serialize;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Measurement {
     pub id: String,
@@ -56,6 +56,10 @@ pub struct Measurement {
     pub mobile_pocket_length_by_width: Option<String>,
 }
 
+// Not FromRow-derived: `measurements` isn't a column, and query_as!'s
+// compile-time codegen requires an exact field-for-column match (the
+// #[sqlx(default)]/#[sqlx(skip)] escape hatches only apply to the FromRow
+// trait's runtime path, e.g. via `query_as::<_, T>`, not the macro).
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Customer {
