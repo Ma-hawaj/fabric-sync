@@ -56,8 +56,8 @@ export function DataTableRangeFilter<TData>({
   }, [filter.value, formatValue])
 
   const onRangeValueChange = React.useCallback(
-    (value: string, isMin?: boolean) => {
-      const numValue = Number(value)
+    (inputValue: string, isMin?: boolean) => {
+      const numValue = Number(inputValue)
       const currentValues = Array.isArray(filter.value)
         ? filter.value
         : ['', '']
@@ -66,14 +66,14 @@ export function DataTableRangeFilter<TData>({
         : (currentValues[0] ?? '')
 
       if (
-        value === '' ||
+        inputValue === '' ||
         (!Number.isNaN(numValue) &&
           (isMin
             ? numValue >= min && numValue <= (Number(otherValue) || max)
             : numValue <= max && numValue >= (Number(otherValue) || min)))
       ) {
         onFilterUpdate(filter.filterId, {
-          value: isMin ? [value, otherValue] : [otherValue, value],
+          value: isMin ? [inputValue, otherValue] : [otherValue, inputValue],
         })
       }
     },

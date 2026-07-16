@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/breadcrumb'
 
 export function Breadcrumbs() {
-  const crumbs = useMatches().filter((m) => m.staticData?.title)
+  const crumbs = useMatches().filter((m) => m.staticData.title)
 
   console.log(JSON.stringify(crumbs, undefined, 2))
 
@@ -17,7 +17,7 @@ export function Breadcrumbs() {
     <Breadcrumb>
       <BreadcrumbList>
         {crumbs
-          .filter((m) => m.staticData?.title)
+          .filter((m) => m.staticData.title)
           .map((m, i) => {
             const isLast = i === crumbs.length - 1
             console.log({ isLast })

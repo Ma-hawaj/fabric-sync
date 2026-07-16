@@ -545,8 +545,7 @@ function SortableOverlay(props: SortableOverlayProps) {
 
   React.useLayoutEffect(() => setMounted(true), [])
 
-  const container =
-    containerProp ?? (mounted ? globalThis.document?.body : null)
+  const container = containerProp ?? (mounted ? globalThis.document.body : null)
 
   if (!container) return null
 

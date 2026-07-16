@@ -18,7 +18,7 @@ import { formatDate } from '@/lib/format'
 type DateSelection = Date[] | DateRange
 
 function getIsDateRange(value: DateSelection): value is DateRange {
-  return value && typeof value === 'object' && !Array.isArray(value)
+  return typeof value === 'object' && !Array.isArray(value)
 }
 
 function parseAsDate(timestamp: number | string | undefined): Date | undefined {

@@ -80,7 +80,7 @@ export function DataTableFacetedFilter<TData, TValue>({
           <Button variant="outline" className="border-dashed font-normal" />
         }
       >
-        {selectedValues?.size > 0 ? (
+        {selectedValues.size > 0 ? (
           <div
             role="button"
             aria-label={`Clear ${title} filter`}
@@ -94,7 +94,7 @@ export function DataTableFacetedFilter<TData, TValue>({
           <PlusCircle />
         )}
         {title}
-        {selectedValues?.size > 0 && (
+        {selectedValues.size > 0 && (
           <>
             <Separator
               orientation="vertical"
