@@ -5,32 +5,32 @@ import { DataTableColumnHeader } from '@/components/data-table/data-table-column
 import type { Order } from '../types/orders'
 
 const MATERIALS = [
-  "Bamboo Fiber",
-  "Cotton",
-  "Cotton Blend",
-  "Organic Cotton",
-  "Polyester",
-  "Recycled Polyester",
-  "Spandex Blend",
-  "Cashmere Blend",
-  "Silk",
-  "Wool",
-  "Linen",
-  "Satin",
-  "Velvet",
-  "Tweed",
-  "Denim",
-  "Lace",
-  "Corduroy",
-  "Hemp",
-  "Microfiber",
-  "Jacquard",
-];
+  'Bamboo Fiber',
+  'Cotton',
+  'Cotton Blend',
+  'Organic Cotton',
+  'Polyester',
+  'Recycled Polyester',
+  'Spandex Blend',
+  'Cashmere Blend',
+  'Silk',
+  'Wool',
+  'Linen',
+  'Satin',
+  'Velvet',
+  'Tweed',
+  'Denim',
+  'Lace',
+  'Corduroy',
+  'Hemp',
+  'Microfiber',
+  'Jacquard',
+]
 
 const materialOptions = MATERIALS.map((m) => ({
   label: m,
   value: m,
-}));
+}))
 
 export const orderColumns: ColumnDef<Order, any>[] = [
   {
@@ -44,8 +44,8 @@ export const orderColumns: ColumnDef<Order, any>[] = [
     enableSorting: true,
     enableColumnFilter: true,
     filterFn: (row, columnId, filterValue) => {
-      const cellValue = row.getValue<string>(columnId);
-      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase());
+      const cellValue = row.getValue<string>(columnId)
+      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
     },
     meta: {
       label: 'Invoice',
@@ -65,31 +65,37 @@ export const orderColumns: ColumnDef<Order, any>[] = [
     enableSorting: true,
     enableColumnFilter: true,
     filterFn: (row, columnId, filterValue) => {
-      const cellValue = row.getValue<Date>(columnId);
-      const time = cellValue.getTime();
-      
+      const cellValue = row.getValue<Date>(columnId)
+      const time = cellValue.getTime()
+
       if (!Array.isArray(filterValue)) {
         if (typeof filterValue === 'number') {
-          return cellValue.toDateString() === new Date(filterValue).toDateString();
+          return (
+            cellValue.toDateString() === new Date(filterValue).toDateString()
+          )
         }
-        return true;
+        return true
       }
-      
-      const [startVal, endVal] = filterValue;
-      const start = startVal !== undefined && startVal !== null ? Number(startVal) : undefined;
-      const end = endVal !== undefined && endVal !== null ? Number(endVal) : undefined;
-      
+
+      const [startVal, endVal] = filterValue
+      const start =
+        startVal !== undefined && startVal !== null
+          ? Number(startVal)
+          : undefined
+      const end =
+        endVal !== undefined && endVal !== null ? Number(endVal) : undefined
+
       if (start !== undefined && !isNaN(start)) {
-        const startDate = new Date(start);
-        startDate.setHours(0, 0, 0, 0);
-        if (time < startDate.getTime()) return false;
+        const startDate = new Date(start)
+        startDate.setHours(0, 0, 0, 0)
+        if (time < startDate.getTime()) return false
       }
       if (end !== undefined && !isNaN(end)) {
-        const endDate = new Date(end);
-        endDate.setHours(23, 59, 59, 999);
-        if (time > endDate.getTime()) return false;
+        const endDate = new Date(end)
+        endDate.setHours(23, 59, 59, 999)
+        if (time > endDate.getTime()) return false
       }
-      return true;
+      return true
     },
     meta: {
       label: 'Invoice Date',
@@ -105,8 +111,8 @@ export const orderColumns: ColumnDef<Order, any>[] = [
     enableSorting: true,
     enableColumnFilter: true,
     filterFn: (row, columnId, filterValue) => {
-      const cellValue = row.getValue<string>(columnId);
-      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase());
+      const cellValue = row.getValue<string>(columnId)
+      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
     },
     meta: {
       label: 'Customer Name',
@@ -123,8 +129,8 @@ export const orderColumns: ColumnDef<Order, any>[] = [
     enableSorting: true,
     enableColumnFilter: true,
     filterFn: (row, columnId, filterValue) => {
-      const cellValue = row.getValue<string>(columnId);
-      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase());
+      const cellValue = row.getValue<string>(columnId)
+      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
     },
     meta: {
       label: 'Customer Mobile',
@@ -163,9 +169,13 @@ export const orderColumns: ColumnDef<Order, any>[] = [
     enableSorting: true,
     enableColumnFilter: true,
     filterFn: (row, columnId, filterValue) => {
-      if (!filterValue || (Array.isArray(filterValue) && filterValue.length === 0)) return true;
-      const cellValue = row.getValue<string>(columnId);
-      return (filterValue as string[]).includes(cellValue);
+      if (
+        !filterValue ||
+        (Array.isArray(filterValue) && filterValue.length === 0)
+      )
+        return true
+      const cellValue = row.getValue<string>(columnId)
+      return (filterValue as string[]).includes(cellValue)
     },
     meta: {
       label: 'Material',

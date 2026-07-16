@@ -9,11 +9,12 @@ import type { Customer } from './types/customers'
 
 export function CustomersPage() {
   const { data: customers = [], isLoading } = useCustomers()
-  const [selectedCustomer, setSelectedCustomer] = React.useState<Customer | null>(null)
+  const [selectedCustomer, setSelectedCustomer] =
+    React.useState<Customer | null>(null)
 
   const columns = React.useMemo(
     () => getCustomerColumns(setSelectedCustomer),
-    []
+    [],
   )
 
   const { table } = useDataTable({

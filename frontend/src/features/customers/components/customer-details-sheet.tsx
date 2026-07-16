@@ -15,7 +15,14 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import { Ruler, ShieldAlert, Sparkles, User, Calendar, Receipt } from 'lucide-react'
+import {
+  Ruler,
+  ShieldAlert,
+  Sparkles,
+  User,
+  Calendar,
+  Receipt,
+} from 'lucide-react'
 import { useOrders } from '@/features/orders/hooks/use-orders'
 import type { Customer } from '../types/customers'
 
@@ -24,8 +31,13 @@ interface CustomerDetailsSheetProps {
   onOpenChange: (open: boolean) => void
 }
 
-export function CustomerDetailsSheet({ customer, onOpenChange }: CustomerDetailsSheetProps) {
-  const [activeMeasurementId, setActiveMeasurementId] = React.useState<string | null>(null)
+export function CustomerDetailsSheet({
+  customer,
+  onOpenChange,
+}: CustomerDetailsSheetProps) {
+  const [activeMeasurementId, setActiveMeasurementId] = React.useState<
+    string | null
+  >(null)
 
   React.useEffect(() => {
     setActiveMeasurementId(customer?.measurements[0]?.id ?? null)
@@ -33,19 +45,26 @@ export function CustomerDetailsSheet({ customer, onOpenChange }: CustomerDetails
 
   const { data: orders = [] } = useOrders()
   const customerOrders = React.useMemo(
-    () => (customer ? orders.filter((order) => order.customerMobile === customer.mobileNo) : []),
-    [orders, customer]
+    () =>
+      customer
+        ? orders.filter((order) => order.customerMobile === customer.mobileNo)
+        : [],
+    [orders, customer],
   )
 
   const activeMeasurement = React.useMemo(() => {
     if (!customer || customer.measurements.length === 0) return null
     return (
-      customer.measurements.find((m) => m.id === activeMeasurementId) ?? customer.measurements[0]
+      customer.measurements.find((m) => m.id === activeMeasurementId) ??
+      customer.measurements[0]
     )
   }, [customer, activeMeasurementId])
 
   return (
-    <Sheet open={customer !== null} onOpenChange={(open) => !open && onOpenChange(false)}>
+    <Sheet
+      open={customer !== null}
+      onOpenChange={(open) => !open && onOpenChange(false)}
+    >
       <SheetContent className="data-[side=right]:w-full data-[side=right]:sm:w-3/4 data-[side=right]:sm:max-w-[75vw] overflow-y-auto bg-background/95 backdrop-blur-md border-s shadow-2xl">
         {customer && (
           <div className="space-y-6 pb-8">
@@ -87,8 +106,12 @@ export function CustomerDetailsSheet({ customer, onOpenChange }: CustomerDetails
                     <TableBody>
                       {customerOrders.map((order) => (
                         <TableRow key={order.id}>
-                          <TableCell className="font-medium">{order.invoice}</TableCell>
-                          <TableCell>{order.invoiceDate.toLocaleDateString()}</TableCell>
+                          <TableCell className="font-medium">
+                            {order.invoice}
+                          </TableCell>
+                          <TableCell>
+                            {order.invoiceDate.toLocaleDateString()}
+                          </TableCell>
                           <TableCell>{order.material}</TableCell>
                         </TableRow>
                       ))}
@@ -105,7 +128,8 @@ export function CustomerDetailsSheet({ customer, onOpenChange }: CustomerDetails
                   No measurements on file
                 </p>
                 <p className="text-xs text-yellow-600/80 dark:text-yellow-400/80 mt-1">
-                  This customer doesn't have any measurement records recorded yet.
+                  This customer doesn't have any measurement records recorded
+                  yet.
                 </p>
               </div>
             ) : (
@@ -122,10 +146,10 @@ export function CustomerDetailsSheet({ customer, onOpenChange }: CustomerDetails
                         key={m.id}
                         onClick={() => setActiveMeasurementId(m.id)}
                         className={cn(
-                          "px-3 py-2 text-xs font-medium rounded-md whitespace-nowrap transition-all duration-150 border",
+                          'px-3 py-2 text-xs font-medium rounded-md whitespace-nowrap transition-all duration-150 border',
                           activeMeasurement?.id === m.id
-                            ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                            : "bg-card hover:bg-muted text-muted-foreground border-border/60 hover:text-foreground"
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                            : 'bg-card hover:bg-muted text-muted-foreground border-border/60 hover:text-foreground',
                         )}
                       >
                         {idx === 0 ? (
@@ -146,54 +170,138 @@ export function CustomerDetailsSheet({ customer, onOpenChange }: CustomerDetails
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
                     {/* Section: Main Body Dimensions */}
                     <StyleSection title="Body Dimensions">
-                      <MetricItem label="Length FL" value={activeMeasurement.lengthFl} />
-                      <MetricItem label="Length BL" value={activeMeasurement.lengthBl} />
-                      <MetricItem label="Chest" value={activeMeasurement.chest} />
-                      <MetricItem label="Waist" value={activeMeasurement.waist} />
+                      <MetricItem
+                        label="Length FL"
+                        value={activeMeasurement.lengthFl}
+                      />
+                      <MetricItem
+                        label="Length BL"
+                        value={activeMeasurement.lengthBl}
+                      />
+                      <MetricItem
+                        label="Chest"
+                        value={activeMeasurement.chest}
+                      />
+                      <MetricItem
+                        label="Waist"
+                        value={activeMeasurement.waist}
+                      />
                       <MetricItem label="Hips" value={activeMeasurement.hips} />
-                      <MetricItem label="Shoulder" value={activeMeasurement.shoulder} />
-                      <MetricItem label="Sleeve Length" value={activeMeasurement.sleeveLength} />
+                      <MetricItem
+                        label="Shoulder"
+                        value={activeMeasurement.shoulder}
+                      />
+                      <MetricItem
+                        label="Sleeve Length"
+                        value={activeMeasurement.sleeveLength}
+                      />
                       <MetricItem label="Neck" value={activeMeasurement.neck} />
-                      <MetricItem label="Arm Hole (Aram)" value={activeMeasurement.aramHole} />
-                      <MetricItem label="Open Hand" value={activeMeasurement.openHand} />
-                      <MetricItem label="Cuff Width" value={activeMeasurement.cuffWidth} />
-                      <MetricItem label="Cuffling Type" value={activeMeasurement.cuffling} />
+                      <MetricItem
+                        label="Arm Hole (Aram)"
+                        value={activeMeasurement.aramHole}
+                      />
+                      <MetricItem
+                        label="Open Hand"
+                        value={activeMeasurement.openHand}
+                      />
+                      <MetricItem
+                        label="Cuff Width"
+                        value={activeMeasurement.cuffWidth}
+                      />
+                      <MetricItem
+                        label="Cuffling Type"
+                        value={activeMeasurement.cuffling}
+                      />
                     </StyleSection>
 
                     {/* Section: Extra Customizations */}
                     <StyleSection title="Pocket & Fold Specifications">
-                      <MetricItem label="Front Pocket Length" value={activeMeasurement.frantPocketLength} />
-                      <MetricItem label="Front Pocket L x W" value={activeMeasurement.farntPocketLengthByWidth} />
-                      <MetricItem label="Side Pocket" value={activeMeasurement.sidePocket} />
-                      <MetricItem label="Mobile Pocket L x W" value={activeMeasurement.mobilePocketLengthByWidth} />
+                      <MetricItem
+                        label="Front Pocket Length"
+                        value={activeMeasurement.frantPocketLength}
+                      />
+                      <MetricItem
+                        label="Front Pocket L x W"
+                        value={activeMeasurement.farntPocketLengthByWidth}
+                      />
+                      <MetricItem
+                        label="Side Pocket"
+                        value={activeMeasurement.sidePocket}
+                      />
+                      <MetricItem
+                        label="Mobile Pocket L x W"
+                        value={activeMeasurement.mobilePocketLengthByWidth}
+                      />
                       <MetricItem label="FO" value={activeMeasurement.fo} />
-                      <MetricItem label="FO Width" value={activeMeasurement.foWidth} />
-                      <MetricItem label="Open Fold" value={activeMeasurement.openFold} />
-                      <MetricItem label="Button Fold" value={activeMeasurement.buttonFold} />
+                      <MetricItem
+                        label="FO Width"
+                        value={activeMeasurement.foWidth}
+                      />
+                      <MetricItem
+                        label="Open Fold"
+                        value={activeMeasurement.openFold}
+                      />
+                      <MetricItem
+                        label="Button Fold"
+                        value={activeMeasurement.buttonFold}
+                      />
                     </StyleSection>
 
                     {/* Section: Tailoring Extra Info */}
-                    {(activeMeasurement.fullBody || activeMeasurement.chestUp || activeMeasurement.neckWidth || activeMeasurement.sleeveHaffButton) && (
+                    {(activeMeasurement.fullBody ||
+                      activeMeasurement.chestUp ||
+                      activeMeasurement.neckWidth ||
+                      activeMeasurement.sleeveHaffButton) && (
                       <StyleSection title="Additional Details">
-                        <MetricItem label="Full Body Fit" value={activeMeasurement.fullBody} />
-                        <MetricItem label="Chest Up" value={activeMeasurement.chestUp} />
-                        <MetricItem label="Neck Width" value={activeMeasurement.neckWidth} />
-                        <MetricItem label="Sleeve Half Button" value={activeMeasurement.sleeveHaffButton} />
+                        <MetricItem
+                          label="Full Body Fit"
+                          value={activeMeasurement.fullBody}
+                        />
+                        <MetricItem
+                          label="Chest Up"
+                          value={activeMeasurement.chestUp}
+                        />
+                        <MetricItem
+                          label="Neck Width"
+                          value={activeMeasurement.neckWidth}
+                        />
+                        <MetricItem
+                          label="Sleeve Half Button"
+                          value={activeMeasurement.sleeveHaffButton}
+                        />
                       </StyleSection>
                     )}
 
                     {/* Section: Thobe Styles */}
                     {activeMeasurement.thobeType1 && (
                       <StyleSection title="Thobe Style 1">
-                        <MetricItem label="Style Type" value={activeMeasurement.thobeType1} />
-                        <MetricItem label="Front Pocket" value={activeMeasurement.fPocket1} />
-                        <MetricItem label="Collar" value={activeMeasurement.collar1} />
-                        <MetricItem label="Sleeve" value={activeMeasurement.sleeve1} />
-                        <MetricItem label="Patti" value={activeMeasurement.patti1} />
+                        <MetricItem
+                          label="Style Type"
+                          value={activeMeasurement.thobeType1}
+                        />
+                        <MetricItem
+                          label="Front Pocket"
+                          value={activeMeasurement.fPocket1}
+                        />
+                        <MetricItem
+                          label="Collar"
+                          value={activeMeasurement.collar1}
+                        />
+                        <MetricItem
+                          label="Sleeve"
+                          value={activeMeasurement.sleeve1}
+                        />
+                        <MetricItem
+                          label="Patti"
+                          value={activeMeasurement.patti1}
+                        />
                         <div className="col-span-3 mt-1">
-                          <span className="text-xs text-muted-foreground font-medium">More Details</span>
+                          <span className="text-xs text-muted-foreground font-medium">
+                            More Details
+                          </span>
                           <p className="text-sm text-foreground mt-1 bg-muted/40 p-2.5 rounded border border-border/30 italic">
-                            {activeMeasurement.moreDetails1 || "No extra details."}
+                            {activeMeasurement.moreDetails1 ||
+                              'No extra details.'}
                           </p>
                         </div>
                       </StyleSection>
@@ -201,15 +309,33 @@ export function CustomerDetailsSheet({ customer, onOpenChange }: CustomerDetails
 
                     {activeMeasurement.thobeType2 && (
                       <StyleSection title="Thobe Style 2">
-                        <MetricItem label="Style Type" value={activeMeasurement.thobeType2} />
-                        <MetricItem label="Front Pocket" value={activeMeasurement.fPocket2} />
-                        <MetricItem label="Collar" value={activeMeasurement.collar2} />
-                        <MetricItem label="Sleeve" value={activeMeasurement.sleeve2} />
-                        <MetricItem label="Patti" value={activeMeasurement.patti2} />
+                        <MetricItem
+                          label="Style Type"
+                          value={activeMeasurement.thobeType2}
+                        />
+                        <MetricItem
+                          label="Front Pocket"
+                          value={activeMeasurement.fPocket2}
+                        />
+                        <MetricItem
+                          label="Collar"
+                          value={activeMeasurement.collar2}
+                        />
+                        <MetricItem
+                          label="Sleeve"
+                          value={activeMeasurement.sleeve2}
+                        />
+                        <MetricItem
+                          label="Patti"
+                          value={activeMeasurement.patti2}
+                        />
                         <div className="col-span-3 mt-1">
-                          <span className="text-xs text-muted-foreground font-medium">More Details</span>
+                          <span className="text-xs text-muted-foreground font-medium">
+                            More Details
+                          </span>
                           <p className="text-sm text-foreground mt-1 bg-muted/40 p-2.5 rounded border border-border/30 italic">
-                            {activeMeasurement.moreDetails2 || "No extra details."}
+                            {activeMeasurement.moreDetails2 ||
+                              'No extra details.'}
                           </p>
                         </div>
                       </StyleSection>
@@ -217,15 +343,33 @@ export function CustomerDetailsSheet({ customer, onOpenChange }: CustomerDetails
 
                     {activeMeasurement.thobeType3 && (
                       <StyleSection title="Thobe Style 3">
-                        <MetricItem label="Style Type" value={activeMeasurement.thobeType3} />
-                        <MetricItem label="Front Pocket" value={activeMeasurement.fPocket3} />
-                        <MetricItem label="Collar" value={activeMeasurement.collar3} />
-                        <MetricItem label="Sleeve" value={activeMeasurement.sleeve3} />
-                        <MetricItem label="Patti" value={activeMeasurement.patti3} />
+                        <MetricItem
+                          label="Style Type"
+                          value={activeMeasurement.thobeType3}
+                        />
+                        <MetricItem
+                          label="Front Pocket"
+                          value={activeMeasurement.fPocket3}
+                        />
+                        <MetricItem
+                          label="Collar"
+                          value={activeMeasurement.collar3}
+                        />
+                        <MetricItem
+                          label="Sleeve"
+                          value={activeMeasurement.sleeve3}
+                        />
+                        <MetricItem
+                          label="Patti"
+                          value={activeMeasurement.patti3}
+                        />
                         <div className="col-span-3 mt-1">
-                          <span className="text-xs text-muted-foreground font-medium">More Details</span>
+                          <span className="text-xs text-muted-foreground font-medium">
+                            More Details
+                          </span>
                           <p className="text-sm text-foreground mt-1 bg-muted/40 p-2.5 rounded border border-border/30 italic">
-                            {activeMeasurement.moreDetails3 || "No extra details."}
+                            {activeMeasurement.moreDetails3 ||
+                              'No extra details.'}
                           </p>
                         </div>
                       </StyleSection>
@@ -241,17 +385,31 @@ export function CustomerDetailsSheet({ customer, onOpenChange }: CustomerDetails
   )
 }
 
-function MetricItem({ label, value }: { label: string; value?: string | number }) {
+function MetricItem({
+  label,
+  value,
+}: {
+  label: string
+  value?: string | number
+}) {
   if (value === undefined || value === '') return null
   return (
     <div className="flex flex-col border-b border-border/30 pb-2">
       <span className="text-xs text-muted-foreground font-medium">{label}</span>
-      <span className="text-sm font-semibold text-foreground mt-0.5">{value}</span>
+      <span className="text-sm font-semibold text-foreground mt-0.5">
+        {value}
+      </span>
     </div>
   )
 }
 
-function StyleSection({ title, children }: { title: string; children: React.ReactNode }) {
+function StyleSection({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) {
   // Filters out null values so we don't render empty containers
   const validChildren = React.Children.toArray(children).filter(Boolean)
   if (validChildren.length === 0) return null

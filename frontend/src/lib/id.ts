@@ -1,9 +1,9 @@
 const DEFAULT_ALPHABET =
-  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 
 interface GenerateIdOptions {
-  alphabet?: string;
-  length?: number;
+  alphabet?: string
+  length?: number
 }
 
 export function generateId(
@@ -11,15 +11,15 @@ export function generateId(
   inputOptions: GenerateIdOptions = {},
 ): string {
   const options =
-    typeof prefixOrOptions === "object" ? prefixOrOptions : inputOptions;
+    typeof prefixOrOptions === 'object' ? prefixOrOptions : inputOptions
 
-  const { alphabet = DEFAULT_ALPHABET, length = 12 } = options;
+  const { alphabet = DEFAULT_ALPHABET, length = 12 } = options
 
-  const chars = new Array(length);
+  const chars = new Array(length)
 
   for (let i = 0; i < length; i++) {
-    chars[i] = alphabet[(Math.random() * alphabet.length) | 0];
+    chars[i] = alphabet[(Math.random() * alphabet.length) | 0]
   }
 
-  return chars.join("");
+  return chars.join('')
 }

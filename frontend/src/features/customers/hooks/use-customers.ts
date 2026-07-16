@@ -76,8 +76,8 @@ const MOCK_CUSTOMERS: Customer[] = [
         farntPocketLengthByWidth: '13x11',
         sidePocket: 'One side',
         mobilePocketLengthByWidth: '15x8',
-      }
-    ]
+      },
+    ],
   },
   {
     id: '2',
@@ -110,8 +110,8 @@ const MOCK_CUSTOMERS: Customer[] = [
         cuffWidth: 5,
         neckWidth: 4,
         aramHole: 21,
-      }
-    ]
+      },
+    ],
   },
   {
     id: '3',
@@ -206,9 +206,9 @@ const MOCK_CUSTOMERS: Customer[] = [
         cuffWidth: 6,
         neckWidth: 5,
         aramHole: 24,
-      }
-    ]
-  }
+      },
+    ],
+  },
 ]
 
 export function useCustomers() {

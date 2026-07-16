@@ -2,7 +2,7 @@ export interface Measurement {
   id: string
   customerId: string
   date: Date
-  
+
   // Body Dimensions
   lengthFl?: number
   lengthBl?: number
@@ -14,7 +14,7 @@ export interface Measurement {
   neck?: number
   openHand?: number
   cuffling?: string
-  
+
   // Thobe Style 1
   thobeType1?: string
   fPocket1?: string

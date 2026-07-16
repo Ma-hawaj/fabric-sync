@@ -1,4 +1,4 @@
-Welcome to your new TanStack Start app! 
+Welcome to your new TanStack Start app!
 
 # Getting Started
 
@@ -29,9 +29,7 @@ npm run test
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
 
-
 ## Linting & Formatting
-
 
 This project uses [eslint](https://eslint.org/) and [prettier](https://prettier.io/) for linting and formatting. Eslint is configured using [tanstack/eslint-config](https://tanstack.com/config/latest/docs/eslint). The following scripts are available:
 
@@ -40,8 +38,6 @@ npm run lint
 npm run format
 npm run check
 ```
-
-
 
 ## Routing
 
@@ -60,7 +56,7 @@ Now that you have two routes you can use a `Link` component to navigate between 
 To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
 
 ```tsx
-import { Link } from "@tanstack/react-router";
+import { Link } from '@tanstack/react-router'
 ```
 
 Then anywhere in your JSX you can use it like so:
@@ -128,11 +124,11 @@ const getServerTime = createServerFn({
 // Use in a component
 function MyComponent() {
   const [time, setTime] = useState('')
-  
+
   useEffect(() => {
     getServerTime().then(setTime)
   }, [])
-  
+
   return <div>Server time: {time}</div>
 }
 ```
@@ -203,6 +199,6 @@ This project includes a shadcn-styled responsive Sidebar and a router-driven Bre
 - Breadcrumbs: `src/components/breadcrumbs.tsx` — derives breadcrumb trail from the current pathname and maps common segments to friendly labels.
 
 Notes:
+
 - Breadcrumb labels prefer explicit mappings in `LABELS` inside `breadcrumbs.tsx`. To improve labels, add route metadata or extend `LABELS`.
 - The root layout (`src/routes/__root.tsx`) renders the Sidebar and Breadcrumbs above the route outlet.
-

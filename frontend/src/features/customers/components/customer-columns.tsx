@@ -5,19 +5,23 @@ import type { Customer } from '../types/customers'
 import { EyeIcon } from 'lucide-react'
 
 export const getCustomerColumns = (
-  onViewDetails: (customer: Customer) => void
+  onViewDetails: (customer: Customer) => void,
 ): ColumnDef<Customer, any>[] => [
   {
     accessorKey: 'id',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="ID" />
     ),
-    cell: ({ row }) => <div className="font-mono text-muted-foreground">{row.getValue('id')}</div>,
+    cell: ({ row }) => (
+      <div className="font-mono text-muted-foreground">
+        {row.getValue('id')}
+      </div>
+    ),
     enableSorting: true,
     enableColumnFilter: true,
     filterFn: (row, columnId, filterValue) => {
-      const val = row.getValue<string>(columnId);
-      return val.toLowerCase().includes(String(filterValue).toLowerCase());
+      const val = row.getValue<string>(columnId)
+      return val.toLowerCase().includes(String(filterValue).toLowerCase())
     },
     meta: {
       label: 'ID',
@@ -30,12 +34,14 @@ export const getCustomerColumns = (
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Name" />
     ),
-    cell: ({ row }) => <div className="font-medium">{row.getValue('name')}</div>,
+    cell: ({ row }) => (
+      <div className="font-medium">{row.getValue('name')}</div>
+    ),
     enableSorting: true,
     enableColumnFilter: true,
     filterFn: (row, columnId, filterValue) => {
-      const val = row.getValue<string>(columnId);
-      return val.toLowerCase().includes(String(filterValue).toLowerCase());
+      const val = row.getValue<string>(columnId)
+      return val.toLowerCase().includes(String(filterValue).toLowerCase())
     },
     meta: {
       label: 'Name',
@@ -52,8 +58,8 @@ export const getCustomerColumns = (
     enableSorting: true,
     enableColumnFilter: true,
     filterFn: (row, columnId, filterValue) => {
-      const val = row.getValue<string>(columnId);
-      return val.toLowerCase().includes(String(filterValue).toLowerCase());
+      const val = row.getValue<string>(columnId)
+      return val.toLowerCase().includes(String(filterValue).toLowerCase())
     },
     meta: {
       label: 'Phone Number',
