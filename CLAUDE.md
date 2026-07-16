@@ -24,6 +24,8 @@ cp .env.example .env
 docker compose up -d --wait
 ```
 
+Postgres is pinned to **18+** (`POSTGRES_IMAGE` in `.env`/`.env.example`, and `postgres:18-alpine` in `.github/workflows/backend.yml`) — this is a hard requirement, not just the latest-available tag: schema id defaults use the native `uuidv7()` function, which only exists in Postgres 18+. The compose volume mount is `postgres-data:/var/lib/postgresql` (the whole data dir, not `.../data`) because the official image changed its on-disk layout starting in 18 to support `pg_upgrade --link`; mounting at the old `.../data` path makes 18+ images refuse to start. Bumping the Postgres image tag again always needs a fresh volume (`docker compose down && docker volume rm fabric-sync_postgres-data`) since minor/major version jumps aren't in-place compatible — remember this also resets local Zitadel state, since it shares the same Postgres instance.
+
 Migrations live in `backend/migrations` and run automatically at startup (`sqlx::migrate!` in `main.rs`).
 
 `sqlx::query!`/`query_as!` macros check queries against a real schema at **compile time**, using either a live `DATABASE_URL` or the committed offline cache at `backend/.sqlx`. After adding/changing a query, regenerate and commit the cache:
@@ -86,7 +88,9 @@ VITE_API_BASE_URL=http://localhost:3001 pnpm run dev
 
 ## Database schema notes
 
-`backend/migrations/20260712000000_create_tables.sql` defines `branch`, `customers`, `materials`, `invoices`, `measurements`, `orders`. `measurements` has three repeated groups of thobe-detail columns (`*_1`, `*_2`, `*_3`) for tracking style changes across visits — the `Measurement` type/query in `features/customers/repository.rs` maps all of them individually (SQLx casts most numeric columns to `float8` and id columns to `text` in the query itself). Only `customers` currently has a backend feature; `orders`, `materials`, `invoices`, `branch` exist in the schema but have no backend routes yet (frontend orders data is fully mocked).
+`backend/migrations/20260712000000_create_tables.sql` defines `branch`, `customers`, `materials`, `invoices`, `measurements`, `orders`. All primary keys are `UUID DEFAULT uuidv7()` — time-ordered (sortable/monotonic by creation, unlike `gen_random_uuid()`'s v4), which is why Postgres 18+ is required (see above). `measurements` has three repeated groups of thobe-detail columns (`*_1`, `*_2`, `*_3`) for tracking style changes across visits. Only `customers` currently has a backend feature; `orders`, `materials`, `invoices`, `branch` exist in the schema but have no backend routes yet (frontend orders data is fully mocked).
+
+**Customer + measurements query** (`features/customers/repository.rs`): a single query does `LEFT JOIN measurements` grouped per customer, aggregating each customer's measurements with `COALESCE(json_agg(to_jsonb(m) ORDER BY m.measurement_date DESC, m.id DESC) FILTER (WHERE m.id IS NOT NULL), '[]')` — Postgres builds the nested JSON array directly, no app-side grouping. `Measurement` (`types.rs`) decodes that JSON via `#[serde(rename_all(serialize = "camelCase", deserialize = "snake_case"))]`: deserialize expects Postgres' raw column names (what `to_jsonb` produces), serialize emits camelCase for the frontend — one struct, two directions. `date` is the one field whose column name (`measurement_date`) doesn't match the Rust field name, so it has its own `#[serde(rename(deserialize = "measurement_date"))]` on top of the container-level rename. If you add a measurement column, no query changes are needed (`to_jsonb` picks it up automatically) — just add the matching field to `Measurement` with the same name as the column (or an explicit rename if they diverge, as with `date`).
 
 ## CI
 

@@ -1,28 +1,28 @@
 CREATE TABLE branch (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     name TEXT NOT NULL
 );
 
 CREATE TABLE customers (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     name TEXT NOT NULL,
     mobile_no TEXT NOT NULL UNIQUE
 );
 
 CREATE TABLE materials (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     name TEXT NOT NULL,
-    branch_id BIGINT NOT NULL REFERENCES branch(id)
+    branch_id UUID NOT NULL REFERENCES branch(id)
 );
 
 CREATE TABLE invoices (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     total_price NUMERIC(10, 2) NOT NULL DEFAULT 0
 );
 
 CREATE TABLE measurements (
-    id BIGSERIAL PRIMARY KEY,
-    customer_id BIGINT NOT NULL REFERENCES customers(id),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    customer_id UUID NOT NULL REFERENCES customers(id),
     measurement_date DATE NOT NULL DEFAULT CURRENT_DATE,
 
     length_fl NUMERIC(6, 2),
@@ -70,10 +70,10 @@ CREATE TABLE measurements (
 );
 
 CREATE TABLE orders (
-    id BIGSERIAL PRIMARY KEY,
-    measurement_id BIGINT NOT NULL REFERENCES measurements(id),
-    material_id BIGINT NOT NULL REFERENCES materials(id),
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    measurement_id UUID NOT NULL REFERENCES measurements(id),
+    material_id UUID NOT NULL REFERENCES materials(id),
     material_amount NUMERIC(10, 2) NOT NULL,
-    invoice_id BIGINT NOT NULL REFERENCES invoices(id),
+    invoice_id UUID NOT NULL REFERENCES invoices(id),
     price NUMERIC(10, 2) NOT NULL
 );
