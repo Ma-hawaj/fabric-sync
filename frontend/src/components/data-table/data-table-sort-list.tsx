@@ -85,8 +85,8 @@ export function DataTableSortList<TData>({
   }, [sorting, table])
 
   const onSortAdd = React.useCallback(() => {
+    if (columns.length === 0) return
     const firstColumn = columns[0]
-    if (!firstColumn) return
 
     onSortingChange((prevSorting) => [
       ...prevSorting,
@@ -96,12 +96,11 @@ export function DataTableSortList<TData>({
 
   const onSortUpdate = React.useCallback(
     (sortId: string, updates: Partial<ColumnSort>) => {
-      onSortingChange((prevSorting) => {
-        if (!prevSorting) return prevSorting
-        return prevSorting.map((sort) =>
+      onSortingChange((prevSorting) =>
+        prevSorting.map((sort) =>
           sort.id === sortId ? { ...sort, ...updates } : sort,
-        )
-      })
+        ),
+      )
     },
     [onSortingChange],
   )

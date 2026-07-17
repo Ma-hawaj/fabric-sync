@@ -70,7 +70,7 @@ export function DataTableSliderFilter<TData>({
       ;[minValue, maxValue] = defaultRange
     } else {
       const values = column.getFacetedMinMaxValues()
-      if (values && Array.isArray(values) && values.length === 2) {
+      if (values && Array.isArray(values)) {
         const [facetMinValue, facetMaxValue] = values
         if (
           typeof facetMinValue === 'number' &&
@@ -83,14 +83,14 @@ export function DataTableSliderFilter<TData>({
     }
 
     const rangeSize = maxValue - minValue
-    const step =
+    const stepValue =
       rangeSize <= 20
         ? 1
         : rangeSize <= 100
           ? Math.ceil(rangeSize / 20)
           : Math.ceil(rangeSize / 50)
 
-    return { min: minValue, max: maxValue, step }
+    return { min: minValue, max: maxValue, step: stepValue }
   }, [column, defaultRange])
 
   const range = React.useMemo((): RangeValue => {
@@ -123,7 +123,7 @@ export function DataTableSliderFilter<TData>({
 
   const onSliderValueChange = React.useCallback(
     (value: RangeValue) => {
-      if (Array.isArray(value) && value.length === 2) {
+      if (Array.isArray(value)) {
         column.setFilterValue(value)
       }
     },
@@ -193,7 +193,7 @@ export function DataTableSliderFilter<TData>({
                 placeholder={min.toString()}
                 min={min}
                 max={max}
-                value={range[0]?.toString()}
+                value={range[0].toString()}
                 onChange={onFromInputChange}
                 className={cn('h-8 w-24', unit && 'pe-8')}
               />
@@ -217,7 +217,7 @@ export function DataTableSliderFilter<TData>({
                 placeholder={max.toString()}
                 min={min}
                 max={max}
-                value={range[1]?.toString()}
+                value={range[1].toString()}
                 onChange={onToInputChange}
                 className={cn('h-8 w-24', unit && 'pe-8')}
               />

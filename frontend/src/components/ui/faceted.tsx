@@ -20,14 +20,14 @@ import {
 } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 
-type FacetedValue<Multiple extends boolean> = Multiple extends true
+type FacetedValue<TMultiple extends boolean> = TMultiple extends true
   ? string[]
   : string
 
-interface FacetedContextValue<Multiple extends boolean = boolean> {
-  value?: FacetedValue<Multiple>
+interface FacetedContextValue<TMultiple extends boolean = boolean> {
+  value?: FacetedValue<TMultiple>
   onItemSelect?: (value: string) => void
-  multiple?: Multiple
+  multiple?: TMultiple
 }
 
 const FacetedContext = React.createContext<FacetedContextValue<boolean> | null>(
@@ -43,16 +43,16 @@ function useFacetedContext(name: string) {
 }
 
 interface FacetedProps<
-  Multiple extends boolean = false,
+  TMultiple extends boolean = false,
 > extends React.ComponentProps<typeof Popover> {
-  value?: FacetedValue<Multiple>
-  onValueChange?: (value: FacetedValue<Multiple> | undefined) => void
+  value?: FacetedValue<TMultiple>
+  onValueChange?: (value: FacetedValue<TMultiple> | undefined) => void
   children?: React.ReactNode
-  multiple?: Multiple
+  multiple?: TMultiple
 }
 
-function Faceted<Multiple extends boolean = false>(
-  props: FacetedProps<Multiple>,
+function Faceted<TMultiple extends boolean = false>(
+  props: FacetedProps<TMultiple>,
 ) {
   const {
     open: openProp,
@@ -87,12 +87,12 @@ function Faceted<Multiple extends boolean = false>(
         const newValue = currentValue.includes(selectedValue)
           ? currentValue.filter((v) => v !== selectedValue)
           : [...currentValue, selectedValue]
-        onValueChange(newValue as FacetedValue<Multiple>)
+        onValueChange(newValue as FacetedValue<TMultiple>)
       } else {
         if (value === selectedValue) {
           onValueChange(undefined)
         } else {
-          onValueChange(selectedValue as FacetedValue<Multiple>)
+          onValueChange(selectedValue as FacetedValue<TMultiple>)
         }
 
         requestAnimationFrame(() => onOpenChange(false))
@@ -158,7 +158,7 @@ function FacetedBadgeList(props: FacetedBadgeListProps) {
     [options],
   )
 
-  if (!values || values.length === 0) {
+  if (values.length === 0) {
     return (
       <div
         {...badgeListProps}
