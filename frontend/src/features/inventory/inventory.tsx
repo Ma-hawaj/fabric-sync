@@ -1,0 +1,53 @@
+import * as React from 'react'
+import { useDataTable } from '@/hooks/use-data-table'
+import { DataTable } from '@/components/data-table/data-table'
+import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
+import { getInventoryColumns } from './components/inventory-columns'
+import { InventoryDetailsSheet } from './components/inventory-details-sheet'
+import { useInventory } from './hooks/use-inventory'
+import type { Material } from './types/inventory'
+
+export function InventoryPage() {
+  const { data: materials = [], isLoading } = useInventory()
+  const [selectedMaterial, setSelectedMaterial] =
+    React.useState<Material | null>(null)
+
+  const columns = React.useMemo(
+    () => getInventoryColumns(setSelectedMaterial),
+    [],
+  )
+
+  const { table } = useDataTable({
+    data: materials,
+    columns,
+    manualFiltering: false,
+    manualSorting: false,
+    manualPagination: false,
+  })
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Inventory</h1>
+        <p className="text-muted-foreground">
+          Track materials and their stock across every location.
+        </p>
+      </div>
+
+      {isLoading ? (
+        <div className="text-center text-sm text-muted-foreground py-10">
+          Loading inventory...
+        </div>
+      ) : (
+        <DataTable table={table}>
+          <DataTableToolbar table={table} />
+        </DataTable>
+      )}
+
+      <InventoryDetailsSheet
+        material={selectedMaterial}
+        onOpenChange={(open) => !open && setSelectedMaterial(null)}
+      />
+    </div>
+  )
+}
