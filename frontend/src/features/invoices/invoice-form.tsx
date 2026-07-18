@@ -1,0 +1,143 @@
+import * as React from 'react'
+import { useForm } from '@tanstack/react-form'
+import { useNavigate } from '@tanstack/react-router'
+import { PlusIcon } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useCustomers } from '@/features/customers/hooks/use-customers'
+import { CustomerBlock } from './components/invoice-form/customer-block'
+import { InvoiceSummary } from './components/invoice-form/invoice-summary'
+import { createEmptyCustomer } from './types/invoice-form'
+import type { InvoiceFormValues } from './types/invoice-form'
+
+function validateCustomers(customers: InvoiceFormValues['customers']) {
+  for (const [idx, customer] of customers.entries()) {
+    const label = `Customer ${idx + 1}`
+    if (customer.mode === 'existing') {
+      if (!customer.existingCustomerId) {
+        return `${label}: pick an existing customer or switch to "+ New Customer".`
+      }
+    } else {
+      if (!customer.name.trim()) return `${label}: enter a full name.`
+      if (customer.customerType === 'adult' && !customer.mobileNo.trim()) {
+        return `${label}: enter a phone number, or mark them as a child.`
+      }
+      if (customer.customerType === 'child' && !customer.guardianId) {
+        return `${label}: select a guardian for this child.`
+      }
+    }
+    for (const [orderIdx, order] of customer.orders.entries()) {
+      if (!order.materialId || order.materialAmount === '') {
+        return `${label}, Order ${orderIdx + 1}: pick a material and quantity.`
+      }
+    }
+  }
+  return null
+}
+
+export function InvoiceFormPage() {
+  const navigate = useNavigate()
+  const { data: existingCustomers = [] } = useCustomers()
+  const [formError, setFormError] = React.useState<string | null>(null)
+
+  const form = useForm({
+    defaultValues: {
+      date: new Date().toISOString().slice(0, 10),
+      receivingBranch: '',
+      discount: '',
+      discountUnit: 'SAR',
+      paymentStatus: 'unpaid',
+      amountPaid: '',
+      customers: [createEmptyCustomer()],
+    } satisfies InvoiceFormValues,
+    onSubmit: async ({ value }) => {
+      const error = validateCustomers(value.customers)
+      if (error) {
+        setFormError(error)
+        return
+      }
+      setFormError(null)
+      // Mocked — no backend endpoint exists yet for creating invoices.
+      console.log('Invoice submitted (mocked):', value)
+      await navigate({ to: '/invoices' })
+    },
+  })
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">New Invoice</h1>
+        <p className="text-muted-foreground">
+          Create a customer order, updating measurements or adding customers as
+          needed.
+        </p>
+      </div>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          void form.handleSubmit()
+        }}
+        className="space-y-6"
+      >
+        <form.Field name="customers">
+          {(customersField) => (
+            <div className="space-y-6">
+              {customersField.state.value.map((customer, index) => (
+                <CustomerBlock
+                  key={customer.key}
+                  form={form as never}
+                  customerIndex={index}
+                  customerNumber={index + 1}
+                  existingCustomers={existingCustomers}
+                  removable={customersField.state.value.length > 1}
+                  onRemove={() => customersField.removeValue(index)}
+                />
+              ))}
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => customersField.pushValue(createEmptyCustomer())}
+                className="w-full border-dashed"
+              >
+                <PlusIcon className="h-4 w-4" />
+                Add Customer
+              </Button>
+            </div>
+          )}
+        </form.Field>
+
+        <InvoiceSummary
+          form={form as never}
+          existingCustomers={existingCustomers}
+        />
+
+        {formError && (
+          <p className="text-sm font-medium text-destructive">{formError}</p>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setFormError(null)
+              console.log('Invoice saved as draft (mocked):', form.state.values)
+              void navigate({ to: '/invoices' })
+            }}
+          >
+            Save Draft
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => window.print()}
+          >
+            Print
+          </Button>
+          <Button type="submit">Save &amp; Send</Button>
+        </div>
+      </form>
+    </div>
+  )
+}

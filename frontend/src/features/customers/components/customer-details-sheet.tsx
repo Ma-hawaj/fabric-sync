@@ -28,11 +28,13 @@ import type { Customer } from '../types/customers'
 
 interface CustomerDetailsSheetProps {
   customer: Customer | null
+  allCustomers: Customer[]
   onOpenChange: (open: boolean) => void
 }
 
 export function CustomerDetailsSheet({
   customer,
+  allCustomers,
   onOpenChange,
 }: CustomerDetailsSheetProps) {
   const [activeMeasurementId, setActiveMeasurementId] = React.useState<
@@ -46,10 +48,18 @@ export function CustomerDetailsSheet({
   const { data: orders = [] } = useOrders()
   const customerOrders = React.useMemo(
     () =>
-      customer
+      customer?.mobileNo
         ? orders.filter((order) => order.customerMobile === customer.mobileNo)
         : [],
     [orders, customer],
+  )
+
+  const guardian = React.useMemo(
+    () =>
+      customer?.guardianId
+        ? (allCustomers.find((c) => c.id === customer.guardianId) ?? null)
+        : null,
+    [allCustomers, customer],
   )
 
   const activeMeasurement = React.useMemo(() => {
@@ -78,7 +88,11 @@ export function CustomerDetailsSheet({
                     {customer.name}
                   </SheetTitle>
                   <SheetDescription className="text-muted-foreground mt-0.5">
-                    Phone: {customer.mobileNo}
+                    {customer.mobileNo
+                      ? `Phone: ${customer.mobileNo}`
+                      : guardian
+                        ? `Child of ${guardian.name}${guardian.mobileNo ? ` — ${guardian.mobileNo}` : ''}`
+                        : 'No phone on file'}
                   </SheetDescription>
                 </div>
               </div>
@@ -269,109 +283,6 @@ export function CustomerDetailsSheet({
                           label="Sleeve Half Button"
                           value={activeMeasurement.sleeveHaffButton}
                         />
-                      </StyleSection>
-                    )}
-
-                    {/* Section: Thobe Styles */}
-                    {activeMeasurement.thobeType1 && (
-                      <StyleSection title="Thobe Style 1">
-                        <MetricItem
-                          label="Style Type"
-                          value={activeMeasurement.thobeType1}
-                        />
-                        <MetricItem
-                          label="Front Pocket"
-                          value={activeMeasurement.fPocket1}
-                        />
-                        <MetricItem
-                          label="Collar"
-                          value={activeMeasurement.collar1}
-                        />
-                        <MetricItem
-                          label="Sleeve"
-                          value={activeMeasurement.sleeve1}
-                        />
-                        <MetricItem
-                          label="Patti"
-                          value={activeMeasurement.patti1}
-                        />
-                        <div className="col-span-3 mt-1">
-                          <span className="text-xs text-muted-foreground font-medium">
-                            More Details
-                          </span>
-                          <p className="text-sm text-foreground mt-1 bg-muted/40 p-2.5 rounded border border-border/30 italic">
-                            {activeMeasurement.moreDetails1 ||
-                              'No extra details.'}
-                          </p>
-                        </div>
-                      </StyleSection>
-                    )}
-
-                    {activeMeasurement.thobeType2 && (
-                      <StyleSection title="Thobe Style 2">
-                        <MetricItem
-                          label="Style Type"
-                          value={activeMeasurement.thobeType2}
-                        />
-                        <MetricItem
-                          label="Front Pocket"
-                          value={activeMeasurement.fPocket2}
-                        />
-                        <MetricItem
-                          label="Collar"
-                          value={activeMeasurement.collar2}
-                        />
-                        <MetricItem
-                          label="Sleeve"
-                          value={activeMeasurement.sleeve2}
-                        />
-                        <MetricItem
-                          label="Patti"
-                          value={activeMeasurement.patti2}
-                        />
-                        <div className="col-span-3 mt-1">
-                          <span className="text-xs text-muted-foreground font-medium">
-                            More Details
-                          </span>
-                          <p className="text-sm text-foreground mt-1 bg-muted/40 p-2.5 rounded border border-border/30 italic">
-                            {activeMeasurement.moreDetails2 ||
-                              'No extra details.'}
-                          </p>
-                        </div>
-                      </StyleSection>
-                    )}
-
-                    {activeMeasurement.thobeType3 && (
-                      <StyleSection title="Thobe Style 3">
-                        <MetricItem
-                          label="Style Type"
-                          value={activeMeasurement.thobeType3}
-                        />
-                        <MetricItem
-                          label="Front Pocket"
-                          value={activeMeasurement.fPocket3}
-                        />
-                        <MetricItem
-                          label="Collar"
-                          value={activeMeasurement.collar3}
-                        />
-                        <MetricItem
-                          label="Sleeve"
-                          value={activeMeasurement.sleeve3}
-                        />
-                        <MetricItem
-                          label="Patti"
-                          value={activeMeasurement.patti3}
-                        />
-                        <div className="col-span-3 mt-1">
-                          <span className="text-xs text-muted-foreground font-medium">
-                            More Details
-                          </span>
-                          <p className="text-sm text-foreground mt-1 bg-muted/40 p-2.5 rounded border border-border/30 italic">
-                            {activeMeasurement.moreDetails3 ||
-                              'No extra details.'}
-                          </p>
-                        </div>
                       </StyleSection>
                     )}
                   </div>

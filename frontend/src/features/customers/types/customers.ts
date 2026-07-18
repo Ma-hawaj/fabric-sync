@@ -15,30 +15,6 @@ export interface Measurement {
   openHand?: number
   cuffling?: string
 
-  // Thobe Style 1
-  thobeType1?: string
-  fPocket1?: string
-  collar1?: string
-  sleeve1?: string
-  patti1?: string
-  moreDetails1?: string
-
-  // Thobe Style 2
-  thobeType2?: string
-  fPocket2?: string
-  collar2?: string
-  sleeve2?: string
-  patti2?: string
-  moreDetails2?: string
-
-  // Thobe Style 3
-  thobeType3?: string
-  fPocket3?: string
-  collar3?: string
-  sleeve3?: string
-  patti3?: string
-  moreDetails3?: string
-
   // Extra Details
   fullBody?: string
   chestUp?: number
@@ -59,6 +35,10 @@ export interface Measurement {
 export interface Customer {
   id: string
   name: string
-  mobileNo: string
+  nameArabic?: string
+  // Undefined for children/dependents, who are looked up through
+  // guardianId instead of their own phone number.
+  mobileNo?: string
+  guardianId?: string
   measurements: Measurement[]
 }
