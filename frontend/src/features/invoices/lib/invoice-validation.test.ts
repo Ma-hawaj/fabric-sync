@@ -51,14 +51,21 @@ describe('validateCustomers', () => {
     expect(validateCustomers([customer])).toMatch(/enter a phone number/)
   })
 
-  it('accepts a new child customer with a name and guardian, no phone required', () => {
+  it('accepts a new child customer with an existing guardian, no phone required', () => {
     const customer = {
       ...createEmptyCustomer(),
       mode: 'new' as const,
       customerType: 'child' as const,
       name: 'Sultan',
       mobileNo: '',
-      guardianId: 'cust-1',
+      guardian: {
+        mode: 'existing' as const,
+        existingCustomerId: 'cust-1',
+        invoiceCustomerKey: '',
+        name: '',
+        nameArabic: '',
+        mobileNo: '',
+      },
       orders: [validOrder()],
     }
     expect(validateCustomers([customer])).toBeNull()
@@ -70,10 +77,93 @@ describe('validateCustomers', () => {
       mode: 'new' as const,
       customerType: 'child' as const,
       name: 'Sultan',
-      guardianId: '',
       orders: [validOrder()],
     }
     expect(validateCustomers([customer])).toMatch(/select a guardian/)
+  })
+
+  it('accepts a new child customer with a newly-entered guardian', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'new' as const,
+      customerType: 'child' as const,
+      name: 'Sultan',
+      guardian: {
+        mode: 'new' as const,
+        existingCustomerId: '',
+        invoiceCustomerKey: '',
+        name: 'Ahmed Al-Mansoori',
+        nameArabic: '',
+        mobileNo: '+966501234567',
+      },
+      orders: [validOrder()],
+    }
+    expect(validateCustomers([customer])).toBeNull()
+  })
+
+  it('rejects a newly-entered guardian with no phone number', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'new' as const,
+      customerType: 'child' as const,
+      name: 'Sultan',
+      guardian: {
+        mode: 'new' as const,
+        existingCustomerId: '',
+        invoiceCustomerKey: '',
+        name: 'Ahmed Al-Mansoori',
+        nameArabic: '',
+        mobileNo: '',
+      },
+      orders: [validOrder()],
+    }
+    expect(validateCustomers([customer])).toMatch(/phone number/)
+  })
+
+  it('accepts a child guardian that points at another customer on the same invoice', () => {
+    const guardianAdult = {
+      ...createEmptyCustomer(),
+      mode: 'new' as const,
+      customerType: 'adult' as const,
+      name: 'Ahmed Al-Mansoori',
+      mobileNo: '+966501234567',
+      orders: [validOrder()],
+    }
+    const child = {
+      ...createEmptyCustomer(),
+      mode: 'new' as const,
+      customerType: 'child' as const,
+      name: 'Sultan',
+      guardian: {
+        mode: 'invoiceCustomer' as const,
+        existingCustomerId: '',
+        invoiceCustomerKey: guardianAdult.key,
+        name: '',
+        nameArabic: '',
+        mobileNo: '',
+      },
+      orders: [validOrder()],
+    }
+    expect(validateCustomers([guardianAdult, child])).toBeNull()
+  })
+
+  it('rejects a child guardian pointing at a customer no longer on the invoice', () => {
+    const child = {
+      ...createEmptyCustomer(),
+      mode: 'new' as const,
+      customerType: 'child' as const,
+      name: 'Sultan',
+      guardian: {
+        mode: 'invoiceCustomer' as const,
+        existingCustomerId: '',
+        invoiceCustomerKey: 'some-removed-key',
+        name: '',
+        nameArabic: '',
+        mobileNo: '',
+      },
+      orders: [validOrder()],
+    }
+    expect(validateCustomers([child])).toMatch(/removed from this invoice/)
   })
 
   it('rejects an order with no material picked', () => {

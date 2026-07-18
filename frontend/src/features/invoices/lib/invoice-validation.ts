@@ -1,4 +1,40 @@
-import type { InvoiceFormValues } from '../types/invoice-form'
+import type {
+  InvoiceCustomerDraft,
+  InvoiceFormValues,
+} from '../types/invoice-form'
+
+function validateGuardian(
+  customer: InvoiceCustomerDraft,
+  customers: InvoiceCustomerDraft[],
+  label: string,
+): string | null {
+  const { guardian } = customer
+  switch (guardian.mode) {
+    case 'unset':
+      return `${label}: select a guardian for this child.`
+    case 'existing':
+      if (!guardian.existingCustomerId) {
+        return `${label}: select a guardian for this child.`
+      }
+      return null
+    case 'invoiceCustomer':
+      if (
+        !guardian.invoiceCustomerKey ||
+        !customers.some((c) => c.key === guardian.invoiceCustomerKey)
+      ) {
+        return `${label}: the selected guardian was removed from this invoice — pick another.`
+      }
+      return null
+    case 'new':
+      if (!guardian.name.trim()) {
+        return `${label}: enter the new guardian's name.`
+      }
+      if (!guardian.mobileNo.trim()) {
+        return `${label}: enter the new guardian's phone number.`
+      }
+      return null
+  }
+}
 
 export function validateCustomers(
   customers: InvoiceFormValues['customers'],
@@ -14,8 +50,9 @@ export function validateCustomers(
       if (customer.customerType === 'adult' && !customer.mobileNo.trim()) {
         return `${label}: enter a phone number, or mark them as a child.`
       }
-      if (customer.customerType === 'child' && !customer.guardianId) {
-        return `${label}: select a guardian for this child.`
+      if (customer.customerType === 'child') {
+        const guardianError = validateGuardian(customer, customers, label)
+        if (guardianError) return guardianError
       }
     }
     for (const [orderIdx, order] of customer.orders.entries()) {

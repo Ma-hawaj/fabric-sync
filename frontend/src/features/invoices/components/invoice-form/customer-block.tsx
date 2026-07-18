@@ -1,6 +1,5 @@
 import { PlusIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -16,6 +15,7 @@ import type {
   InvoiceFormApi,
 } from '../../types/invoice-form'
 import { TextField } from './form-fields'
+import { GuardianField } from './guardian-field'
 import {
   measurementFromSnapshot,
   MeasurementFields,
@@ -47,7 +47,6 @@ export function CustomerBlock({
   removable,
 }: CustomerBlockProps) {
   const base = `customers[${customerIndex}]`
-  const guardianOptions = existingCustomers.filter((c) => c.mobileNo)
 
   return (
     <div className="space-y-6 rounded-xl border border-border/60 bg-card p-5">
@@ -195,42 +194,11 @@ export function CustomerBlock({
                             label="Phone"
                           />
                         ) : (
-                          <form.Field name={`${base}.guardianId` as never}>
-                            {(guardianField: any) => (
-                              <div className="space-y-1">
-                                <Label htmlFor={guardianField.name}>
-                                  Guardian
-                                </Label>
-                                <Select
-                                  items={guardianOptions.map((customer) => ({
-                                    value: customer.id,
-                                    label: `${customer.name} — ${customer.mobileNo}`,
-                                  }))}
-                                  value={guardianField.state.value}
-                                  onValueChange={(value: string) =>
-                                    guardianField.handleChange(value)
-                                  }
-                                >
-                                  <SelectTrigger
-                                    id={guardianField.name}
-                                    className="w-full"
-                                  >
-                                    <SelectValue placeholder="Select guardian..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {guardianOptions.map((customer) => (
-                                      <SelectItem
-                                        key={customer.id}
-                                        value={customer.id}
-                                      >
-                                        {customer.name} — {customer.mobileNo}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            )}
-                          </form.Field>
+                          <GuardianField
+                            form={form}
+                            customerIndex={customerIndex}
+                            existingCustomers={existingCustomers}
+                          />
                         )
                       }
                     </form.Field>
