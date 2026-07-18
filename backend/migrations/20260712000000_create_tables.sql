@@ -6,7 +6,10 @@ CREATE TABLE branch (
 CREATE TABLE customers (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     name TEXT NOT NULL,
-    mobile_no TEXT NOT NULL UNIQUE
+    -- Null for children/dependents, who are looked up through guardian_id
+    -- instead of their own phone number.
+    mobile_no TEXT UNIQUE,
+    guardian_id UUID REFERENCES customers(id)
 );
 
 CREATE TABLE materials (
@@ -35,12 +38,6 @@ CREATE TABLE measurements (
     neck NUMERIC(6, 2),
     open_hand NUMERIC(6, 2),
     cuffling TEXT,
-    thobe_type_1 TEXT,
-    f_pocket_1 TEXT,
-    collar_1 TEXT,
-    sleeve_1 TEXT,
-    patti_1 TEXT,
-    more_details_1 TEXT,
     full_body TEXT,
     chest_up NUMERIC(6, 2),
     open_fold TEXT,
@@ -54,19 +51,7 @@ CREATE TABLE measurements (
     frant_pocket_length NUMERIC(6, 2),
     farnt_pocket_length_by_width TEXT,
     side_pocket TEXT,
-    mobile_pocket_length_by_width TEXT,
-    thobe_type_2 TEXT,
-    f_pocket_2 TEXT,
-    collar_2 TEXT,
-    sleeve_2 TEXT,
-    patti_2 TEXT,
-    more_details_2 TEXT,
-    thobe_type_3 TEXT,
-    f_pocket_3 TEXT,
-    collar_3 TEXT,
-    sleeve_3 TEXT,
-    patti_3 TEXT,
-    more_details_3 TEXT
+    mobile_pocket_length_by_width TEXT
 );
 
 CREATE TABLE orders (
@@ -75,5 +60,11 @@ CREATE TABLE orders (
     material_id UUID NOT NULL REFERENCES materials(id),
     material_amount NUMERIC(10, 2) NOT NULL,
     invoice_id UUID NOT NULL REFERENCES invoices(id),
-    price NUMERIC(10, 2) NOT NULL
+    price NUMERIC(10, 2) NOT NULL,
+    thobe_type TEXT,
+    f_pocket TEXT,
+    collar TEXT,
+    sleeve TEXT,
+    patti TEXT,
+    more_details TEXT
 );

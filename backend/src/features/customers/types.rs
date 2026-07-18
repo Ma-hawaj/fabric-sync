@@ -26,27 +26,6 @@ pub struct Measurement {
     pub open_hand: Option<f64>,
     pub cuffling: Option<String>,
 
-    pub thobe_type_1: Option<String>,
-    pub f_pocket_1: Option<String>,
-    pub collar_1: Option<String>,
-    pub sleeve_1: Option<String>,
-    pub patti_1: Option<String>,
-    pub more_details_1: Option<String>,
-
-    pub thobe_type_2: Option<String>,
-    pub f_pocket_2: Option<String>,
-    pub collar_2: Option<String>,
-    pub sleeve_2: Option<String>,
-    pub patti_2: Option<String>,
-    pub more_details_2: Option<String>,
-
-    pub thobe_type_3: Option<String>,
-    pub f_pocket_3: Option<String>,
-    pub collar_3: Option<String>,
-    pub sleeve_3: Option<String>,
-    pub patti_3: Option<String>,
-    pub more_details_3: Option<String>,
-
     pub full_body: Option<String>,
     pub chest_up: Option<f64>,
     pub open_fold: Option<String>,
@@ -68,7 +47,9 @@ pub struct Measurement {
 pub struct Customer {
     pub id: Uuid,
     pub name: String,
-    pub mobile_no: String,
+    // None for children/dependents, who are looked up through `guardian_id`
+    // instead of their own phone number.
+    pub mobile_no: Option<String>,
     pub measurements: Vec<Measurement>,
 }
 
@@ -89,12 +70,6 @@ mod tests {
             "length_fl": 152.5, "length_bl": null, "chest": 108.0, "waist": null,
             "hips": null, "shoulder": null, "sleeve_length": null, "neck": null,
             "open_hand": null, "cuffling": "Double Cuff",
-            "thobe_type_1": null, "f_pocket_1": null, "collar_1": null,
-            "sleeve_1": null, "patti_1": null, "more_details_1": null,
-            "thobe_type_2": null, "f_pocket_2": null, "collar_2": null,
-            "sleeve_2": null, "patti_2": null, "more_details_2": null,
-            "thobe_type_3": null, "f_pocket_3": null, "collar_3": null,
-            "sleeve_3": null, "patti_3": null, "more_details_3": null,
             "full_body": null, "chest_up": null, "open_fold": null,
             "cuff_width": null, "neck_width": null, "aram_hole": null,
             "sleeve_haff_button": null, "button_fold": null, "fo": null,
