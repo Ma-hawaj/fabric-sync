@@ -19,7 +19,7 @@ import {
 } from '../../data/invoice-form-options'
 import { computeOrderLineTotal } from '../../lib/invoice-pricing'
 import type { InvoiceFormApi } from '../../types/invoice-form'
-import { NumberField } from './form-fields'
+import { FieldError, NumberField } from './form-fields'
 import { SegmentedOptions } from './segmented-options'
 
 interface OrderBlockProps {
@@ -164,6 +164,7 @@ export function OrderBlock({
                       ))}
                     </SelectContent>
                   </Select>
+                  <FieldError field={field} />
                   {selected && (
                     <p className="text-xs text-muted-foreground">
                       Available: {selected.availableMeters}m —{' '}

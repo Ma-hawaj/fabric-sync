@@ -1,12 +1,33 @@
 import { describe, expect, it } from 'vitest'
-import { validateCustomers } from './invoice-validation'
+import { invoiceFormSchema } from './invoice-schema'
 import { createEmptyCustomer, createEmptyOrder } from '../types/invoice-form'
+import type {
+  InvoiceCustomerDraft,
+  InvoiceFormValues,
+} from '../types/invoice-form'
 
 function validOrder() {
   return { ...createEmptyOrder(), materialId: 'mat-1', materialAmount: 2 }
 }
 
-describe('validateCustomers', () => {
+function baseValues(customers: InvoiceCustomerDraft[]): InvoiceFormValues {
+  return {
+    date: '2026-07-18',
+    receivingBranch: '',
+    discount: '',
+    discountUnit: 'SAR',
+    paymentStatus: 'unpaid',
+    amountPaid: '',
+    customers,
+  }
+}
+
+function firstError(customers: InvoiceCustomerDraft[]) {
+  const result = invoiceFormSchema.safeParse(baseValues(customers))
+  return result.success ? null : result.error.issues[0]
+}
+
+describe('invoiceFormSchema', () => {
   it('passes for a fully filled existing customer with a valid order', () => {
     const customer = {
       ...createEmptyCustomer(),
@@ -14,7 +35,9 @@ describe('validateCustomers', () => {
       existingCustomerId: 'cust-1',
       orders: [validOrder()],
     }
-    expect(validateCustomers([customer])).toBeNull()
+    expect(invoiceFormSchema.safeParse(baseValues([customer])).success).toBe(
+      true,
+    )
   })
 
   it('rejects an existing customer with no selection', () => {
@@ -24,7 +47,9 @@ describe('validateCustomers', () => {
       existingCustomerId: '',
       orders: [validOrder()],
     }
-    expect(validateCustomers([customer])).toMatch(/pick an existing customer/)
+    const error = firstError([customer])
+    expect(error?.message).toMatch(/pick an existing customer/i)
+    expect(error?.path).toEqual(['customers', 0, 'existingCustomerId'])
   })
 
   it('rejects a new adult customer with no name', () => {
@@ -36,7 +61,7 @@ describe('validateCustomers', () => {
       mobileNo: '+966501234567',
       orders: [validOrder()],
     }
-    expect(validateCustomers([customer])).toMatch(/enter a full name/)
+    expect(firstError([customer])?.message).toMatch(/enter a full name/i)
   })
 
   it('rejects a new adult customer with no phone number', () => {
@@ -48,7 +73,7 @@ describe('validateCustomers', () => {
       mobileNo: '  ',
       orders: [validOrder()],
     }
-    expect(validateCustomers([customer])).toMatch(/enter a phone number/)
+    expect(firstError([customer])?.message).toMatch(/enter a phone number/i)
   })
 
   it('accepts a new child customer with an existing guardian, no phone required', () => {
@@ -68,7 +93,9 @@ describe('validateCustomers', () => {
       },
       orders: [validOrder()],
     }
-    expect(validateCustomers([customer])).toBeNull()
+    expect(invoiceFormSchema.safeParse(baseValues([customer])).success).toBe(
+      true,
+    )
   })
 
   it('rejects a new child customer with no guardian selected', () => {
@@ -79,7 +106,9 @@ describe('validateCustomers', () => {
       name: 'Sultan',
       orders: [validOrder()],
     }
-    expect(validateCustomers([customer])).toMatch(/select a guardian/)
+    const error = firstError([customer])
+    expect(error?.message).toMatch(/select a guardian/i)
+    expect(error?.path).toEqual(['customers', 0, 'guardian'])
   })
 
   it('accepts a new child customer with a newly-entered guardian', () => {
@@ -98,7 +127,9 @@ describe('validateCustomers', () => {
       },
       orders: [validOrder()],
     }
-    expect(validateCustomers([customer])).toBeNull()
+    expect(invoiceFormSchema.safeParse(baseValues([customer])).success).toBe(
+      true,
+    )
   })
 
   it('rejects a newly-entered guardian with no phone number', () => {
@@ -117,7 +148,9 @@ describe('validateCustomers', () => {
       },
       orders: [validOrder()],
     }
-    expect(validateCustomers([customer])).toMatch(/phone number/)
+    const error = firstError([customer])
+    expect(error?.message).toMatch(/phone number/i)
+    expect(error?.path).toEqual(['customers', 0, 'guardian', 'mobileNo'])
   })
 
   it('accepts a child guardian that points at another customer on the same invoice', () => {
@@ -144,7 +177,9 @@ describe('validateCustomers', () => {
       },
       orders: [validOrder()],
     }
-    expect(validateCustomers([guardianAdult, child])).toBeNull()
+    expect(
+      invoiceFormSchema.safeParse(baseValues([guardianAdult, child])).success,
+    ).toBe(true)
   })
 
   it('rejects a child guardian pointing at a customer no longer on the invoice', () => {
@@ -163,7 +198,7 @@ describe('validateCustomers', () => {
       },
       orders: [validOrder()],
     }
-    expect(validateCustomers([child])).toMatch(/removed from this invoice/)
+    expect(firstError([child])?.message).toMatch(/removed from this invoice/i)
   })
 
   it('rejects an order with no material picked', () => {
@@ -173,9 +208,9 @@ describe('validateCustomers', () => {
       existingCustomerId: 'cust-1',
       orders: [{ ...createEmptyOrder(), materialAmount: 2 }],
     }
-    expect(validateCustomers([customer])).toMatch(
-      /pick a material and quantity/,
-    )
+    const error = firstError([customer])
+    expect(error?.message).toMatch(/pick a material and quantity/i)
+    expect(error?.path).toEqual(['customers', 0, 'orders', 0, 'materialId'])
   })
 
   it('rejects an order with no quantity entered', () => {
@@ -185,12 +220,16 @@ describe('validateCustomers', () => {
       existingCustomerId: 'cust-1',
       orders: [{ ...createEmptyOrder(), materialId: 'mat-1' }],
     }
-    expect(validateCustomers([customer])).toMatch(
-      /pick a material and quantity/,
+    expect(firstError([customer])?.message).toMatch(
+      /pick a material and quantity/i,
     )
   })
 
-  it('reports the correct customer and order number in multi-customer invoices', () => {
+  it('rejects an invoice with no customers', () => {
+    expect(firstError([])?.message).toMatch(/at least one customer/i)
+  })
+
+  it('reports the correct customer path in multi-customer invoices', () => {
     const good = {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
@@ -203,6 +242,7 @@ describe('validateCustomers', () => {
       existingCustomerId: '',
       orders: [validOrder()],
     }
-    expect(validateCustomers([good, bad])).toMatch(/^Customer 2:/)
+    const error = firstError([good, bad])
+    expect(error?.path).toEqual(['customers', 1, 'existingCustomerId'])
   })
 })

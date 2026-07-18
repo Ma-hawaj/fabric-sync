@@ -1,4 +1,3 @@
-import * as React from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
@@ -6,32 +5,32 @@ import { Button } from '@/components/ui/button'
 import { useCustomers } from '@/features/customers/hooks/use-customers'
 import { CustomerBlock } from './components/invoice-form/customer-block'
 import { InvoiceSummary } from './components/invoice-form/invoice-summary'
-import { validateCustomers } from './lib/invoice-validation'
+import { invoiceFormSchema } from './lib/invoice-schema'
 import { createEmptyCustomer } from './types/invoice-form'
 import type { InvoiceFormValues } from './types/invoice-form'
 
 export function InvoiceFormPage() {
   const navigate = useNavigate()
   const { data: existingCustomers = [] } = useCustomers()
-  const [formError, setFormError] = React.useState<string | null>(null)
+
+  // A plain type annotation (not `satisfies`) so TFormData widens to
+  // InvoiceFormValues' union members (e.g. `discount: number | ''`) rather
+  // than the narrower literal types inferred from these particular values —
+  // the zod schema below expects the wide type.
+  const defaultValues: InvoiceFormValues = {
+    date: new Date().toISOString().slice(0, 10),
+    receivingBranch: '',
+    discount: '',
+    discountUnit: 'SAR',
+    paymentStatus: 'unpaid',
+    amountPaid: '',
+    customers: [createEmptyCustomer()],
+  }
 
   const form = useForm({
-    defaultValues: {
-      date: new Date().toISOString().slice(0, 10),
-      receivingBranch: '',
-      discount: '',
-      discountUnit: 'SAR',
-      paymentStatus: 'unpaid',
-      amountPaid: '',
-      customers: [createEmptyCustomer()],
-    } satisfies InvoiceFormValues,
+    defaultValues,
+    validators: { onSubmit: invoiceFormSchema },
     onSubmit: async ({ value }) => {
-      const error = validateCustomers(value.customers)
-      if (error) {
-        setFormError(error)
-        return
-      }
-      setFormError(null)
       // Mocked — no backend endpoint exists yet for creating invoices.
       console.log('Invoice submitted (mocked):', value)
       await navigate({ to: '/invoices' })
@@ -88,16 +87,26 @@ export function InvoiceFormPage() {
           existingCustomers={existingCustomers}
         />
 
-        {formError && (
-          <p className="text-sm font-medium text-destructive">{formError}</p>
-        )}
+        <form.Subscribe
+          selector={(state) =>
+            [state.submissionAttempts, state.isValid] as const
+          }
+        >
+          {([submissionAttempts, isValid]) =>
+            submissionAttempts > 0 &&
+            !isValid && (
+              <p className="text-sm font-medium text-destructive">
+                Please fix the highlighted fields before saving.
+              </p>
+            )
+          }
+        </form.Subscribe>
 
         <div className="flex justify-end gap-2">
           <Button
             type="button"
             variant="outline"
             onClick={() => {
-              setFormError(null)
               console.log('Invoice saved as draft (mocked):', form.state.values)
               void navigate({ to: '/invoices' })
             }}

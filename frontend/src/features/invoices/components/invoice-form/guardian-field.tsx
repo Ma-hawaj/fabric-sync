@@ -18,7 +18,7 @@ import type {
   InvoiceCustomerDraft,
   InvoiceFormApi,
 } from '../../types/invoice-form'
-import { TextField } from './form-fields'
+import { FieldError, TextField } from './form-fields'
 
 const NEW_GUARDIAN_VALUE = 'new'
 
@@ -81,76 +81,80 @@ export function GuardianField({
 
         return (
           <div className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor={`${base}-select`}>Guardian</Label>
-              <Select
-                items={[
-                  ...invoiceCandidates,
-                  ...existingCandidates,
-                  { value: NEW_GUARDIAN_VALUE, label: '+ New Guardian' },
-                ]}
-                value={guardianSelectValue(guardian)}
-                onValueChange={(value: string | null) => {
-                  if (!value) return
-                  if (value === NEW_GUARDIAN_VALUE) {
-                    form.setFieldValue(
-                      base as never,
-                      {
-                        ...blankGuardian(),
-                        mode: 'new',
-                      } as never,
-                    )
-                    return
-                  }
-                  const [kind, id] = value.split(':')
-                  form.setFieldValue(
-                    base as never,
-                    {
-                      ...blankGuardian(),
-                      mode:
-                        kind === 'existing' ? 'existing' : 'invoiceCustomer',
-                      existingCustomerId: kind === 'existing' ? id : '',
-                      invoiceCustomerKey: kind === 'invoice' ? id : '',
-                    } as never,
-                  )
-                }}
-              >
-                <SelectTrigger id={`${base}-select`} className="w-full">
-                  <SelectValue placeholder="Select guardian..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {invoiceCandidates.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>On This Invoice</SelectLabel>
-                      {invoiceCandidates.map((candidate) => (
-                        <SelectItem
-                          key={candidate.value}
-                          value={candidate.value}
-                        >
-                          {candidate.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  {existingCandidates.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>Existing Customers</SelectLabel>
-                      {existingCandidates.map((candidate) => (
-                        <SelectItem
-                          key={candidate.value}
-                          value={candidate.value}
-                        >
-                          {candidate.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  <SelectItem value={NEW_GUARDIAN_VALUE}>
-                    + New Guardian
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <form.Field name={base as never}>
+              {(guardianField: any) => (
+                <div className="space-y-1">
+                  <Label htmlFor={`${base}-select`}>Guardian</Label>
+                  <Select
+                    items={[
+                      ...invoiceCandidates,
+                      ...existingCandidates,
+                      { value: NEW_GUARDIAN_VALUE, label: '+ New Guardian' },
+                    ]}
+                    value={guardianSelectValue(guardian)}
+                    onValueChange={(value: string | null) => {
+                      if (!value) return
+                      if (value === NEW_GUARDIAN_VALUE) {
+                        form.setFieldValue(
+                          base as never,
+                          { ...blankGuardian(), mode: 'new' } as never,
+                        )
+                        return
+                      }
+                      const [kind, id] = value.split(':')
+                      form.setFieldValue(
+                        base as never,
+                        {
+                          ...blankGuardian(),
+                          mode:
+                            kind === 'existing'
+                              ? 'existing'
+                              : 'invoiceCustomer',
+                          existingCustomerId: kind === 'existing' ? id : '',
+                          invoiceCustomerKey: kind === 'invoice' ? id : '',
+                        } as never,
+                      )
+                    }}
+                  >
+                    <SelectTrigger id={`${base}-select`} className="w-full">
+                      <SelectValue placeholder="Select guardian..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {invoiceCandidates.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>On This Invoice</SelectLabel>
+                          {invoiceCandidates.map((candidate) => (
+                            <SelectItem
+                              key={candidate.value}
+                              value={candidate.value}
+                            >
+                              {candidate.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      {existingCandidates.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Existing Customers</SelectLabel>
+                          {existingCandidates.map((candidate) => (
+                            <SelectItem
+                              key={candidate.value}
+                              value={candidate.value}
+                            >
+                              {candidate.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      <SelectItem value={NEW_GUARDIAN_VALUE}>
+                        + New Guardian
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FieldError field={guardianField} />
+                </div>
+              )}
+            </form.Field>
 
             {guardian.mode === 'new' && (
               <div className="space-y-3 rounded-lg border border-border/50 bg-muted/30 p-3">

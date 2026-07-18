@@ -14,7 +14,7 @@ import type {
   CustomerMode,
   InvoiceFormApi,
 } from '../../types/invoice-form'
-import { TextField } from './form-fields'
+import { FieldError, TextField } from './form-fields'
 import { GuardianField } from './guardian-field'
 import {
   measurementFromSnapshot,
@@ -131,6 +131,7 @@ export function CustomerBlock({
                               ))}
                             </SelectContent>
                           </Select>
+                          <FieldError field={idField} />
 
                           {selected && (
                             <div className="rounded-lg border border-border/50 bg-muted/30 p-3">

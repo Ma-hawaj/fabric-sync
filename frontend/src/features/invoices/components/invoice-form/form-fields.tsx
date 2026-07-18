@@ -19,6 +19,19 @@ interface FieldProps {
   label: string
 }
 
+// Errors come from the zod schema (lib/invoice-schema.ts) via TanStack
+// Form's Standard Schema validator — each entry has a `.message`.
+export function FieldError({ field }: { field: any }) {
+  if (field.state.meta.errors.length === 0) return null
+  return (
+    <p className="text-xs font-medium text-destructive">
+      {field.state.meta.errors
+        .map((error: any) => error.message ?? error)
+        .join(', ')}
+    </p>
+  )
+}
+
 export function TextField({ form, name, label }: FieldProps) {
   return (
     <form.Field name={name as never}>
@@ -28,9 +41,11 @@ export function TextField({ form, name, label }: FieldProps) {
           <Input
             id={field.name}
             value={field.state.value ?? ''}
+            aria-invalid={field.state.meta.errors.length > 0}
             onBlur={field.handleBlur}
             onChange={(e) => field.handleChange(e.target.value)}
           />
+          <FieldError field={field} />
         </div>
       )}
     </form.Field>
@@ -54,6 +69,7 @@ export function NumberField({
               type="number"
               inputMode="decimal"
               value={field.state.value ?? ''}
+              aria-invalid={field.state.meta.errors.length > 0}
               onBlur={field.handleBlur}
               onChange={(e) => {
                 const raw = e.target.value
@@ -68,6 +84,7 @@ export function NumberField({
               </span>
             )}
           </div>
+          <FieldError field={field} />
         </div>
       )}
     </form.Field>
@@ -101,6 +118,7 @@ export function SelectField({
               ))}
             </SelectContent>
           </Select>
+          <FieldError field={field} />
         </div>
       )}
     </form.Field>
