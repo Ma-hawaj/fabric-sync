@@ -63,7 +63,11 @@ const TEXT_FIELDS: { name: keyof MeasurementDraft; label: string }[] = [
   { name: 'mobilePocketLengthByWidth', label: 'Mobile Pocket L×W' },
 ]
 
-function snapshotLabel(snapshot: Measurement, idx: number, total: number) {
+export function snapshotLabel(
+  snapshot: Measurement,
+  idx: number,
+  total: number,
+) {
   const date = new Date(snapshot.date).toLocaleDateString()
   return idx === 0 ? `Current (${date})` : `Previous #${total - idx} (${date})`
 }
