@@ -9,6 +9,7 @@ pub enum AppError {
     Io(std::io::Error),
     Sqlx(sqlx::Error),
     Migration(sqlx::migrate::MigrateError),
+    NotFound(String),
 }
 
 impl From<std::io::Error> for AppError {
@@ -36,6 +37,7 @@ impl IntoResponse for AppError {
             Self::Io(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
             Self::Sqlx(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
             Self::Migration(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
+            Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
         };
 
         (status, message).into_response()

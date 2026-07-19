@@ -6,7 +6,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::{
     // auth,
-    features::{customers, health},
+    features::{customers, health, locations, materials},
     state::AppState,
 };
 
@@ -20,6 +20,8 @@ pub fn router(state: AppState) -> Router {
                                  //     auth::require_auth,
                                  // )),
         )
+        .merge(materials::router())
+        .merge(locations::router())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
