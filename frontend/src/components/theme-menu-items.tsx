@@ -1,6 +1,6 @@
 import { CheckIcon, MonitorIcon, MoonIcon, SunIcon } from 'lucide-react'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
-import { useTheme } from '@/lib/theme'
+import { useTheme } from '@/components/theme-provider'
 
 const options = [
   { value: 'light' as const, label: 'Light', icon: SunIcon },
