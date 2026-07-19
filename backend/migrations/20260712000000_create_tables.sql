@@ -6,10 +6,7 @@ CREATE TABLE branch (
 CREATE TABLE customers (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     name TEXT NOT NULL,
-    -- Null for children/dependents, who are looked up through guardian_id
-    -- instead of their own phone number.
-    mobile_no TEXT UNIQUE,
-    guardian_id UUID REFERENCES customers(id)
+    mobile_no TEXT NOT NULL
 );
 
 CREATE TABLE materials (
