@@ -5,6 +5,12 @@ export type StockEntryMode = 'existing' | 'new'
 // A blank string means "not entered yet" for a numeric field, distinct from 0.
 export type NumberInput = number | ''
 
+export interface StockEntryDraft {
+  key: string
+  location: string
+  quantity: NumberInput
+}
+
 export interface InventoryFormValues {
   mode: StockEntryMode
 
@@ -16,8 +22,7 @@ export interface InventoryFormValues {
   sku: string
   unit: string
 
-  location: string
-  quantity: NumberInput
+  entries: StockEntryDraft[]
 }
 
 // The validator generic slots are left as `any` — this form has no
@@ -38,6 +43,14 @@ export type InventoryFormApi = ReactFormExtendedApi<
   any
 >
 
+export function createEmptyStockEntry(): StockEntryDraft {
+  return {
+    key: crypto.randomUUID(),
+    location: '',
+    quantity: '',
+  }
+}
+
 export function createEmptyInventoryForm(): InventoryFormValues {
   return {
     mode: 'existing',
@@ -45,7 +58,6 @@ export function createEmptyInventoryForm(): InventoryFormValues {
     name: '',
     sku: '',
     unit: 'meters',
-    location: '',
-    quantity: '',
+    entries: [createEmptyStockEntry()],
   }
 }

@@ -1,6 +1,31 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Material } from '../types/inventory'
+import type { Material, MaterialLocationStock } from '../types/inventory'
 import type { InventoryFormValues } from '../types/inventory-form'
+
+function toStock(values: InventoryFormValues): MaterialLocationStock[] {
+  return values.entries.map((entry) => ({
+    location: entry.location,
+    quantity: entry.quantity === '' ? 0 : entry.quantity,
+  }))
+}
+
+function applyStock(
+  locations: MaterialLocationStock[],
+  additions: MaterialLocationStock[],
+) {
+  let next = locations
+  for (const addition of additions) {
+    const hasLocation = next.some((l) => l.location === addition.location)
+    next = hasLocation
+      ? next.map((l) =>
+          l.location === addition.location
+            ? { ...l, quantity: l.quantity + addition.quantity }
+            : l,
+        )
+      : [...next, addition]
+  }
+  return next
+}
 
 export function useAddStock() {
   const queryClient = useQueryClient()
@@ -12,26 +37,18 @@ export function useAddStock() {
       return values
     },
     onSuccess: (values) => {
-      const quantity = values.quantity === '' ? 0 : values.quantity
+      const additions = toStock(values)
 
       queryClient.setQueryData<Material[]>(['inventory'], (materials = []) => {
         if (values.mode === 'existing') {
-          return materials.map((material) => {
-            if (material.id !== values.materialId) return material
-
-            const hasLocation = material.locations.some(
-              (l) => l.location === values.location,
-            )
-            const locations = hasLocation
-              ? material.locations.map((l) =>
-                  l.location === values.location
-                    ? { ...l, quantity: l.quantity + quantity }
-                    : l,
-                )
-              : [...material.locations, { location: values.location, quantity }]
-
-            return { ...material, locations }
-          })
+          return materials.map((material) =>
+            material.id === values.materialId
+              ? {
+                  ...material,
+                  locations: applyStock(material.locations, additions),
+                }
+              : material,
+          )
         }
 
         const newMaterial: Material = {
@@ -39,7 +56,7 @@ export function useAddStock() {
           name: values.name,
           sku: values.sku,
           unit: values.unit,
-          locations: [{ location: values.location, quantity }],
+          locations: additions,
         }
         return [...materials, newMaterial]
       })

@@ -1,5 +1,6 @@
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
+import { PlusIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import {
@@ -9,13 +10,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { NumberField, TextField } from '@/components/form/fields'
+import { TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
-import { LOCATIONS, UNITS } from './data/inventory-options'
+import { StockEntryRow } from './components/stock-entry-row'
+import { UNITS } from './data/inventory-options'
 import { useAddStock } from './hooks/use-add-stock'
 import { useInventory } from './hooks/use-inventory'
 import { inventoryFormSchema } from './lib/inventory-schema'
-import { createEmptyInventoryForm } from './types/inventory-form'
+import {
+  createEmptyInventoryForm,
+  createEmptyStockEntry,
+} from './types/inventory-form'
 import type { StockEntryMode } from './types/inventory-form'
 
 export function InventoryFormPage() {
@@ -37,7 +42,8 @@ export function InventoryFormPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Add Stock</h1>
         <p className="text-muted-foreground">
-          Add stock to an existing material or register a new material.
+          Add stock to an existing material or register a new material, across
+          one or more locations at once.
         </p>
       </div>
 
@@ -140,33 +146,34 @@ export function InventoryFormPage() {
             }
           </form.Subscribe>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <form.Field name="location">
-              {(field) => (
-                <Field data-invalid={field.state.meta.errors.length > 0}>
-                  <FieldLabel htmlFor={field.name}>Location</FieldLabel>
-                  <Select
-                    value={field.state.value}
-                    onValueChange={(value: string) => field.handleChange(value)}
-                  >
-                    <SelectTrigger id={field.name} className="w-full">
-                      <SelectValue placeholder="Select location..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {LOCATIONS.map((location) => (
-                        <SelectItem key={location} value={location}>
-                          {location}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FieldError errors={field.state.meta.errors} />
-                </Field>
-              )}
-            </form.Field>
-
-            <NumberField form={form} name="quantity" label="Quantity" />
-          </div>
+          <form.Field name="entries">
+            {(entriesField) => (
+              <div className="space-y-3">
+                <FieldLabel>Locations</FieldLabel>
+                {entriesField.state.value.map((entry, index) => (
+                  <StockEntryRow
+                    key={entry.key}
+                    form={form as never}
+                    entryIndex={index}
+                    removable={entriesField.state.value.length > 1}
+                    onRemove={() => entriesField.removeValue(index)}
+                  />
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() =>
+                    entriesField.pushValue(createEmptyStockEntry())
+                  }
+                  className="w-full border-dashed"
+                >
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  Add Another Location
+                </Button>
+              </div>
+            )}
+          </form.Field>
         </div>
 
         <form.Subscribe
