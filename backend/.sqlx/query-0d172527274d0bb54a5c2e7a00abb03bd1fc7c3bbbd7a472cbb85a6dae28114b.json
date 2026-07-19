@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            m.id,\n            m.name,\n            m.sku,\n            m.unit,\n            COALESCE(\n                json_agg(\n                    json_build_object(\n                        'locationId', b.id,\n                        'location', b.name,\n                        'quantity', ms.quantity\n                    )\n                    ORDER BY b.name\n                ) FILTER (WHERE ms.id IS NOT NULL),\n                '[]'\n            ) AS \"locations!: Json<Vec<MaterialLocationStock>>\"\n        FROM materials m\n        LEFT JOIN material_stock ms ON ms.material_id = m.id\n        LEFT JOIN branch b ON b.id = ms.branch_id\n        WHERE $1::uuid IS NULL OR m.id = $1\n        GROUP BY m.id, m.name, m.sku, m.unit\n        ORDER BY m.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "sku",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "unit",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "locations!: Json<Vec<MaterialLocationStock>>",
+        "type_info": "Json"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "0d172527274d0bb54a5c2e7a00abb03bd1fc7c3bbbd7a472cbb85a6dae28114b"
+}
