@@ -83,7 +83,7 @@ function Faceted<TMultiple extends boolean = false>(
       if (!onValueChange) return
 
       if (multiple) {
-        const currentValue = (Array.isArray(value) ? value : [])
+        const currentValue = Array.isArray(value) ? value : []
         const newValue = currentValue.includes(selectedValue)
           ? currentValue.filter((v) => v !== selectedValue)
           : [...currentValue, selectedValue]
