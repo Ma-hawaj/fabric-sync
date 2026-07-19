@@ -54,21 +54,12 @@ export const getCustomerColumns = (
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Phone Number" />
     ),
-    cell: ({ row }) => {
-      const mobileNo = row.getValue<string | undefined>('mobileNo')
-      return mobileNo ? (
-        <div>{mobileNo}</div>
-      ) : (
-        <div className="text-muted-foreground italic">No phone (child)</div>
-      )
-    },
+    cell: ({ row }) => <div>{row.getValue('mobileNo')}</div>,
     enableSorting: true,
     enableColumnFilter: true,
     filterFn: (row, columnId, filterValue) => {
-      const val = row.getValue<string | undefined>(columnId)
-      return (val ?? '')
-        .toLowerCase()
-        .includes(String(filterValue).toLowerCase())
+      const val = row.getValue<string>(columnId)
+      return val.toLowerCase().includes(String(filterValue).toLowerCase())
     },
     meta: {
       label: 'Phone Number',

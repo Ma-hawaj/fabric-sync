@@ -11,15 +11,6 @@ const numberInputSchema = z.union([z.number(), z.literal('')])
 // fields for no benefit.
 const measurementDraftSchema = z.custom<MeasurementDraft>()
 
-const guardianDraftSchema = z.object({
-  mode: z.enum(['unset', 'existing', 'invoiceCustomer', 'new']),
-  existingCustomerId: z.string(),
-  invoiceCustomerKey: z.string(),
-  name: z.string(),
-  nameArabic: z.string(),
-  mobileNo: z.string(),
-})
-
 const orderDraftSchema = z
   .object({
     key: z.string(),
@@ -47,11 +38,9 @@ const customerDraftSchema = z
     key: z.string(),
     mode: z.enum(['existing', 'new']),
     existingCustomerId: z.string(),
-    customerType: z.enum(['adult', 'child']),
     name: z.string(),
     nameArabic: z.string(),
     mobileNo: z.string(),
-    guardian: guardianDraftSchema,
     measurement: measurementDraftSchema,
     orders: z.array(orderDraftSchema).min(1, 'Add at least one order.'),
   })
@@ -75,81 +64,18 @@ const customerDraftSchema = z
       })
     }
 
-    if (customer.customerType === 'adult') {
-      if (!customer.mobileNo.trim()) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'Enter a phone number, or mark them as a child.',
-          path: ['mobileNo'],
-        })
-      }
-      return
-    }
-
-    const guardian = customer.guardian
-    if (guardian.mode === 'unset') {
+    if (!customer.mobileNo.trim()) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Select a guardian for this child.',
-        path: ['guardian'],
+        message: 'Enter a phone number.',
+        path: ['mobileNo'],
       })
-    } else if (guardian.mode === 'existing' && !guardian.existingCustomerId) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Select a guardian for this child.',
-        path: ['guardian'],
-      })
-    } else if (
-      guardian.mode === 'invoiceCustomer' &&
-      !guardian.invoiceCustomerKey
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Select a guardian for this child.',
-        path: ['guardian'],
-      })
-    } else if (guardian.mode === 'new') {
-      if (!guardian.name.trim()) {
-        ctx.addIssue({
-          code: 'custom',
-          message: "Enter the new guardian's name.",
-          path: ['guardian', 'name'],
-        })
-      }
-      if (!guardian.mobileNo.trim()) {
-        ctx.addIssue({
-          code: 'custom',
-          message: "Enter the new guardian's phone number.",
-          path: ['guardian', 'mobileNo'],
-        })
-      }
     }
   })
 
 const customersArraySchema = z
   .array(customerDraftSchema)
   .min(1, 'Add at least one customer.')
-  .superRefine((customers, ctx) => {
-    customers.forEach((customer, index) => {
-      if (
-        customer.mode === 'new' &&
-        customer.customerType === 'child' &&
-        customer.guardian.mode === 'invoiceCustomer'
-      ) {
-        const stillOnInvoice = customers.some(
-          (c) => c.key === customer.guardian.invoiceCustomerKey,
-        )
-        if (!stillOnInvoice) {
-          ctx.addIssue({
-            code: 'custom',
-            message:
-              'The selected guardian was removed from this invoice — pick another.',
-            path: [index, 'guardian'],
-          })
-        }
-      }
-    })
-  })
 
 export const invoiceFormSchema = z.object({
   date: z.string(),

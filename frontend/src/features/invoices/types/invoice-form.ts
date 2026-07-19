@@ -1,31 +1,8 @@
 import type { ReactFormExtendedApi } from '@tanstack/react-form'
 
 export type CustomerMode = 'existing' | 'new'
-export type CustomerKind = 'adult' | 'child'
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
 export type DiscountUnit = 'SAR' | '%'
-
-// A child's guardian can be an already-saved customer, another adult being
-// added on this same invoice (not yet saved), or entered inline here — a
-// guardian who needs to exist as a customer but isn't ordering anything
-// themselves this visit.
-export type GuardianMode = 'unset' | 'existing' | 'invoiceCustomer' | 'new'
-
-export interface GuardianDraft {
-  mode: GuardianMode
-
-  // mode: 'existing'
-  existingCustomerId: string
-
-  // mode: 'invoiceCustomer' — references another InvoiceCustomerDraft.key
-  // on this same invoice.
-  invoiceCustomerKey: string
-
-  // mode: 'new'
-  name: string
-  nameArabic: string
-  mobileNo: string
-}
 
 // A blank string means "not entered yet" for a numeric field, distinct from 0.
 export type NumberInput = number | ''
@@ -89,11 +66,9 @@ export interface InvoiceCustomerDraft {
   existingCustomerId: string
 
   // mode: 'new'
-  customerType: CustomerKind
   name: string
   nameArabic: string
   mobileNo: string
-  guardian: GuardianDraft
 
   measurement: MeasurementDraft
   orders: InvoiceOrderDraft[]
@@ -172,27 +147,14 @@ export function createEmptyOrder(): InvoiceOrderDraft {
   }
 }
 
-export function createEmptyGuardian(): GuardianDraft {
-  return {
-    mode: 'unset',
-    existingCustomerId: '',
-    invoiceCustomerKey: '',
-    name: '',
-    nameArabic: '',
-    mobileNo: '',
-  }
-}
-
 export function createEmptyCustomer(): InvoiceCustomerDraft {
   return {
     key: crypto.randomUUID(),
     mode: 'existing',
     existingCustomerId: '',
-    customerType: 'adult',
     name: '',
     nameArabic: '',
     mobileNo: '',
-    guardian: createEmptyGuardian(),
     measurement: createEmptyMeasurement(),
     orders: [createEmptyOrder()],
   }

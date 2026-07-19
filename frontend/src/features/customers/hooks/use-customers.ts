@@ -180,8 +180,8 @@ const MOCK_CUSTOMERS: Customer[] = [
     id: '4',
     name: 'Sultan Al-Mansoori',
     nameArabic: 'سلطان المنصوري',
-    // Child of customer '1' — no phone number of their own.
-    guardianId: '1',
+    // Shares customer '1' (Ahmed)'s phone number — mobile numbers aren't unique.
+    mobileNo: '+971-50-1234567',
     measurements: [
       {
         id: 'm4_1',
@@ -204,8 +204,8 @@ const MOCK_CUSTOMERS: Customer[] = [
     id: '5',
     name: 'Noor Al-Hashimi',
     nameArabic: 'نور الهاشمي',
-    // Child of customer '3' — no phone number of their own.
-    guardianId: '3',
+    // Shares customer '3' (Zayed)'s phone number — mobile numbers aren't unique.
+    mobileNo: '+971-52-1112223',
     measurements: [],
   },
 ]

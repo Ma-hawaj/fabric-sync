@@ -52,11 +52,10 @@ describe('invoiceFormSchema', () => {
     expect(error?.path).toEqual(['customers', 0, 'existingCustomerId'])
   })
 
-  it('rejects a new adult customer with no name', () => {
+  it('rejects a new customer with no name', () => {
     const customer = {
       ...createEmptyCustomer(),
       mode: 'new' as const,
-      customerType: 'adult' as const,
       name: '',
       mobileNo: '+966501234567',
       orders: [validOrder()],
@@ -64,11 +63,10 @@ describe('invoiceFormSchema', () => {
     expect(firstError([customer])?.message).toMatch(/enter a full name/i)
   })
 
-  it('rejects a new adult customer with no phone number', () => {
+  it('rejects a new customer with no phone number', () => {
     const customer = {
       ...createEmptyCustomer(),
       mode: 'new' as const,
-      customerType: 'adult' as const,
       name: 'Ahmed',
       mobileNo: '  ',
       orders: [validOrder()],
@@ -76,129 +74,17 @@ describe('invoiceFormSchema', () => {
     expect(firstError([customer])?.message).toMatch(/enter a phone number/i)
   })
 
-  it('accepts a new child customer with an existing guardian, no phone required', () => {
+  it('accepts a fully filled new customer', () => {
     const customer = {
       ...createEmptyCustomer(),
       mode: 'new' as const,
-      customerType: 'child' as const,
-      name: 'Sultan',
-      mobileNo: '',
-      guardian: {
-        mode: 'existing' as const,
-        existingCustomerId: 'cust-1',
-        invoiceCustomerKey: '',
-        name: '',
-        nameArabic: '',
-        mobileNo: '',
-      },
-      orders: [validOrder()],
-    }
-    expect(invoiceFormSchema.safeParse(baseValues([customer])).success).toBe(
-      true,
-    )
-  })
-
-  it('rejects a new child customer with no guardian selected', () => {
-    const customer = {
-      ...createEmptyCustomer(),
-      mode: 'new' as const,
-      customerType: 'child' as const,
-      name: 'Sultan',
-      orders: [validOrder()],
-    }
-    const error = firstError([customer])
-    expect(error?.message).toMatch(/select a guardian/i)
-    expect(error?.path).toEqual(['customers', 0, 'guardian'])
-  })
-
-  it('accepts a new child customer with a newly-entered guardian', () => {
-    const customer = {
-      ...createEmptyCustomer(),
-      mode: 'new' as const,
-      customerType: 'child' as const,
-      name: 'Sultan',
-      guardian: {
-        mode: 'new' as const,
-        existingCustomerId: '',
-        invoiceCustomerKey: '',
-        name: 'Ahmed Al-Mansoori',
-        nameArabic: '',
-        mobileNo: '+966501234567',
-      },
-      orders: [validOrder()],
-    }
-    expect(invoiceFormSchema.safeParse(baseValues([customer])).success).toBe(
-      true,
-    )
-  })
-
-  it('rejects a newly-entered guardian with no phone number', () => {
-    const customer = {
-      ...createEmptyCustomer(),
-      mode: 'new' as const,
-      customerType: 'child' as const,
-      name: 'Sultan',
-      guardian: {
-        mode: 'new' as const,
-        existingCustomerId: '',
-        invoiceCustomerKey: '',
-        name: 'Ahmed Al-Mansoori',
-        nameArabic: '',
-        mobileNo: '',
-      },
-      orders: [validOrder()],
-    }
-    const error = firstError([customer])
-    expect(error?.message).toMatch(/phone number/i)
-    expect(error?.path).toEqual(['customers', 0, 'guardian', 'mobileNo'])
-  })
-
-  it('accepts a child guardian that points at another customer on the same invoice', () => {
-    const guardianAdult = {
-      ...createEmptyCustomer(),
-      mode: 'new' as const,
-      customerType: 'adult' as const,
       name: 'Ahmed Al-Mansoori',
       mobileNo: '+966501234567',
       orders: [validOrder()],
     }
-    const child = {
-      ...createEmptyCustomer(),
-      mode: 'new' as const,
-      customerType: 'child' as const,
-      name: 'Sultan',
-      guardian: {
-        mode: 'invoiceCustomer' as const,
-        existingCustomerId: '',
-        invoiceCustomerKey: guardianAdult.key,
-        name: '',
-        nameArabic: '',
-        mobileNo: '',
-      },
-      orders: [validOrder()],
-    }
-    expect(
-      invoiceFormSchema.safeParse(baseValues([guardianAdult, child])).success,
-    ).toBe(true)
-  })
-
-  it('rejects a child guardian pointing at a customer no longer on the invoice', () => {
-    const child = {
-      ...createEmptyCustomer(),
-      mode: 'new' as const,
-      customerType: 'child' as const,
-      name: 'Sultan',
-      guardian: {
-        mode: 'invoiceCustomer' as const,
-        existingCustomerId: '',
-        invoiceCustomerKey: 'some-removed-key',
-        name: '',
-        nameArabic: '',
-        mobileNo: '',
-      },
-      orders: [validOrder()],
-    }
-    expect(firstError([child])?.message).toMatch(/removed from this invoice/i)
+    expect(invoiceFormSchema.safeParse(baseValues([customer])).success).toBe(
+      true,
+    )
   })
 
   it('rejects an order with no material picked', () => {

@@ -36,9 +36,6 @@ export interface Customer {
   id: string
   name: string
   nameArabic?: string
-  // Undefined for children/dependents, who are looked up through
-  // guardianId instead of their own phone number.
-  mobileNo?: string
-  guardianId?: string
+  mobileNo: string
   measurements: Measurement[]
 }

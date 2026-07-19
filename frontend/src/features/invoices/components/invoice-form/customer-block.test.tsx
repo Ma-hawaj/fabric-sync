@@ -31,8 +31,8 @@ const EXISTING_CUSTOMERS: Customer[] = [
   },
   {
     id: 'cust-2',
-    name: 'Sultan Al-Mansoori',
-    guardianId: 'cust-1',
+    name: 'Fatima Al-Farsi',
+    mobileNo: '+971-55-9876543',
     measurements: [],
   },
 ]
@@ -54,29 +54,12 @@ function Harness({ customer }: { customer: InvoiceCustomerDraft }) {
 }
 
 describe('CustomerBlock', () => {
-  it('shows a guardian picker instead of a phone field for a new child customer', () => {
+  it('shows name, name (Arabic), and phone fields for a new customer', () => {
     render(<Harness customer={createEmptyCustomer()} />)
 
     fireEvent.click(screen.getByText('+ New Customer'))
-    expect(screen.getByLabelText('Phone')).toBeTruthy()
-
-    fireEvent.click(screen.getByText('Child / Dependent'))
-    expect(screen.queryByLabelText('Phone')).toBeNull()
-    expect(screen.getByText('Guardian')).toBeTruthy()
-    expect(
-      screen.getByText(
-        'This child will be created and linked to the selected guardian when the invoice is saved.',
-      ),
-    ).toBeTruthy()
-  })
-
-  it('shows the adult note and phone field again when switched back from child', () => {
-    render(<Harness customer={createEmptyCustomer()} />)
-
-    fireEvent.click(screen.getByText('+ New Customer'))
-    fireEvent.click(screen.getByText('Child / Dependent'))
-    fireEvent.click(screen.getByText('Adult'))
-
+    expect(screen.getByLabelText('Full Name')).toBeTruthy()
+    expect(screen.getByLabelText('Name (Arabic)')).toBeTruthy()
     expect(screen.getByLabelText('Phone')).toBeTruthy()
     expect(
       screen.getByText(
@@ -98,27 +81,16 @@ describe('CustomerBlock', () => {
     expect(chestInput.value).toBe('108')
   })
 
-  it('loads a blank measurement snapshot for a child with no history', async () => {
+  it('loads a blank measurement snapshot for a customer with no history', async () => {
     render(<Harness customer={createEmptyCustomer()} />)
 
     fireEvent.click(screen.getByText('Select customer...'))
     const option = await screen.findByRole('option', {
-      name: 'Sultan Al-Mansoori (child — Ahmed Al-Mansoori)',
+      name: 'Fatima Al-Farsi — +971-55-9876543',
     })
     selectOption(option)
 
     const chestInput = await screen.findByLabelText<HTMLInputElement>('Chest')
     expect(chestInput.value).toBe('')
-  })
-
-  it('lists a child customer alongside their guardian in the existing-customer picker', async () => {
-    render(<Harness customer={createEmptyCustomer()} />)
-
-    fireEvent.click(screen.getByText('Select customer...'))
-    expect(
-      await screen.findByRole('option', {
-        name: 'Sultan Al-Mansoori (child — Ahmed Al-Mansoori)',
-      }),
-    ).toBeTruthy()
   })
 })

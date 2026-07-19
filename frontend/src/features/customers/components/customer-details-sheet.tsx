@@ -28,13 +28,11 @@ import type { Customer } from '../types/customers'
 
 interface CustomerDetailsSheetProps {
   customer: Customer | null
-  allCustomers: Customer[]
   onOpenChange: (open: boolean) => void
 }
 
 export function CustomerDetailsSheet({
   customer,
-  allCustomers,
   onOpenChange,
 }: CustomerDetailsSheetProps) {
   const [activeMeasurementId, setActiveMeasurementId] = React.useState<
@@ -47,19 +45,8 @@ export function CustomerDetailsSheet({
 
   const { data: orders = [] } = useOrders()
   const customerOrders = React.useMemo(
-    () =>
-      customer?.mobileNo
-        ? orders.filter((order) => order.customerMobile === customer.mobileNo)
-        : [],
+    () => orders.filter((order) => order.customerMobile === customer?.mobileNo),
     [orders, customer],
-  )
-
-  const guardian = React.useMemo(
-    () =>
-      customer?.guardianId
-        ? (allCustomers.find((c) => c.id === customer.guardianId) ?? null)
-        : null,
-    [allCustomers, customer],
   )
 
   const activeMeasurement = React.useMemo(() => {
@@ -88,11 +75,7 @@ export function CustomerDetailsSheet({
                     {customer.name}
                   </SheetTitle>
                   <SheetDescription className="text-muted-foreground mt-0.5">
-                    {customer.mobileNo
-                      ? `Phone: ${customer.mobileNo}`
-                      : guardian
-                        ? `Child of ${guardian.name}${guardian.mobileNo ? ` — ${guardian.mobileNo}` : ''}`
-                        : 'No phone on file'}
+                    Phone: {customer.mobileNo}
                   </SheetDescription>
                 </div>
               </div>

@@ -11,12 +11,7 @@ import {
 import { TextField } from '@/components/form/fields'
 import type { Customer } from '@/features/customers/types/customers'
 import { createEmptyOrder } from '../../types/invoice-form'
-import type {
-  CustomerKind,
-  CustomerMode,
-  InvoiceFormApi,
-} from '../../types/invoice-form'
-import { GuardianField } from './guardian-field'
+import type { CustomerMode, InvoiceFormApi } from '../../types/invoice-form'
 import {
   measurementFromSnapshot,
   MeasurementFields,
@@ -24,10 +19,8 @@ import {
 import { OrderBlock } from './order-block'
 import { SegmentedOptions } from './segmented-options'
 
-function customerOptionLabel(customer: Customer, all: Customer[]) {
-  if (customer.mobileNo) return `${customer.name} — ${customer.mobileNo}`
-  const guardian = all.find((c) => c.id === customer.guardianId)
-  return `${customer.name} (child — ${guardian?.name ?? 'unknown guardian'})`
+function customerOptionLabel(customer: Customer) {
+  return `${customer.name} — ${customer.mobileNo}`
 }
 
 interface CustomerBlockProps {
@@ -96,10 +89,7 @@ export function CustomerBlock({
                           <Select
                             items={existingCustomers.map((customer) => ({
                               value: customer.id,
-                              label: customerOptionLabel(
-                                customer,
-                                existingCustomers,
-                              ),
+                              label: customerOptionLabel(customer),
                             }))}
                             value={idField.state.value}
                             onValueChange={(customerId: string) => {
@@ -124,10 +114,7 @@ export function CustomerBlock({
                                   key={customer.id}
                                   value={customer.id}
                                 >
-                                  {customerOptionLabel(
-                                    customer,
-                                    existingCustomers,
-                                  )}
+                                  {customerOptionLabel(customer)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -140,7 +127,7 @@ export function CustomerBlock({
                                 {selected.name}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {selected.mobileNo ?? 'No phone on file'}
+                                {selected.mobileNo}
                                 {selected.nameArabic
                                   ? ` · ${selected.nameArabic}`
                                   : ''}
@@ -153,27 +140,6 @@ export function CustomerBlock({
                   </form.Field>
                 ) : (
                   <div className="space-y-4">
-                    <form.Field name={`${base}.customerType` as never}>
-                      {(typeField: any) => (
-                        <SegmentedOptions
-                          options={['Adult', 'Child / Dependent']}
-                          value={
-                            typeField.state.value === 'adult'
-                              ? 'Adult'
-                              : 'Child / Dependent'
-                          }
-                          onChange={(label) =>
-                            typeField.handleChange(
-                              (label === 'Adult'
-                                ? 'adult'
-                                : 'child') satisfies CustomerKind,
-                            )
-                          }
-                          columns={2}
-                        />
-                      )}
-                    </form.Field>
-
                     <div className="grid gap-3 sm:grid-cols-2">
                       <TextField
                         form={form}
@@ -187,33 +153,15 @@ export function CustomerBlock({
                       />
                     </div>
 
-                    <form.Field name={`${base}.customerType` as never}>
-                      {(typeField: any) =>
-                        typeField.state.value === 'adult' ? (
-                          <TextField
-                            form={form}
-                            name={`${base}.mobileNo`}
-                            label="Phone"
-                          />
-                        ) : (
-                          <GuardianField
-                            form={form}
-                            customerIndex={customerIndex}
-                            existingCustomers={existingCustomers}
-                          />
-                        )
-                      }
-                    </form.Field>
+                    <TextField
+                      form={form}
+                      name={`${base}.mobileNo`}
+                      label="Phone"
+                    />
 
-                    <form.Field name={`${base}.customerType` as never}>
-                      {(typeField: any) => (
-                        <p className="text-xs text-muted-foreground">
-                          {typeField.state.value === 'adult'
-                            ? 'This customer will be created when the invoice is saved.'
-                            : 'This child will be created and linked to the selected guardian when the invoice is saved.'}
-                        </p>
-                      )}
-                    </form.Field>
+                    <p className="text-xs text-muted-foreground">
+                      This customer will be created when the invoice is saved.
+                    </p>
                   </div>
                 )}
               </>

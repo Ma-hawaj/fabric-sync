@@ -46,7 +46,6 @@ export function CustomersPage() {
 
       <CustomerDetailsSheet
         customer={selectedCustomer}
-        allCustomers={customers}
         onOpenChange={(open) => !open && setSelectedCustomer(null)}
       />
     </div>
