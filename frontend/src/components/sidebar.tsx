@@ -85,11 +85,9 @@ function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<SidebarMenuButton size="lg" />}>
-        <Avatar className="size-8 rounded-xl">
+        <Avatar>
           <AvatarImage src={user.avatarUrl} alt={user.name} />
-          <AvatarFallback className="rounded-xl">
-            {getInitials(user.name)}
-          </AvatarFallback>
+          <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
         </Avatar>
         <div className="grid flex-1 text-start text-sm leading-tight group-data-[collapsible=icon]:hidden">
           <span className="truncate font-medium">{user.name}</span>
@@ -101,11 +99,9 @@ function UserMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="top" className="w-64">
         <div className="flex items-center gap-2 px-2 py-1.5 text-start text-sm">
-          <Avatar className="size-8 rounded-xl">
+          <Avatar>
             <AvatarImage src={user.avatarUrl} alt={user.name} />
-            <AvatarFallback className="rounded-xl">
-              {getInitials(user.name)}
-            </AvatarFallback>
+            <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
           </Avatar>
           <div className="grid flex-1 leading-tight">
             <span className="truncate font-medium">{user.name}</span>
