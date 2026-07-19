@@ -9,6 +9,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 import '../styles.css'
 import Sidebar from '@/components/sidebar'
 import Breadcrumbs from '@/components/breadcrumbs'
+import { ModeToggle } from '@/components/mode-toggle'
 import type { AuthState } from '@/lib/auth'
 import type { QueryClient } from '@tanstack/react-query'
 import { SidebarInset, SidebarTrigger } from '#/components/ui/sidebar'
@@ -53,6 +54,7 @@ function Header() {
           >
             Users
           </Link>
+          <ModeToggle />
           {isAuthenticated ? (
             <button
               className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -83,7 +85,9 @@ function RootComponent() {
       <Sidebar />
       <SidebarInset>
         <Header />
-        <Outlet />
+        <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-6">
+          <Outlet />
+        </div>
       </SidebarInset>
       <TanStackDevtools
         config={{
