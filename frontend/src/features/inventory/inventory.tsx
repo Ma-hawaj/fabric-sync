@@ -1,5 +1,8 @@
 import * as React from 'react'
+import { Link } from '@tanstack/react-router'
+import { PlusIcon } from 'lucide-react'
 import { useDataTable } from '@/hooks/use-data-table'
+import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getInventoryColumns } from './components/inventory-columns'
@@ -27,11 +30,17 @@ export function InventoryPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Inventory</h1>
-        <p className="text-muted-foreground">
-          Track materials and their stock across every location.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Inventory</h1>
+          <p className="text-muted-foreground">
+            Track materials and their stock across every location.
+          </p>
+        </div>
+        <Button nativeButton={false} render={<Link to="/inventory/new" />}>
+          <PlusIcon className="h-4 w-4" />
+          Add Stock
+        </Button>
       </div>
 
       {isLoading ? (

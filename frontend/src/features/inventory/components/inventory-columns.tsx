@@ -3,9 +3,8 @@ import { EyeIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
+import { LOCATIONS } from '../data/inventory-options'
 import type { Material } from '../types/inventory'
-
-const LOCATIONS = ['Main Warehouse', 'Downtown Branch', 'Airport Branch']
 
 const locationOptions = LOCATIONS.map((location) => ({
   label: location,
