@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>frontend</title>
+    <script>
+      ;(function () {
+        var stored = localStorage.getItem('fabric-sync-theme')
+        if (stored !== 'light' && stored !== 'dark' && stored !== 'system') {
+          stored = 'system'
+        }
+        var prefersDark = window.matchMedia(
+          '(prefers-color-scheme: dark)',
+        ).matches
+        var resolved =
+          stored === 'system' ? (prefersDark ? 'dark' : 'light') : stored
+        var root = document.documentElement
+        root.classList.add(resolved)
+        root.style.colorScheme = resolved
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

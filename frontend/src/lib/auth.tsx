@@ -1,8 +1,21 @@
 import { createContext, useContext, useMemo } from 'react'
 import type { ReactNode } from 'react'
 
+export type AuthUser = {
+  name: string
+  email: string
+  avatarUrl?: string
+}
+
 export type AuthState = {
   isAuthenticated: boolean
+  user: AuthUser | null
+  signOut: () => void
+}
+
+const mockUser: AuthUser = {
+  name: 'Aisha Al Mansoori',
+  email: 'aisha@fabricsync.com',
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -11,6 +24,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthState>(
     () => ({
       isAuthenticated: true,
+      user: mockUser,
+      signOut: () => {},
     }),
     [],
   )
