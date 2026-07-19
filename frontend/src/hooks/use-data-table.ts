@@ -1,5 +1,4 @@
 import {
-  
   getCoreRowModel,
   getFacetedMinMaxValues,
   getFacetedRowModel,
@@ -7,26 +6,26 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
-  
-  
-  
-  
-  
-  
-  useReactTable
-  
+  useReactTable,
 } from '@tanstack/react-table'
-import type {ColumnFiltersState, PaginationState, RowSelectionState, SortingState, TableOptions, TableState, Updater, VisibilityState} from '@tanstack/react-table';
+import type {
+  ColumnFiltersState,
+  PaginationState,
+  RowSelectionState,
+  SortingState,
+  TableOptions,
+  TableState,
+  Updater,
+  VisibilityState,
+} from '@tanstack/react-table'
 import {
   parseAsArrayOf,
   parseAsInteger,
   parseAsString,
-  
-  
   useQueryState,
-  useQueryStates
+  useQueryStates,
 } from 'nuqs'
-import type {SingleParser, UseQueryStateOptions} from 'nuqs';
+import type { SingleParser, UseQueryStateOptions } from 'nuqs'
 import * as React from 'react'
 
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'

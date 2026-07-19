@@ -1,27 +1,28 @@
 'use client'
 
 import {
-  
   closestCenter,
   closestCorners,
   DndContext,
-  
-  
-  
-  
   DragOverlay,
-  
-  
   defaultDropAnimationSideEffects,
   KeyboardSensor,
   MouseSensor,
-  
   TouchSensor,
-  
   useSensor,
-  useSensors
+  useSensors,
 } from '@dnd-kit/core'
-import type {Announcements, DndContextProps, DragEndEvent, DraggableAttributes, DraggableSyntheticListeners, DragStartEvent, DropAnimation, ScreenReaderInstructions, UniqueIdentifier} from '@dnd-kit/core';
+import type {
+  Announcements,
+  DndContextProps,
+  DragEndEvent,
+  DraggableAttributes,
+  DraggableSyntheticListeners,
+  DragStartEvent,
+  DropAnimation,
+  ScreenReaderInstructions,
+  UniqueIdentifier,
+} from '@dnd-kit/core'
 import {
   restrictToHorizontalAxis,
   restrictToParentElement,
@@ -31,12 +32,11 @@ import {
   arrayMove,
   horizontalListSortingStrategy,
   SortableContext,
-  
   sortableKeyboardCoordinates,
   useSortable,
-  verticalListSortingStrategy
+  verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import type {SortableContextProps} from '@dnd-kit/sortable';
+import type { SortableContextProps } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Slot as SlotPrimitive } from 'radix-ui'
 import * as React from 'react'
