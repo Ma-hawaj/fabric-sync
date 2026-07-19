@@ -47,9 +47,7 @@ pub struct Measurement {
 pub struct Customer {
     pub id: Uuid,
     pub name: String,
-    // None for children/dependents, who are looked up through `guardian_id`
-    // instead of their own phone number.
-    pub mobile_no: Option<String>,
+    pub mobile_no: String,
     pub measurements: Vec<Measurement>,
 }
 
