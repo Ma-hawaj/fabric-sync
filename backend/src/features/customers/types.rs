@@ -51,6 +51,13 @@ pub struct Customer {
     pub measurements: Vec<Measurement>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateCustomerInput {
+    pub name: String,
+    pub mobile_no: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
