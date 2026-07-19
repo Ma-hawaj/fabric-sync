@@ -1,6 +1,7 @@
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import {
@@ -34,7 +35,15 @@ export function InventoryFormPage() {
     defaultValues: createEmptyInventoryForm(),
     validators: { onSubmit: inventoryFormSchema },
     onSubmit: async ({ value }) => {
-      await addStock.mutateAsync(value)
+      const pending = addStock.mutateAsync(value)
+      toast.promise(pending, {
+        loading:
+          value.mode === 'existing' ? 'Adding stock...' : 'Adding material...',
+        success: value.mode === 'existing' ? 'Stock added.' : 'Material added.',
+        error: 'Could not save this stock. Please try again.',
+      })
+
+      await pending
       await navigate({ to: '/inventory' })
     },
   })

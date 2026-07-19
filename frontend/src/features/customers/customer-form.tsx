@@ -1,10 +1,11 @@
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { MeasurementFields } from './components/measurement-fields'
-import { useCreateCustomer } from './hooks/use-create-customer'
+import { ApiError, useCreateCustomer } from './hooks/use-create-customer'
 import { customerFormSchema } from './lib/customer-schema'
 import { createEmptyCustomerForm } from './types/customer-form'
 
@@ -16,8 +17,18 @@ export function CustomerFormPage() {
     defaultValues: createEmptyCustomerForm(),
     validators: { onSubmit: customerFormSchema },
     onSubmit: async ({ value }) => {
+      const pending = createCustomer.mutateAsync(value)
+      toast.promise(pending, {
+        loading: 'Adding customer...',
+        success: (customer) => `${customer.name} was added.`,
+        error: (error) =>
+          error instanceof ApiError && error.status === 409
+            ? 'A customer with this name and phone number already exists.'
+            : 'Could not save this customer. Please try again.',
+      })
+
       try {
-        await createCustomer.mutateAsync(value)
+        await pending
       } catch {
         return
       }

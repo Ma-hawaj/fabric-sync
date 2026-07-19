@@ -1,11 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import { apiBaseUrl } from '@/lib/api'
 import type { CustomerFormValues } from '../types/customer-form'
 import type { Customer } from '../types/customers'
 import type { MeasurementDraft } from '../types/measurement-form'
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
@@ -83,14 +82,6 @@ export function useCreateCustomer() {
         ...customers,
         customer,
       ])
-      toast.success(`${customer.name} was added.`)
-    },
-    onError: (error) => {
-      toast.error(
-        error instanceof ApiError && error.status === 409
-          ? 'A customer with this name and phone number already exists.'
-          : 'Could not save this customer. Please try again.',
-      )
     },
   })
 }
