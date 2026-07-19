@@ -7,7 +7,7 @@ export type NumberInput = number | ''
 
 export interface StockEntryDraft {
   key: string
-  location: string
+  locationId: string
   quantity: NumberInput
 }
 
@@ -46,7 +46,7 @@ export type InventoryFormApi = ReactFormExtendedApi<
 export function createEmptyStockEntry(): StockEntryDraft {
   return {
     key: crypto.randomUUID(),
-    location: '',
+    locationId: '',
     quantity: '',
   }
 }

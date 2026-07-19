@@ -3,7 +3,7 @@ import { EyeIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
-import type { Material } from '../types/inventory'
+import type { Location, Material } from '../types/inventory'
 
 function totalQuantity(material: Material) {
   return material.locations.reduce((sum, l) => sum + l.quantity, 0)
@@ -11,7 +11,7 @@ function totalQuantity(material: Material) {
 
 export const getInventoryColumns = (
   onViewStock: (material: Material) => void,
-  locations: string[],
+  locations: Location[],
 ): ColumnDef<Material, any>[] => [
   {
     accessorKey: 'name',
@@ -40,13 +40,13 @@ export const getInventoryColumns = (
     ),
     cell: ({ row }) => (
       <div className="font-mono text-muted-foreground">
-        {row.getValue('sku')}
+        {row.getValue('sku') ?? '—'}
       </div>
     ),
     enableSorting: true,
     enableColumnFilter: true,
     filterFn: (row, columnId, filterValue) => {
-      const cellValue = row.getValue<string>(columnId)
+      const cellValue = row.getValue<string | null>(columnId) ?? ''
       return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
     },
     meta: {
@@ -64,7 +64,7 @@ export const getInventoryColumns = (
     cell: ({ row }) => (
       <div className="flex flex-wrap gap-1">
         {row.original.locations.map((l) => (
-          <Badge key={l.location} variant="outline">
+          <Badge key={l.locationId} variant="outline">
             {l.location}
           </Badge>
         ))}
@@ -87,9 +87,11 @@ export const getInventoryColumns = (
       label: 'Locations',
       placeholder: 'Filter locations...',
       variant: 'multiSelect',
+      // The filter matches against location names (see accessorFn above),
+      // so option values are names rather than ids.
       options: locations.map((location) => ({
-        label: location,
-        value: location,
+        label: location.name,
+        value: location.name,
       })),
     },
   },

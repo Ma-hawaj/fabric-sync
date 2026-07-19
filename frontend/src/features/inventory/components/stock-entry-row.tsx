@@ -9,12 +9,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { NumberField } from '@/components/form/fields'
+import type { Location } from '../types/inventory'
 import type { InventoryFormApi } from '../types/inventory-form'
 
 interface StockEntryRowProps {
   form: InventoryFormApi
   entryIndex: number
-  locations: string[]
+  locations: Location[]
   removable: boolean
   onRemove: () => void
 }
@@ -30,7 +31,7 @@ export function StockEntryRow({
 
   return (
     <div className="flex items-start gap-3">
-      <form.Field name={`${base}.location` as never}>
+      <form.Field name={`${base}.locationId` as never}>
         {(field: any) => (
           <Field
             data-invalid={field.state.meta.errors.length > 0}
@@ -39,8 +40,8 @@ export function StockEntryRow({
             <FieldLabel htmlFor={field.name}>Location</FieldLabel>
             <Select
               items={locations.map((location) => ({
-                value: location,
-                label: location,
+                value: location.id,
+                label: location.name,
               }))}
               value={field.state.value}
               onValueChange={(value: string) => field.handleChange(value)}
@@ -50,8 +51,8 @@ export function StockEntryRow({
               </SelectTrigger>
               <SelectContent>
                 {locations.map((location) => (
-                  <SelectItem key={location} value={location}>
-                    {location}
+                  <SelectItem key={location.id} value={location.id}>
+                    {location.name}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -98,7 +98,9 @@ export function InventoryFormPage() {
                       <Select
                         items={materials.map((material) => ({
                           value: material.id,
-                          label: `${material.name} (${material.sku})`,
+                          label: material.sku
+                            ? `${material.name} (${material.sku})`
+                            : material.name,
                         }))}
                         value={field.state.value}
                         onValueChange={(value: string) =>
@@ -111,7 +113,9 @@ export function InventoryFormPage() {
                         <SelectContent>
                           {materials.map((material) => (
                             <SelectItem key={material.id} value={material.id}>
-                              {material.name} ({material.sku})
+                              {material.sku
+                                ? `${material.name} (${material.sku})`
+                                : material.name}
                             </SelectItem>
                           ))}
                         </SelectContent>

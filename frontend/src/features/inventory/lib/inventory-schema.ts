@@ -10,15 +10,15 @@ const numberInputSchema = z.union([
 const stockEntrySchema = z
   .object({
     key: z.string(),
-    location: z.string(),
+    locationId: z.string(),
     quantity: numberInputSchema,
   })
   .superRefine((entry, ctx) => {
-    if (!entry.location) {
+    if (!entry.locationId) {
       ctx.addIssue({
         code: 'custom',
         message: 'Pick a location.',
-        path: ['location'],
+        path: ['locationId'],
       })
     }
 
@@ -59,15 +59,15 @@ export const inventoryFormSchema = z
 
     const seenLocations = new Set<string>()
     value.entries.forEach((entry, index) => {
-      if (!entry.location || !seenLocations.has(entry.location)) {
-        seenLocations.add(entry.location)
+      if (!entry.locationId || !seenLocations.has(entry.locationId)) {
+        seenLocations.add(entry.locationId)
         return
       }
 
       ctx.addIssue({
         code: 'custom',
         message: 'Each location can only be added once.',
-        path: ['entries', index, 'location'],
+        path: ['entries', index, 'locationId'],
       })
     })
   })
