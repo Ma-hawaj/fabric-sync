@@ -12,7 +12,18 @@ CREATE TABLE customers (
 CREATE TABLE materials (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     name TEXT NOT NULL,
-    branch_id UUID NOT NULL REFERENCES branch(id)
+    sku TEXT,
+    unit TEXT NOT NULL DEFAULT 'meters'
+);
+
+-- A material can be stocked at more than one location (branch), so stock is
+-- tracked per material/location pair rather than as a single quantity.
+CREATE TABLE material_stock (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    material_id UUID NOT NULL REFERENCES materials(id),
+    branch_id UUID NOT NULL REFERENCES branch(id),
+    quantity NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    UNIQUE (material_id, branch_id)
 );
 
 CREATE TABLE invoices (
