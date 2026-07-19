@@ -1,5 +1,6 @@
 import { XIcon } from 'lucide-react'
 import { NumberField } from '@/components/form/fields'
+import { SegmentedOptions } from '@/components/form/segmented-options'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Label } from '@/components/ui/label'
@@ -21,7 +22,6 @@ import {
 } from '../../data/invoice-form-options'
 import { computeOrderLineTotal } from '../../lib/invoice-pricing'
 import type { InvoiceFormApi } from '../../types/invoice-form'
-import { SegmentedOptions } from './segmented-options'
 
 interface OrderBlockProps {
   form: InvoiceFormApi

@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { TextField } from '@/components/form/fields'
+import { SegmentedOptions } from '@/components/form/segmented-options'
 import type { Customer } from '@/features/customers/types/customers'
 import { createEmptyOrder } from '../../types/invoice-form'
 import type { CustomerMode, InvoiceFormApi } from '../../types/invoice-form'
@@ -17,7 +18,6 @@ import {
   MeasurementFields,
 } from './measurement-fields'
 import { OrderBlock } from './order-block'
-import { SegmentedOptions } from './segmented-options'
 
 function customerOptionLabel(customer: Customer) {
   return `${customer.name} — ${customer.mobileNo}`

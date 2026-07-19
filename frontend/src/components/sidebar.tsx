@@ -13,6 +13,7 @@ import {
   Grid,
   ShoppingCart,
   ReceiptText,
+  PackageIcon,
 } from 'lucide-react'
 
 export function AppSidebar() {
@@ -48,6 +49,13 @@ export function AppSidebar() {
             <SidebarMenuButton render={<Link to="/customers" />}>
               <UsersIcon />
               <span>Customers</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem>
+            <SidebarMenuButton render={<Link to="/inventory" />}>
+              <PackageIcon />
+              <span>Inventory</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
 
