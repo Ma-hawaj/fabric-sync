@@ -7,11 +7,17 @@
     <script>
       ;(function () {
         var stored = localStorage.getItem('fabric-sync-theme')
-        var isDark =
-          stored === 'dark' ||
-          (stored !== 'light' &&
-            window.matchMedia('(prefers-color-scheme: dark)').matches)
-        document.documentElement.classList.toggle('dark', isDark)
+        if (stored !== 'light' && stored !== 'dark' && stored !== 'system') {
+          stored = 'system'
+        }
+        var prefersDark = window.matchMedia(
+          '(prefers-color-scheme: dark)',
+        ).matches
+        var resolved =
+          stored === 'system' ? (prefersDark ? 'dark' : 'light') : stored
+        var root = document.documentElement
+        root.classList.add(resolved)
+        root.style.colorScheme = resolved
       })()
     </script>
   </head>
