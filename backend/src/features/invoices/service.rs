@@ -4,8 +4,14 @@ use crate::{
 
 use super::{
     repository,
-    types::{CreateInvoiceInput, CreatedInvoice, DiscountUnit, InvoiceCustomerInput},
+    types::{
+        CreateInvoiceInput, CreatedInvoice, DiscountUnit, InvoiceCustomerInput, InvoiceListItem,
+    },
 };
+
+pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, AppError> {
+    Ok(repository::list_invoices(state).await?)
+}
 
 // Matches the frontend's invoice summary; the stored total is
 // (subtotal - discount) + VAT, floored at zero before tax.

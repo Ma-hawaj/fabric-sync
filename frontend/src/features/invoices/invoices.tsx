@@ -1,18 +1,26 @@
+import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { useDataTable } from '@/hooks/use-data-table'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
-import { invoiceColumns } from './components/invoice-columns'
+import { getInvoiceColumns } from './components/invoice-columns'
 import { useInvoices } from './hooks/use-invoices'
 
 export function InvoicesPage() {
   const { data: invoices = [], isLoading } = useInvoices()
 
+  // The materials filter offers exactly the material names present in the
+  // fetched invoices.
+  const columns = React.useMemo(() => {
+    const materials = [...new Set(invoices.flatMap((i) => i.materials))].sort()
+    return getInvoiceColumns(materials.map((m) => ({ label: m, value: m })))
+  }, [invoices])
+
   const { table } = useDataTable({
     data: invoices,
-    columns: invoiceColumns,
+    columns,
     manualFiltering: false,
     manualSorting: false,
     manualPagination: false,

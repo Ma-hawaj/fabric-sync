@@ -1,15 +1,23 @@
+import * as React from 'react'
 import { useDataTable } from '@/hooks/use-data-table'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
-import { orderColumns } from './components/order-columns'
+import { getOrderColumns } from './components/order-columns'
 import { useOrders } from './hooks/use-orders'
 
 export function OrdersPage() {
   const { data: orders = [], isLoading } = useOrders()
 
+  // The material filter offers exactly the material names present in the
+  // fetched orders.
+  const columns = React.useMemo(() => {
+    const materials = [...new Set(orders.map((o) => o.material))].sort()
+    return getOrderColumns(materials.map((m) => ({ label: m, value: m })))
+  }, [orders])
+
   const { table } = useDataTable({
     data: orders,
-    columns: orderColumns,
+    columns,
     manualFiltering: false,
     manualSorting: false,
     manualPagination: false,

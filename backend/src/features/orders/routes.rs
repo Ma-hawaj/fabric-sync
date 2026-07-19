@@ -5,8 +5,5 @@ use crate::state::AppState;
 use super::handlers;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route(
-        "/invoices",
-        get(handlers::list_invoices).post(handlers::create_invoice),
-    )
+    Router::new().route("/orders", get(handlers::list_orders))
 }

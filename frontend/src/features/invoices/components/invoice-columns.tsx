@@ -1,49 +1,38 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
-import type { Invoice } from '../types/invoices'
-
-const MATERIALS = [
-  'Bamboo Fiber',
-  'Cashmere Blend',
-  'Corduroy',
-  'Cotton',
-  'Cotton Blend',
-  'Denim',
-  'Hemp',
-  'Jacquard',
-  'Lace',
-  'Linen',
-  'Microfiber',
-  'Organic Cotton',
-  'Polyester',
-  'Recycled Polyester',
-  'Satin',
-  'Silk',
-  'Spandex Blend',
-  'Tweed',
-  'Velvet',
-  'Wool',
-]
-
-const materialOptions = MATERIALS.map((m) => ({
-  label: m,
-  value: m,
-}))
+import type { Invoice, PaymentStatus } from '../types/invoices'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
-  currency: 'USD',
+  currency: 'SAR',
 })
 
-export const invoiceColumns: ColumnDef<Invoice, any>[] = [
+// Invoice ids are uuidv7 — time-ordered, so the short prefix still sorts by
+// creation and is unique enough to identify an invoice at a glance.
+function shortId(id: string) {
+  return id.slice(0, 8).toUpperCase()
+}
+
+const PAYMENT_STATUS_VARIANT: Record<
+  PaymentStatus,
+  'destructive' | 'secondary' | 'default'
+> = {
+  unpaid: 'destructive',
+  partial: 'secondary',
+  paid: 'default',
+}
+
+export const getInvoiceColumns = (
+  materialOptions: { label: string; value: string }[],
+): ColumnDef<Invoice, any>[] => [
   {
     accessorKey: 'id',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Invoice" />
     ),
     cell: ({ row }) => (
-      <div className="font-mono font-medium">{row.getValue('id')}</div>
+      <div className="font-mono font-medium">{shortId(row.getValue('id'))}</div>
     ),
     enableSorting: true,
     enableColumnFilter: true,
@@ -58,7 +47,20 @@ export const invoiceColumns: ColumnDef<Invoice, any>[] = [
     },
   },
   {
-    accessorKey: 'customerName',
+    id: 'date',
+    accessorFn: (invoice) => new Date(invoice.date),
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Date" />
+    ),
+    cell: ({ row }) => (
+      <div>{row.getValue<Date>('date').toLocaleDateString()}</div>
+    ),
+    enableSorting: true,
+    enableColumnFilter: false,
+  },
+  {
+    id: 'customerName',
+    accessorFn: (invoice) => invoice.customers.map((c) => c.name).join(', '),
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Customer Name" />
     ),
@@ -76,7 +78,9 @@ export const invoiceColumns: ColumnDef<Invoice, any>[] = [
     },
   },
   {
-    accessorKey: 'customerMobile',
+    id: 'customerMobile',
+    accessorFn: (invoice) =>
+      invoice.customers.map((c) => c.mobileNo).join(', '),
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Customer Mobile" />
     ),
@@ -144,6 +148,40 @@ export const invoiceColumns: ColumnDef<Invoice, any>[] = [
     },
   },
   {
+    accessorKey: 'paymentStatus',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Payment" />
+    ),
+    cell: ({ row }) => {
+      const status = row.getValue<PaymentStatus>('paymentStatus')
+      return (
+        <Badge variant={PAYMENT_STATUS_VARIANT[status]} className="capitalize">
+          {status}
+        </Badge>
+      )
+    },
+    enableSorting: true,
+    enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) => {
+      if (
+        !filterValue ||
+        (Array.isArray(filterValue) && filterValue.length === 0)
+      )
+        return true
+      return (filterValue as string[]).includes(row.getValue(columnId))
+    },
+    meta: {
+      label: 'Payment',
+      placeholder: 'Filter payment...',
+      variant: 'multiSelect',
+      options: [
+        { label: 'Unpaid', value: 'unpaid' },
+        { label: 'Partial', value: 'partial' },
+        { label: 'Paid', value: 'paid' },
+      ],
+    },
+  },
+  {
     accessorKey: 'totalPrice',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Total Price" />
@@ -174,7 +212,7 @@ export const invoiceColumns: ColumnDef<Invoice, any>[] = [
       label: 'Total Price',
       variant: 'range',
       range: [0, 2000],
-      unit: '$',
+      unit: 'SAR',
     },
   },
 ]
