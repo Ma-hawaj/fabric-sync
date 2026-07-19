@@ -29,31 +29,11 @@ function Header() {
   return (
     <header className="border-b">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-        <SidebarTrigger />
         <div className="flex items-center gap-2">
-          <Link
-            to="/"
-            className="font-heading text-sm font-semibold tracking-normal"
-          >
-            Fabric Sync
-          </Link>
+          <SidebarTrigger />
           <Breadcrumbs />
         </div>
         <nav className="flex items-center gap-1">
-          <Link
-            to="/dashboard"
-            className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-            activeProps={{ className: 'bg-muted text-foreground' }}
-          >
-            Dashboard
-          </Link>
-          <Link
-            to="/users"
-            className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-            activeProps={{ className: 'bg-muted text-foreground' }}
-          >
-            Users
-          </Link>
           <ModeToggle />
           {isAuthenticated ? (
             <button
