@@ -11,6 +11,7 @@ pub enum AppError {
     Migration(sqlx::migrate::MigrateError),
     NotFound(String),
     Conflict(String),
+    BadRequest(String),
 }
 
 impl From<std::io::Error> for AppError {
@@ -26,6 +27,13 @@ impl From<sqlx::Error> for AppError {
         if let sqlx::Error::Database(db_error) = &error {
             if db_error.code().as_deref() == Some("23505") {
                 return Self::Conflict("a record with these values already exists".to_string());
+            }
+
+            // 23503 is `foreign_key_violation` — the client referenced an id
+            // that doesn't exist (e.g. an unknown customer or material), which
+            // is a bad request rather than a server fault.
+            if db_error.code().as_deref() == Some("23503") {
+                return Self::BadRequest("a referenced record does not exist".to_string());
             }
         }
 
@@ -48,6 +56,7 @@ impl IntoResponse for AppError {
             Self::Migration(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
             Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
             Self::Conflict(message) => (StatusCode::CONFLICT, message),
+            Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
         };
 
         (status, message).into_response()

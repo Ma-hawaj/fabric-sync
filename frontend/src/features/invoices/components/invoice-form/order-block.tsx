@@ -15,19 +15,24 @@ import {
 import {
   COLLARS,
   FRONT_POCKETS,
-  MATERIALS,
   PATTIS,
   SLEEVES,
   THOBE_TYPES,
 } from '../../data/invoice-form-options'
-import { computeOrderLineTotal } from '../../lib/invoice-pricing'
+import { materialTotalStock } from '../../types/materials'
+import type { Material } from '../../types/materials'
 import type { InvoiceFormApi } from '../../types/invoice-form'
+
+function materialOptionLabel(material: Material) {
+  return material.sku ? `${material.name} (${material.sku})` : material.name
+}
 
 interface OrderBlockProps {
   form: InvoiceFormApi
   customerIndex: number
   orderIndex: number
   orderNumber: number
+  materials: Material[]
   onRemove: () => void
   removable: boolean
 }
@@ -37,6 +42,7 @@ export function OrderBlock({
   customerIndex,
   orderIndex,
   orderNumber,
+  materials,
   onRemove,
   removable,
 }: OrderBlockProps) {
@@ -139,20 +145,20 @@ export function OrderBlock({
 
       <div className="space-y-3">
         <h4 className="text-sm font-semibold">Material</h4>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <form.Field name={`${base}.materialId` as never}>
             {(field: any) => {
-              const selected = MATERIALS.find((m) => m.id === field.state.value)
+              const selected = materials.find((m) => m.id === field.state.value)
               return (
                 <Field
-                  className="sm:col-span-2"
+                  className="lg:col-span-2"
                   data-invalid={field.state.meta.errors.length > 0}
                 >
                   <FieldLabel htmlFor={field.name}>Material</FieldLabel>
                   <Select
-                    items={MATERIALS.map((material) => ({
+                    items={materials.map((material) => ({
                       value: material.id,
-                      label: `${material.name} (${material.code})`,
+                      label: materialOptionLabel(material),
                     }))}
                     value={field.state.value}
                     onValueChange={(value: string) => field.handleChange(value)}
@@ -161,9 +167,9 @@ export function OrderBlock({
                       <SelectValue placeholder="Select material..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {MATERIALS.map((material) => (
+                      {materials.map((material) => (
                         <SelectItem key={material.id} value={material.id}>
-                          {material.name} ({material.code})
+                          {materialOptionLabel(material)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -171,8 +177,13 @@ export function OrderBlock({
                   <FieldError errors={field.state.meta.errors} />
                   {selected && (
                     <p className="text-xs text-muted-foreground">
-                      Available: {selected.availableMeters}m —{' '}
-                      {selected.storageLocation}
+                      Available: {materialTotalStock(selected)} {selected.unit}
+                      {selected.locations.length > 0 &&
+                        ` — ${selected.locations
+                          .map(
+                            (stock) => `${stock.location}: ${stock.quantity}`,
+                          )
+                          .join(', ')}`}
                     </p>
                   )}
                 </Field>
@@ -185,22 +196,9 @@ export function OrderBlock({
             name={`${base}.materialAmount`}
             label="Quantity (m)"
           />
-        </div>
 
-        <form.Subscribe
-          selector={(state: any) => {
-            const order =
-              state.values.customers[customerIndex]?.orders[orderIndex]
-            return order ? computeOrderLineTotal(order) : 0
-          }}
-        >
-          {(lineTotal: number) => (
-            <p className="text-sm font-medium">
-              Line Total:{' '}
-              <span className="font-semibold">SAR {lineTotal.toFixed(2)}</span>
-            </p>
-          )}
-        </form.Subscribe>
+          <NumberField form={form} name={`${base}.price`} label="Price (SAR)" />
+        </div>
       </div>
     </div>
   )

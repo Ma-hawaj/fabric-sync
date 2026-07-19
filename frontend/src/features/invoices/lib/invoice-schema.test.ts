@@ -7,7 +7,12 @@ import type {
 } from '../types/invoice-form'
 
 function validOrder() {
-  return { ...createEmptyOrder(), materialId: 'mat-1', materialAmount: 2 }
+  return {
+    ...createEmptyOrder(),
+    materialId: 'mat-1',
+    materialAmount: 2,
+    price: 150,
+  }
 }
 
 function baseValues(customers: InvoiceCustomerDraft[]): InvoiceFormValues {
@@ -92,7 +97,7 @@ describe('invoiceFormSchema', () => {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
       existingCustomerId: 'cust-1',
-      orders: [{ ...createEmptyOrder(), materialAmount: 2 }],
+      orders: [{ ...createEmptyOrder(), materialAmount: 2, price: 150 }],
     }
     const error = firstError([customer])
     expect(error?.message).toMatch(/pick a material and quantity/i)
@@ -104,11 +109,25 @@ describe('invoiceFormSchema', () => {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
       existingCustomerId: 'cust-1',
-      orders: [{ ...createEmptyOrder(), materialId: 'mat-1' }],
+      orders: [{ ...createEmptyOrder(), materialId: 'mat-1', price: 150 }],
     }
     expect(firstError([customer])?.message).toMatch(
       /pick a material and quantity/i,
     )
+  })
+
+  it('rejects an order with no price entered', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      orders: [
+        { ...createEmptyOrder(), materialId: 'mat-1', materialAmount: 2 },
+      ],
+    }
+    const error = firstError([customer])
+    expect(error?.message).toMatch(/enter a price/i)
+    expect(error?.path).toEqual(['customers', 0, 'orders', 0, 'price'])
   })
 
   it('rejects an invoice with no customers', () => {

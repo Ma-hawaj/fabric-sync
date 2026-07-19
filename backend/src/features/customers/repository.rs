@@ -53,12 +53,14 @@ pub async fn get_customer(
     Ok(fetch_customers(state, Some(customer_id)).await?.pop())
 }
 
-async fn insert_measurement(
+// Also used by the invoices feature, which records a measurement snapshot per
+// customer inside its own transaction and needs the new row's id for orders.
+pub async fn insert_measurement(
     tx: &mut sqlx::PgTransaction<'_>,
     customer_id: Uuid,
     measurement: &CreateMeasurementInput,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
+) -> Result<Uuid, sqlx::Error> {
+    sqlx::query_scalar!(
         r#"
         INSERT INTO measurements (
             customer_id, measurement_date,
@@ -76,6 +78,7 @@ async fn insert_measurement(
             $19, $20, $21, $22::float8, $23::float8,
             $24, $25, $26
         )
+        RETURNING id
         "#,
         customer_id,
         measurement.date,
@@ -104,10 +107,28 @@ async fn insert_measurement(
         measurement.side_pocket,
         measurement.mobile_pocket_length_by_width,
     )
-    .execute(&mut **tx)
-    .await?;
+    .fetch_one(&mut **tx)
+    .await
+}
 
-    Ok(())
+// Tx-scoped so the invoices feature can create new customers as part of an
+// invoice's transaction.
+pub async fn insert_customer(
+    tx: &mut sqlx::PgTransaction<'_>,
+    name: &str,
+    mobile_no: &str,
+) -> Result<Uuid, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"
+        INSERT INTO customers (name, mobile_no)
+        VALUES ($1, $2)
+        RETURNING id
+        "#,
+        name,
+        mobile_no,
+    )
+    .fetch_one(&mut **tx)
+    .await
 }
 
 pub async fn create_customer(
@@ -118,17 +139,7 @@ pub async fn create_customer(
 ) -> Result<Uuid, sqlx::Error> {
     let mut tx = state.db().begin().await?;
 
-    let customer_id = sqlx::query_scalar!(
-        r#"
-        INSERT INTO customers (name, mobile_no)
-        VALUES ($1, $2)
-        RETURNING id
-        "#,
-        name,
-        mobile_no,
-    )
-    .fetch_one(&mut *tx)
-    .await?;
+    let customer_id = insert_customer(&mut tx, name, mobile_no).await?;
 
     if let Some(measurement) = measurement {
         insert_measurement(&mut tx, customer_id, measurement).await?;

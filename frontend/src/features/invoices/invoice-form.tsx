@@ -1,10 +1,15 @@
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { ApiError } from '@/features/customers/hooks/use-create-customer'
 import { useCustomers } from '@/features/customers/hooks/use-customers'
 import { CustomerBlock } from './components/invoice-form/customer-block'
 import { InvoiceSummary } from './components/invoice-form/invoice-summary'
+import { useBranches } from './hooks/use-branches'
+import { useCreateInvoice } from './hooks/use-create-invoice'
+import { useMaterials } from './hooks/use-materials'
 import { invoiceFormSchema } from './lib/invoice-schema'
 import { createEmptyCustomer } from './types/invoice-form'
 import type { InvoiceFormValues } from './types/invoice-form'
@@ -12,6 +17,9 @@ import type { InvoiceFormValues } from './types/invoice-form'
 export function InvoiceFormPage() {
   const navigate = useNavigate()
   const { data: existingCustomers = [] } = useCustomers()
+  const { data: materials = [] } = useMaterials()
+  const { data: branches = [] } = useBranches()
+  const createInvoice = useCreateInvoice()
 
   // A plain type annotation (not `satisfies`) so TFormData widens to
   // InvoiceFormValues' union members (e.g. `discount: number | ''`) rather
@@ -31,8 +39,22 @@ export function InvoiceFormPage() {
     defaultValues,
     validators: { onSubmit: invoiceFormSchema },
     onSubmit: async ({ value }) => {
-      // Mocked — no backend endpoint exists yet for creating invoices.
-      console.log('Invoice submitted (mocked):', value)
+      const pending = createInvoice.mutateAsync(value)
+      toast.promise(pending, {
+        loading: 'Saving invoice...',
+        success: (invoice) =>
+          `Invoice saved — total SAR ${invoice.totalPrice.toFixed(2)}.`,
+        error: (error) =>
+          error instanceof ApiError && error.status === 409
+            ? 'A customer with this name and phone number already exists.'
+            : 'Could not save this invoice. Please try again.',
+      })
+
+      try {
+        await pending
+      } catch {
+        return
+      }
       await navigate({ to: '/invoices' })
     },
   })
@@ -65,6 +87,7 @@ export function InvoiceFormPage() {
                   customerIndex={index}
                   customerNumber={index + 1}
                   existingCustomers={existingCustomers}
+                  materials={materials}
                   removable={customersField.state.value.length > 1}
                   onRemove={() => customersField.removeValue(index)}
                 />
@@ -85,6 +108,7 @@ export function InvoiceFormPage() {
         <InvoiceSummary
           form={form as never}
           existingCustomers={existingCustomers}
+          branches={branches}
         />
 
         <form.Subscribe
@@ -106,21 +130,13 @@ export function InvoiceFormPage() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => {
-              console.log('Invoice saved as draft (mocked):', form.state.values)
-              void navigate({ to: '/invoices' })
-            }}
-          >
-            Save Draft
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
             onClick={() => window.print()}
           >
             Print
           </Button>
-          <Button type="submit">Save &amp; Send</Button>
+          <Button type="submit" disabled={createInvoice.isPending}>
+            Save
+          </Button>
         </div>
       </form>
     </div>

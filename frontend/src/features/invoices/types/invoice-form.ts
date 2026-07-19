@@ -21,9 +21,9 @@ export interface InvoiceOrderDraft {
 
   materialId: string
   materialAmount: NumberInput
-  // Line total is derived from materialId + materialAmount (see
-  // computeOrderLineTotal) rather than stored, so it can never drift out of
-  // sync with the material's price per meter.
+  // Entered by staff per order line — materials carry no unit price to derive
+  // it from.
+  price: NumberInput
 }
 
 export interface InvoiceCustomerDraft {
@@ -35,7 +35,6 @@ export interface InvoiceCustomerDraft {
 
   // mode: 'new'
   name: string
-  nameArabic: string
   mobileNo: string
 
   measurement: MeasurementDraft
@@ -81,6 +80,7 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     moreDetails: '',
     materialId: '',
     materialAmount: '',
+    price: '',
   }
 }
 
@@ -90,7 +90,6 @@ export function createEmptyCustomer(): InvoiceCustomerDraft {
     mode: 'existing',
     existingCustomerId: '',
     name: '',
-    nameArabic: '',
     mobileNo: '',
     measurement: createEmptyMeasurement(),
     orders: [createEmptyOrder()],

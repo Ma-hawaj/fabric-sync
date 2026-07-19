@@ -9,8 +9,8 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import type { Customer } from '@/features/customers/types/customers'
-import { BRANCHES } from '../../data/invoice-form-options'
 import { computeOrderLineTotal } from '../../lib/invoice-pricing'
+import type { Branch } from '../../types/branches'
 import type {
   InvoiceCustomerDraft,
   InvoiceFormApi,
@@ -56,11 +56,13 @@ function buildLineItems(
 interface InvoiceSummaryProps {
   form: InvoiceFormApi
   existingCustomers: Customer[]
+  branches: Branch[]
 }
 
 export function InvoiceSummary({
   form,
   existingCustomers,
+  branches,
 }: InvoiceSummaryProps) {
   return (
     <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
@@ -73,6 +75,10 @@ export function InvoiceSummary({
             <div className="space-y-1">
               <Label htmlFor={field.name}>Receiving Branch</Label>
               <Select
+                items={branches.map((branch) => ({
+                  value: branch.id,
+                  label: branch.name,
+                }))}
                 value={field.state.value}
                 onValueChange={(value: string) => field.handleChange(value)}
               >
@@ -80,9 +86,9 @@ export function InvoiceSummary({
                   <SelectValue placeholder="Select branch..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {BRANCHES.map((branch) => (
-                    <SelectItem key={branch} value={branch}>
-                      {branch}
+                  {branches.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.id}>
+                      {branch.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

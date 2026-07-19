@@ -1,0 +1,91 @@
+use chrono::NaiveDate;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::features::customers::types::CreateMeasurementInput;
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub enum DiscountUnit {
+    #[serde(rename = "SAR")]
+    Sar,
+    #[serde(rename = "%")]
+    Percent,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PaymentStatus {
+    Unpaid,
+    Partial,
+    Paid,
+}
+
+impl PaymentStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unpaid => "unpaid",
+            Self::Partial => "partial",
+            Self::Paid => "paid",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateOrderInput {
+    pub material_id: Uuid,
+    pub material_amount: f64,
+    // Entered by staff per order line; materials carry no unit price to derive
+    // it from.
+    pub price: f64,
+    pub thobe_type: Option<String>,
+    pub f_pocket: Option<String>,
+    pub collar: Option<String>,
+    pub sleeve: Option<String>,
+    pub patti: Option<String>,
+    pub more_details: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewCustomerInput {
+    pub name: String,
+    pub mobile_no: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceCustomerInput {
+    // Exactly one of these two must be set: reference an existing customer or
+    // create a new one as part of the invoice.
+    #[serde(default)]
+    pub existing_customer_id: Option<Uuid>,
+    #[serde(default)]
+    pub new_customer: Option<NewCustomerInput>,
+    // Saving an invoice always records a fresh measurement snapshot (orders
+    // reference it), even when every field was left blank.
+    pub measurement: CreateMeasurementInput,
+    pub orders: Vec<CreateOrderInput>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateInvoiceInput {
+    pub date: NaiveDate,
+    #[serde(default)]
+    pub branch_id: Option<Uuid>,
+    #[serde(default)]
+    pub discount: f64,
+    pub discount_unit: DiscountUnit,
+    pub payment_status: PaymentStatus,
+    #[serde(default)]
+    pub amount_paid: f64,
+    pub customers: Vec<InvoiceCustomerInput>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatedInvoice {
+    pub id: Uuid,
+    pub total_price: f64,
+}
