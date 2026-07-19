@@ -2,7 +2,7 @@ import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { TextField } from '@/components/form/fields'
-import { useCreateCustomer } from './hooks/use-create-customer'
+import { ApiError, useCreateCustomer } from './hooks/use-create-customer'
 import { customerFormSchema } from './lib/customer-schema'
 import { createEmptyCustomerForm } from './types/customer-form'
 
@@ -14,7 +14,11 @@ export function CustomerFormPage() {
     defaultValues: createEmptyCustomerForm(),
     validators: { onSubmit: customerFormSchema },
     onSubmit: async ({ value }) => {
-      await createCustomer.mutateAsync(value)
+      try {
+        await createCustomer.mutateAsync(value)
+      } catch {
+        return
+      }
       await navigate({ to: '/customers' })
     },
   })
@@ -59,7 +63,10 @@ export function CustomerFormPage() {
 
         {createCustomer.isError && (
           <p className="text-sm font-medium text-destructive">
-            Could not save this customer. Please try again.
+            {createCustomer.error instanceof ApiError &&
+            createCustomer.error.status === 409
+              ? 'A customer with this name and phone number already exists.'
+              : 'Could not save this customer. Please try again.'}
           </p>
         )}
 

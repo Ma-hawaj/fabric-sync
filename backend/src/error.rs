@@ -10,6 +10,7 @@ pub enum AppError {
     Sqlx(sqlx::Error),
     Migration(sqlx::migrate::MigrateError),
     NotFound(String),
+    Conflict(String),
 }
 
 impl From<std::io::Error> for AppError {
@@ -20,6 +21,14 @@ impl From<std::io::Error> for AppError {
 
 impl From<sqlx::Error> for AppError {
     fn from(error: sqlx::Error) -> Self {
+        // Postgres error code 23505 is `unique_violation` — surface it as a
+        // 409 with a message clients can show, rather than a generic 500.
+        if let sqlx::Error::Database(db_error) = &error {
+            if db_error.code().as_deref() == Some("23505") {
+                return Self::Conflict("a record with these values already exists".to_string());
+            }
+        }
+
         Self::Sqlx(error)
     }
 }
@@ -38,6 +47,7 @@ impl IntoResponse for AppError {
             Self::Sqlx(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
             Self::Migration(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
             Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
+            Self::Conflict(message) => (StatusCode::CONFLICT, message),
         };
 
         (status, message).into_response()

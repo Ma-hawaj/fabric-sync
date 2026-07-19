@@ -3,6 +3,15 @@ import { apiBaseUrl } from '@/lib/api'
 import type { CustomerFormValues } from '../types/customer-form'
 import type { Customer } from '../types/customers'
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message)
+  }
+}
+
 async function createCustomer(values: CustomerFormValues): Promise<Customer> {
   const response = await fetch(`${apiBaseUrl}/customers`, {
     method: 'POST',
@@ -10,7 +19,10 @@ async function createCustomer(values: CustomerFormValues): Promise<Customer> {
     body: JSON.stringify(values),
   })
   if (!response.ok) {
-    throw new Error(`Failed to create customer (${response.status})`)
+    throw new ApiError(
+      `Failed to create customer (${response.status})`,
+      response.status,
+    )
   }
   return response.json()
 }
