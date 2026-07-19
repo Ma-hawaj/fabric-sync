@@ -1,5 +1,6 @@
 import { PlusIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { FieldError } from '@/components/ui/field'
 import {
   Select,
   SelectContent,
@@ -7,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { TextField } from '@/components/form/fields'
 import type { Customer } from '@/features/customers/types/customers'
 import { createEmptyOrder } from '../../types/invoice-form'
 import type {
@@ -14,7 +16,6 @@ import type {
   CustomerMode,
   InvoiceFormApi,
 } from '../../types/invoice-form'
-import { FieldError, TextField } from './form-fields'
 import { GuardianField } from './guardian-field'
 import {
   measurementFromSnapshot,
@@ -131,7 +132,7 @@ export function CustomerBlock({
                               ))}
                             </SelectContent>
                           </Select>
-                          <FieldError field={idField} />
+                          <FieldError errors={idField.state.meta.errors} />
 
                           {selected && (
                             <div className="rounded-lg border border-border/50 bg-muted/30 p-3">

@@ -1,5 +1,7 @@
 import { XIcon } from 'lucide-react'
+import { NumberField } from '@/components/form/fields'
 import { Button } from '@/components/ui/button'
+import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -19,7 +21,6 @@ import {
 } from '../../data/invoice-form-options'
 import { computeOrderLineTotal } from '../../lib/invoice-pricing'
 import type { InvoiceFormApi } from '../../types/invoice-form'
-import { FieldError, NumberField } from './form-fields'
 import { SegmentedOptions } from './segmented-options'
 
 interface OrderBlockProps {
@@ -143,8 +144,11 @@ export function OrderBlock({
             {(field: any) => {
               const selected = MATERIALS.find((m) => m.id === field.state.value)
               return (
-                <div className="space-y-1 sm:col-span-2">
-                  <Label htmlFor={field.name}>Material</Label>
+                <Field
+                  className="sm:col-span-2"
+                  data-invalid={field.state.meta.errors.length > 0}
+                >
+                  <FieldLabel htmlFor={field.name}>Material</FieldLabel>
                   <Select
                     items={MATERIALS.map((material) => ({
                       value: material.id,
@@ -164,14 +168,14 @@ export function OrderBlock({
                       ))}
                     </SelectContent>
                   </Select>
-                  <FieldError field={field} />
+                  <FieldError errors={field.state.meta.errors} />
                   {selected && (
                     <p className="text-xs text-muted-foreground">
                       Available: {selected.availableMeters}m —{' '}
                       {selected.storageLocation}
                     </p>
                   )}
-                </div>
+                </Field>
               )
             }}
           </form.Field>

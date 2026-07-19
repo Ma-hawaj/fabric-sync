@@ -1,5 +1,5 @@
+import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -7,37 +7,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { InvoiceFormApi, NumberInput } from '../../types/invoice-form'
 
-// Dynamic array paths (e.g. `customers[0].measurement.chest`) don't play
-// well with TanStack Form's deep-key type inference, so field names are
-// plain strings here rather than the library's `DeepKeys<T>` type.
+// TanStack Form's extended API type has 11 validator generic params beyond
+// the form data itself; pinning them all to `any` collapses several method
+// signatures to `never` (a known quirk of erasing deep conditional/mapped
+// types to `any`), which then rejects any concrete form's `useForm()`
+// result. `AnyFormApi = any` sidesteps that — matching how this codebase
+// already types individual field render props (`field: any`) rather than
+// fighting the generics. Dynamic array paths (e.g.
+// `customers[0].measurement.chest`) also don't play well with TanStack
+// Form's deep-key type inference, so field names below are plain strings
+// rather than the library's `DeepKeys<T>` type.
+export type AnyFormApi = any
 
 interface FieldProps {
-  form: InvoiceFormApi
+  form: AnyFormApi
   name: string
   label: string
-}
-
-// Errors come from the zod schema (lib/invoice-schema.ts) via TanStack
-// Form's Standard Schema validator — each entry has a `.message`.
-export function FieldError({ field }: { field: any }) {
-  if (field.state.meta.errors.length === 0) return null
-  return (
-    <p className="text-xs font-medium text-destructive">
-      {field.state.meta.errors
-        .map((error: any) => error.message ?? error)
-        .join(', ')}
-    </p>
-  )
 }
 
 export function TextField({ form, name, label }: FieldProps) {
   return (
     <form.Field name={name as never}>
       {(field: any) => (
-        <div className="space-y-1">
-          <Label htmlFor={field.name}>{label}</Label>
+        <Field data-invalid={field.state.meta.errors.length > 0}>
+          <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
           <Input
             id={field.name}
             value={field.state.value ?? ''}
@@ -45,8 +39,8 @@ export function TextField({ form, name, label }: FieldProps) {
             onBlur={field.handleBlur}
             onChange={(e) => field.handleChange(e.target.value)}
           />
-          <FieldError field={field} />
-        </div>
+          <FieldError errors={field.state.meta.errors} />
+        </Field>
       )}
     </form.Field>
   )
@@ -61,8 +55,8 @@ export function NumberField({
   return (
     <form.Field name={name as never}>
       {(field: any) => (
-        <div className="space-y-1">
-          <Label htmlFor={field.name}>{label}</Label>
+        <Field data-invalid={field.state.meta.errors.length > 0}>
+          <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
           <div className="relative">
             <Input
               id={field.name}
@@ -73,8 +67,7 @@ export function NumberField({
               onBlur={field.handleBlur}
               onChange={(e) => {
                 const raw = e.target.value
-                const next: NumberInput = raw === '' ? '' : Number(raw)
-                field.handleChange(next)
+                field.handleChange(raw === '' ? '' : Number(raw))
               }}
               className={unit ? 'pe-10' : undefined}
             />
@@ -84,8 +77,8 @@ export function NumberField({
               </span>
             )}
           </div>
-          <FieldError field={field} />
-        </div>
+          <FieldError errors={field.state.meta.errors} />
+        </Field>
       )}
     </form.Field>
   )
@@ -101,8 +94,8 @@ export function SelectField({
   return (
     <form.Field name={name as never}>
       {(field: any) => (
-        <div className="space-y-1">
-          <Label htmlFor={field.name}>{label}</Label>
+        <Field data-invalid={field.state.meta.errors.length > 0}>
+          <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
           <Select
             value={field.state.value}
             onValueChange={(value: string) => field.handleChange(value)}
@@ -118,8 +111,8 @@ export function SelectField({
               ))}
             </SelectContent>
           </Select>
-          <FieldError field={field} />
-        </div>
+          <FieldError errors={field.state.meta.errors} />
+        </Field>
       )}
     </form.Field>
   )

@@ -1,4 +1,5 @@
-import { Label } from '@/components/ui/label'
+import { TextField } from '@/components/form/fields'
+import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import {
   Select,
   SelectContent,
@@ -18,7 +19,6 @@ import type {
   InvoiceCustomerDraft,
   InvoiceFormApi,
 } from '../../types/invoice-form'
-import { FieldError, TextField } from './form-fields'
 
 const NEW_GUARDIAN_VALUE = 'new'
 
@@ -83,8 +83,10 @@ export function GuardianField({
           <div className="space-y-3">
             <form.Field name={base as never}>
               {(guardianField: any) => (
-                <div className="space-y-1">
-                  <Label htmlFor={`${base}-select`}>Guardian</Label>
+                <Field
+                  data-invalid={guardianField.state.meta.errors.length > 0}
+                >
+                  <FieldLabel htmlFor={`${base}-select`}>Guardian</FieldLabel>
                   <Select
                     items={[
                       ...invoiceCandidates,
@@ -151,8 +153,8 @@ export function GuardianField({
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                  <FieldError field={guardianField} />
-                </div>
+                  <FieldError errors={guardianField.state.meta.errors} />
+                </Field>
               )}
             </form.Field>
 

@@ -5,10 +5,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { NumberField, SelectField, TextField } from '@/components/form/fields'
 import { Label } from '@/components/ui/label'
 import type { Measurement } from '@/features/customers/types/customers'
 import type { InvoiceFormApi, MeasurementDraft } from '../../types/invoice-form'
-import { NumberField, SelectField, TextField } from './form-fields'
 
 const NUMBER_FIELDS: { name: keyof MeasurementDraft; label: string }[] = [
   { name: 'lengthFl', label: 'Length (Front)' },

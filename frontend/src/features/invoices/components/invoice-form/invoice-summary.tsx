@@ -1,3 +1,4 @@
+import { NumberField, TextField } from '@/components/form/fields'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -15,7 +16,6 @@ import type {
   InvoiceFormApi,
   PaymentStatus,
 } from '../../types/invoice-form'
-import { NumberField, TextField } from './form-fields'
 
 const VAT_RATE = 0.15
 
