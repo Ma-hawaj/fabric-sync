@@ -10,13 +10,13 @@ import {
 } from '@/components/ui/select'
 import { TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
-import type { Customer } from '@/features/customers/types/customers'
-import { createEmptyOrder } from '../../types/invoice-form'
-import type { CustomerMode, InvoiceFormApi } from '../../types/invoice-form'
 import {
   measurementFromSnapshot,
   MeasurementFields,
-} from './measurement-fields'
+} from '@/features/customers/components/measurement-fields'
+import type { Customer } from '@/features/customers/types/customers'
+import { createEmptyOrder } from '../../types/invoice-form'
+import type { CustomerMode, InvoiceFormApi } from '../../types/invoice-form'
 import { OrderBlock } from './order-block'
 
 function customerOptionLabel(customer: Customer) {
@@ -183,7 +183,7 @@ export function CustomerBlock({
           {(history: Customer['measurements']) => (
             <MeasurementFields
               form={form}
-              customerIndex={customerIndex}
+              basePath={`${base}.measurement`}
               history={history}
             />
           )}

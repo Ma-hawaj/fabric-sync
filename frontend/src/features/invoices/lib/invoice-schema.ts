@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { MeasurementDraft } from '../types/invoice-form'
+import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 
 // A blank string means "not entered yet" — mirrors NumberInput in
 // types/invoice-form.ts.

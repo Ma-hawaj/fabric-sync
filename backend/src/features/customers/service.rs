@@ -13,7 +13,13 @@ pub async fn create_customer(
     state: &AppState,
     input: CreateCustomerInput,
 ) -> Result<Customer, AppError> {
-    let customer_id = repository::create_customer(state, &input.name, &input.mobile_no).await?;
+    let customer_id = repository::create_customer(
+        state,
+        &input.name,
+        &input.mobile_no,
+        input.measurement.as_ref(),
+    )
+    .await?;
 
     Ok(repository::get_customer(state, customer_id)
         .await?

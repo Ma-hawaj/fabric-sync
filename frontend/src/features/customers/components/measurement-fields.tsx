@@ -6,9 +6,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { NumberField, SelectField, TextField } from '@/components/form/fields'
+import type { AnyFormApi } from '@/components/form/fields'
 import { Label } from '@/components/ui/label'
-import type { Measurement } from '@/features/customers/types/customers'
-import type { InvoiceFormApi, MeasurementDraft } from '../../types/invoice-form'
+import type { Measurement } from '../types/customers'
+import type { MeasurementDraft } from '../types/measurement-form'
 
 const NUMBER_FIELDS: { name: keyof MeasurementDraft; label: string }[] = [
   { name: 'lengthFl', label: 'Length (Front)' },
@@ -108,17 +109,17 @@ export function measurementFromSnapshot(
 }
 
 interface MeasurementFieldsProps {
-  form: InvoiceFormApi
-  customerIndex: number
+  form: AnyFormApi
+  basePath: string
   history: Measurement[]
 }
 
 export function MeasurementFields({
   form,
-  customerIndex,
+  basePath,
   history,
 }: MeasurementFieldsProps) {
-  const base = `customers[${customerIndex}].measurement`
+  const base = basePath
 
   return (
     <div className="space-y-4">
@@ -140,10 +141,7 @@ export function MeasurementFields({
                 onValueChange={(snapshotId: string) => {
                   const snapshot =
                     history.find((m) => m.id === snapshotId) ?? null
-                  form.setFieldValue(
-                    base as never,
-                    measurementFromSnapshot(snapshot) as never,
-                  )
+                  form.setFieldValue(base, measurementFromSnapshot(snapshot))
                 }}
               >
                 <SelectTrigger id={field.name} className="w-full sm:w-72">
@@ -195,8 +193,7 @@ export function MeasurementFields({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Shared across all this customer's orders on this invoice. Saving always
-        records these as a new measurement snapshot dated today.
+        Saving always records these as a new measurement snapshot dated today.
       </p>
     </div>
   )
