@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link, useLocation } from '@tanstack/react-router'
 import {
   Sidebar,
   SidebarContent,
@@ -16,9 +16,22 @@ import {
   ReceiptText,
   PackageIcon,
   ScissorsIcon,
+  ContactIcon,
 } from 'lucide-react'
 
+const navItems = [
+  { to: '/', label: 'Home', icon: HomeIcon, exact: true },
+  { to: '/dashboard', label: 'Dashboard', icon: Grid, exact: true },
+  { to: '/orders', label: 'Orders', icon: ShoppingCart },
+  { to: '/customers', label: 'Customers', icon: ContactIcon },
+  { to: '/inventory', label: 'Inventory', icon: PackageIcon },
+  { to: '/invoices', label: 'Invoices', icon: ReceiptText },
+  { to: '/users', label: 'Users', icon: UsersIcon },
+] as const
+
 export function AppSidebar() {
+  const { pathname } = useLocation()
+
   return (
     <Sidebar>
       <SidebarContent>
@@ -42,54 +55,23 @@ export function AppSidebar() {
         </SidebarHeader>
         <SidebarSeparator />
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton render={<Link to="/" />}>
-              <HomeIcon />
-              <span>Home</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          {navItems.map(({ to, label, icon: Icon, exact }) => {
+            const isActive = exact
+              ? pathname === to
+              : pathname === to || pathname.startsWith(`${to}/`)
 
-          <SidebarMenuItem>
-            <SidebarMenuButton render={<Link to="/dashboard" />}>
-              <Grid />
-              <span>Dashboard</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          <SidebarMenuItem>
-            <SidebarMenuButton render={<Link to="/dashboard/orders" />}>
-              <ShoppingCart />
-              <span>Orders</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          <SidebarMenuItem>
-            <SidebarMenuButton render={<Link to="/customers" />}>
-              <UsersIcon />
-              <span>Customers</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          <SidebarMenuItem>
-            <SidebarMenuButton render={<Link to="/inventory" />}>
-              <PackageIcon />
-              <span>Inventory</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          <SidebarMenuItem>
-            <SidebarMenuButton render={<Link to="/invoices" />}>
-              <ReceiptText />
-              <span>Invoices</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          <SidebarMenuItem>
-            <SidebarMenuButton render={<Link to="/users" />}>
-              <UsersIcon />
-              <span>Users</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+            return (
+              <SidebarMenuItem key={to}>
+                <SidebarMenuButton
+                  isActive={isActive}
+                  render={<Link to={to} />}
+                >
+                  <Icon />
+                  <span>{label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )
+          })}
         </SidebarMenu>
       </SidebarContent>
     </Sidebar>
