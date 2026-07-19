@@ -9,12 +9,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { NumberField } from '@/components/form/fields'
-import { LOCATIONS } from '../data/inventory-options'
 import type { InventoryFormApi } from '../types/inventory-form'
 
 interface StockEntryRowProps {
   form: InventoryFormApi
   entryIndex: number
+  locations: string[]
   removable: boolean
   onRemove: () => void
 }
@@ -22,6 +22,7 @@ interface StockEntryRowProps {
 export function StockEntryRow({
   form,
   entryIndex,
+  locations,
   removable,
   onRemove,
 }: StockEntryRowProps) {
@@ -37,7 +38,7 @@ export function StockEntryRow({
           >
             <FieldLabel htmlFor={field.name}>Location</FieldLabel>
             <Select
-              items={LOCATIONS.map((location) => ({
+              items={locations.map((location) => ({
                 value: location,
                 label: location,
               }))}
@@ -48,7 +49,7 @@ export function StockEntryRow({
                 <SelectValue placeholder="Select location..." />
               </SelectTrigger>
               <SelectContent>
-                {LOCATIONS.map((location) => (
+                {locations.map((location) => (
                   <SelectItem key={location} value={location}>
                     {location}
                   </SelectItem>

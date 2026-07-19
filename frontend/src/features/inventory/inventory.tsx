@@ -8,16 +8,18 @@ import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getInventoryColumns } from './components/inventory-columns'
 import { InventoryDetailsSheet } from './components/inventory-details-sheet'
 import { useInventory } from './hooks/use-inventory'
+import { useLocations } from './hooks/use-locations'
 import type { Material } from './types/inventory'
 
 export function InventoryPage() {
   const { data: materials = [], isLoading } = useInventory()
+  const { data: locations = [] } = useLocations()
   const [selectedMaterial, setSelectedMaterial] =
     React.useState<Material | null>(null)
 
   const columns = React.useMemo(
-    () => getInventoryColumns(setSelectedMaterial),
-    [],
+    () => getInventoryColumns(setSelectedMaterial, locations),
+    [locations],
   )
 
   const { table } = useDataTable({

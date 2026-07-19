@@ -3,13 +3,7 @@ import { EyeIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
-import { LOCATIONS } from '../data/inventory-options'
 import type { Material } from '../types/inventory'
-
-const locationOptions = LOCATIONS.map((location) => ({
-  label: location,
-  value: location,
-}))
 
 function totalQuantity(material: Material) {
   return material.locations.reduce((sum, l) => sum + l.quantity, 0)
@@ -17,6 +11,7 @@ function totalQuantity(material: Material) {
 
 export const getInventoryColumns = (
   onViewStock: (material: Material) => void,
+  locations: string[],
 ): ColumnDef<Material, any>[] => [
   {
     accessorKey: 'name',
@@ -92,7 +87,10 @@ export const getInventoryColumns = (
       label: 'Locations',
       placeholder: 'Filter locations...',
       variant: 'multiSelect',
-      options: locationOptions,
+      options: locations.map((location) => ({
+        label: location,
+        value: location,
+      })),
     },
   },
   {
