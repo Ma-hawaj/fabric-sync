@@ -37,29 +37,15 @@ import {
   SunIcon,
 } from 'lucide-react'
 
-type NavItem = {
-  to:
-    | '/'
-    | '/dashboard'
-    | '/orders'
-    | '/customers'
-    | '/inventory'
-    | '/invoices'
-    | '/users'
-  label: string
-  icon: typeof HomeIcon
-  exact?: boolean
-}
-
-const navItems: NavItem[] = [
+const navItems = [
   { to: '/', label: 'Home', icon: HomeIcon, exact: true },
   { to: '/dashboard', label: 'Dashboard', icon: Grid, exact: true },
-  { to: '/orders', label: 'Orders', icon: ShoppingCart },
-  { to: '/customers', label: 'Customers', icon: ContactIcon },
-  { to: '/inventory', label: 'Inventory', icon: PackageIcon },
-  { to: '/invoices', label: 'Invoices', icon: ReceiptText },
-  { to: '/users', label: 'Users', icon: UsersIcon },
-]
+  { to: '/orders', label: 'Orders', icon: ShoppingCart, exact: false },
+  { to: '/customers', label: 'Customers', icon: ContactIcon, exact: false },
+  { to: '/inventory', label: 'Inventory', icon: PackageIcon, exact: false },
+  { to: '/invoices', label: 'Invoices', icon: ReceiptText, exact: false },
+  { to: '/users', label: 'Users', icon: UsersIcon, exact: false },
+] as const
 
 function getInitials(name: string) {
   const parts = name.trim().split(/\s+/)
