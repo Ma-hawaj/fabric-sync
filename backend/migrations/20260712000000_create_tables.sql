@@ -6,7 +6,8 @@ CREATE TABLE branch (
 CREATE TABLE customers (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     name TEXT NOT NULL,
-    mobile_no TEXT NOT NULL
+    mobile_no TEXT NOT NULL,
+    UNIQUE (name, mobile_no)
 );
 
 CREATE TABLE materials (

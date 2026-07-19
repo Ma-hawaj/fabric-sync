@@ -8,6 +8,7 @@ import Breadcrumbs from '@/components/breadcrumbs'
 import type { AuthState } from '@/lib/auth'
 import type { QueryClient } from '@tanstack/react-query'
 import { SidebarInset, SidebarTrigger } from '#/components/ui/sidebar'
+import { Toaster } from '@/components/ui/sonner'
 import { NuqsAdapter } from 'nuqs/adapters/tanstack-router'
 
 type RouterContext = {
@@ -51,6 +52,7 @@ function RootComponent() {
           },
         ]}
       />
+      <Toaster />
     </NuqsAdapter>
   )
 }

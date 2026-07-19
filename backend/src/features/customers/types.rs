@@ -51,6 +51,47 @@ pub struct Customer {
     pub measurements: Vec<Measurement>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateMeasurementInput {
+    pub date: NaiveDate,
+
+    pub length_fl: Option<f64>,
+    pub length_bl: Option<f64>,
+    pub chest: Option<f64>,
+    pub waist: Option<f64>,
+    pub hips: Option<f64>,
+    pub shoulder: Option<f64>,
+    pub sleeve_length: Option<f64>,
+    pub neck: Option<f64>,
+    pub open_hand: Option<f64>,
+    pub cuffling: Option<String>,
+
+    pub full_body: Option<String>,
+    pub chest_up: Option<f64>,
+    pub open_fold: Option<String>,
+    pub cuff_width: Option<f64>,
+    pub neck_width: Option<f64>,
+    pub aram_hole: Option<f64>,
+    pub sleeve_haff_button: Option<String>,
+    pub button_fold: Option<String>,
+    pub fo: Option<String>,
+    pub fo_width: Option<f64>,
+    pub frant_pocket_length: Option<f64>,
+    pub farnt_pocket_length_by_width: Option<String>,
+    pub side_pocket: Option<String>,
+    pub mobile_pocket_length_by_width: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateCustomerInput {
+    pub name: String,
+    pub mobile_no: String,
+    #[serde(default)]
+    pub measurement: Option<CreateMeasurementInput>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
