@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { MeasurementFields } from './components/measurement-fields'
-import { ApiError, useCreateCustomer } from './hooks/use-create-customer'
+import { useCreateCustomer } from './hooks/use-create-customer'
 import { customerFormSchema } from './lib/customer-schema'
 import { createEmptyCustomerForm } from './types/customer-form'
 
@@ -91,15 +91,6 @@ export function CustomerFormPage() {
             )
           }
         </form.Subscribe>
-
-        {createCustomer.isError && (
-          <p className="text-sm font-medium text-destructive">
-            {createCustomer.error instanceof ApiError &&
-            createCustomer.error.status === 409
-              ? 'A customer with this name and phone number already exists.'
-              : 'Could not save this customer. Please try again.'}
-          </p>
-        )}
 
         <div className="flex justify-end gap-2">
           <Button

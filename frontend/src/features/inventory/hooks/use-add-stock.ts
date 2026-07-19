@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import type { Material, MaterialLocationStock } from '../types/inventory'
 import type { InventoryFormValues } from '../types/inventory-form'
 
@@ -60,6 +61,10 @@ export function useAddStock() {
         }
         return [...materials, newMaterial]
       })
+
+      toast.success(
+        values.mode === 'existing' ? 'Stock added.' : 'Material added.',
+      )
     },
   })
 }
