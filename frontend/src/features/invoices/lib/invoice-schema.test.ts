@@ -20,7 +20,7 @@ function baseValues(customers: InvoiceCustomerDraft[]): InvoiceFormValues {
     date: '2026-07-18',
     receivingBranch: '',
     discount: '',
-    discountUnit: 'SAR',
+    discountUnit: 'amount',
     paymentStatus: 'unpaid',
     amountPaid: '',
     customers,

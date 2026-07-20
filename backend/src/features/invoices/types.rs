@@ -4,17 +4,23 @@ use uuid::Uuid;
 
 use crate::features::customers::types::CreateMeasurementInput;
 
-// The business only invoices in SAR for now (matches the frontend's
-// lib/currency.ts). Ordinary code can reference this; the serde rename below
-// can't — proc-macro attributes need a literal, not a const.
-pub const CURRENCY: &str = "SAR";
-
+// Deliberately not tied to a specific currency code — a flat amount in
+// whatever the business currency is, or a percentage of the subtotal.
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub enum DiscountUnit {
-    #[serde(rename = "SAR")]
-    Sar,
-    #[serde(rename = "%")]
+    #[serde(rename = "amount")]
+    Amount,
+    #[serde(rename = "percent")]
     Percent,
+}
+
+impl DiscountUnit {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Amount => "amount",
+            Self::Percent => "percent",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]

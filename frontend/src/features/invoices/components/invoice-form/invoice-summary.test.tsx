@@ -26,7 +26,7 @@ function baseValues(
     date: '2026-07-18',
     receivingBranch: '',
     discount: '',
-    discountUnit: 'SAR',
+    discountUnit: 'amount',
     paymentStatus: 'unpaid',
     amountPaid: '',
     customers: [],
@@ -70,7 +70,7 @@ describe('InvoiceSummary', () => {
         defaultValues={baseValues({
           customers: [customerWithOrder(90)],
           discount: 10,
-          discountUnit: 'SAR',
+          discountUnit: 'amount',
         })}
       />,
     )
@@ -86,7 +86,7 @@ describe('InvoiceSummary', () => {
         defaultValues={baseValues({
           customers: [customerWithOrder(90)],
           discount: 10,
-          discountUnit: '%',
+          discountUnit: 'percent',
         })}
       />,
     )

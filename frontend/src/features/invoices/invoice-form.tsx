@@ -32,7 +32,7 @@ export function InvoiceFormPage() {
     date: new Date().toISOString().slice(0, 10),
     receivingBranch: '',
     discount: '',
-    discountUnit: CURRENCY,
+    discountUnit: 'amount',
     paymentStatus: 'unpaid',
     amountPaid: '',
     customers: [createEmptyCustomer()],

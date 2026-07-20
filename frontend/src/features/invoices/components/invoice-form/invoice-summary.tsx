@@ -21,6 +21,7 @@ import type { Location } from '@/features/locations/types/location'
 import { CURRENCY } from '@/lib/currency'
 import { computeOrderLineTotal } from '../../lib/invoice-pricing'
 import type {
+  DiscountUnit,
   InvoiceCustomerDraft,
   InvoiceFormApi,
   PaymentStatus,
@@ -172,8 +173,8 @@ export function InvoiceSummary({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={CURRENCY}>{CURRENCY}</SelectItem>
-                        <SelectItem value="%">%</SelectItem>
+                        <SelectItem value="amount">{CURRENCY}</SelectItem>
+                        <SelectItem value="percent">%</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -190,12 +191,12 @@ export function InvoiceSummary({
                 {(subscribed: any) => {
                   const [discount, discountUnit, amountPaid] = subscribed as [
                     number | '',
-                    typeof CURRENCY | '%',
+                    DiscountUnit,
                     number | '',
                   ]
                   const discountValue = discount === '' ? 0 : discount
                   const discountAmount =
-                    discountUnit === '%'
+                    discountUnit === 'percent'
                       ? subtotal * (discountValue / 100)
                       : discountValue
                   const taxable = Math.max(subtotal - discountAmount, 0)

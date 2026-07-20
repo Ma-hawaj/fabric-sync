@@ -3,10 +3,7 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
-use super::types::{
-    CreateInvoiceInput, CreateOrderInput, DiscountUnit, InvoiceListCustomer, InvoiceListItem,
-    CURRENCY,
-};
+use super::types::{CreateInvoiceInput, CreateOrderInput, InvoiceListCustomer, InvoiceListItem};
 
 pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sqlx::Error> {
     let rows = sqlx::query!(
@@ -71,10 +68,7 @@ pub async fn insert_invoice(
         input.date,
         input.branch_id,
         input.discount,
-        match input.discount_unit {
-            DiscountUnit::Sar => CURRENCY,
-            DiscountUnit::Percent => "%",
-        },
+        input.discount_unit.as_str(),
         input.payment_status.as_str(),
         input.amount_paid,
         total_price,

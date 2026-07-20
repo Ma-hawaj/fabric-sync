@@ -32,7 +32,7 @@ fn compute_total(input: &CreateInvoiceInput) -> f64 {
         .sum();
 
     let discount_amount = match input.discount_unit {
-        DiscountUnit::Sar => input.discount,
+        DiscountUnit::Amount => input.discount,
         DiscountUnit::Percent => subtotal * input.discount / 100.0,
     };
 
@@ -125,31 +125,35 @@ mod tests {
 
     #[test]
     fn total_adds_vat_on_top_of_summed_order_prices() {
-        let input = invoice(0.0, "SAR", vec![customer(vec![order(100.0), order(100.0)])]);
+        let input = invoice(
+            0.0,
+            "amount",
+            vec![customer(vec![order(100.0), order(100.0)])],
+        );
         assert_eq!(compute_total(&input), 230.0);
     }
 
     #[test]
     fn flat_discount_is_subtracted_before_vat() {
-        let input = invoice(50.0, "SAR", vec![customer(vec![order(150.0)])]);
+        let input = invoice(50.0, "amount", vec![customer(vec![order(150.0)])]);
         assert_eq!(compute_total(&input), 115.0);
     }
 
     #[test]
     fn percentage_discount_applies_to_the_subtotal() {
-        let input = invoice(10.0, "%", vec![customer(vec![order(200.0)])]);
+        let input = invoice(10.0, "percent", vec![customer(vec![order(200.0)])]);
         assert_eq!(compute_total(&input), 207.0);
     }
 
     #[test]
     fn discount_larger_than_subtotal_floors_at_zero() {
-        let input = invoice(500.0, "SAR", vec![customer(vec![order(100.0)])]);
+        let input = invoice(500.0, "amount", vec![customer(vec![order(100.0)])]);
         assert_eq!(compute_total(&input), 0.0);
     }
 
     #[test]
     fn rejects_customer_with_both_existing_id_and_new_customer() {
-        let mut invoice = invoice(0.0, "SAR", vec![customer(vec![order(100.0)])]);
+        let mut invoice = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
         invoice.customers[0].new_customer = Some(super::super::types::NewCustomerInput {
             name: "Ahmed".to_string(),
             mobile_no: "0500000000".to_string(),
@@ -159,13 +163,13 @@ mod tests {
 
     #[test]
     fn rejects_customer_with_no_orders() {
-        let invoice = invoice(0.0, "SAR", vec![customer(vec![])]);
+        let invoice = invoice(0.0, "amount", vec![customer(vec![])]);
         assert!(validate(&invoice).is_err());
     }
 
     #[test]
     fn rejects_invoice_with_no_customers() {
-        let invoice = invoice(0.0, "SAR", vec![]);
+        let invoice = invoice(0.0, "amount", vec![]);
         assert!(validate(&invoice).is_err());
     }
 }

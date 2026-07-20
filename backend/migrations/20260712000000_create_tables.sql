@@ -33,7 +33,7 @@ CREATE TABLE invoices (
     invoice_date DATE NOT NULL DEFAULT CURRENT_DATE,
     branch_id UUID REFERENCES branch(id),
     discount NUMERIC(10, 2) NOT NULL DEFAULT 0,
-    discount_unit TEXT NOT NULL DEFAULT 'SAR' CHECK (discount_unit IN ('SAR', '%')),
+    discount_unit TEXT NOT NULL DEFAULT 'amount' CHECK (discount_unit IN ('amount', 'percent')),
     payment_status TEXT NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid', 'partial', 'paid')),
     amount_paid NUMERIC(10, 2) NOT NULL DEFAULT 0
 );
