@@ -1,19 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiBaseUrl } from '@/lib/api'
-import type { Branch } from '../types/branches'
+import type { Location } from '../types/location'
 
-async function fetchBranches(): Promise<Branch[]> {
+async function fetchLocations(): Promise<Location[]> {
   const response = await fetch(`${apiBaseUrl}/locations`)
   if (!response.ok) {
-    throw new Error(`Failed to load branches (${response.status})`)
+    throw new Error(`Failed to load locations (${response.status})`)
   }
   return response.json()
 }
 
-export function useBranches() {
+export function useLocations() {
   return useQuery({
-    queryKey: ['branches'],
-    queryFn: fetchBranches,
+    queryKey: ['locations'],
+    queryFn: fetchLocations,
     staleTime: 1000 * 60 * 5, // 5 minutes
   })
 }
