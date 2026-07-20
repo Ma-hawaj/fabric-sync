@@ -1,4 +1,12 @@
 import { NumberField, TextField } from '@/components/form/fields'
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -71,30 +79,42 @@ export function InvoiceSummary({
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField form={form} name="date" label="Date" />
         <form.Field name={'receivingBranch' as never}>
-          {(field: any) => (
-            <div className="space-y-1">
-              <Label htmlFor={field.name}>Receiving Branch</Label>
-              <Select
-                items={branches.map((branch) => ({
-                  value: branch.id,
-                  label: branch.name,
-                }))}
-                value={field.state.value}
-                onValueChange={(value: string) => field.handleChange(value)}
-              >
-                <SelectTrigger id={field.name} className="w-full">
-                  <SelectValue placeholder="Select branch..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {branches.map((branch) => (
-                    <SelectItem key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          {(field: any) => {
+            const selected = branches.find((b) => b.id === field.state.value)
+            return (
+              <div className="space-y-1">
+                <Label htmlFor={field.name}>Receiving Branch</Label>
+                <Combobox
+                  items={branches}
+                  itemToStringLabel={(branch: Location) => branch.name}
+                  isItemEqualToValue={(a: Location, b: Location) =>
+                    a.id === b.id
+                  }
+                  value={selected ?? null}
+                  onValueChange={(branch: Location | null) =>
+                    field.handleChange(branch?.id ?? '')
+                  }
+                >
+                  <ComboboxInput
+                    id={field.name}
+                    placeholder="Search branch..."
+                    className="w-full"
+                    showClear
+                  />
+                  <ComboboxContent>
+                    <ComboboxEmpty>No branches found.</ComboboxEmpty>
+                    <ComboboxList>
+                      {(branch: Location) => (
+                        <ComboboxItem key={branch.id} value={branch}>
+                          {branch.name}
+                        </ComboboxItem>
+                      )}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
+              </div>
+            )
+          }}
         </form.Field>
       </div>
 
