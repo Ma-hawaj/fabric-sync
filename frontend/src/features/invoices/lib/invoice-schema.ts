@@ -22,6 +22,7 @@ const orderDraftSchema = z
     moreDetails: z.string(),
     materialId: z.string(),
     materialAmount: numberInputSchema,
+    price: numberInputSchema,
   })
   .superRefine((order, ctx) => {
     if (!order.materialId || order.materialAmount === '') {
@@ -29,6 +30,13 @@ const orderDraftSchema = z
         code: 'custom',
         message: 'Pick a material and quantity.',
         path: ['materialId'],
+      })
+    }
+    if (order.price === '') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter a price.',
+        path: ['price'],
       })
     }
   })
@@ -39,7 +47,6 @@ const customerDraftSchema = z
     mode: z.enum(['existing', 'new']),
     existingCustomerId: z.string(),
     name: z.string(),
-    nameArabic: z.string(),
     mobileNo: z.string(),
     measurement: measurementDraftSchema,
     orders: z.array(orderDraftSchema).min(1, 'Add at least one order.'),
@@ -81,7 +88,7 @@ export const invoiceFormSchema = z.object({
   date: z.string(),
   receivingBranch: z.string(),
   discount: numberInputSchema,
-  discountUnit: z.enum(['SAR', '%']),
+  discountUnit: z.enum(['amount', 'percent']),
   paymentStatus: z.enum(['unpaid', 'partial', 'paid']),
   amountPaid: numberInputSchema,
   customers: customersArraySchema,

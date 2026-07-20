@@ -19,7 +19,8 @@ function blankToNull<T>(value: T | ''): T | null {
   return value === '' ? null : value
 }
 
-function measurementPayload(measurement: MeasurementDraft) {
+// Also used by the invoice form, which snapshots a measurement per customer.
+export function measurementPayload(measurement: MeasurementDraft) {
   return {
     date: measurement.date,
     lengthFl: blankToNull(measurement.lengthFl),

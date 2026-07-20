@@ -14,6 +14,7 @@ function Harness({ defaultValues }: { defaultValues: InvoiceFormValues }) {
     <InvoiceSummary
       form={form as never}
       existingCustomers={EXISTING_CUSTOMERS}
+      branches={[]}
     />
   )
 }
@@ -25,11 +26,21 @@ function baseValues(
     date: '2026-07-18',
     receivingBranch: '',
     discount: '',
-    discountUnit: 'SAR',
+    discountUnit: 'amount',
     paymentStatus: 'unpaid',
     amountPaid: '',
     customers: [],
     ...overrides,
+  }
+}
+
+// A customer with a single order line priced at 90 SAR.
+function customerWithOrder(price: number) {
+  return {
+    ...createEmptyCustomer(),
+    orders: [
+      { ...createEmptyOrder(), materialId: 'mat-1', materialAmount: 5, price },
+    ],
   }
 }
 
@@ -42,13 +53,11 @@ function rowValue(label: string) {
 
 describe('InvoiceSummary', () => {
   it('computes subtotal, VAT, and total from order line items', () => {
-    const customer = {
-      ...createEmptyCustomer(),
-      orders: [
-        { ...createEmptyOrder(), materialId: 'mat-1', materialAmount: 5 }, // 5 * 18 = 90
-      ],
-    }
-    render(<Harness defaultValues={baseValues({ customers: [customer] })} />)
+    render(
+      <Harness
+        defaultValues={baseValues({ customers: [customerWithOrder(90)] })}
+      />,
+    )
 
     expect(rowValue('Subtotal')).toBe('SAR 90.00')
     expect(rowValue('VAT (15%)')).toBe('SAR 13.50')
@@ -56,18 +65,12 @@ describe('InvoiceSummary', () => {
   })
 
   it('applies a flat SAR discount before computing VAT', () => {
-    const customer = {
-      ...createEmptyCustomer(),
-      orders: [
-        { ...createEmptyOrder(), materialId: 'mat-1', materialAmount: 5 }, // subtotal 90
-      ],
-    }
     render(
       <Harness
         defaultValues={baseValues({
-          customers: [customer],
+          customers: [customerWithOrder(90)],
           discount: 10,
-          discountUnit: 'SAR',
+          discountUnit: 'amount',
         })}
       />,
     )
@@ -78,18 +81,12 @@ describe('InvoiceSummary', () => {
   })
 
   it('applies a percentage discount before computing VAT', () => {
-    const customer = {
-      ...createEmptyCustomer(),
-      orders: [
-        { ...createEmptyOrder(), materialId: 'mat-1', materialAmount: 5 }, // subtotal 90
-      ],
-    }
     render(
       <Harness
         defaultValues={baseValues({
-          customers: [customer],
+          customers: [customerWithOrder(90)],
           discount: 10,
-          discountUnit: '%',
+          discountUnit: 'percent',
         })}
       />,
     )
@@ -100,15 +97,12 @@ describe('InvoiceSummary', () => {
   })
 
   it('computes balance due as total minus amount paid, never negative', () => {
-    const customer = {
-      ...createEmptyCustomer(),
-      orders: [
-        { ...createEmptyOrder(), materialId: 'mat-1', materialAmount: 5 }, // total 103.50
-      ],
-    }
     render(
       <Harness
-        defaultValues={baseValues({ customers: [customer], amountPaid: 200 })}
+        defaultValues={baseValues({
+          customers: [customerWithOrder(90)], // total 103.50
+          amountPaid: 200,
+        })}
       />,
     )
 
@@ -116,13 +110,11 @@ describe('InvoiceSummary', () => {
   })
 
   it('updates the discount amount live as the input changes', () => {
-    const customer = {
-      ...createEmptyCustomer(),
-      orders: [
-        { ...createEmptyOrder(), materialId: 'mat-1', materialAmount: 5 }, // subtotal 90
-      ],
-    }
-    render(<Harness defaultValues={baseValues({ customers: [customer] })} />)
+    render(
+      <Harness
+        defaultValues={baseValues({ customers: [customerWithOrder(90)] })}
+      />,
+    )
 
     fireEvent.change(screen.getByLabelText('Discount'), {
       target: { value: '20' },

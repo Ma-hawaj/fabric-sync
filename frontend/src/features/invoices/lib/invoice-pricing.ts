@@ -1,10 +1,7 @@
-import { MATERIALS } from '../data/invoice-form-options'
 import type { InvoiceOrderDraft } from '../types/invoice-form'
 
+// Each order line's price is entered by staff (materials carry no unit
+// price); a blank or non-positive entry counts as 0 in the summary.
 export function computeOrderLineTotal(order: InvoiceOrderDraft): number {
-  const material = MATERIALS.find((m) => m.id === order.materialId)
-  const quantity =
-    typeof order.materialAmount === 'number' ? order.materialAmount : 0
-  if (!material || quantity <= 0) return 0
-  return Math.round(material.pricePerMeter * quantity * 100) / 100
+  return typeof order.price === 'number' && order.price > 0 ? order.price : 0
 }

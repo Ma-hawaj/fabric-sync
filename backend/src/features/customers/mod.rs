@@ -1,7 +1,9 @@
 mod handlers;
-mod repository;
+// Shared with the invoices feature, which creates customers and measurement
+// snapshots inside its own transaction.
+pub(crate) mod repository;
 mod routes;
 mod service;
-mod types;
+pub(crate) mod types;
 
 pub use routes::router;

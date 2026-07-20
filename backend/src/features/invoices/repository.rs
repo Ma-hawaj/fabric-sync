@@ -1,0 +1,110 @@
+use sqlx::types::Json;
+use uuid::Uuid;
+
+use crate::state::AppState;
+
+use super::types::{CreateInvoiceInput, CreateOrderInput, InvoiceListCustomer, InvoiceListItem};
+
+pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT
+            i.id,
+            i.invoice_date,
+            i.payment_status,
+            i.total_price::float8 AS "total_price!",
+            COALESCE(agg.item_count, 0) AS "item_count!",
+            COALESCE(agg.customers, '[]') AS "customers!: Json<Vec<InvoiceListCustomer>>",
+            COALESCE(agg.materials, '[]') AS "materials!: Json<Vec<String>>"
+        FROM invoices i
+        LEFT JOIN LATERAL (
+            SELECT
+                count(*) AS item_count,
+                json_agg(DISTINCT jsonb_build_object(
+                    'name', c.name,
+                    'mobileNo', c.mobile_no
+                )) AS customers,
+                json_agg(DISTINCT mat.name) AS materials
+            FROM orders o
+            JOIN measurements m ON m.id = o.measurement_id
+            JOIN customers c ON c.id = m.customer_id
+            JOIN materials mat ON mat.id = o.material_id
+            WHERE o.invoice_id = i.id
+        ) agg ON true
+        ORDER BY i.id DESC
+        "#,
+    )
+    .fetch_all(state.db())
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| InvoiceListItem {
+            id: row.id,
+            date: row.invoice_date,
+            customers: row.customers.0,
+            item_count: row.item_count,
+            materials: row.materials.0,
+            total_price: row.total_price,
+            payment_status: row.payment_status,
+        })
+        .collect())
+}
+
+pub async fn insert_invoice(
+    tx: &mut sqlx::PgTransaction<'_>,
+    input: &CreateInvoiceInput,
+    total_price: f64,
+) -> Result<Uuid, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"
+        INSERT INTO invoices (
+            invoice_date, branch_id, discount, discount_unit,
+            payment_status, amount_paid, total_price
+        )
+        VALUES ($1, $2, $3::float8, $4, $5, $6::float8, $7::float8)
+        RETURNING id
+        "#,
+        input.date,
+        input.branch_id,
+        input.discount,
+        input.discount_unit.as_str(),
+        input.payment_status.as_str(),
+        input.amount_paid,
+        total_price,
+    )
+    .fetch_one(&mut **tx)
+    .await
+}
+
+pub async fn insert_order(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    measurement_id: Uuid,
+    order: &CreateOrderInput,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO orders (
+            measurement_id, material_id, material_amount, invoice_id, price,
+            thobe_type, f_pocket, collar, sleeve, patti, more_details
+        )
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11)
+        "#,
+        measurement_id,
+        order.material_id,
+        order.material_amount,
+        invoice_id,
+        order.price,
+        order.thobe_type,
+        order.f_pocket,
+        order.collar,
+        order.sleeve,
+        order.patti,
+        order.more_details,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}

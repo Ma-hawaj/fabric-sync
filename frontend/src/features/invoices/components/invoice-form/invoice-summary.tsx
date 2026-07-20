@@ -1,4 +1,12 @@
 import { NumberField, TextField } from '@/components/form/fields'
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -9,9 +17,11 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import type { Customer } from '@/features/customers/types/customers'
-import { BRANCHES } from '../../data/invoice-form-options'
+import type { Location } from '@/features/locations/types/location'
+import { CURRENCY } from '@/lib/currency'
 import { computeOrderLineTotal } from '../../lib/invoice-pricing'
 import type {
+  DiscountUnit,
   InvoiceCustomerDraft,
   InvoiceFormApi,
   PaymentStatus,
@@ -56,11 +66,13 @@ function buildLineItems(
 interface InvoiceSummaryProps {
   form: InvoiceFormApi
   existingCustomers: Customer[]
+  branches: Location[]
 }
 
 export function InvoiceSummary({
   form,
   existingCustomers,
+  branches,
 }: InvoiceSummaryProps) {
   return (
     <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
@@ -69,26 +81,42 @@ export function InvoiceSummary({
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField form={form} name="date" label="Date" />
         <form.Field name={'receivingBranch' as never}>
-          {(field: any) => (
-            <div className="space-y-1">
-              <Label htmlFor={field.name}>Receiving Branch</Label>
-              <Select
-                value={field.state.value}
-                onValueChange={(value: string) => field.handleChange(value)}
-              >
-                <SelectTrigger id={field.name} className="w-full">
-                  <SelectValue placeholder="Select branch..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {BRANCHES.map((branch) => (
-                    <SelectItem key={branch} value={branch}>
-                      {branch}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          {(field: any) => {
+            const selected = branches.find((b) => b.id === field.state.value)
+            return (
+              <div className="space-y-1">
+                <Label htmlFor={field.name}>Receiving Branch</Label>
+                <Combobox
+                  items={branches}
+                  itemToStringLabel={(branch: Location) => branch.name}
+                  isItemEqualToValue={(a: Location, b: Location) =>
+                    a.id === b.id
+                  }
+                  value={selected ?? null}
+                  onValueChange={(branch: Location | null) =>
+                    field.handleChange(branch?.id ?? '')
+                  }
+                >
+                  <ComboboxInput
+                    id={field.name}
+                    placeholder="Search branch..."
+                    className="w-full"
+                    showClear
+                  />
+                  <ComboboxContent>
+                    <ComboboxEmpty>No branches found.</ComboboxEmpty>
+                    <ComboboxList>
+                      {(branch: Location) => (
+                        <ComboboxItem key={branch.id} value={branch}>
+                          {branch.name}
+                        </ComboboxItem>
+                      )}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
+              </div>
+            )
+          }}
         </form.Field>
       </div>
 
@@ -114,7 +142,9 @@ export function InvoiceSummary({
                       <span>
                         {item.customerName} — {order.label}
                       </span>
-                      <span>SAR {order.total.toFixed(2)}</span>
+                      <span>
+                        {CURRENCY} {order.total.toFixed(2)}
+                      </span>
                     </div>
                   )),
                 )}
@@ -124,7 +154,9 @@ export function InvoiceSummary({
 
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
-                <span>SAR {subtotal.toFixed(2)}</span>
+                <span>
+                  {CURRENCY} {subtotal.toFixed(2)}
+                </span>
               </div>
 
               <div className="grid grid-cols-2 gap-3 items-end">
@@ -141,8 +173,8 @@ export function InvoiceSummary({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="SAR">SAR</SelectItem>
-                        <SelectItem value="%">%</SelectItem>
+                        <SelectItem value="amount">{CURRENCY}</SelectItem>
+                        <SelectItem value="percent">%</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -159,12 +191,12 @@ export function InvoiceSummary({
                 {(subscribed: any) => {
                   const [discount, discountUnit, amountPaid] = subscribed as [
                     number | '',
-                    'SAR' | '%',
+                    DiscountUnit,
                     number | '',
                   ]
                   const discountValue = discount === '' ? 0 : discount
                   const discountAmount =
-                    discountUnit === '%'
+                    discountUnit === 'percent'
                       ? subtotal * (discountValue / 100)
                       : discountValue
                   const taxable = Math.max(subtotal - discountAmount, 0)
@@ -177,12 +209,16 @@ export function InvoiceSummary({
                     <>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">VAT (15%)</span>
-                        <span>SAR {vat.toFixed(2)}</span>
+                        <span>
+                          {CURRENCY} {vat.toFixed(2)}
+                        </span>
                       </div>
                       <Separator />
                       <div className="flex justify-between font-semibold">
                         <span>Total</span>
-                        <span>SAR {total.toFixed(2)}</span>
+                        <span>
+                          {CURRENCY} {total.toFixed(2)}
+                        </span>
                       </div>
 
                       <div className="grid gap-4 sm:grid-cols-2 pt-2">
@@ -227,7 +263,9 @@ export function InvoiceSummary({
 
                       <div className="flex justify-between font-semibold pt-1">
                         <span>Balance Due</span>
-                        <span>SAR {balanceDue.toFixed(2)}</span>
+                        <span>
+                          {CURRENCY} {balanceDue.toFixed(2)}
+                        </span>
                       </div>
                     </>
                   )
