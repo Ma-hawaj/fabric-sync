@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            o.id,\n            o.invoice_id,\n            i.invoice_date,\n            o.measurement_id,\n            c.name AS customer_name,\n            c.mobile_no AS customer_mobile,\n            mat.name AS material,\n            o.material_amount::float8 AS \"material_amount!\",\n            o.price::float8 AS \"price!\",\n            o.status,\n            i.total_price::float8 AS \"invoice_total_price!\",\n            i.amount_paid::float8 AS \"invoice_amount_paid!\",\n            i.payment_status AS invoice_payment_status,\n            i.advance_amount::float8 AS \"invoice_advance_amount!\",\n            i.advance_payment_type AS invoice_advance_payment_type,\n            i.final_payment_type AS invoice_final_payment_type\n        FROM orders o\n        JOIN invoices i ON i.id = o.invoice_id\n        JOIN measurements m ON m.id = o.measurement_id\n        JOIN customers c ON c.id = m.customer_id\n        JOIN materials mat ON mat.id = o.material_id\n        WHERE $1::uuid IS NULL OR o.id = $1\n        ORDER BY o.id DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "invoice_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "invoice_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 3,
+        "name": "measurement_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "customer_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "customer_mobile",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "material",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "material_amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 8,
+        "name": "price!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 9,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "invoice_total_price!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 11,
+        "name": "invoice_amount_paid!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 12,
+        "name": "invoice_payment_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "invoice_advance_amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 14,
+        "name": "invoice_advance_payment_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "invoice_final_payment_type",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      false,
+      null,
+      null,
+      false,
+      null,
+      true,
+      true
+    ]
+  },
+  "hash": "aa233945ebfe522aa97f5e632fcc0f5d45f8000067e5474143889ac7e489651f"
+}

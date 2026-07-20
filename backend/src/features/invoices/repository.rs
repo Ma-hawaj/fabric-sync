@@ -3,7 +3,10 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
-use super::types::{CreateInvoiceInput, CreateOrderInput, InvoiceListCustomer, InvoiceListItem};
+use super::types::{
+    CreateInvoiceInput, CreateOrderInput, InvoiceListCustomer, InvoiceListItem, PaymentType,
+    ReceivedInvoice,
+};
 
 pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sqlx::Error> {
     let rows = sqlx::query!(
@@ -13,6 +16,10 @@ pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sql
             i.invoice_date,
             i.payment_status,
             i.total_price::float8 AS "total_price!",
+            i.amount_paid::float8 AS "amount_paid!",
+            i.advance_amount::float8 AS "advance_amount!",
+            i.advance_payment_type,
+            i.final_payment_type,
             COALESCE(agg.item_count, 0) AS "item_count!",
             COALESCE(agg.customers, '[]') AS "customers!: Json<Vec<InvoiceListCustomer>>",
             COALESCE(agg.materials, '[]') AS "materials!: Json<Vec<String>>"
@@ -47,6 +54,10 @@ pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sql
             materials: row.materials.0,
             total_price: row.total_price,
             payment_status: row.payment_status,
+            amount_paid: row.amount_paid,
+            advance_amount: row.advance_amount,
+            advance_payment_type: row.advance_payment_type,
+            final_payment_type: row.final_payment_type,
         })
         .collect())
 }
@@ -60,9 +71,10 @@ pub async fn insert_invoice(
         r#"
         INSERT INTO invoices (
             invoice_date, branch_id, discount, discount_unit,
-            payment_status, amount_paid, total_price
+            payment_status, amount_paid, total_price,
+            advance_amount, advance_payment_type
         )
-        VALUES ($1, $2, $3::float8, $4, $5, $6::float8, $7::float8)
+        VALUES ($1, $2, $3::float8, $4, $5, $6::float8, $7::float8, $6::float8, $8)
         RETURNING id
         "#,
         input.date,
@@ -72,9 +84,50 @@ pub async fn insert_invoice(
         input.payment_status.as_str(),
         input.amount_paid,
         total_price,
+        input.payment_type.map(super::types::PaymentType::as_str),
     )
     .fetch_one(&mut **tx)
     .await
+}
+
+/// Marks every order on the invoice received and settles the remaining
+/// balance in full, recording how that final payment was made. Returns
+/// `None` if the invoice doesn't exist.
+pub async fn receive_invoice(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    final_payment_type: PaymentType,
+) -> Result<Option<ReceivedInvoice>, sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE orders
+        SET status = 'received', received_at = now()
+        WHERE invoice_id = $1
+        "#,
+        invoice_id,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    let row = sqlx::query!(
+        r#"
+        UPDATE invoices
+        SET amount_paid = total_price, payment_status = 'paid', final_payment_type = $2
+        WHERE id = $1
+        RETURNING id, payment_status, amount_paid::float8 AS "amount_paid!", final_payment_type
+        "#,
+        invoice_id,
+        final_payment_type.as_str(),
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    Ok(row.map(|row| ReceivedInvoice {
+        id: row.id,
+        payment_status: row.payment_status,
+        amount_paid: row.amount_paid,
+        final_payment_type: row.final_payment_type,
+    }))
 }
 
 pub async fn insert_order(

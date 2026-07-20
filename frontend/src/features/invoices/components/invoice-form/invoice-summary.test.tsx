@@ -29,6 +29,7 @@ function baseValues(
     discountUnit: 'amount',
     paymentStatus: 'unpaid',
     amountPaid: '',
+    paymentType: '',
     customers: [],
     ...overrides,
   }

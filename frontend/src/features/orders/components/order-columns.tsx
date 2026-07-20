@@ -1,4 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { CURRENCY } from '@/lib/currency'
 import type { Order } from '../types/orders'
@@ -14,168 +16,313 @@ function shortId(id: string) {
   return id.slice(0, 8).toUpperCase()
 }
 
-export const getOrderColumns = (
-  materialOptions: { label: string; value: string }[],
-): ColumnDef<Order, any>[] => [
-  {
-    accessorKey: 'invoiceId',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Invoice" />
-    ),
-    cell: ({ row }) => (
-      <div className="font-mono font-medium">
-        {shortId(row.getValue('invoiceId'))}
-      </div>
-    ),
-    enableSorting: true,
-    enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) => {
-      const cellValue = row.getValue<string>(columnId)
-      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
-    },
-    meta: {
-      label: 'Invoice',
-      placeholder: 'Filter invoice...',
-      variant: 'text',
-    },
-  },
-  {
-    accessorKey: 'invoiceDate',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Invoice Date" />
-    ),
-    cell: ({ row }) => {
-      const date = row.getValue<Date>('invoiceDate')
-      return <div>{date.toLocaleDateString()}</div>
-    },
-    enableSorting: true,
-    enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) => {
-      const cellValue = row.getValue<Date>(columnId)
-      const time = cellValue.getTime()
+const statusOptions = [
+  { label: 'Pending', value: 'pending' },
+  { label: 'Received', value: 'received' },
+]
 
-      if (!Array.isArray(filterValue)) {
-        if (typeof filterValue === 'number') {
-          return (
-            cellValue.toDateString() === new Date(filterValue).toDateString()
-          )
+const paymentStatusOptions = [
+  { label: 'Unpaid', value: 'unpaid' },
+  { label: 'Partial', value: 'partial' },
+  { label: 'Paid', value: 'paid' },
+]
+
+const paymentTypeLabels: Record<
+  NonNullable<Order['invoiceFinalPaymentType']>,
+  string
+> = {
+  benefit: 'Benefit',
+  cash: 'Cash',
+  card: 'Card',
+}
+
+export function getOrderColumns(
+  materialOptions: { label: string; value: string }[],
+  onReceive: (order: Order) => void,
+): ColumnDef<Order, any>[] {
+  return [
+    {
+      accessorKey: 'invoiceId',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Invoice" />
+      ),
+      cell: ({ row }) => (
+        <div className="font-mono font-medium">
+          {shortId(row.getValue('invoiceId'))}
+        </div>
+      ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: (row, columnId, filterValue) => {
+        const cellValue = row.getValue<string>(columnId)
+        return cellValue
+          .toLowerCase()
+          .includes(String(filterValue).toLowerCase())
+      },
+      meta: {
+        label: 'Invoice',
+        placeholder: 'Filter invoice...',
+        variant: 'text',
+      },
+    },
+    {
+      accessorKey: 'invoiceDate',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Invoice Date" />
+      ),
+      cell: ({ row }) => {
+        const date = row.getValue<Date>('invoiceDate')
+        return <div>{date.toLocaleDateString()}</div>
+      },
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: (row, columnId, filterValue) => {
+        const cellValue = row.getValue<Date>(columnId)
+        const time = cellValue.getTime()
+
+        if (!Array.isArray(filterValue)) {
+          if (typeof filterValue === 'number') {
+            return (
+              cellValue.toDateString() === new Date(filterValue).toDateString()
+            )
+          }
+          return true
+        }
+
+        const [startVal, endVal] = filterValue
+        const start =
+          startVal !== undefined && startVal !== null
+            ? Number(startVal)
+            : undefined
+        const end =
+          endVal !== undefined && endVal !== null ? Number(endVal) : undefined
+
+        if (start !== undefined && !isNaN(start)) {
+          const startDate = new Date(start)
+          startDate.setHours(0, 0, 0, 0)
+          if (time < startDate.getTime()) return false
+        }
+        if (end !== undefined && !isNaN(end)) {
+          const endDate = new Date(end)
+          endDate.setHours(23, 59, 59, 999)
+          if (time > endDate.getTime()) return false
         }
         return true
-      }
-
-      const [startVal, endVal] = filterValue
-      const start =
-        startVal !== undefined && startVal !== null
-          ? Number(startVal)
-          : undefined
-      const end =
-        endVal !== undefined && endVal !== null ? Number(endVal) : undefined
-
-      if (start !== undefined && !isNaN(start)) {
-        const startDate = new Date(start)
-        startDate.setHours(0, 0, 0, 0)
-        if (time < startDate.getTime()) return false
-      }
-      if (end !== undefined && !isNaN(end)) {
-        const endDate = new Date(end)
-        endDate.setHours(23, 59, 59, 999)
-        if (time > endDate.getTime()) return false
-      }
-      return true
+      },
+      meta: {
+        label: 'Invoice Date',
+        variant: 'dateRange',
+      },
     },
-    meta: {
-      label: 'Invoice Date',
-      variant: 'dateRange',
+    {
+      accessorKey: 'customerName',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Customer Name" />
+      ),
+      cell: ({ row }) => <div>{row.getValue('customerName')}</div>,
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: (row, columnId, filterValue) => {
+        const cellValue = row.getValue<string>(columnId)
+        return cellValue
+          .toLowerCase()
+          .includes(String(filterValue).toLowerCase())
+      },
+      meta: {
+        label: 'Customer Name',
+        placeholder: 'Filter customer...',
+        variant: 'text',
+      },
     },
-  },
-  {
-    accessorKey: 'customerName',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Customer Name" />
-    ),
-    cell: ({ row }) => <div>{row.getValue('customerName')}</div>,
-    enableSorting: true,
-    enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) => {
-      const cellValue = row.getValue<string>(columnId)
-      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
+    {
+      accessorKey: 'customerMobile',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Customer Mobile" />
+      ),
+      cell: ({ row }) => <div>{row.getValue('customerMobile')}</div>,
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: (row, columnId, filterValue) => {
+        const cellValue = row.getValue<string>(columnId)
+        return cellValue
+          .toLowerCase()
+          .includes(String(filterValue).toLowerCase())
+      },
+      meta: {
+        label: 'Customer Mobile',
+        placeholder: 'Filter mobile...',
+        variant: 'text',
+      },
     },
-    meta: {
-      label: 'Customer Name',
-      placeholder: 'Filter customer...',
-      variant: 'text',
+    {
+      accessorKey: 'material',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Material" />
+      ),
+      cell: ({ row }) => <div>{row.getValue('material')}</div>,
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: (row, columnId, filterValue) => {
+        if (
+          !filterValue ||
+          (Array.isArray(filterValue) && filterValue.length === 0)
+        )
+          return true
+        const cellValue = row.getValue<string>(columnId)
+        return (filterValue as string[]).includes(cellValue)
+      },
+      meta: {
+        label: 'Material',
+        placeholder: 'Filter materials...',
+        variant: 'multiSelect',
+        options: materialOptions,
+      },
     },
-  },
-  {
-    accessorKey: 'customerMobile',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Customer Mobile" />
-    ),
-    cell: ({ row }) => <div>{row.getValue('customerMobile')}</div>,
-    enableSorting: true,
-    enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) => {
-      const cellValue = row.getValue<string>(columnId)
-      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
+    {
+      accessorKey: 'materialAmount',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Quantity" />
+      ),
+      cell: ({ row }) => <div>{row.getValue<number>('materialAmount')} m</div>,
+      enableSorting: true,
+      enableColumnFilter: false,
+      meta: {
+        label: 'Quantity',
+        variant: 'number',
+      },
     },
-    meta: {
-      label: 'Customer Mobile',
-      placeholder: 'Filter mobile...',
-      variant: 'text',
+    {
+      accessorKey: 'price',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Price" />
+      ),
+      cell: ({ row }) => (
+        <div className="font-medium">
+          {currencyFormatter.format(row.getValue<number>('price'))}
+        </div>
+      ),
+      enableSorting: true,
+      enableColumnFilter: false,
+      meta: {
+        label: 'Price',
+        variant: 'number',
+      },
     },
-  },
-  {
-    accessorKey: 'material',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Material" />
-    ),
-    cell: ({ row }) => <div>{row.getValue('material')}</div>,
-    enableSorting: true,
-    enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) => {
-      if (
-        !filterValue ||
-        (Array.isArray(filterValue) && filterValue.length === 0)
-      )
-        return true
-      const cellValue = row.getValue<string>(columnId)
-      return (filterValue as string[]).includes(cellValue)
+    {
+      accessorKey: 'status',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Status" />
+      ),
+      cell: ({ row }) => {
+        const status = row.getValue<Order['status']>('status')
+        return (
+          <Badge variant={status === 'received' ? 'default' : 'secondary'}>
+            {status === 'received' ? 'Received' : 'Pending'}
+          </Badge>
+        )
+      },
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: (row, columnId, filterValue) => {
+        if (
+          !filterValue ||
+          (Array.isArray(filterValue) && filterValue.length === 0)
+        )
+          return true
+        const cellValue = row.getValue<string>(columnId)
+        return (filterValue as string[]).includes(cellValue)
+      },
+      meta: {
+        label: 'Status',
+        variant: 'multiSelect',
+        options: statusOptions,
+      },
     },
-    meta: {
-      label: 'Material',
-      placeholder: 'Filter materials...',
-      variant: 'multiSelect',
-      options: materialOptions,
+    {
+      id: 'balanceDue',
+      accessorFn: (order) =>
+        Math.max(order.invoiceTotalPrice - order.invoiceAmountPaid, 0),
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Balance Due" />
+      ),
+      cell: ({ row }) => (
+        <div className="font-medium">
+          {currencyFormatter.format(row.getValue<number>('balanceDue'))}
+        </div>
+      ),
+      enableSorting: true,
+      enableColumnFilter: false,
     },
-  },
-  {
-    accessorKey: 'materialAmount',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Quantity" />
-    ),
-    cell: ({ row }) => <div>{row.getValue<number>('materialAmount')} m</div>,
-    enableSorting: true,
-    enableColumnFilter: false,
-    meta: {
-      label: 'Quantity',
-      variant: 'number',
+    {
+      accessorKey: 'invoicePaymentStatus',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Payment Status" />
+      ),
+      cell: ({ row }) => {
+        const status = row.getValue<Order['invoicePaymentStatus']>(
+          'invoicePaymentStatus',
+        )
+        const label =
+          status === 'paid'
+            ? 'Paid'
+            : status === 'partial'
+              ? 'Partial'
+              : 'Unpaid'
+        return (
+          <Badge variant={status === 'paid' ? 'default' : 'outline'}>
+            {label}
+          </Badge>
+        )
+      },
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: (row, columnId, filterValue) => {
+        if (
+          !filterValue ||
+          (Array.isArray(filterValue) && filterValue.length === 0)
+        )
+          return true
+        const cellValue = row.getValue<string>(columnId)
+        return (filterValue as string[]).includes(cellValue)
+      },
+      meta: {
+        label: 'Payment Status',
+        variant: 'multiSelect',
+        options: paymentStatusOptions,
+      },
     },
-  },
-  {
-    accessorKey: 'price',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Price" />
-    ),
-    cell: ({ row }) => (
-      <div className="font-medium">
-        {currencyFormatter.format(row.getValue<number>('price'))}
-      </div>
-    ),
-    enableSorting: true,
-    enableColumnFilter: false,
-    meta: {
-      label: 'Price',
-      variant: 'number',
+    {
+      id: 'paymentMethod',
+      accessorFn: (order) =>
+        order.invoiceFinalPaymentType ?? order.invoiceAdvancePaymentType,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Payment Method" />
+      ),
+      cell: ({ row }) => {
+        const type =
+          row.getValue<Order['invoiceFinalPaymentType']>('paymentMethod')
+        return <div>{type ? paymentTypeLabels[type] : '—'}</div>
+      },
+      enableSorting: true,
+      enableColumnFilter: false,
     },
-  },
-]
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => {
+        const order = row.original
+        return (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={order.status === 'received'}
+            onClick={() => onReceive(order)}
+            className="h-8 w-auto px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
+          >
+            {order.status === 'received' ? 'Received' : 'Mark Received'}
+          </Button>
+        )
+      },
+    },
+  ]
+}

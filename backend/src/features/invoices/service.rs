@@ -4,15 +4,38 @@ use crate::{
     state::AppState,
 };
 
+use uuid::Uuid;
+
 use super::{
     repository,
     types::{
         CreateInvoiceInput, CreatedInvoice, DiscountUnit, InvoiceCustomerInput, InvoiceListItem,
+        PaymentType, ReceivedInvoice,
     },
 };
 
 pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, AppError> {
     Ok(repository::list_invoices(state).await?)
+}
+
+/// Marks every order on the invoice received and settles the remaining
+/// balance in one action — the whole-invoice counterpart to
+/// features::orders::receive_order, for when everything is collected (and
+/// paid) at once.
+pub async fn receive_invoice(
+    state: &AppState,
+    invoice_id: Uuid,
+    payment_type: PaymentType,
+) -> Result<ReceivedInvoice, AppError> {
+    let mut tx = state.db().begin().await?;
+
+    let received = repository::receive_invoice(&mut tx, invoice_id, payment_type)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
+
+    tx.commit().await?;
+
+    Ok(received)
 }
 
 // Matches the frontend's invoice summary; the stored total is
@@ -44,6 +67,12 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
     if input.customers.is_empty() {
         return Err(AppError::BadRequest(
             "an invoice needs at least one customer".to_string(),
+        ));
+    }
+
+    if input.amount_paid > 0.0 && input.payment_type.is_none() {
+        return Err(AppError::BadRequest(
+            "an advance payment needs a paymentType".to_string(),
         ));
     }
 

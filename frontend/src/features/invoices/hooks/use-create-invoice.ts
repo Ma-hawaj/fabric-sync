@@ -61,6 +61,7 @@ function invoicePayload(values: InvoiceFormValues) {
     discountUnit: values.discountUnit,
     paymentStatus: values.paymentStatus,
     amountPaid: numberOrZero(values.amountPaid),
+    paymentType: values.paymentType || null,
     customers: values.customers.map(customerPayload),
   }
 }
