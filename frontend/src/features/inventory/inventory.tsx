@@ -7,8 +7,8 @@ import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getInventoryColumns } from './components/inventory-columns'
 import { InventoryDetailsSheet } from './components/inventory-details-sheet'
+import { useLocations } from '@/features/locations/hooks/use-locations'
 import { useInventory } from './hooks/use-inventory'
-import { useLocations } from './hooks/use-locations'
 import type { Material } from './types/inventory'
 
 export function InventoryPage() {

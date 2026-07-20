@@ -46,8 +46,8 @@ export function InventoryDetailsSheet({
                     {material.name}
                   </SheetTitle>
                   <SheetDescription className="text-muted-foreground mt-0.5">
-                    SKU: {material.sku} &middot; {totalQuantity} {material.unit}{' '}
-                    total
+                    SKU: {material.sku ?? '—'} &middot; {totalQuantity}{' '}
+                    {material.unit} total
                   </SheetDescription>
                 </div>
               </div>
@@ -73,7 +73,7 @@ export function InventoryDetailsSheet({
                     </TableHeader>
                     <TableBody>
                       {material.locations.map((stock) => (
-                        <TableRow key={stock.location}>
+                        <TableRow key={stock.locationId}>
                           <TableCell className="font-medium">
                             {stock.location}
                           </TableCell>
