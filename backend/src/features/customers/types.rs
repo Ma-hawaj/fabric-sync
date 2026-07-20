@@ -51,7 +51,7 @@ pub struct Customer {
     pub measurements: Vec<Measurement>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateMeasurementInput {
     pub date: NaiveDate,
@@ -92,9 +92,76 @@ pub struct CreateCustomerInput {
     pub measurement: Option<CreateMeasurementInput>,
 }
 
+// Two snapshots count as "the same measurement" if every measured field
+// matches, regardless of date — used by the invoices feature to skip
+// inserting a new row when nothing actually changed since the customer's
+// last visit.
+pub fn measurement_values_equal(a: &CreateMeasurementInput, b: &CreateMeasurementInput) -> bool {
+    CreateMeasurementInput {
+        date: b.date,
+        ..a.clone()
+    } == *b
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn measurement(chest: Option<f64>, cuffling: Option<&str>) -> CreateMeasurementInput {
+        CreateMeasurementInput {
+            date: NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+            length_fl: None,
+            length_bl: None,
+            chest,
+            waist: None,
+            hips: None,
+            shoulder: None,
+            sleeve_length: None,
+            neck: None,
+            open_hand: None,
+            cuffling: cuffling.map(str::to_string),
+            full_body: None,
+            chest_up: None,
+            open_fold: None,
+            cuff_width: None,
+            neck_width: None,
+            aram_hole: None,
+            sleeve_haff_button: None,
+            button_fold: None,
+            fo: None,
+            fo_width: None,
+            frant_pocket_length: None,
+            farnt_pocket_length_by_width: None,
+            side_pocket: None,
+            mobile_pocket_length_by_width: None,
+        }
+    }
+
+    #[test]
+    fn measurement_values_equal_ignores_date() {
+        let mut a = measurement(Some(108.0), Some("Double Cuff"));
+        let mut b = a.clone();
+        a.date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+        b.date = NaiveDate::from_ymd_opt(2026, 7, 1).unwrap();
+
+        assert!(measurement_values_equal(&a, &b));
+    }
+
+    #[test]
+    fn measurement_values_equal_detects_a_changed_field() {
+        let a = measurement(Some(108.0), Some("Double Cuff"));
+        let b = measurement(Some(110.0), Some("Double Cuff"));
+
+        assert!(!measurement_values_equal(&a, &b));
+    }
+
+    #[test]
+    fn measurement_values_equal_detects_a_field_becoming_blank() {
+        let a = measurement(Some(108.0), Some("Double Cuff"));
+        let b = measurement(Some(108.0), None);
+
+        assert!(!measurement_values_equal(&a, &b));
+    }
 
     // Guards the asymmetric rename_all in repository.rs's
     // `to_jsonb(measurements)` decode path: deserialize must accept the raw

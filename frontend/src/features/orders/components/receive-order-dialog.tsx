@@ -17,12 +17,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { CURRENCY } from '@/lib/currency'
 import { useReceiveOrder } from '../hooks/use-receive-order'
 import type { Order, PaymentType } from '../types/orders'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
-  currency: 'USD',
+  currency: CURRENCY,
 })
 
 const paymentTypeOptions: { value: PaymentType; label: string }[] = [
@@ -80,7 +81,7 @@ export function ReceiveOrderDialog({
             <DialogHeader>
               <DialogTitle>Mark Order Received</DialogTitle>
               <DialogDescription>
-                {order.customerName} — {order.materialName}
+                {order.customerName} — {order.material}
               </DialogDescription>
             </DialogHeader>
 

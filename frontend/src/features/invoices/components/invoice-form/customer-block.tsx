@@ -2,12 +2,13 @@ import { PlusIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FieldError } from '@/components/ui/field'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox'
 import { TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import {
@@ -17,6 +18,7 @@ import {
 import type { Customer } from '@/features/customers/types/customers'
 import { createEmptyOrder } from '../../types/invoice-form'
 import type { CustomerMode, InvoiceFormApi } from '../../types/invoice-form'
+import type { Material } from '../../types/materials'
 import { OrderBlock } from './order-block'
 
 function customerOptionLabel(customer: Customer) {
@@ -28,6 +30,7 @@ interface CustomerBlockProps {
   customerIndex: number
   customerNumber: number
   existingCustomers: Customer[]
+  materials: Material[]
   onRemove: () => void
   removable: boolean
 }
@@ -37,6 +40,7 @@ export function CustomerBlock({
   customerIndex,
   customerNumber,
   existingCustomers,
+  materials,
   onRemove,
   removable,
 }: CustomerBlockProps) {
@@ -86,17 +90,15 @@ export function CustomerBlock({
                       )
                       return (
                         <div className="space-y-3">
-                          <Select
-                            items={existingCustomers.map((customer) => ({
-                              value: customer.id,
-                              label: customerOptionLabel(customer),
-                            }))}
-                            value={idField.state.value}
-                            onValueChange={(customerId: string) => {
-                              idField.handleChange(customerId)
-                              const customer = existingCustomers.find(
-                                (c) => c.id === customerId,
-                              )
+                          <Combobox
+                            items={existingCustomers}
+                            itemToStringLabel={customerOptionLabel}
+                            isItemEqualToValue={(a: Customer, b: Customer) =>
+                              a.id === b.id
+                            }
+                            value={selected ?? null}
+                            onValueChange={(customer: Customer | null) => {
+                              idField.handleChange(customer?.id ?? '')
                               form.setFieldValue(
                                 `${base}.measurement` as never,
                                 measurementFromSnapshot(
@@ -105,20 +107,25 @@ export function CustomerBlock({
                               )
                             }}
                           >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select customer..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {existingCustomers.map((customer) => (
-                                <SelectItem
-                                  key={customer.id}
-                                  value={customer.id}
-                                >
-                                  {customerOptionLabel(customer)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            <ComboboxInput
+                              placeholder="Search customer by name or phone..."
+                              className="w-full"
+                              showClear
+                            />
+                            <ComboboxContent>
+                              <ComboboxEmpty>No customers found.</ComboboxEmpty>
+                              <ComboboxList>
+                                {(customer: Customer) => (
+                                  <ComboboxItem
+                                    key={customer.id}
+                                    value={customer}
+                                  >
+                                    {customerOptionLabel(customer)}
+                                  </ComboboxItem>
+                                )}
+                              </ComboboxList>
+                            </ComboboxContent>
+                          </Combobox>
                           <FieldError errors={idField.state.meta.errors} />
 
                           {selected && (
@@ -128,9 +135,6 @@ export function CustomerBlock({
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 {selected.mobileNo}
-                                {selected.nameArabic
-                                  ? ` · ${selected.nameArabic}`
-                                  : ''}
                               </p>
                             </div>
                           )}
@@ -140,18 +144,11 @@ export function CustomerBlock({
                   </form.Field>
                 ) : (
                   <div className="space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <TextField
-                        form={form}
-                        name={`${base}.name`}
-                        label="Full Name"
-                      />
-                      <TextField
-                        form={form}
-                        name={`${base}.nameArabic`}
-                        label="Name (Arabic)"
-                      />
-                    </div>
+                    <TextField
+                      form={form}
+                      name={`${base}.name`}
+                      label="Full Name"
+                    />
 
                     <TextField
                       form={form}
@@ -200,6 +197,7 @@ export function CustomerBlock({
                 customerIndex={customerIndex}
                 orderIndex={orderIndex}
                 orderNumber={orderIndex + 1}
+                materials={materials}
                 removable={ordersField.state.value.length > 1}
                 onRemove={() => ordersField.removeValue(orderIndex)}
               />

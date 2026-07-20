@@ -7,7 +7,12 @@ async function fetchOrders(): Promise<Order[]> {
   if (!response.ok) {
     throw new Error(`Failed to load orders (${response.status})`)
   }
-  return response.json()
+  const orders: (Omit<Order, 'invoiceDate'> & { invoiceDate: string })[] =
+    await response.json()
+  return orders.map((order) => ({
+    ...order,
+    invoiceDate: new Date(order.invoiceDate),
+  }))
 }
 
 export function useOrders() {

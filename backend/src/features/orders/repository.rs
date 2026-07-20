@@ -1,53 +1,55 @@
-use sqlx::types::Json;
 use uuid::Uuid;
 
 use crate::state::AppState;
 
-use super::types::{Order, PaymentType};
+use super::types::{OrderListItem, PaymentType};
 
-async fn fetch_orders(state: &AppState, order_id: Option<Uuid>) -> Result<Vec<Order>, sqlx::Error> {
-    let rows = sqlx::query!(
+async fn fetch_orders(
+    state: &AppState,
+    order_id: Option<Uuid>,
+) -> Result<Vec<OrderListItem>, sqlx::Error> {
+    sqlx::query_as!(
+        OrderListItem,
         r#"
         SELECT
-            json_build_object(
-                'id', o.id,
-                'invoiceId', o.invoice_id,
-                'invoiceDate', i.created_at,
-                'customerId', c.id,
-                'customerName', c.name,
-                'customerMobile', c.mobile_no,
-                'measurementId', o.measurement_id,
-                'materialName', mat.name,
-                'status', o.status,
-                'price', o.price::float8,
-                'invoiceTotalPrice', i.total_price::float8,
-                'invoiceAmountPaid', i.amount_paid::float8,
-                'invoicePaymentStatus', i.payment_status,
-                'invoiceAdvanceAmount', i.advance_amount::float8,
-                'invoiceAdvancePaymentType', i.advance_payment_type,
-                'invoiceFinalPaymentType', i.final_payment_type
-            ) AS "order!: Json<Order>"
+            o.id,
+            o.invoice_id,
+            i.invoice_date,
+            o.measurement_id,
+            c.name AS customer_name,
+            c.mobile_no AS customer_mobile,
+            mat.name AS material,
+            o.material_amount::float8 AS "material_amount!",
+            o.price::float8 AS "price!",
+            o.status,
+            i.total_price::float8 AS "invoice_total_price!",
+            i.amount_paid::float8 AS "invoice_amount_paid!",
+            i.payment_status AS invoice_payment_status,
+            i.advance_amount::float8 AS "invoice_advance_amount!",
+            i.advance_payment_type AS invoice_advance_payment_type,
+            i.final_payment_type AS invoice_final_payment_type
         FROM orders o
         JOIN invoices i ON i.id = o.invoice_id
-        JOIN measurements me ON me.id = o.measurement_id
-        JOIN customers c ON c.id = me.customer_id
+        JOIN measurements m ON m.id = o.measurement_id
+        JOIN customers c ON c.id = m.customer_id
         JOIN materials mat ON mat.id = o.material_id
         WHERE $1::uuid IS NULL OR o.id = $1
-        ORDER BY o.id
+        ORDER BY o.id DESC
         "#,
         order_id,
     )
     .fetch_all(state.db())
-    .await?;
-
-    Ok(rows.into_iter().map(|row| row.order.0).collect())
+    .await
 }
 
-pub async fn list_orders(state: &AppState) -> Result<Vec<Order>, sqlx::Error> {
+pub async fn list_orders(state: &AppState) -> Result<Vec<OrderListItem>, sqlx::Error> {
     fetch_orders(state, None).await
 }
 
-pub async fn get_order(state: &AppState, order_id: Uuid) -> Result<Option<Order>, sqlx::Error> {
+pub async fn get_order(
+    state: &AppState,
+    order_id: Uuid,
+) -> Result<Option<OrderListItem>, sqlx::Error> {
     Ok(fetch_orders(state, Some(order_id)).await?.pop())
 }
 

@@ -4,10 +4,10 @@ use crate::{error::AppError, state::AppState};
 
 use super::{
     repository,
-    types::{Order, PaymentType},
+    types::{OrderListItem, PaymentType},
 };
 
-pub async fn list_orders(state: &AppState) -> Result<Vec<Order>, AppError> {
+pub async fn list_orders(state: &AppState) -> Result<Vec<OrderListItem>, AppError> {
     Ok(repository::list_orders(state).await?)
 }
 
@@ -18,7 +18,7 @@ pub async fn receive_order(
     state: &AppState,
     order_id: Uuid,
     final_payment_type: PaymentType,
-) -> Result<Order, AppError> {
+) -> Result<OrderListItem, AppError> {
     let mut tx = state.db().begin().await?;
 
     let invoice_id = repository::mark_received(&mut tx, order_id)

@@ -107,9 +107,9 @@ export function CustomerDetailsSheet({
                             {order.invoiceId}
                           </TableCell>
                           <TableCell>
-                            {new Date(order.invoiceDate).toLocaleDateString()}
+                            {order.invoiceDate.toLocaleDateString()}
                           </TableCell>
-                          <TableCell>{order.materialName}</TableCell>
+                          <TableCell>{order.material}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

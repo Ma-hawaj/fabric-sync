@@ -21,7 +21,7 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
   it('shows the zod error inline on the field and a banner, blocking submit', async () => {
     renderPage()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save & Send' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
       await screen.findByText(
@@ -36,7 +36,7 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
   it('clears the error on the next submit attempt once the field is fixed', async () => {
     renderPage()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save & Send' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await screen.findByText(
       'Pick an existing customer or switch to "+ New Customer".',
     )
@@ -51,7 +51,7 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
       target: { value: '+971-50-1234567' },
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save & Send' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
       screen.queryByText(

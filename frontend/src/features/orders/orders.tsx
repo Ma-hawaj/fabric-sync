@@ -11,7 +11,15 @@ export function OrdersPage() {
   const { data: orders = [], isLoading } = useOrders()
   const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(null)
 
-  const columns = React.useMemo(() => getOrderColumns(setSelectedOrder), [])
+  // The material filter offers exactly the material names present in the
+  // fetched orders.
+  const columns = React.useMemo(() => {
+    const materials = [...new Set(orders.map((o) => o.material))].sort()
+    return getOrderColumns(
+      materials.map((m) => ({ label: m, value: m })),
+      setSelectedOrder,
+    )
+  }, [orders])
 
   const { table } = useDataTable({
     data: orders,

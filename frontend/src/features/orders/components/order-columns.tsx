@@ -2,12 +2,19 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
+import { CURRENCY } from '@/lib/currency'
 import type { Order } from '../types/orders'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
-  currency: 'USD',
+  currency: CURRENCY,
 })
+
+// Invoice ids are uuidv7 — time-ordered, so the short prefix still sorts by
+// creation and is unique enough to identify an invoice at a glance.
+function shortId(id: string) {
+  return id.slice(0, 8).toUpperCase()
+}
 
 const statusOptions = [
   { label: 'Pending', value: 'pending' },
@@ -30,6 +37,7 @@ const paymentTypeLabels: Record<
 }
 
 export function getOrderColumns(
+  materialOptions: { label: string; value: string }[],
   onReceive: (order: Order) => void,
 ): ColumnDef<Order, any>[] {
   return [
@@ -39,7 +47,9 @@ export function getOrderColumns(
         <DataTableColumnHeader column={column} label="Invoice" />
       ),
       cell: ({ row }) => (
-        <div className="font-mono font-medium">{row.getValue('invoiceId')}</div>
+        <div className="font-mono font-medium">
+          {shortId(row.getValue('invoiceId'))}
+        </div>
       ),
       enableSorting: true,
       enableColumnFilter: true,
@@ -56,8 +66,7 @@ export function getOrderColumns(
       },
     },
     {
-      id: 'invoiceDate',
-      accessorFn: (order) => new Date(order.invoiceDate),
+      accessorKey: 'invoiceDate',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Invoice Date" />
       ),
@@ -146,23 +155,57 @@ export function getOrderColumns(
       },
     },
     {
-      accessorKey: 'materialName',
+      accessorKey: 'material',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Material" />
       ),
-      cell: ({ row }) => <div>{row.getValue('materialName')}</div>,
+      cell: ({ row }) => <div>{row.getValue('material')}</div>,
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: (row, columnId, filterValue) => {
+        if (
+          !filterValue ||
+          (Array.isArray(filterValue) && filterValue.length === 0)
+        )
+          return true
         const cellValue = row.getValue<string>(columnId)
-        return cellValue
-          .toLowerCase()
-          .includes(String(filterValue).toLowerCase())
+        return (filterValue as string[]).includes(cellValue)
       },
       meta: {
         label: 'Material',
-        placeholder: 'Filter material...',
-        variant: 'text',
+        placeholder: 'Filter materials...',
+        variant: 'multiSelect',
+        options: materialOptions,
+      },
+    },
+    {
+      accessorKey: 'materialAmount',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Quantity" />
+      ),
+      cell: ({ row }) => <div>{row.getValue<number>('materialAmount')} m</div>,
+      enableSorting: true,
+      enableColumnFilter: false,
+      meta: {
+        label: 'Quantity',
+        variant: 'number',
+      },
+    },
+    {
+      accessorKey: 'price',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Price" />
+      ),
+      cell: ({ row }) => (
+        <div className="font-medium">
+          {currencyFormatter.format(row.getValue<number>('price'))}
+        </div>
+      ),
+      enableSorting: true,
+      enableColumnFilter: false,
+      meta: {
+        label: 'Price',
+        variant: 'number',
       },
     },
     {
@@ -256,8 +299,9 @@ export function getOrderColumns(
         <DataTableColumnHeader column={column} label="Payment Method" />
       ),
       cell: ({ row }) => {
-        const type =
-          row.getValue<Order['invoiceFinalPaymentType']>('paymentMethod')
+        const type = row.getValue<Order['invoiceFinalPaymentType']>(
+          'paymentMethod',
+        )
         return <div>{type ? paymentTypeLabels[type] : '—'}</div>
       },
       enableSorting: true,

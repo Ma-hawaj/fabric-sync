@@ -4,7 +4,9 @@ import type { MeasurementDraft } from '@/features/customers/types/measurement-fo
 
 export type CustomerMode = 'existing' | 'new'
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
-export type DiscountUnit = 'SAR' | '%'
+// A flat amount in the business currency, or a percentage of the subtotal —
+// deliberately not tied to a specific currency code (see lib/currency.ts).
+export type DiscountUnit = 'amount' | 'percent'
 
 // A blank string means "not entered yet" for a numeric field, distinct from 0.
 export type NumberInput = number | ''
@@ -21,9 +23,9 @@ export interface InvoiceOrderDraft {
 
   materialId: string
   materialAmount: NumberInput
-  // Line total is derived from materialId + materialAmount (see
-  // computeOrderLineTotal) rather than stored, so it can never drift out of
-  // sync with the material's price per meter.
+  // Entered by staff per order line — materials carry no unit price to derive
+  // it from.
+  price: NumberInput
 }
 
 export interface InvoiceCustomerDraft {
@@ -35,7 +37,6 @@ export interface InvoiceCustomerDraft {
 
   // mode: 'new'
   name: string
-  nameArabic: string
   mobileNo: string
 
   measurement: MeasurementDraft
@@ -81,6 +82,7 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     moreDetails: '',
     materialId: '',
     materialAmount: '',
+    price: '',
   }
 }
 
@@ -90,7 +92,6 @@ export function createEmptyCustomer(): InvoiceCustomerDraft {
     mode: 'existing',
     existingCustomerId: '',
     name: '',
-    nameArabic: '',
     mobileNo: '',
     measurement: createEmptyMeasurement(),
     orders: [createEmptyOrder()],
