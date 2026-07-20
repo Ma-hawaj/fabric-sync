@@ -4,6 +4,11 @@ use uuid::Uuid;
 
 use crate::features::customers::types::CreateMeasurementInput;
 
+// The business only invoices in SAR for now (matches the frontend's
+// lib/currency.ts). Ordinary code can reference this; the serde rename below
+// can't — proc-macro attributes need a literal, not a const.
+pub const CURRENCY: &str = "SAR";
+
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub enum DiscountUnit {
     #[serde(rename = "SAR")]

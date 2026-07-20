@@ -5,6 +5,7 @@ use crate::state::AppState;
 
 use super::types::{
     CreateInvoiceInput, CreateOrderInput, DiscountUnit, InvoiceListCustomer, InvoiceListItem,
+    CURRENCY,
 };
 
 pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sqlx::Error> {
@@ -71,7 +72,7 @@ pub async fn insert_invoice(
         input.branch_id,
         input.discount,
         match input.discount_unit {
-            DiscountUnit::Sar => "SAR",
+            DiscountUnit::Sar => CURRENCY,
             DiscountUnit::Percent => "%",
         },
         input.payment_status.as_str(),
