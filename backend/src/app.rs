@@ -9,7 +9,7 @@ use tower_http::{
 
 use crate::{
     // auth,
-    features::{customers, health, locations, materials},
+    features::{customers, health, locations, materials, orders},
     state::AppState,
 };
 
@@ -34,6 +34,7 @@ pub fn router(state: AppState) -> Router {
         )
         .merge(materials::router())
         .merge(locations::router())
+        .merge(orders::router())
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)

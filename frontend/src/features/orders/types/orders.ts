@@ -1,9 +1,18 @@
+export type OrderStatus = 'pending' | 'received'
+export type InvoicePaymentStatus = 'unpaid' | 'partial' | 'paid'
+
 export interface Order {
   id: string
-  invoice: string
-  invoiceDate: Date
+  invoiceId: string
+  invoiceDate: string
+  customerId: string
   customerName: string
   customerMobile: string
-  measurementLink: string
-  material: string
+  measurementId: string
+  materialName: string
+  status: OrderStatus
+  price: number
+  invoiceTotalPrice: number
+  invoiceAmountPaid: number
+  invoicePaymentStatus: InvoicePaymentStatus
 }

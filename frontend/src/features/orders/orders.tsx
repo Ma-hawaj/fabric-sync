@@ -1,15 +1,21 @@
+import * as React from 'react'
 import { useDataTable } from '@/hooks/use-data-table'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
-import { orderColumns } from './components/order-columns'
+import { getOrderColumns } from './components/order-columns'
+import { ReceiveOrderDialog } from './components/receive-order-dialog'
 import { useOrders } from './hooks/use-orders'
+import type { Order } from './types/orders'
 
 export function OrdersPage() {
   const { data: orders = [], isLoading } = useOrders()
+  const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(null)
+
+  const columns = React.useMemo(() => getOrderColumns(setSelectedOrder), [])
 
   const { table } = useDataTable({
     data: orders,
-    columns: orderColumns,
+    columns,
     manualFiltering: false,
     manualSorting: false,
     manualPagination: false,
@@ -33,6 +39,11 @@ export function OrdersPage() {
           <DataTableToolbar table={table} />
         </DataTable>
       )}
+
+      <ReceiveOrderDialog
+        order={selectedOrder}
+        onOpenChange={(open) => !open && setSelectedOrder(null)}
+      />
     </div>
   )
 }

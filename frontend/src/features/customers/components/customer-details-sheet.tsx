@@ -104,12 +104,12 @@ export function CustomerDetailsSheet({
                       {customerOrders.map((order) => (
                         <TableRow key={order.id}>
                           <TableCell className="font-medium">
-                            {order.invoice}
+                            {order.invoiceId}
                           </TableCell>
                           <TableCell>
-                            {order.invoiceDate.toLocaleDateString()}
+                            {new Date(order.invoiceDate).toLocaleDateString()}
                           </TableCell>
-                          <TableCell>{order.material}</TableCell>
+                          <TableCell>{order.materialName}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
