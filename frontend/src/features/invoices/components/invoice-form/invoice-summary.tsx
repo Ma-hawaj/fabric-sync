@@ -18,6 +18,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
+import { CURRENCY } from '@/lib/currency'
 import { computeOrderLineTotal } from '../../lib/invoice-pricing'
 import type {
   InvoiceCustomerDraft,
@@ -140,7 +141,9 @@ export function InvoiceSummary({
                       <span>
                         {item.customerName} — {order.label}
                       </span>
-                      <span>SAR {order.total.toFixed(2)}</span>
+                      <span>
+                        {CURRENCY} {order.total.toFixed(2)}
+                      </span>
                     </div>
                   )),
                 )}
@@ -150,7 +153,9 @@ export function InvoiceSummary({
 
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
-                <span>SAR {subtotal.toFixed(2)}</span>
+                <span>
+                  {CURRENCY} {subtotal.toFixed(2)}
+                </span>
               </div>
 
               <div className="grid grid-cols-2 gap-3 items-end">
@@ -167,7 +172,7 @@ export function InvoiceSummary({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="SAR">SAR</SelectItem>
+                        <SelectItem value={CURRENCY}>{CURRENCY}</SelectItem>
                         <SelectItem value="%">%</SelectItem>
                       </SelectContent>
                     </Select>
@@ -185,7 +190,7 @@ export function InvoiceSummary({
                 {(subscribed: any) => {
                   const [discount, discountUnit, amountPaid] = subscribed as [
                     number | '',
-                    'SAR' | '%',
+                    typeof CURRENCY | '%',
                     number | '',
                   ]
                   const discountValue = discount === '' ? 0 : discount
@@ -203,12 +208,16 @@ export function InvoiceSummary({
                     <>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">VAT (15%)</span>
-                        <span>SAR {vat.toFixed(2)}</span>
+                        <span>
+                          {CURRENCY} {vat.toFixed(2)}
+                        </span>
                       </div>
                       <Separator />
                       <div className="flex justify-between font-semibold">
                         <span>Total</span>
-                        <span>SAR {total.toFixed(2)}</span>
+                        <span>
+                          {CURRENCY} {total.toFixed(2)}
+                        </span>
                       </div>
 
                       <div className="grid gap-4 sm:grid-cols-2 pt-2">
@@ -253,7 +262,9 @@ export function InvoiceSummary({
 
                       <div className="flex justify-between font-semibold pt-1">
                         <span>Balance Due</span>
-                        <span>SAR {balanceDue.toFixed(2)}</span>
+                        <span>
+                          {CURRENCY} {balanceDue.toFixed(2)}
+                        </span>
                       </div>
                     </>
                   )

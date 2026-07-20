@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
+import { CURRENCY } from '@/lib/currency'
 
 // A blank string means "not entered yet" — mirrors NumberInput in
 // types/invoice-form.ts.
@@ -88,7 +89,7 @@ export const invoiceFormSchema = z.object({
   date: z.string(),
   receivingBranch: z.string(),
   discount: numberInputSchema,
-  discountUnit: z.enum(['SAR', '%']),
+  discountUnit: z.enum([CURRENCY, '%']),
   paymentStatus: z.enum(['unpaid', 'partial', 'paid']),
   amountPaid: numberInputSchema,
   customers: customersArraySchema,

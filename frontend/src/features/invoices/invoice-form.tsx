@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ApiError } from '@/features/customers/hooks/use-create-customer'
 import { useCustomers } from '@/features/customers/hooks/use-customers'
 import { useLocations } from '@/features/locations/hooks/use-locations'
+import { CURRENCY } from '@/lib/currency'
 import { CustomerBlock } from './components/invoice-form/customer-block'
 import { InvoiceSummary } from './components/invoice-form/invoice-summary'
 import { useCreateInvoice } from './hooks/use-create-invoice'
@@ -31,7 +32,7 @@ export function InvoiceFormPage() {
     date: new Date().toISOString().slice(0, 10),
     receivingBranch: '',
     discount: '',
-    discountUnit: 'SAR',
+    discountUnit: CURRENCY,
     paymentStatus: 'unpaid',
     amountPaid: '',
     customers: [createEmptyCustomer()],
@@ -45,7 +46,7 @@ export function InvoiceFormPage() {
       toast.promise(pending, {
         loading: 'Saving invoice...',
         success: (invoice) =>
-          `Invoice saved — total SAR ${invoice.totalPrice.toFixed(2)}.`,
+          `Invoice saved — total ${CURRENCY} ${invoice.totalPrice.toFixed(2)}.`,
         error: (error) =>
           error instanceof ApiError && error.status === 409
             ? 'A customer with this name and phone number already exists.'

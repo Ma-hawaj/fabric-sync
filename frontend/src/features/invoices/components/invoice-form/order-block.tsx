@@ -13,6 +13,7 @@ import {
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { CURRENCY } from '@/lib/currency'
 import {
   COLLARS,
   FRONT_POCKETS,
@@ -207,7 +208,11 @@ export function OrderBlock({
             label="Quantity (m)"
           />
 
-          <NumberField form={form} name={`${base}.price`} label="Price (SAR)" />
+          <NumberField
+            form={form}
+            name={`${base}.price`}
+            label={`Price (${CURRENCY})`}
+          />
         </div>
       </div>
     </div>

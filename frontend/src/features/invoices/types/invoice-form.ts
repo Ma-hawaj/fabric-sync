@@ -1,10 +1,11 @@
 import type { ReactFormExtendedApi } from '@tanstack/react-form'
 import { createEmptyMeasurement } from '@/features/customers/types/measurement-form'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
+import type { CURRENCY } from '@/lib/currency'
 
 export type CustomerMode = 'existing' | 'new'
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
-export type DiscountUnit = 'SAR' | '%'
+export type DiscountUnit = typeof CURRENCY | '%'
 
 // A blank string means "not entered yet" for a numeric field, distinct from 0.
 export type NumberInput = number | ''
