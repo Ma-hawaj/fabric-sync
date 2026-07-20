@@ -1,0 +1,172 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            id, measurement_date,\n            length_fl::float8, length_bl::float8, chest::float8, waist::float8,\n            hips::float8, shoulder::float8, sleeve_length::float8,\n            neck::float8, open_hand::float8, cuffling,\n            full_body, chest_up::float8, open_fold, cuff_width::float8,\n            neck_width::float8, aram_hole::float8,\n            sleeve_haff_button, button_fold, fo, fo_width::float8,\n            frant_pocket_length::float8,\n            farnt_pocket_length_by_width, side_pocket, mobile_pocket_length_by_width\n        FROM measurements\n        WHERE customer_id = $1\n        ORDER BY measurement_date DESC, id DESC\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "measurement_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 2,
+        "name": "length_fl",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 3,
+        "name": "length_bl",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "chest",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "waist",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "hips",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "shoulder",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 8,
+        "name": "sleeve_length",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 9,
+        "name": "neck",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 10,
+        "name": "open_hand",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 11,
+        "name": "cuffling",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "full_body",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "chest_up",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 14,
+        "name": "open_fold",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "cuff_width",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 16,
+        "name": "neck_width",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 17,
+        "name": "aram_hole",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 18,
+        "name": "sleeve_haff_button",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 19,
+        "name": "button_fold",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 20,
+        "name": "fo",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 21,
+        "name": "fo_width",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 22,
+        "name": "frant_pocket_length",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 23,
+        "name": "farnt_pocket_length_by_width",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 24,
+        "name": "side_pocket",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 25,
+        "name": "mobile_pocket_length_by_width",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      true,
+      true,
+      null,
+      true,
+      null,
+      null,
+      null,
+      true,
+      true,
+      true,
+      null,
+      null,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "875b39ac0763954ee9522a95517b96c2dea8c9c3712e4b8fa8e49cdc0b2cfcfc"
+}

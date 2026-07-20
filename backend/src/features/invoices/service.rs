@@ -1,5 +1,7 @@
 use crate::{
-    error::AppError, features::customers::repository as customers_repository, state::AppState,
+    error::AppError,
+    features::customers::{repository as customers_repository, types::measurement_values_equal},
+    state::AppState,
 };
 
 use super::{
@@ -185,9 +187,18 @@ pub async fn create_invoice(
 
         // An unknown existing_customer_id surfaces here as a foreign-key
         // violation, which the AppError conversion maps to a 400.
-        let measurement_id =
-            customers_repository::insert_measurement(&mut tx, customer_id, &customer.measurement)
-                .await?;
+        let latest = customers_repository::latest_measurement(&mut tx, customer_id).await?;
+        let measurement_id = match latest {
+            Some((id, ref values)) if measurement_values_equal(values, &customer.measurement) => id,
+            _ => {
+                customers_repository::insert_measurement(
+                    &mut tx,
+                    customer_id,
+                    &customer.measurement,
+                )
+                .await?
+            }
+        };
 
         for order in &customer.orders {
             repository::insert_order(&mut tx, invoice_id, measurement_id, order).await?;

@@ -111,6 +111,68 @@ pub async fn insert_measurement(
     .await
 }
 
+// Tx-scoped so the invoices feature can check it against a new snapshot
+// inside its own transaction before deciding whether to insert one.
+pub async fn latest_measurement(
+    tx: &mut sqlx::PgTransaction<'_>,
+    customer_id: Uuid,
+) -> Result<Option<(Uuid, CreateMeasurementInput)>, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        SELECT
+            id, measurement_date,
+            length_fl::float8, length_bl::float8, chest::float8, waist::float8,
+            hips::float8, shoulder::float8, sleeve_length::float8,
+            neck::float8, open_hand::float8, cuffling,
+            full_body, chest_up::float8, open_fold, cuff_width::float8,
+            neck_width::float8, aram_hole::float8,
+            sleeve_haff_button, button_fold, fo, fo_width::float8,
+            frant_pocket_length::float8,
+            farnt_pocket_length_by_width, side_pocket, mobile_pocket_length_by_width
+        FROM measurements
+        WHERE customer_id = $1
+        ORDER BY measurement_date DESC, id DESC
+        LIMIT 1
+        "#,
+        customer_id,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    Ok(row.map(|row| {
+        (
+            row.id,
+            CreateMeasurementInput {
+                date: row.measurement_date,
+                length_fl: row.length_fl,
+                length_bl: row.length_bl,
+                chest: row.chest,
+                waist: row.waist,
+                hips: row.hips,
+                shoulder: row.shoulder,
+                sleeve_length: row.sleeve_length,
+                neck: row.neck,
+                open_hand: row.open_hand,
+                cuffling: row.cuffling,
+                full_body: row.full_body,
+                chest_up: row.chest_up,
+                open_fold: row.open_fold,
+                cuff_width: row.cuff_width,
+                neck_width: row.neck_width,
+                aram_hole: row.aram_hole,
+                sleeve_haff_button: row.sleeve_haff_button,
+                button_fold: row.button_fold,
+                fo: row.fo,
+                fo_width: row.fo_width,
+                frant_pocket_length: row.frant_pocket_length,
+                farnt_pocket_length_by_width: row.farnt_pocket_length_by_width,
+                side_pocket: row.side_pocket,
+                mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
+            },
+        )
+    }))
+}
+
 // Tx-scoped so the invoices feature can create new customers as part of an
 // invoice's transaction.
 pub async fn insert_customer(
