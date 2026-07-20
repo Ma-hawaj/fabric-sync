@@ -2,16 +2,17 @@ import { XIcon } from 'lucide-react'
 import { NumberField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { Button } from '@/components/ui/button'
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   COLLARS,
   FRONT_POCKETS,
@@ -155,25 +156,34 @@ export function OrderBlock({
                   data-invalid={field.state.meta.errors.length > 0}
                 >
                   <FieldLabel htmlFor={field.name}>Material</FieldLabel>
-                  <Select
-                    items={materials.map((material) => ({
-                      value: material.id,
-                      label: materialOptionLabel(material),
-                    }))}
-                    value={field.state.value}
-                    onValueChange={(value: string) => field.handleChange(value)}
+                  <Combobox
+                    items={materials}
+                    itemToStringLabel={materialOptionLabel}
+                    isItemEqualToValue={(a: Material, b: Material) =>
+                      a.id === b.id
+                    }
+                    value={selected ?? null}
+                    onValueChange={(material: Material | null) =>
+                      field.handleChange(material?.id ?? '')
+                    }
                   >
-                    <SelectTrigger id={field.name} className="w-full">
-                      <SelectValue placeholder="Select material..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {materials.map((material) => (
-                        <SelectItem key={material.id} value={material.id}>
-                          {materialOptionLabel(material)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <ComboboxInput
+                      id={field.name}
+                      placeholder="Search material by name or SKU..."
+                      className="w-full"
+                      showClear
+                    />
+                    <ComboboxContent>
+                      <ComboboxEmpty>No materials found.</ComboboxEmpty>
+                      <ComboboxList>
+                        {(material: Material) => (
+                          <ComboboxItem key={material.id} value={material}>
+                            {materialOptionLabel(material)}
+                          </ComboboxItem>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
                   <FieldError errors={field.state.meta.errors} />
                   {selected && (
                     <p className="text-xs text-muted-foreground">
