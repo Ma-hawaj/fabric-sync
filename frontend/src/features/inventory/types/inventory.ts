@@ -12,9 +12,3 @@ export interface Material {
   unit: string
   locations: MaterialLocationStock[]
 }
-
-// Shape of GET /locations — the branch table rows.
-export interface Location {
-  id: string
-  name: string
-}

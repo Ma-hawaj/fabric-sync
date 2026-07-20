@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { NumberField } from '@/components/form/fields'
-import type { Location } from '../types/inventory'
+import type { Location } from '@/features/locations/types/location'
 import type { InventoryFormApi } from '../types/inventory-form'
 
 interface StockEntryRowProps {

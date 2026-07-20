@@ -3,7 +3,8 @@ import { EyeIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
-import type { Location, Material } from '../types/inventory'
+import type { Location } from '@/features/locations/types/location'
+import type { Material } from '../types/inventory'
 
 function totalQuantity(material: Material) {
   return material.locations.reduce((sum, l) => sum + l.quantity, 0)
