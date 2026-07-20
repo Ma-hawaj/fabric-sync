@@ -89,8 +89,11 @@ export function useCreateInvoice() {
     mutationFn: createInvoice,
     onSuccess: () => {
       // Saving an invoice can create customers and always records new
-      // measurement snapshots, so cached customers are stale now.
+      // measurement snapshots, so cached customers are stale now — as are
+      // the invoice and order lists.
       void queryClient.invalidateQueries({ queryKey: ['customers'] })
+      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      void queryClient.invalidateQueries({ queryKey: ['orders'] })
     },
   })
 }

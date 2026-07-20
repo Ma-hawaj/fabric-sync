@@ -1,45 +1,31 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { ExternalLinkIcon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
+import { CURRENCY } from '@/lib/currency'
 import type { Order } from '../types/orders'
 
-const MATERIALS = [
-  'Bamboo Fiber',
-  'Cotton',
-  'Cotton Blend',
-  'Organic Cotton',
-  'Polyester',
-  'Recycled Polyester',
-  'Spandex Blend',
-  'Cashmere Blend',
-  'Silk',
-  'Wool',
-  'Linen',
-  'Satin',
-  'Velvet',
-  'Tweed',
-  'Denim',
-  'Lace',
-  'Corduroy',
-  'Hemp',
-  'Microfiber',
-  'Jacquard',
-]
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: CURRENCY,
+})
 
-const materialOptions = MATERIALS.map((m) => ({
-  label: m,
-  value: m,
-}))
+// Invoice ids are uuidv7 — time-ordered, so the short prefix still sorts by
+// creation and is unique enough to identify an invoice at a glance.
+function shortId(id: string) {
+  return id.slice(0, 8).toUpperCase()
+}
 
-export const orderColumns: ColumnDef<Order, any>[] = [
+export const getOrderColumns = (
+  materialOptions: { label: string; value: string }[],
+): ColumnDef<Order, any>[] => [
   {
-    accessorKey: 'invoice',
+    accessorKey: 'invoiceId',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Invoice" />
     ),
     cell: ({ row }) => (
-      <div className="font-medium">{row.getValue('invoice')}</div>
+      <div className="font-mono font-medium">
+        {shortId(row.getValue('invoiceId'))}
+      </div>
     ),
     enableSorting: true,
     enableColumnFilter: true,
@@ -139,28 +125,6 @@ export const orderColumns: ColumnDef<Order, any>[] = [
     },
   },
   {
-    accessorKey: 'measurementLink',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Measurement Link" />
-    ),
-    cell: ({ row }) => {
-      const link = row.getValue<string>('measurementLink')
-      return (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-auto w-auto p-0 text-blue-600 hover:text-blue-700 hover:underline"
-        >
-          <ExternalLinkIcon className="mr-2 h-4 w-4" />
-          View
-          {link}
-        </Button>
-      )
-    },
-    enableSorting: false,
-    enableColumnFilter: false,
-  },
-  {
     accessorKey: 'material',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Material" />
@@ -182,6 +146,36 @@ export const orderColumns: ColumnDef<Order, any>[] = [
       placeholder: 'Filter materials...',
       variant: 'multiSelect',
       options: materialOptions,
+    },
+  },
+  {
+    accessorKey: 'materialAmount',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Quantity" />
+    ),
+    cell: ({ row }) => <div>{row.getValue<number>('materialAmount')} m</div>,
+    enableSorting: true,
+    enableColumnFilter: false,
+    meta: {
+      label: 'Quantity',
+      variant: 'number',
+    },
+  },
+  {
+    accessorKey: 'price',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Price" />
+    ),
+    cell: ({ row }) => (
+      <div className="font-medium">
+        {currencyFormatter.format(row.getValue<number>('price'))}
+      </div>
+    ),
+    enableSorting: true,
+    enableColumnFilter: false,
+    meta: {
+      label: 'Price',
+      variant: 'number',
     },
   },
 ]

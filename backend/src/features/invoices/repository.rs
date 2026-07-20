@@ -1,6 +1,57 @@
+use sqlx::types::Json;
 use uuid::Uuid;
 
-use super::types::{CreateInvoiceInput, CreateOrderInput, DiscountUnit};
+use crate::state::AppState;
+
+use super::types::{
+    CreateInvoiceInput, CreateOrderInput, DiscountUnit, InvoiceListCustomer, InvoiceListItem,
+};
+
+pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT
+            i.id,
+            i.invoice_date,
+            i.payment_status,
+            i.total_price::float8 AS "total_price!",
+            COALESCE(agg.item_count, 0) AS "item_count!",
+            COALESCE(agg.customers, '[]') AS "customers!: Json<Vec<InvoiceListCustomer>>",
+            COALESCE(agg.materials, '[]') AS "materials!: Json<Vec<String>>"
+        FROM invoices i
+        LEFT JOIN LATERAL (
+            SELECT
+                count(*) AS item_count,
+                json_agg(DISTINCT jsonb_build_object(
+                    'name', c.name,
+                    'mobileNo', c.mobile_no
+                )) AS customers,
+                json_agg(DISTINCT mat.name) AS materials
+            FROM orders o
+            JOIN measurements m ON m.id = o.measurement_id
+            JOIN customers c ON c.id = m.customer_id
+            JOIN materials mat ON mat.id = o.material_id
+            WHERE o.invoice_id = i.id
+        ) agg ON true
+        ORDER BY i.id DESC
+        "#,
+    )
+    .fetch_all(state.db())
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| InvoiceListItem {
+            id: row.id,
+            date: row.invoice_date,
+            customers: row.customers.0,
+            item_count: row.item_count,
+            materials: row.materials.0,
+            total_price: row.total_price,
+            payment_status: row.payment_status,
+        })
+        .collect())
+}
 
 pub async fn insert_invoice(
     tx: &mut sqlx::PgTransaction<'_>,

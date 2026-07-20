@@ -1,0 +1,68 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            o.id,\n            o.invoice_id,\n            i.invoice_date,\n            o.measurement_id,\n            c.name AS customer_name,\n            c.mobile_no AS customer_mobile,\n            mat.name AS material,\n            o.material_amount::float8 AS \"material_amount!\",\n            o.price::float8 AS \"price!\"\n        FROM orders o\n        JOIN invoices i ON i.id = o.invoice_id\n        JOIN measurements m ON m.id = o.measurement_id\n        JOIN customers c ON c.id = m.customer_id\n        JOIN materials mat ON mat.id = o.material_id\n        ORDER BY o.id DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "invoice_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "invoice_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 3,
+        "name": "measurement_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "customer_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "customer_mobile",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "material",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "material_amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 8,
+        "name": "price!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "a63278b9637242faff860a53d7b4ff02e933cf595ad25168546378ec81e6f6a2"
+}

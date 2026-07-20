@@ -89,3 +89,25 @@ pub struct CreatedInvoice {
     pub id: Uuid,
     pub total_price: f64,
 }
+
+// One row of GET /invoices. Deserialize is only used to decode the
+// SQL-built JSON aggregate in repository.rs, whose keys are already
+// camelCase, so a single symmetric rename_all works.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceListCustomer {
+    pub name: String,
+    pub mobile_no: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceListItem {
+    pub id: Uuid,
+    pub date: NaiveDate,
+    pub customers: Vec<InvoiceListCustomer>,
+    pub item_count: i64,
+    pub materials: Vec<String>,
+    pub total_price: f64,
+    pub payment_status: String,
+}
