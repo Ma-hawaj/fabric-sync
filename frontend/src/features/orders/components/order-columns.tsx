@@ -20,6 +20,15 @@ const paymentStatusOptions = [
   { label: 'Paid', value: 'paid' },
 ]
 
+const paymentTypeLabels: Record<
+  NonNullable<Order['invoiceFinalPaymentType']>,
+  string
+> = {
+  benefit: 'Benefit',
+  cash: 'Cash',
+  card: 'Card',
+}
+
 export function getOrderColumns(
   onReceive: (order: Order) => void,
 ): ColumnDef<Order, any>[] {
@@ -238,6 +247,21 @@ export function getOrderColumns(
         variant: 'multiSelect',
         options: paymentStatusOptions,
       },
+    },
+    {
+      id: 'paymentMethod',
+      accessorFn: (order) =>
+        order.invoiceFinalPaymentType ?? order.invoiceAdvancePaymentType,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Payment Method" />
+      ),
+      cell: ({ row }) => {
+        const type =
+          row.getValue<Order['invoiceFinalPaymentType']>('paymentMethod')
+        return <div>{type ? paymentTypeLabels[type] : '—'}</div>
+      },
+      enableSorting: true,
+      enableColumnFilter: false,
     },
     {
       id: 'actions',

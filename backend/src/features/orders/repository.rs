@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
-use super::types::Order;
+use super::types::{Order, PaymentType};
 
 async fn fetch_orders(state: &AppState, order_id: Option<Uuid>) -> Result<Vec<Order>, sqlx::Error> {
     let rows = sqlx::query!(
@@ -22,7 +22,10 @@ async fn fetch_orders(state: &AppState, order_id: Option<Uuid>) -> Result<Vec<Or
                 'price', o.price::float8,
                 'invoiceTotalPrice', i.total_price::float8,
                 'invoiceAmountPaid', i.amount_paid::float8,
-                'invoicePaymentStatus', i.payment_status
+                'invoicePaymentStatus', i.payment_status,
+                'invoiceAdvanceAmount', i.advance_amount::float8,
+                'invoiceAdvancePaymentType', i.advance_payment_type,
+                'invoiceFinalPaymentType', i.final_payment_type
             ) AS "order!: Json<Order>"
         FROM orders o
         JOIN invoices i ON i.id = o.invoice_id
@@ -87,17 +90,21 @@ pub async fn invoice_fully_received(
     .map(|all_received| all_received.unwrap_or(false))
 }
 
+/// Settles the invoice's remaining balance in full and records how that
+/// final payment was made.
 pub async fn mark_invoice_paid(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
+    final_payment_type: PaymentType,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         UPDATE invoices
-        SET amount_paid = total_price, payment_status = 'paid'
+        SET amount_paid = total_price, payment_status = 'paid', final_payment_type = $2
         WHERE id = $1
         "#,
         invoice_id,
+        final_payment_type.as_str(),
     )
     .execute(&mut **tx)
     .await?;
