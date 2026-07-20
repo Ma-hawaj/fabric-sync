@@ -5,6 +5,14 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -24,6 +32,11 @@ import {
   createEmptyStockEntry,
 } from './types/inventory-form'
 import type { StockEntryMode } from './types/inventory-form'
+import type { Material } from './types/inventory'
+
+function materialOptionLabel(material: Material) {
+  return material.sku ? `${material.name} (${material.sku})` : material.name
+}
 
 export function InventoryFormPage() {
   const navigate = useNavigate()
@@ -95,31 +108,37 @@ export function InventoryFormPage() {
                   {(field) => (
                     <Field data-invalid={field.state.meta.errors.length > 0}>
                       <FieldLabel htmlFor={field.name}>Material</FieldLabel>
-                      <Select
-                        items={materials.map((material) => ({
-                          value: material.id,
-                          label: material.sku
-                            ? `${material.name} (${material.sku})`
-                            : material.name,
-                        }))}
-                        value={field.state.value}
-                        onValueChange={(value: string) =>
-                          field.handleChange(value)
+                      <Combobox
+                        items={materials}
+                        itemToStringLabel={materialOptionLabel}
+                        isItemEqualToValue={(a: Material, b: Material) =>
+                          a.id === b.id
+                        }
+                        value={
+                          materials.find((m) => m.id === field.state.value) ??
+                          null
+                        }
+                        onValueChange={(material: Material | null) =>
+                          field.handleChange(material?.id ?? '')
                         }
                       >
-                        <SelectTrigger id={field.name} className="w-full">
-                          <SelectValue placeholder="Select material..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {materials.map((material) => (
-                            <SelectItem key={material.id} value={material.id}>
-                              {material.sku
-                                ? `${material.name} (${material.sku})`
-                                : material.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <ComboboxInput
+                          id={field.name}
+                          placeholder="Search material by name or SKU..."
+                          className="w-full"
+                          showClear
+                        />
+                        <ComboboxContent>
+                          <ComboboxEmpty>No materials found.</ComboboxEmpty>
+                          <ComboboxList>
+                            {(material: Material) => (
+                              <ComboboxItem key={material.id} value={material}>
+                                {materialOptionLabel(material)}
+                              </ComboboxItem>
+                            )}
+                          </ComboboxList>
+                        </ComboboxContent>
+                      </Combobox>
                       <FieldError errors={field.state.meta.errors} />
                     </Field>
                   )}
