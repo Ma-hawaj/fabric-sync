@@ -47,6 +47,12 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
         ));
     }
 
+    if input.amount_paid > 0.0 && input.payment_type.is_none() {
+        return Err(AppError::BadRequest(
+            "an advance payment needs a paymentType".to_string(),
+        ));
+    }
+
     for customer in &input.customers {
         match (&customer.existing_customer_id, &customer.new_customer) {
             (Some(_), Some(_)) | (None, None) => {

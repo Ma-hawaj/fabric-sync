@@ -25,7 +25,14 @@ import type {
   InvoiceCustomerDraft,
   InvoiceFormApi,
   PaymentStatus,
+  PaymentType,
 } from '../../types/invoice-form'
+
+const PAYMENT_TYPE_OPTIONS: { value: PaymentType; label: string }[] = [
+  { value: 'benefit', label: 'Benefit' },
+  { value: 'cash', label: 'Cash' },
+  { value: 'card', label: 'Card' },
+]
 
 const VAT_RATE = 0.15
 
@@ -260,6 +267,42 @@ export function InvoiceSummary({
                           label="Amount Paid"
                         />
                       </div>
+
+                      {paid > 0 && (
+                        <form.Field name={'paymentType' as never}>
+                          {(field: any) => (
+                            <div className="space-y-1">
+                              <Label htmlFor={field.name}>
+                                Advance Payment Method
+                              </Label>
+                              <Select
+                                items={PAYMENT_TYPE_OPTIONS}
+                                value={field.state.value}
+                                onValueChange={(value: PaymentType) =>
+                                  field.handleChange(value)
+                                }
+                              >
+                                <SelectTrigger
+                                  id={field.name}
+                                  className="w-full"
+                                >
+                                  <SelectValue placeholder="Select payment method..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PAYMENT_TYPE_OPTIONS.map((option) => (
+                                    <SelectItem
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </form.Field>
+                      )}
 
                       <div className="flex justify-between font-semibold pt-1">
                         <span>Balance Due</span>

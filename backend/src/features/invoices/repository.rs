@@ -13,6 +13,10 @@ pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sql
             i.invoice_date,
             i.payment_status,
             i.total_price::float8 AS "total_price!",
+            i.amount_paid::float8 AS "amount_paid!",
+            i.advance_amount::float8 AS "advance_amount!",
+            i.advance_payment_type,
+            i.final_payment_type,
             COALESCE(agg.item_count, 0) AS "item_count!",
             COALESCE(agg.customers, '[]') AS "customers!: Json<Vec<InvoiceListCustomer>>",
             COALESCE(agg.materials, '[]') AS "materials!: Json<Vec<String>>"
@@ -47,6 +51,10 @@ pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sql
             materials: row.materials.0,
             total_price: row.total_price,
             payment_status: row.payment_status,
+            amount_paid: row.amount_paid,
+            advance_amount: row.advance_amount,
+            advance_payment_type: row.advance_payment_type,
+            final_payment_type: row.final_payment_type,
         })
         .collect())
 }
@@ -60,9 +68,10 @@ pub async fn insert_invoice(
         r#"
         INSERT INTO invoices (
             invoice_date, branch_id, discount, discount_unit,
-            payment_status, amount_paid, total_price
+            payment_status, amount_paid, total_price,
+            advance_amount, advance_payment_type
         )
-        VALUES ($1, $2, $3::float8, $4, $5, $6::float8, $7::float8)
+        VALUES ($1, $2, $3::float8, $4, $5, $6::float8, $7::float8, $6::float8, $8)
         RETURNING id
         "#,
         input.date,
@@ -72,6 +81,7 @@ pub async fn insert_invoice(
         input.payment_status.as_str(),
         input.amount_paid,
         total_price,
+        input.payment_type.map(super::types::PaymentType::as_str),
     )
     .fetch_one(&mut **tx)
     .await

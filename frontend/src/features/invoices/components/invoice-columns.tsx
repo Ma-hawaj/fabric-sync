@@ -4,6 +4,15 @@ import { DataTableColumnHeader } from '@/components/data-table/data-table-column
 import { CURRENCY } from '@/lib/currency'
 import type { Invoice, PaymentStatus } from '../types/invoices'
 
+const paymentTypeLabels: Record<
+  NonNullable<Invoice['finalPaymentType']>,
+  string
+> = {
+  benefit: 'Benefit',
+  cash: 'Cash',
+  card: 'Card',
+}
+
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: CURRENCY,
@@ -181,6 +190,20 @@ export const getInvoiceColumns = (
         { label: 'Paid', value: 'paid' },
       ],
     },
+  },
+  {
+    id: 'paymentMethod',
+    accessorFn: (invoice) =>
+      invoice.finalPaymentType ?? invoice.advancePaymentType,
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Payment Method" />
+    ),
+    cell: ({ row }) => {
+      const type = row.getValue<Invoice['finalPaymentType']>('paymentMethod')
+      return <div>{type ? paymentTypeLabels[type] : '—'}</div>
+    },
+    enableSorting: true,
+    enableColumnFilter: false,
   },
   {
     accessorKey: 'totalPrice',

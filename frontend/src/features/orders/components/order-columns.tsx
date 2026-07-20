@@ -299,9 +299,8 @@ export function getOrderColumns(
         <DataTableColumnHeader column={column} label="Payment Method" />
       ),
       cell: ({ row }) => {
-        const type = row.getValue<Order['invoiceFinalPaymentType']>(
-          'paymentMethod',
-        )
+        const type =
+          row.getValue<Order['invoiceFinalPaymentType']>('paymentMethod')
         return <div>{type ? paymentTypeLabels[type] : '—'}</div>
       },
       enableSorting: true,

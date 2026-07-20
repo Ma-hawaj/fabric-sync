@@ -41,6 +41,28 @@ impl PaymentStatus {
     }
 }
 
+// How a payment was actually made. An invoice can be settled in up to two
+// payments — an advance taken at invoice creation and a final payment made
+// when the order is received (see features::orders) — each recording its own
+// `PaymentType`.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PaymentType {
+    Benefit,
+    Cash,
+    Card,
+}
+
+impl PaymentType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Benefit => "benefit",
+            Self::Cash => "cash",
+            Self::Card => "card",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateOrderInput {
@@ -91,6 +113,10 @@ pub struct CreateInvoiceInput {
     pub payment_status: PaymentStatus,
     #[serde(default)]
     pub amount_paid: f64,
+    // The method used for the advance payment above. Required whenever
+    // amount_paid is greater than zero (validated in service.rs).
+    #[serde(default)]
+    pub payment_type: Option<PaymentType>,
     pub customers: Vec<InvoiceCustomerInput>,
 }
 
@@ -121,4 +147,8 @@ pub struct InvoiceListItem {
     pub materials: Vec<String>,
     pub total_price: f64,
     pub payment_status: String,
+    pub amount_paid: f64,
+    pub advance_amount: f64,
+    pub advance_payment_type: Option<String>,
+    pub final_payment_type: Option<String>,
 }
