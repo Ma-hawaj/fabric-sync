@@ -137,6 +137,25 @@ pub struct InvoiceListCustomer {
     pub mobile_no: String,
 }
 
+/// Body for `POST /invoices/:id/receive` — marks every order on the invoice
+/// received and settles the remaining balance in one action, for when the
+/// customer collects everything (and pays) at once rather than picking up
+/// order lines individually (see features::orders::receive_order).
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiveInvoiceInput {
+    pub payment_type: PaymentType,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceivedInvoice {
+    pub id: Uuid,
+    pub payment_status: String,
+    pub amount_paid: f64,
+    pub final_payment_type: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceListItem {

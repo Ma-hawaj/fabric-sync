@@ -1,5 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { CURRENCY } from '@/lib/currency'
 import type { Invoice, PaymentStatus } from '../types/invoices'
@@ -35,6 +36,7 @@ const PAYMENT_STATUS_VARIANT: Record<
 
 export const getInvoiceColumns = (
   materialOptions: { label: string; value: string }[],
+  onReceive: (invoice: Invoice) => void,
 ): ColumnDef<Invoice, any>[] => [
   {
     accessorKey: 'id',
@@ -237,6 +239,25 @@ export const getInvoiceColumns = (
       variant: 'range',
       range: [0, 2000],
       unit: CURRENCY,
+    },
+  },
+  {
+    id: 'actions',
+    header: 'Actions',
+    cell: ({ row }) => {
+      const invoice = row.original
+      const isPaid = invoice.paymentStatus === 'paid'
+      return (
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={isPaid}
+          onClick={() => onReceive(invoice)}
+          className="h-8 w-auto px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
+        >
+          {isPaid ? 'Received' : 'Mark Received'}
+        </Button>
+      )
     },
   },
 ]
