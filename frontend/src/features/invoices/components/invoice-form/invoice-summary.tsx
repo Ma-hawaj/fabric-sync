@@ -9,8 +9,8 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import type { Customer } from '@/features/customers/types/customers'
+import type { Location } from '@/features/locations/types/location'
 import { computeOrderLineTotal } from '../../lib/invoice-pricing'
-import type { Branch } from '../../types/branches'
 import type {
   InvoiceCustomerDraft,
   InvoiceFormApi,
@@ -56,7 +56,7 @@ function buildLineItems(
 interface InvoiceSummaryProps {
   form: InvoiceFormApi
   existingCustomers: Customer[]
-  branches: Branch[]
+  branches: Location[]
 }
 
 export function InvoiceSummary({

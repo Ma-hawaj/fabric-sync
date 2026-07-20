@@ -5,9 +5,9 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/features/customers/hooks/use-create-customer'
 import { useCustomers } from '@/features/customers/hooks/use-customers'
+import { useLocations } from '@/features/locations/hooks/use-locations'
 import { CustomerBlock } from './components/invoice-form/customer-block'
 import { InvoiceSummary } from './components/invoice-form/invoice-summary'
-import { useBranches } from './hooks/use-branches'
 import { useCreateInvoice } from './hooks/use-create-invoice'
 import { useMaterials } from './hooks/use-materials'
 import { invoiceFormSchema } from './lib/invoice-schema'
@@ -18,7 +18,9 @@ export function InvoiceFormPage() {
   const navigate = useNavigate()
   const { data: existingCustomers = [] } = useCustomers()
   const { data: materials = [] } = useMaterials()
-  const { data: branches = [] } = useBranches()
+  // "Receiving Branch" is a physical location — same GET /locations data as
+  // the inventory feature's stock locations.
+  const { data: branches = [] } = useLocations()
   const createInvoice = useCreateInvoice()
 
   // A plain type annotation (not `satisfies`) so TFormData widens to
