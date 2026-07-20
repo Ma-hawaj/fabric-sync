@@ -1,11 +1,12 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
+import { CURRENCY } from '@/lib/currency'
 import type { Invoice, PaymentStatus } from '../types/invoices'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
-  currency: 'SAR',
+  currency: CURRENCY,
 })
 
 // Invoice ids are uuidv7 — time-ordered, so the short prefix still sorts by
@@ -212,7 +213,7 @@ export const getInvoiceColumns = (
       label: 'Total Price',
       variant: 'range',
       range: [0, 2000],
-      unit: 'SAR',
+      unit: CURRENCY,
     },
   },
 ]

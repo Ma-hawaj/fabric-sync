@@ -1,10 +1,11 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
+import { CURRENCY } from '@/lib/currency'
 import type { Order } from '../types/orders'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
-  currency: 'SAR',
+  currency: CURRENCY,
 })
 
 // Invoice ids are uuidv7 — time-ordered, so the short prefix still sorts by
