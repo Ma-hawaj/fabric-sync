@@ -27,7 +27,10 @@ pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, App
 const VAT_RATE: f64 = 0.15;
 
 fn round2(value: f64) -> f64 {
-    (value * 100.0).round() / 100.0
+    // The trailing `+ 0.0` normalizes negative zero: std's `Sum` for floats
+    // folds from `-0.0` (the true additive identity), so summing an empty list
+    // of lines yields `-0.0` and would serialize as `-0.0` in the response.
+    (value * 100.0).round() / 100.0 + 0.0
 }
 
 // Unlike an order, whose price is the whole line, a product line is priced per
@@ -309,6 +312,14 @@ mod tests {
         input.discount_unit = DiscountUnit::Percent;
         // 10% off the 100 of goods only: 90 × 1.15 = 103.5, plus 200
         assert_eq!(compute_totals(&input).total, 303.5);
+    }
+
+    #[test]
+    fn an_invoice_with_nothing_to_redeem_reports_a_positive_zero() {
+        let input = retail_invoice(serde_json::json!({ "products": [product(1.0, 100.0)] }));
+        // -0.0 == 0.0, so this checks the sign bit rather than the value: a
+        // negative zero would reach the client as "-0.0".
+        assert!(compute_totals(&input).redeemed.is_sign_positive());
     }
 
     #[test]

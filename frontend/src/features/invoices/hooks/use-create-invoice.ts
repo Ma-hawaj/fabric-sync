@@ -5,15 +5,19 @@ import {
   measurementPayload,
 } from '@/features/customers/hooks/use-create-customer'
 import type {
+  GiftCardRedemptionDraft,
   InvoiceCustomerDraft,
   InvoiceFormValues,
+  InvoiceGiftCardDraft,
   InvoiceOrderDraft,
+  InvoiceProductDraft,
   NumberInput,
 } from '../types/invoice-form'
 
 export interface CreatedInvoice {
   id: string
   totalPrice: number
+  giftCardRedeemed: number
 }
 
 function numberOrZero(value: NumberInput): number {
@@ -53,6 +57,32 @@ function customerPayload(customer: InvoiceCustomerDraft) {
   }
 }
 
+// One "sold from" location on the form is stamped onto every product line,
+// since the backend records it per line for the stock it came off.
+function productPayload(line: InvoiceProductDraft, branchId: string) {
+  return {
+    productId: line.productId,
+    quantity: numberOrZero(line.quantity),
+    unitPrice: numberOrZero(line.unitPrice),
+    branchId,
+  }
+}
+
+function giftCardPayload(line: InvoiceGiftCardDraft) {
+  return {
+    code: line.code,
+    amount: numberOrZero(line.amount),
+    expiresOn: blankToNull(line.expiresOn),
+  }
+}
+
+function redemptionPayload(redemption: GiftCardRedemptionDraft) {
+  return {
+    code: redemption.code,
+    amount: numberOrZero(redemption.amount),
+  }
+}
+
 function invoicePayload(values: InvoiceFormValues) {
   return {
     date: values.date,
@@ -61,7 +91,15 @@ function invoicePayload(values: InvoiceFormValues) {
     discountUnit: values.discountUnit,
     paymentStatus: values.paymentStatus,
     amountPaid: numberOrZero(values.amountPaid),
+    // Only meaningful for a sale with no orders to find a customer through;
+    // it is left blank otherwise.
+    customerId: values.customerId || null,
     customers: values.customers.map(customerPayload),
+    products: values.products.map((line) =>
+      productPayload(line, values.productBranch),
+    ),
+    giftCards: values.giftCards.map(giftCardPayload),
+    giftCardRedemptions: values.redemptions.map(redemptionPayload),
   }
 }
 
@@ -94,6 +132,10 @@ export function useCreateInvoice() {
       void queryClient.invalidateQueries({ queryKey: ['customers'] })
       void queryClient.invalidateQueries({ queryKey: ['invoices'] })
       void queryClient.invalidateQueries({ queryKey: ['orders'] })
+      // A sale can draw down product stock, issue new cards, and spend the
+      // balance on existing ones.
+      void queryClient.invalidateQueries({ queryKey: ['products'] })
+      void queryClient.invalidateQueries({ queryKey: ['gift-cards'] })
     },
   })
 }

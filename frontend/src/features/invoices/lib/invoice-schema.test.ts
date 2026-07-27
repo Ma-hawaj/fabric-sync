@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { invoiceFormSchema } from './invoice-schema'
-import { createEmptyCustomer, createEmptyOrder } from '../types/invoice-form'
+import {
+  createEmptyCustomer,
+  createEmptyGiftCardLine,
+  createEmptyInvoiceForm,
+  createEmptyOrder,
+  createEmptyProductLine,
+  createEmptyRedemption,
+} from '../types/invoice-form'
 import type {
   InvoiceCustomerDraft,
   InvoiceFormValues,
@@ -15,21 +22,30 @@ function validOrder() {
   }
 }
 
-function baseValues(customers: InvoiceCustomerDraft[]): InvoiceFormValues {
+function validProductLine() {
+  return { ...createEmptyProductLine(), productId: 'prod-1', unitPrice: 40 }
+}
+
+function values(overrides: Partial<InvoiceFormValues> = {}): InvoiceFormValues {
   return {
+    ...createEmptyInvoiceForm(),
     date: '2026-07-18',
-    receivingBranch: '',
-    discount: '',
-    discountUnit: 'amount',
-    paymentStatus: 'unpaid',
-    amountPaid: '',
-    customers,
+    customers: [],
+    ...overrides,
   }
 }
 
-function firstError(customers: InvoiceCustomerDraft[]) {
-  const result = invoiceFormSchema.safeParse(baseValues(customers))
+function firstErrorFor(input: InvoiceFormValues) {
+  const result = invoiceFormSchema.safeParse(input)
   return result.success ? null : result.error.issues[0]
+}
+
+function baseValues(customers: InvoiceCustomerDraft[]): InvoiceFormValues {
+  return values({ customers })
+}
+
+function firstError(customers: InvoiceCustomerDraft[]) {
+  return firstErrorFor(baseValues(customers))
 }
 
 describe('invoiceFormSchema', () => {
@@ -130,8 +146,75 @@ describe('invoiceFormSchema', () => {
     expect(error?.path).toEqual(['customers', 0, 'orders', 0, 'price'])
   })
 
-  it('rejects an invoice with no customers', () => {
-    expect(firstError([])?.message).toMatch(/at least one customer/i)
+  it('rejects an invoice with no lines of any kind', () => {
+    const error = firstError([])
+    expect(error?.message).toMatch(/at least one order, product, or gift card/i)
+    expect(error?.path).toEqual(['customers'])
+  })
+
+  it('accepts an invoice of only products, with no customer at all', () => {
+    const input = values({
+      products: [validProductLine()],
+      productBranch: 'loc-1',
+    })
+    expect(firstErrorFor(input)).toBeNull()
+  })
+
+  it('accepts an invoice of only gift cards', () => {
+    const input = values({
+      giftCards: [{ ...createEmptyGiftCardLine(), code: 'GC-1', amount: 200 }],
+    })
+    expect(firstErrorFor(input)).toBeNull()
+  })
+
+  it('requires a sold-from location once there are product lines', () => {
+    const input = values({ products: [validProductLine()], productBranch: '' })
+    const error = firstErrorFor(input)
+    expect(error?.message).toMatch(/location these products are sold from/i)
+    expect(error?.path).toEqual(['productBranch'])
+  })
+
+  it('rejects a product line with no product picked', () => {
+    const input = values({
+      products: [{ ...validProductLine(), productId: '' }],
+      productBranch: 'loc-1',
+    })
+    const error = firstErrorFor(input)
+    expect(error?.message).toMatch(/pick a product/i)
+    expect(error?.path).toEqual(['products', 0, 'productId'])
+  })
+
+  it('rejects a product line with no unit price', () => {
+    const input = values({
+      products: [{ ...validProductLine(), unitPrice: '' }],
+      productBranch: 'loc-1',
+    })
+    const error = firstErrorFor(input)
+    expect(error?.message).toMatch(/enter a unit price/i)
+    expect(error?.path).toEqual(['products', 0, 'unitPrice'])
+  })
+
+  it('rejects a gift card sold with no amount', () => {
+    const input = values({
+      giftCards: [{ ...createEmptyGiftCardLine(), code: 'GC-1', amount: '' }],
+    })
+    const error = firstErrorFor(input)
+    expect(error?.message).toMatch(/amount greater than 0/i)
+    expect(error?.path).toEqual(['giftCards', 0, 'amount'])
+  })
+
+  it('rejects the same gift card applied twice, ignoring case and spacing', () => {
+    const input = values({
+      products: [validProductLine()],
+      productBranch: 'loc-1',
+      redemptions: [
+        { ...createEmptyRedemption(), code: 'GC-1', amount: 20 },
+        { ...createEmptyRedemption(), code: ' gc-1 ', amount: 10 },
+      ],
+    })
+    const error = firstErrorFor(input)
+    expect(error?.message).toMatch(/only be applied once/i)
+    expect(error?.path).toEqual(['redemptions', 1, 'code'])
   })
 
   it('reports the correct customer path in multi-customer invoices', () => {
