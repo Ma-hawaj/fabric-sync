@@ -43,7 +43,15 @@ CREATE TABLE invoices (
     discount NUMERIC(10, 2) NOT NULL DEFAULT 0,
     discount_unit TEXT NOT NULL DEFAULT 'amount' CHECK (discount_unit IN ('amount', 'percent')),
     payment_status TEXT NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid', 'partial', 'paid')),
-    amount_paid NUMERIC(10, 2) NOT NULL DEFAULT 0
+    amount_paid NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    -- A tailoring invoice finds its customer through orders → measurements, but
+    -- a sale of only products or gift cards has no orders to go through. This
+    -- names the buyer directly for those; it stays NULL on ordinary invoices.
+    customer_id UUID REFERENCES customers(id),
+    -- A gift card is tender rather than a discount, so total_price stays the
+    -- gross amount charged and this sits alongside amount_paid instead of
+    -- reducing the total.
+    gift_card_redeemed NUMERIC(10, 2) NOT NULL DEFAULT 0
 );
 
 CREATE TABLE measurements (
@@ -90,4 +98,72 @@ CREATE TABLE orders (
     sleeve TEXT,
     patti TEXT,
     more_details TEXT
+);
+
+-- A finished good sold as-is, as opposed to `materials`, which are raw fabric
+-- consumed by a tailoring order. A product carries a list price because it
+-- sells at one; an order's price is typed in per line instead. Deactivating a
+-- product retires it without disturbing the invoice lines that reference it.
+CREATE TABLE products (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    name TEXT NOT NULL,
+    sku TEXT UNIQUE,
+    unit_price NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- Mirrors material_stock: a product can sit at more than one location.
+CREATE TABLE product_stock (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    product_id UUID NOT NULL REFERENCES products(id),
+    branch_id UUID NOT NULL REFERENCES branch(id),
+    quantity NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    UNIQUE (product_id, branch_id)
+);
+
+-- Stored value. `balance` is decremented as the card is spent across invoices,
+-- so it outlives the sale that created it. The invoice that sold a card is
+-- found through invoice_items rather than duplicated here.
+CREATE TABLE gift_cards (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    code TEXT NOT NULL UNIQUE,
+    initial_amount NUMERIC(10, 2) NOT NULL,
+    balance NUMERIC(10, 2) NOT NULL,
+    customer_id UUID REFERENCES customers(id),
+    expires_on DATE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- Audit trail of every redemption; gift_cards.balance is the running total the
+-- redemptions add up to.
+CREATE TABLE gift_card_redemptions (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    gift_card_id UUID NOT NULL REFERENCES gift_cards(id),
+    invoice_id UUID NOT NULL REFERENCES invoices(id),
+    amount NUMERIC(10, 2) NOT NULL,
+    redeemed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- A card can only be applied once per invoice; a repeat surfaces as a 409
+    -- through the unique-violation mapping in error.rs.
+    UNIQUE (gift_card_id, invoice_id)
+);
+
+-- Invoice lines that are not tailoring orders. These cannot live in `orders`,
+-- whose measurement_id and material_id are NOT NULL and meaningless for a
+-- retail sale. branch_id records where a product line's stock came off, and is
+-- NULL for a gift card, which has no stock.
+CREATE TABLE invoice_items (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    invoice_id UUID NOT NULL REFERENCES invoices(id),
+    kind TEXT NOT NULL CHECK (kind IN ('product', 'gift_card')),
+    product_id UUID REFERENCES products(id),
+    gift_card_id UUID REFERENCES gift_cards(id),
+    branch_id UUID REFERENCES branch(id),
+    description TEXT NOT NULL,
+    quantity NUMERIC(10, 2) NOT NULL DEFAULT 1,
+    unit_price NUMERIC(10, 2) NOT NULL,
+    line_total NUMERIC(10, 2) NOT NULL,
+    CHECK (
+        (kind = 'product' AND product_id IS NOT NULL AND gift_card_id IS NULL)
+        OR (kind = 'gift_card' AND gift_card_id IS NOT NULL AND product_id IS NULL)
+    )
 );

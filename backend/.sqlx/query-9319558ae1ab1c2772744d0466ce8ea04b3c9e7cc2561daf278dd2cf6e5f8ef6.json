@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            i.id,\n            i.invoice_date,\n            i.payment_status,\n            i.total_price::float8 AS \"total_price!\",\n            COALESCE(agg.item_count, 0) + COALESCE(items.item_count, 0) AS \"item_count!\",\n            COALESCE(\n                agg.customers,\n                CASE\n                    WHEN ic.id IS NOT NULL THEN json_build_array(jsonb_build_object(\n                        'name', ic.name,\n                        'mobileNo', ic.mobile_no\n                    ))\n                END,\n                '[]'\n            ) AS \"customers!: Json<Vec<InvoiceListCustomer>>\",\n            COALESCE(agg.materials, '[]') AS \"materials!: Json<Vec<String>>\"\n        FROM invoices i\n        LEFT JOIN LATERAL (\n            SELECT\n                count(*) AS item_count,\n                json_agg(DISTINCT jsonb_build_object(\n                    'name', c.name,\n                    'mobileNo', c.mobile_no\n                )) AS customers,\n                json_agg(DISTINCT mat.name) AS materials\n            FROM orders o\n            JOIN measurements m ON m.id = o.measurement_id\n            JOIN customers c ON c.id = m.customer_id\n            JOIN materials mat ON mat.id = o.material_id\n            WHERE o.invoice_id = i.id\n        ) agg ON true\n        -- Product and gift card lines live in their own table, so they need a\n        -- second aggregate to be counted alongside the tailoring orders.\n        LEFT JOIN LATERAL (\n            SELECT count(*) AS item_count\n            FROM invoice_items ii\n            WHERE ii.invoice_id = i.id\n        ) items ON true\n        -- Falls back to the invoice's own customer when there are no orders to\n        -- derive one from, which is the case for a pure retail sale.\n        LEFT JOIN customers ic ON ic.id = i.customer_id\n        ORDER BY i.id DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "invoice_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 2,
+        "name": "payment_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "total_price!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "item_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "customers!: Json<Vec<InvoiceListCustomer>>",
+        "type_info": "Json"
+      },
+      {
+        "ordinal": 6,
+        "name": "materials!: Json<Vec<String>>",
+        "type_info": "Json"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "9319558ae1ab1c2772744d0466ce8ea04b3c9e7cc2561daf278dd2cf6e5f8ef6"
+}

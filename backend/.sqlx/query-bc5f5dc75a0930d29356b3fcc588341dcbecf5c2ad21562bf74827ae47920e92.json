@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO gift_cards (code, initial_amount, balance, customer_id, expires_on)\n        VALUES ($1, $2::float8, $2::float8, $3, $4)\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Float8",
+        "Uuid",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "bc5f5dc75a0930d29356b3fcc588341dcbecf5c2ad21562bf74827ae47920e92"
+}

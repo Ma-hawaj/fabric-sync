@@ -3,7 +3,10 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
-use super::types::{CreateInvoiceInput, CreateOrderInput, InvoiceListCustomer, InvoiceListItem};
+use super::types::{
+    CreateInvoiceInput, CreateOrderInput, CreateProductLineInput, InvoiceListCustomer,
+    InvoiceListItem,
+};
 
 pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sqlx::Error> {
     let rows = sqlx::query!(
@@ -13,8 +16,17 @@ pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sql
             i.invoice_date,
             i.payment_status,
             i.total_price::float8 AS "total_price!",
-            COALESCE(agg.item_count, 0) AS "item_count!",
-            COALESCE(agg.customers, '[]') AS "customers!: Json<Vec<InvoiceListCustomer>>",
+            COALESCE(agg.item_count, 0) + COALESCE(items.item_count, 0) AS "item_count!",
+            COALESCE(
+                agg.customers,
+                CASE
+                    WHEN ic.id IS NOT NULL THEN json_build_array(jsonb_build_object(
+                        'name', ic.name,
+                        'mobileNo', ic.mobile_no
+                    ))
+                END,
+                '[]'
+            ) AS "customers!: Json<Vec<InvoiceListCustomer>>",
             COALESCE(agg.materials, '[]') AS "materials!: Json<Vec<String>>"
         FROM invoices i
         LEFT JOIN LATERAL (
@@ -31,6 +43,16 @@ pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sql
             JOIN materials mat ON mat.id = o.material_id
             WHERE o.invoice_id = i.id
         ) agg ON true
+        -- Product and gift card lines live in their own table, so they need a
+        -- second aggregate to be counted alongside the tailoring orders.
+        LEFT JOIN LATERAL (
+            SELECT count(*) AS item_count
+            FROM invoice_items ii
+            WHERE ii.invoice_id = i.id
+        ) items ON true
+        -- Falls back to the invoice's own customer when there are no orders to
+        -- derive one from, which is the case for a pure retail sale.
+        LEFT JOIN customers ic ON ic.id = i.customer_id
         ORDER BY i.id DESC
         "#,
     )
@@ -55,14 +77,16 @@ pub async fn insert_invoice(
     tx: &mut sqlx::PgTransaction<'_>,
     input: &CreateInvoiceInput,
     total_price: f64,
+    gift_card_redeemed: f64,
 ) -> Result<Uuid, sqlx::Error> {
     sqlx::query_scalar!(
         r#"
         INSERT INTO invoices (
             invoice_date, branch_id, discount, discount_unit,
-            payment_status, amount_paid, total_price
+            payment_status, amount_paid, total_price,
+            customer_id, gift_card_redeemed
         )
-        VALUES ($1, $2, $3::float8, $4, $5, $6::float8, $7::float8)
+        VALUES ($1, $2, $3::float8, $4, $5, $6::float8, $7::float8, $8, $9::float8)
         RETURNING id
         "#,
         input.date,
@@ -72,6 +96,8 @@ pub async fn insert_invoice(
         input.payment_status.as_str(),
         input.amount_paid,
         total_price,
+        input.customer_id,
+        gift_card_redeemed,
     )
     .fetch_one(&mut **tx)
     .await
@@ -102,6 +128,63 @@ pub async fn insert_order(
         order.sleeve,
         order.patti,
         order.more_details,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+// `description` is stored rather than joined at read time so a line keeps the
+// name the product was sold under, even if the catalog entry is renamed later.
+pub async fn insert_product_item(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    line: &CreateProductLineInput,
+    description: &str,
+    line_total: f64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO invoice_items (
+            invoice_id, kind, product_id, branch_id,
+            description, quantity, unit_price, line_total
+        )
+        VALUES ($1, 'product', $2, $3, $4, $5::float8, $6::float8, $7::float8)
+        "#,
+        invoice_id,
+        line.product_id,
+        line.branch_id,
+        description,
+        line.quantity,
+        line.unit_price,
+        line_total,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn insert_gift_card_item(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    gift_card_id: Uuid,
+    description: &str,
+    amount: f64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO invoice_items (
+            invoice_id, kind, gift_card_id,
+            description, quantity, unit_price, line_total
+        )
+        VALUES ($1, 'gift_card', $2, $3, 1, $4::float8, $4::float8)
+        "#,
+        invoice_id,
+        gift_card_id,
+        description,
+        amount,
     )
     .execute(&mut **tx)
     .await?;
