@@ -31,6 +31,7 @@ import {
   PackageIcon,
   ScissorsIcon,
   ContactIcon,
+  MapPinIcon,
   ChevronsUpDownIcon,
   LogInIcon,
   LogOutIcon,
@@ -44,6 +45,7 @@ const navItems = [
   { to: '/customers', label: 'Customers', icon: ContactIcon, exact: false },
   { to: '/inventory', label: 'Inventory', icon: PackageIcon, exact: false },
   { to: '/invoices', label: 'Invoices', icon: ReceiptText, exact: false },
+  { to: '/locations', label: 'Locations', icon: MapPinIcon, exact: false },
   { to: '/users', label: 'Users', icon: UsersIcon, exact: false },
 ] as const
 
