@@ -28,7 +28,8 @@ export const THOB_OUTLINE =
 export const THOB_COLLAR = 'M 222 46 C 240 78 258 50 258 46'
 
 /** The two stitch lines of the front placket. */
-export const THOB_PLACKET = 'M 234 61 L 234 200 M 246 61 L 246 200 M 234 200 L 246 200'
+export const THOB_PLACKET =
+  'M 234 61 L 234 200 M 246 61 L 246 200 M 234 200 L 246 200'
 
 export const THOB_BUTTONS: { cx: number; cy: number }[] = [
   { cx: 240, cy: 96 },
