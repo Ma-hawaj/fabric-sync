@@ -4,6 +4,7 @@ import { useForm } from '@tanstack/react-form'
 import { OrderBlock } from './order-block'
 import { createEmptyCustomer } from '../../types/invoice-form'
 import type { Material } from '../../types/materials'
+import { CURRENCY } from '@/lib/currency'
 
 const MATERIALS: Material[] = [
   {
@@ -108,6 +109,6 @@ describe('OrderBlock', () => {
 
   it('has a manual price field for the order line', () => {
     render(<Harness />)
-    expect(screen.getByLabelText('Price (SAR)')).toBeTruthy()
+    expect(screen.getByLabelText(`Price (${CURRENCY})`)).toBeTruthy()
   })
 })
