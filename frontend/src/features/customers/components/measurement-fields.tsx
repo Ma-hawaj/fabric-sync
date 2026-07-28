@@ -153,14 +153,14 @@ export function MeasurementFields({
           there is room for it and the column widens from there; only a
           genuinely narrow container stacks them. */}
       <div className="@container">
-        <div className="grid gap-5 @2xl:grid-cols-[minmax(0,1fr)_16rem] @4xl:grid-cols-[minmax(0,1fr)_21rem]">
+        <div className="grid gap-5 @2xl:grid-cols-[minmax(16rem,35%)_1fr]">
           <div className="order-2 space-y-5 @2xl:order-1">
             {MEASUREMENT_GROUPS.map((group) => (
               <div key={group.id} className="space-y-2.5">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {group.title}
                 </h4>
-                <div className="grid grid-cols-2 gap-3 @4xl:grid-cols-3">
+                <div className="grid grid-cols-2 gap-3">
                   {fieldsInGroup(group.id).map((field) => (
                     <div
                       key={field.name}

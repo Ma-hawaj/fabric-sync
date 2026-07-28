@@ -25,10 +25,10 @@ export const THOB_OUTLINE =
   'C 194 50 208 47 222 46 Q 240 78 258 46 Z'
 
 /** Stand collar sitting just above the neckline. */
-export const THOB_COLLAR = 'M 216 40 Q 240 76 264 40'
+export const THOB_COLLAR = 'M 222 46 C 240 78 258 50 258 46'
 
 /** The two stitch lines of the front placket. */
-export const THOB_PLACKET = 'M 234 68 L 234 200 M 246 68 L 246 200'
+export const THOB_PLACKET = 'M 234 61 L 234 200 M 246 61 L 246 200 M 234 200 L 246 200'
 
 export const THOB_BUTTONS: { cx: number; cy: number }[] = [
   { cx: 240, cy: 96 },
@@ -38,19 +38,19 @@ export const THOB_BUTTONS: { cx: number; cy: number }[] = [
 ]
 
 /** Chest pocket, on the wearer's right as the sketch is drawn. */
-export const THOB_CHEST_POCKET = 'M 192 116 L 230 116 L 230 158 L 192 158 Z'
+export const THOB_CHEST_POCKET = 'M 197 116 L 225 116 L 225 158 L 197 158 Z'
 
 /** Inner mobile pocket — dashed, since it sits behind the panel. */
-export const THOB_MOBILE_POCKET = 'M 254 200 L 288 200 L 288 246 L 254 246 Z'
+export const THOB_MOBILE_POCKET = 'M 260 200 L 288 200 L 288 246 L 260 246 Z'
 
 /** Slash openings on both side seams. */
-export const THOB_SIDE_POCKETS = 'M 179 280 L 175 318 M 301 280 L 305 318'
+export const THOB_SIDE_POCKETS = 'M 182 240 L 178 290 M 298 240 L 302 290'
 
 /** Cuff bands, one per sleeve. */
 export const THOB_CUFFS = 'M 133 227 L 163 243 M 347 227 L 317 243'
 
 /** Half-button positions midway down each sleeve. */
 export const THOB_SLEEVE_BUTTONS: { cx: number; cy: number }[] = [
-  { cx: 154, cy: 213 },
-  { cx: 326, cy: 213 },
+  { cx: 153, cy: 253 },
+  { cx: 327, cy: 253 },
 ]

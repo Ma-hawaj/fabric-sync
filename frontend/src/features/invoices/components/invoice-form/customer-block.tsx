@@ -58,7 +58,7 @@ export function CustomerBlock({
         )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6">
         <div className="space-y-4">
           <h4 className="text-sm font-semibold">Customer</h4>
 

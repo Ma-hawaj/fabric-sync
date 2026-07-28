@@ -186,7 +186,7 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     group: 'body',
     input: NUMBER,
     marker: {
-      dims: [{ x1: 188, y1: 58, x2: 198, y2: 144 }],
+      dims: [{ x1: 182, y1: 65, x2: 190, y2: 144 }],
       label: { x: 212, y: 101 },
     },
   },
@@ -217,8 +217,6 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     group: 'body',
     input: NUMBER,
     marker: {
-      dims: [{ x1: 113, y1: 248, x2: 120, y2: 223 }],
-      guides: [{ x1: 116, y1: 236, x2: 92, y2: 222 }],
       shapes: [THOB_CUFFS],
       label: { x: 78, y: 212 },
     },
@@ -232,8 +230,8 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     marker: {
       dims: [{ x1: 180, y1: 116, x2: 180, y2: 158 }],
       guides: [
-        { x1: 192, y1: 116, x2: 176, y2: 116 },
-        { x1: 192, y1: 158, x2: 176, y2: 158 },
+        { x1: 197, y1: 116, x2: 180, y2: 116 },
+        { x1: 197, y1: 158, x2: 180, y2: 158 },
         { x1: 180, y1: 150, x2: 130, y2: 172 },
       ],
       shapes: [THOB_CHEST_POCKET],
@@ -247,7 +245,7 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     input: TEXT,
     marker: {
       shapes: [THOB_CHEST_POCKET],
-      guides: [{ x1: 192, y1: 120, x2: 140, y2: 96 }],
+      guides: [{ x1: 197, y1: 120, x2: 140, y2: 96 }],
       label: { x: 108, y: 88 },
     },
   },
@@ -258,8 +256,8 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     input: { kind: 'select', options: ['None', 'Left', 'Right', 'Both'] },
     marker: {
       shapes: [THOB_SIDE_POCKETS],
-      guides: [{ x1: 303, y1: 300, x2: 346, y2: 300 }],
-      label: { x: 382, y: 300 },
+      guides: [{ x1: 300, y1: 260, x2: 346, y2: 260 }],
+      label: { x: 382, y: 260 },
     },
   },
   {
@@ -292,7 +290,7 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     input: YES_NO,
     marker: {
       dots: THOB_SLEEVE_BUTTONS,
-      guides: [{ x1: 154, y1: 213, x2: 112, y2: 196 }],
+      guides: [{ x1: 153, y1: 253, x2: 112, y2: 196 }],
       label: { x: 82, y: 190 },
     },
   },
