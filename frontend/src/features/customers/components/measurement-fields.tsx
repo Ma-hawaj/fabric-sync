@@ -148,11 +148,13 @@ export function MeasurementFields({
       )}
 
       {/* Container queries, not viewport ones: these fields are also
-          embedded in the (narrower) invoice form, where the sketch has to
-          drop below the inputs rather than squeeze in beside them. */}
+          embedded in the (narrower) invoice form. The sketch belongs on the
+          right wherever it fits, so the two-column layout starts as soon as
+          there is room for it and the column widens from there; only a
+          genuinely narrow container stacks them. */}
       <div className="@container">
-        <div className="grid gap-5 @3xl:grid-cols-[minmax(0,1fr)_21rem]">
-          <div className="order-2 space-y-5 @3xl:order-1">
+        <div className="grid gap-5 @2xl:grid-cols-[minmax(0,1fr)_16rem] @4xl:grid-cols-[minmax(0,1fr)_21rem]">
+          <div className="order-2 space-y-5 @2xl:order-1">
             {MEASUREMENT_GROUPS.map((group) => (
               <div key={group.id} className="space-y-2.5">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -183,7 +185,7 @@ export function MeasurementFields({
             ))}
           </div>
 
-          <aside className="order-1 h-fit rounded-xl border border-border/60 bg-card p-3 @3xl:order-2 @3xl:sticky @3xl:top-4">
+          <aside className="order-1 h-fit rounded-xl border border-border/60 bg-card p-3 @2xl:order-2 @2xl:sticky @2xl:top-4">
             <form.Subscribe
               selector={(state: any) => readAt(state.values, base)}
             >

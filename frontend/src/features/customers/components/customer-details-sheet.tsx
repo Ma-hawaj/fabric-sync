@@ -168,8 +168,8 @@ export function CustomerDetailsSheet({
 
                 {activeMeasurement && (
                   <div className="@container animate-in fade-in slide-in-from-bottom-2 duration-200">
-                    <div className="grid gap-5 @3xl:grid-cols-[minmax(0,1fr)_21rem]">
-                      <div className="order-2 space-y-6 @3xl:order-1">
+                    <div className="grid gap-5 @2xl:grid-cols-[minmax(0,1fr)_16rem] @4xl:grid-cols-[minmax(0,1fr)_21rem]">
+                      <div className="order-2 space-y-6 @2xl:order-1">
                         {MEASUREMENT_GROUPS.map((group) => {
                           const recorded = fieldsInGroup(group.id)
                             .map((field) => ({
@@ -198,7 +198,7 @@ export function CustomerDetailsSheet({
                         })}
                       </div>
 
-                      <aside className="order-1 h-fit rounded-xl border border-border/60 bg-card p-3 shadow-sm @3xl:order-2 @3xl:sticky @3xl:top-4">
+                      <aside className="order-1 h-fit rounded-xl border border-border/60 bg-card p-3 shadow-sm @2xl:order-2 @2xl:sticky @2xl:top-4">
                         <ThobDiagram
                           activeField={hoveredField}
                           values={activeMeasurement}
