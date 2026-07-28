@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Select,
   SelectContent,
@@ -8,61 +9,17 @@ import {
 import { NumberField, SelectField, TextField } from '@/components/form/fields'
 import type { AnyFormApi } from '@/components/form/fields'
 import { Label } from '@/components/ui/label'
+import { ThobDiagram } from './thob-diagram'
+import type { MeasurementValues } from './thob-diagram'
+import {
+  MEASUREMENT_FIELDS,
+  MEASUREMENT_GROUPS,
+  fieldsInGroup,
+} from '../data/measurement-fields'
+import type { MeasurementField } from '../data/measurement-fields'
 import type { Measurement } from '../types/customers'
 import type { MeasurementDraft } from '../types/measurement-form'
-
-const NUMBER_FIELDS: { name: keyof MeasurementDraft; label: string }[] = [
-  { name: 'lengthFl', label: 'Length (Front)' },
-  { name: 'lengthBl', label: 'Length (Back)' },
-  { name: 'chest', label: 'Chest' },
-  { name: 'chestUp', label: 'Chest (Upper)' },
-  { name: 'waist', label: 'Waist' },
-  { name: 'hips', label: 'Hips' },
-  { name: 'shoulder', label: 'Shoulder' },
-  { name: 'sleeveLength', label: 'Sleeve Length' },
-  { name: 'neck', label: 'Neck' },
-  { name: 'neckWidth', label: 'Neck Width' },
-  { name: 'openHand', label: 'Open Hand' },
-  { name: 'cuffWidth', label: 'Cuff Width' },
-  { name: 'aramHole', label: 'Armhole' },
-  { name: 'foWidth', label: 'Fo Width' },
-  { name: 'frantPocketLength', label: 'Front Pocket Length' },
-]
-
-const SELECT_FIELDS: {
-  name: keyof MeasurementDraft
-  label: string
-  options: readonly string[]
-}[] = [
-  {
-    name: 'cuffling',
-    label: 'Cuffling',
-    options: ['Button', 'No Button', 'Cufflink'],
-  },
-  {
-    name: 'fullBody',
-    label: 'Full Body Measurement',
-    options: ['Yes', 'No'],
-  },
-  { name: 'openFold', label: 'Open / Fold', options: ['Open', 'Fold'] },
-  {
-    name: 'sleeveHaffButton',
-    label: 'Sleeve Half Button',
-    options: ['Yes', 'No'],
-  },
-  { name: 'buttonFold', label: 'Button Fold', options: ['Yes', 'No'] },
-  { name: 'fo', label: 'Fo', options: ['Yes', 'No'] },
-  {
-    name: 'sidePocket',
-    label: 'Side Pocket',
-    options: ['None', 'Left', 'Right', 'Both'],
-  },
-]
-
-const TEXT_FIELDS: { name: keyof MeasurementDraft; label: string }[] = [
-  { name: 'farntPocketLengthByWidth', label: 'Front Pocket L×W' },
-  { name: 'mobilePocketLengthByWidth', label: 'Mobile Pocket L×W' },
-]
+import { createEmptyMeasurement } from '../types/measurement-form'
 
 export function snapshotLabel(
   snapshot: Measurement,
@@ -76,36 +33,60 @@ export function snapshotLabel(
 export function measurementFromSnapshot(
   snapshot: Measurement | null,
 ): MeasurementDraft {
-  return {
-    loadedFromId: snapshot?.id ?? null,
-    // Saving always creates a new record, dated today, regardless of which
-    // historical snapshot it started from.
-    date: new Date().toISOString().slice(0, 10),
-    lengthFl: snapshot?.lengthFl ?? '',
-    lengthBl: snapshot?.lengthBl ?? '',
-    chest: snapshot?.chest ?? '',
-    waist: snapshot?.waist ?? '',
-    hips: snapshot?.hips ?? '',
-    shoulder: snapshot?.shoulder ?? '',
-    sleeveLength: snapshot?.sleeveLength ?? '',
-    neck: snapshot?.neck ?? '',
-    openHand: snapshot?.openHand ?? '',
-    cuffling: snapshot?.cuffling ?? '',
-    fullBody: snapshot?.fullBody ?? '',
-    chestUp: snapshot?.chestUp ?? '',
-    openFold: snapshot?.openFold ?? '',
-    cuffWidth: snapshot?.cuffWidth ?? '',
-    neckWidth: snapshot?.neckWidth ?? '',
-    aramHole: snapshot?.aramHole ?? '',
-    sleeveHaffButton: snapshot?.sleeveHaffButton ?? '',
-    buttonFold: snapshot?.buttonFold ?? '',
-    fo: snapshot?.fo ?? '',
-    foWidth: snapshot?.foWidth ?? '',
-    frantPocketLength: snapshot?.frantPocketLength ?? '',
-    farntPocketLengthByWidth: snapshot?.farntPocketLengthByWidth ?? '',
-    sidePocket: snapshot?.sidePocket ?? '',
-    mobilePocketLengthByWidth: snapshot?.mobilePocketLengthByWidth ?? '',
+  // Start from a blank draft so an unset field stays '' rather than
+  // undefined, then copy across whatever the snapshot actually recorded.
+  const draft = createEmptyMeasurement() as MeasurementDraft &
+    Record<string, unknown>
+  draft.loadedFromId = snapshot?.id ?? null
+  // Saving always creates a new record, dated today, regardless of which
+  // historical snapshot it started from.
+  draft.date = new Date().toISOString().slice(0, 10)
+
+  if (snapshot) {
+    for (const { name } of MEASUREMENT_FIELDS) {
+      const value = snapshot[name]
+      // Widened to a string key so the write goes through the index
+      // signature: each field's own type is narrower than the union.
+      if (value !== undefined) draft[name as string] = value
+    }
   }
+
+  return draft
+}
+
+/** Reads `customers[0].measurement`-style paths out of the form values. */
+function readAt(values: unknown, path: string) {
+  return path
+    .split(/[.[\]]+/)
+    .filter(Boolean)
+    .reduce<any>((acc, key) => (acc == null ? acc : acc[key]), values)
+}
+
+function FieldInput({
+  form,
+  base,
+  field,
+}: {
+  form: AnyFormApi
+  base: string
+  field: MeasurementField
+}) {
+  const name = `${base}.${field.name}`
+
+  if (field.input.kind === 'number') {
+    return <NumberField form={form} name={name} label={field.label} unit="cm" />
+  }
+  if (field.input.kind === 'select') {
+    return (
+      <SelectField
+        form={form}
+        name={name}
+        label={field.label}
+        options={field.input.options}
+      />
+    )
+  }
+  return <TextField form={form} name={name} label={field.label} />
 }
 
 interface MeasurementFieldsProps {
@@ -120,6 +101,12 @@ export function MeasurementFields({
   history,
 }: MeasurementFieldsProps) {
   const base = basePath
+  // Hover wins over focus so pointing at one field while another is focused
+  // shows what the pointer is on, and dropping the pointer falls back to the
+  // focused field rather than clearing the sketch.
+  const [hovered, setHovered] = useState<string | null>(null)
+  const [focused, setFocused] = useState<string | null>(null)
+  const activeField = hovered ?? focused
 
   return (
     <div className="space-y-4">
@@ -160,36 +147,61 @@ export function MeasurementFields({
         </form.Field>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {NUMBER_FIELDS.map(({ name, label }) => (
-          <NumberField
-            key={name}
-            form={form}
-            name={`${base}.${name}`}
-            label={label}
-            unit="cm"
-          />
-        ))}
-      </div>
+      {/* Container queries, not viewport ones: these fields are also
+          embedded in the (narrower) invoice form, where the sketch has to
+          drop below the inputs rather than squeeze in beside them. */}
+      <div className="@container">
+        <div className="grid gap-5 @3xl:grid-cols-[minmax(0,1fr)_21rem]">
+          <div className="order-2 space-y-5 @3xl:order-1">
+            {MEASUREMENT_GROUPS.map((group) => (
+              <div key={group.id} className="space-y-2.5">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group.title}
+                </h4>
+                <div className="grid grid-cols-2 gap-3 @4xl:grid-cols-3">
+                  {fieldsInGroup(group.id).map((field) => (
+                    <div
+                      key={field.name}
+                      onMouseEnter={() => setHovered(field.name)}
+                      onMouseLeave={() =>
+                        setHovered((current) =>
+                          current === field.name ? null : current,
+                        )
+                      }
+                      onFocusCapture={() => setFocused(field.name)}
+                      onBlurCapture={() =>
+                        setFocused((current) =>
+                          current === field.name ? null : current,
+                        )
+                      }
+                    >
+                      <FieldInput form={form} base={base} field={field} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {SELECT_FIELDS.map(({ name, label, options }) => (
-          <SelectField
-            key={name}
-            form={form}
-            name={`${base}.${name}`}
-            label={label}
-            options={options}
-          />
-        ))}
-        {TEXT_FIELDS.map(({ name, label }) => (
-          <TextField
-            key={name}
-            form={form}
-            name={`${base}.${name}`}
-            label={label}
-          />
-        ))}
+          <aside className="order-1 h-fit rounded-xl border border-border/60 bg-card p-3 @3xl:order-2 @3xl:sticky @3xl:top-4">
+            <form.Subscribe
+              selector={(state: any) => readAt(state.values, base)}
+            >
+              {(values: MeasurementValues | undefined) => (
+                <ThobDiagram
+                  activeField={activeField}
+                  values={values}
+                  onSelectField={(name) =>
+                    document.getElementById(`${base}.${name}`)?.focus()
+                  }
+                />
+              )}
+            </form.Subscribe>
+            <p className="mt-1 text-center text-xs text-muted-foreground">
+              Hover or focus a field to see where it is measured.
+            </p>
+          </aside>
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground">
