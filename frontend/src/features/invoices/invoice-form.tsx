@@ -15,8 +15,6 @@ import {
 } from '@/components/ui/combobox'
 import { ApiError } from '@/features/customers/hooks/use-create-customer'
 import { useCustomers } from '@/features/customers/hooks/use-customers'
-import { useGiftCards } from '@/features/gift-cards/hooks/use-gift-cards'
-import { redeemableGiftCards } from '@/features/gift-cards/types/gift-card'
 import { useLocations } from '@/features/locations/hooks/use-locations'
 import {
   orderReceivingLocations,
@@ -72,7 +70,6 @@ export function InvoiceFormPage() {
       ),
     [allProducts],
   )
-  const { data: allGiftCards = [] } = useGiftCards()
   const createInvoice = useCreateInvoice()
 
   // A plain type annotation (not `satisfies`) so TFormData widens to
@@ -306,7 +303,7 @@ export function InvoiceFormPage() {
                           key={line.key}
                           form={form as never}
                           lineIndex={index}
-                          giftCards={redeemableGiftCards(allGiftCards, date)}
+                          date={date}
                           onRemove={() => redemptionsField.removeValue(index)}
                         />
                       ))}

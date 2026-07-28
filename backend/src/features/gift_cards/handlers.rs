@@ -18,6 +18,14 @@ pub async fn list_gift_cards(
     Ok(Json(service::list_gift_cards(&state).await?))
 }
 
+pub async fn get_gift_card_by_code(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(code): Path<String>,
+) -> Result<Json<GiftCard>, AppError> {
+    Ok(Json(service::get_gift_card_by_code(&state, &code).await?))
+}
+
 pub async fn create_gift_card(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,

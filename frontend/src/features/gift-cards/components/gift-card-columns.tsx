@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { CURRENCY } from '@/lib/currency'
+import { giftCardStatus } from '../lib/gift-card-status'
 import type { GiftCard } from '../types/gift-card'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -29,15 +30,6 @@ function matchesAnySelected(cellValue: string[], filterValue: unknown) {
     return true
   }
   return (filterValue as string[]).some((value) => cellValue.includes(value))
-}
-
-// A card that is voided, out of balance, or past its expiry can't be spent —
-// three separate reasons that read better as one status than three columns.
-export function giftCardStatus(card: GiftCard, today: string): string {
-  if (!card.isActive) return 'Voided'
-  if (card.balance <= 0) return 'Spent'
-  if (card.expiresOn !== null && card.expiresOn < today) return 'Expired'
-  return 'Active'
 }
 
 export const getGiftCardColumns = (

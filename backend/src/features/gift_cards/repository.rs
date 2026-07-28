@@ -53,6 +53,35 @@ pub async fn get_gift_card(
     .await
 }
 
+// Looked up by the code staff type in at redemption time. Deliberately the only
+// way the invoice form can see a card: it never loads the full list, so a code
+// has to be known (i.e. the customer has to present the card) to spend it.
+pub async fn get_gift_card_by_code(
+    state: &AppState,
+    code: &str,
+) -> Result<Option<GiftCard>, sqlx::Error> {
+    sqlx::query_as!(
+        GiftCard,
+        r#"
+        SELECT
+            g.id,
+            g.code,
+            g.initial_amount::float8 AS "initial_amount!",
+            g.balance::float8 AS "balance!",
+            g.customer_id,
+            c.name AS "customer_name?",
+            g.expires_on,
+            g.is_active
+        FROM gift_cards g
+        LEFT JOIN customers c ON c.id = g.customer_id
+        WHERE g.code = $1
+        "#,
+        code,
+    )
+    .fetch_optional(state.db())
+    .await
+}
+
 // Tx-scoped so invoice creation can sell a card inside its own transaction, the
 // way customers::repository's insert fns are shared with invoices. A new card's
 // balance always starts at its face value.

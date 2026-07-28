@@ -67,6 +67,16 @@ pub async fn list_gift_cards(state: &AppState) -> Result<Vec<GiftCard>, AppError
     Ok(repository::list_gift_cards(state).await?)
 }
 
+/// Resolves the code staff typed at the till. The code is normalized the same
+/// way it was on the way in, so the case they type does not matter.
+pub async fn get_gift_card_by_code(state: &AppState, code: &str) -> Result<GiftCard, AppError> {
+    let code = normalize_code(code)?;
+
+    repository::get_gift_card_by_code(state, &code)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("no gift card with code {code}")))
+}
+
 pub async fn create_gift_card(
     state: &AppState,
     input: CreateGiftCardInput,

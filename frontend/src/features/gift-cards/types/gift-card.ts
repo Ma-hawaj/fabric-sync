@@ -11,13 +11,3 @@ export interface GiftCard {
   expiresOn: string | null
   isActive: boolean
 }
-
-/** Cards that can still be spent — the invoice form's redemption picker. */
-export function redeemableGiftCards(cards: GiftCard[], on: string): GiftCard[] {
-  return cards.filter(
-    (card) =>
-      card.isActive &&
-      card.balance > 0 &&
-      (card.expiresOn === null || card.expiresOn >= on),
-  )
-}
