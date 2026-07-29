@@ -1,6 +1,14 @@
+-- A physical location. It can be a branch where customers collect finished
+-- orders, a store that only holds material stock, or both — so the two
+-- capabilities are independent flags rather than a single type column.
+-- Deactivating a location hides it from both pickers without touching the
+-- stock rows and invoices that still reference it.
 CREATE TABLE branch (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
-    name TEXT NOT NULL
+    name TEXT NOT NULL UNIQUE,
+    receives_orders BOOLEAN NOT NULL DEFAULT TRUE,
+    holds_stock BOOLEAN NOT NULL DEFAULT TRUE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 CREATE TABLE customers (

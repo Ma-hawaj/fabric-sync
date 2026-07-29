@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO branch (name, receives_orders, holds_stock)\n        VALUES ($1, $2, $3)\n        RETURNING id, name, receives_orders, holds_stock, is_active\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "receives_orders",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "holds_stock",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_active",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "784ebfd214ab91c8ae08c647f24212776a05feedc19a7fd5d175ccfbba94ef27"
+}

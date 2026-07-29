@@ -40,7 +40,7 @@ pub async fn receive_invoice(
 
 // Matches the frontend's invoice summary; the stored total is
 // (subtotal - discount) + VAT, floored at zero before tax.
-const VAT_RATE: f64 = 0.15;
+const VAT_RATE: f64 = 0.1;
 
 fn round2(value: f64) -> f64 {
     (value * 100.0).round() / 100.0
@@ -159,19 +159,19 @@ mod tests {
             "amount",
             vec![customer(vec![order(100.0), order(100.0)])],
         );
-        assert_eq!(compute_total(&input), 230.0);
+        assert_eq!(compute_total(&input), 220.0);
     }
 
     #[test]
     fn flat_discount_is_subtracted_before_vat() {
         let input = invoice(50.0, "amount", vec![customer(vec![order(150.0)])]);
-        assert_eq!(compute_total(&input), 115.0);
+        assert_eq!(compute_total(&input), 110.0);
     }
 
     #[test]
     fn percentage_discount_applies_to_the_subtotal() {
         let input = invoice(10.0, "percent", vec![customer(vec![order(200.0)])]);
-        assert_eq!(compute_total(&input), 207.0);
+        assert_eq!(compute_total(&input), 198.0);
     }
 
     #[test]

@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
@@ -6,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ApiError } from '@/features/customers/hooks/use-create-customer'
 import { useCustomers } from '@/features/customers/hooks/use-customers'
 import { useLocations } from '@/features/locations/hooks/use-locations'
+import { orderReceivingLocations } from '@/features/locations/lib/location-filters'
 import { CURRENCY } from '@/lib/currency'
 import { CustomerBlock } from './components/invoice-form/customer-block'
 import { InvoiceSummary } from './components/invoice-form/invoice-summary'
@@ -19,9 +21,14 @@ export function InvoiceFormPage() {
   const navigate = useNavigate()
   const { data: existingCustomers = [] } = useCustomers()
   const { data: materials = [] } = useMaterials()
-  // "Receiving Branch" is a physical location — same GET /locations data as
-  // the inventory feature's stock locations.
-  const { data: branches = [] } = useLocations()
+  // "Receiving Branch" is where the customer collects the finished order, so
+  // it lists only locations flagged as receiving orders — a store that just
+  // holds material stock is not a collection point.
+  const { data: allLocations = [] } = useLocations()
+  const branches = React.useMemo(
+    () => orderReceivingLocations(allLocations),
+    [allLocations],
+  )
   const createInvoice = useCreateInvoice()
 
   // A plain type annotation (not `satisfies`) so TFormData widens to

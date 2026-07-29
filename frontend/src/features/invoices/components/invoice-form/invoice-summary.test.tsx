@@ -5,6 +5,7 @@ import type { Customer } from '@/features/customers/types/customers'
 import { InvoiceSummary } from './invoice-summary'
 import { createEmptyCustomer, createEmptyOrder } from '../../types/invoice-form'
 import type { InvoiceFormValues } from '../../types/invoice-form'
+import { CURRENCY } from '@/lib/currency'
 
 const EXISTING_CUSTOMERS: Customer[] = []
 
@@ -35,7 +36,7 @@ function baseValues(
   }
 }
 
-// A customer with a single order line priced at 90 SAR.
+// A customer with a single order line priced at 90 CURRECY.
 function customerWithOrder(price: number) {
   return {
     ...createEmptyCustomer(),
@@ -60,12 +61,12 @@ describe('InvoiceSummary', () => {
       />,
     )
 
-    expect(rowValue('Subtotal')).toBe('SAR 90.00')
-    expect(rowValue('VAT (15%)')).toBe('SAR 13.50')
-    expect(rowValue('Total')).toBe('SAR 103.50')
+    expect(rowValue('Subtotal')).toBe(`${CURRENCY} 90.00`)
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 9.00`)
+    expect(rowValue('Total')).toBe(`${CURRENCY} 99.00`)
   })
 
-  it('applies a flat SAR discount before computing VAT', () => {
+  it('applies a flat CURRENCY discount before computing VAT', () => {
     render(
       <Harness
         defaultValues={baseValues({
@@ -76,9 +77,9 @@ describe('InvoiceSummary', () => {
       />,
     )
 
-    // taxable = 90 - 10 = 80, vat = 12, total = 92
-    expect(rowValue('VAT (15%)')).toBe('SAR 12.00')
-    expect(rowValue('Total')).toBe('SAR 92.00')
+    // taxable = 90 - 10 = 80, vat = 8, total = 88
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 8.00`)
+    expect(rowValue('Total')).toBe(`${CURRENCY} 88.00`)
   })
 
   it('applies a percentage discount before computing VAT', () => {
@@ -92,22 +93,22 @@ describe('InvoiceSummary', () => {
       />,
     )
 
-    // taxable = 90 - 9 = 81, vat = 12.15, total = 93.15
-    expect(rowValue('VAT (15%)')).toBe('SAR 12.15')
-    expect(rowValue('Total')).toBe('SAR 93.15')
+    // taxable = 90 - 9 = 81, vat = 8.10, total = 89.10
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 8.10`)
+    expect(rowValue('Total')).toBe(`${CURRENCY} 89.10`)
   })
 
   it('computes balance due as total minus amount paid, never negative', () => {
     render(
       <Harness
         defaultValues={baseValues({
-          customers: [customerWithOrder(90)], // total 103.50
+          customers: [customerWithOrder(90)], // total 99.00
           amountPaid: 200,
         })}
       />,
     )
 
-    expect(rowValue('Balance Due')).toBe('SAR 0.00')
+    expect(rowValue('Balance Due')).toBe(`${CURRENCY} 0.00`)
   })
 
   it('updates the discount amount live as the input changes', () => {
@@ -121,8 +122,8 @@ describe('InvoiceSummary', () => {
       target: { value: '20' },
     })
 
-    // taxable = 70, vat = 10.5, total = 80.5
-    expect(rowValue('VAT (15%)')).toBe('SAR 10.50')
-    expect(rowValue('Total')).toBe('SAR 80.50')
+    // taxable = 70, vat = 7, total = 77
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 7.00`)
+    expect(rowValue('Total')).toBe(`${CURRENCY} 77.00`)
   })
 })

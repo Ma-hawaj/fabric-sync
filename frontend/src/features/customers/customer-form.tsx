@@ -52,9 +52,9 @@ export function CustomerFormPage() {
           e.stopPropagation()
           void form.handleSubmit()
         }}
-        className="max-w-3xl space-y-6"
+        className="max-w-5xl space-y-6"
       >
-        <div className="space-y-4 rounded-xl border border-border/60 bg-card p-5">
+        <div className="max-w-3xl space-y-4 rounded-xl border border-border/60 bg-card p-5">
           <TextField form={form} name="name" label="Full Name" />
           <TextField form={form} name="mobileNo" label="Phone" />
         </div>

@@ -34,7 +34,7 @@ const PAYMENT_TYPE_OPTIONS: { value: PaymentType; label: string }[] = [
   { value: 'card', label: 'Card' },
 ]
 
-const VAT_RATE = 0.15
+const VAT_RATE = 0.1
 
 function customerDisplayName(
   draft: InvoiceCustomerDraft,
@@ -215,7 +215,7 @@ export function InvoiceSummary({
                   return (
                     <>
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">VAT (15%)</span>
+                        <span className="text-muted-foreground">VAT (10%)</span>
                         <span>
                           {CURRENCY} {vat.toFixed(2)}
                         </span>
