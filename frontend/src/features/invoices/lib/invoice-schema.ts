@@ -84,12 +84,27 @@ const customersArraySchema = z
   .array(customerDraftSchema)
   .min(1, 'Add at least one customer.')
 
-export const invoiceFormSchema = z.object({
-  date: z.string(),
-  receivingBranch: z.string(),
-  discount: numberInputSchema,
-  discountUnit: z.enum(['amount', 'percent']),
-  paymentStatus: z.enum(['unpaid', 'partial', 'paid']),
-  amountPaid: numberInputSchema,
-  customers: customersArraySchema,
-})
+export const invoiceFormSchema = z
+  .object({
+    date: z.string(),
+    receivingBranch: z.string(),
+    discount: numberInputSchema,
+    discountUnit: z.enum(['amount', 'percent']),
+    paymentStatus: z.enum(['unpaid', 'partial', 'paid']),
+    amountPaid: numberInputSchema,
+    paymentType: z.enum(['benefit', 'cash', 'card', '']),
+    customers: customersArraySchema,
+  })
+  .superRefine((invoice, ctx) => {
+    if (
+      invoice.amountPaid !== '' &&
+      invoice.amountPaid > 0 &&
+      !invoice.paymentType
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick how the advance payment was made.',
+        path: ['paymentType'],
+      })
+    }
+  })

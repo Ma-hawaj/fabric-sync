@@ -42,6 +42,7 @@ export function InvoiceFormPage() {
     discountUnit: 'amount',
     paymentStatus: 'unpaid',
     amountPaid: '',
+    paymentType: '',
     customers: [createEmptyCustomer()],
   }
 

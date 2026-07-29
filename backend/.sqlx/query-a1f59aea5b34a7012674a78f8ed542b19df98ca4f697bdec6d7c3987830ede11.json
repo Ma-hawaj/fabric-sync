@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE invoices\n        SET amount_paid = total_price, payment_status = 'paid', final_payment_type = $2\n        WHERE id = $1\n        RETURNING id, payment_status, amount_paid::float8 AS \"amount_paid!\", final_payment_type\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "payment_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "amount_paid!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 3,
+        "name": "final_payment_type",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "a1f59aea5b34a7012674a78f8ed542b19df98ca4f697bdec6d7c3987830ede11"
+}

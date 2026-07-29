@@ -6,16 +6,24 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getInvoiceColumns } from './components/invoice-columns'
+import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
 import { useInvoices } from './hooks/use-invoices'
+import type { Invoice } from './types/invoices'
 
 export function InvoicesPage() {
   const { data: invoices = [], isLoading } = useInvoices()
+  const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(
+    null,
+  )
 
   // The materials filter offers exactly the material names present in the
   // fetched invoices.
   const columns = React.useMemo(() => {
     const materials = [...new Set(invoices.flatMap((i) => i.materials))].sort()
-    return getInvoiceColumns(materials.map((m) => ({ label: m, value: m })))
+    return getInvoiceColumns(
+      materials.map((m) => ({ label: m, value: m })),
+      setSelectedInvoice,
+    )
   }, [invoices])
 
   const { table } = useDataTable({
@@ -50,6 +58,11 @@ export function InvoicesPage() {
           <DataTableToolbar table={table} />
         </DataTable>
       )}
+
+      <ReceiveInvoiceDialog
+        invoice={selectedInvoice}
+        onOpenChange={(open) => !open && setSelectedInvoice(null)}
+      />
     </div>
   )
 }

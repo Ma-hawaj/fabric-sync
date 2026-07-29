@@ -23,6 +23,7 @@ function baseValues(customers: InvoiceCustomerDraft[]): InvoiceFormValues {
     discountUnit: 'amount',
     paymentStatus: 'unpaid',
     amountPaid: '',
+    paymentType: '',
     customers,
   }
 }
@@ -132,6 +133,37 @@ describe('invoiceFormSchema', () => {
 
   it('rejects an invoice with no customers', () => {
     expect(firstError([])?.message).toMatch(/at least one customer/i)
+  })
+
+  it('requires a payment type when an advance payment is entered', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      orders: [validOrder()],
+    }
+    const values = { ...baseValues([customer]), amountPaid: 100 }
+    const result = invoiceFormSchema.safeParse(values)
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toMatch(/payment was made/i)
+      expect(result.error.issues[0]?.path).toEqual(['paymentType'])
+    }
+  })
+
+  it('accepts an advance payment once a payment type is picked', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      orders: [validOrder()],
+    }
+    const values = {
+      ...baseValues([customer]),
+      amountPaid: 100,
+      paymentType: 'cash' as const,
+    }
+    expect(invoiceFormSchema.safeParse(values).success).toBe(true)
   })
 
   it('reports the correct customer path in multi-customer invoices', () => {
