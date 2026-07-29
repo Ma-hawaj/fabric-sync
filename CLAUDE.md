@@ -83,6 +83,7 @@ VITE_API_BASE_URL=http://localhost:3001 pnpm run dev
   - backend feature `locations` reads and writes the table named `branch`
   - `routes/_authenticated/users.tsx` exists with no `users` feature or table behind it
   - the invoice form's `receivingBranch` field is serialized as `branchId`
+- **Measurements are described in one place**: `features/customers/data/measurement-fields.ts` lists every measurement once — label, group, input kind (number/text/select + options) and the callout geometry that points at it on the thob sketch. Both the entry form (`components/measurement-fields.tsx`) and the read-only customer sheet (`components/customer-details-sheet.tsx`) render from that list, and `components/thob-diagram.tsx` draws the sketch itself from `data/thob-sketch.ts`. Adding a measurement means adding a `MeasurementDraft` field plus one entry here (a test asserts the two stay in step) — not touching either page.
 - UI primitives: `src/components/ui/` are local shadcn/Base UI-style primitives (not a node_modules package) — extend/copy this pattern for new primitives rather than pulling in a component library.
 - **Adding shadcn components**: `shadcn` is a project devDependency (not a one-off `dlx` install), configured via `components.json` (style `base-rhea`, base color `neutral`, icon library `lucide`, `rtl: true`). Add a new primitive with:
 
