@@ -3,6 +3,7 @@ mod auth;
 mod config;
 mod error;
 mod features;
+mod list;
 mod state;
 
 use std::net::SocketAddr;

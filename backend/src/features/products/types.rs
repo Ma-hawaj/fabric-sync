@@ -11,7 +11,7 @@ pub struct ProductLocationStock {
     pub quantity: f64,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Product {
     pub id: Uuid,
@@ -21,6 +21,7 @@ pub struct Product {
     /// prefills a line from it rather than making staff type one in.
     pub unit_price: f64,
     pub is_active: bool,
+    #[sqlx(json)]
     pub locations: Vec<ProductLocationStock>,
 }
 

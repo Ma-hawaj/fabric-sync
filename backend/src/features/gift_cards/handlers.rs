@@ -4,7 +4,12 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::{auth::AuthenticatedUser, error::AppError, state::AppState};
+use crate::{
+    auth::AuthenticatedUser,
+    error::AppError,
+    list::{ListParams, Page},
+    state::AppState,
+};
 
 use super::{
     service,
@@ -14,8 +19,9 @@ use super::{
 pub async fn list_gift_cards(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,
-) -> Result<Json<Vec<GiftCard>>, AppError> {
-    Ok(Json(service::list_gift_cards(&state).await?))
+    params: ListParams,
+) -> Result<Json<Page<GiftCard>>, AppError> {
+    Ok(Json(service::list_gift_cards(&state, &params).await?))
 }
 
 pub async fn get_gift_card_by_code(

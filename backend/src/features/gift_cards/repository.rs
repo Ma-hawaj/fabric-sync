@@ -1,56 +1,60 @@
 use chrono::NaiveDate;
 use uuid::Uuid;
 
-use crate::state::AppState;
+use crate::{
+    error::AppError,
+    list::{self, ColumnDef, ColumnKind, ListParams, ListSpec},
+    state::AppState,
+};
 
 use super::types::{GiftCard, GiftCardBalance};
 
-pub async fn list_gift_cards(state: &AppState) -> Result<Vec<GiftCard>, sqlx::Error> {
-    sqlx::query_as!(
-        GiftCard,
-        r#"
+const SPEC: ListSpec = ListSpec {
+    base_sql: r#"
         SELECT
             g.id,
             g.code,
-            g.initial_amount::float8 AS "initial_amount!",
-            g.balance::float8 AS "balance!",
+            g.initial_amount::float8 AS initial_amount,
+            g.balance::float8 AS balance,
             g.customer_id,
-            c.name AS "customer_name?",
+            c.name AS customer_name,
             g.expires_on,
-            g.is_active
+            g.is_active,
+            CASE WHEN g.is_active THEN 'active' ELSE 'inactive' END AS status
         FROM gift_cards g
         LEFT JOIN customers c ON c.id = g.customer_id
-        ORDER BY g.id DESC
-        "#,
-    )
-    .fetch_all(state.db())
-    .await
+    "#,
+    columns: &[
+        ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        ("code", ColumnDef::new("code", ColumnKind::Text)),
+        (
+            "initialAmount",
+            ColumnDef::new("initial_amount", ColumnKind::Number),
+        ),
+        ("balance", ColumnDef::new("balance", ColumnKind::Number)),
+        (
+            "customerName",
+            ColumnDef::new("customer_name", ColumnKind::Text),
+        ),
+        ("expiresOn", ColumnDef::new("expires_on", ColumnKind::Date)),
+        ("isActive", ColumnDef::new("is_active", ColumnKind::Bool)),
+        ("status", ColumnDef::new("status", ColumnKind::Text)),
+    ],
+    default_order: "id DESC",
+};
+
+pub async fn list_gift_cards(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<GiftCard>, AppError> {
+    list::fetch_page(state.db(), &SPEC, params).await
 }
 
 pub async fn get_gift_card(
     state: &AppState,
     gift_card_id: Uuid,
-) -> Result<Option<GiftCard>, sqlx::Error> {
-    sqlx::query_as!(
-        GiftCard,
-        r#"
-        SELECT
-            g.id,
-            g.code,
-            g.initial_amount::float8 AS "initial_amount!",
-            g.balance::float8 AS "balance!",
-            g.customer_id,
-            c.name AS "customer_name?",
-            g.expires_on,
-            g.is_active
-        FROM gift_cards g
-        LEFT JOIN customers c ON c.id = g.customer_id
-        WHERE g.id = $1
-        "#,
-        gift_card_id,
-    )
-    .fetch_optional(state.db())
-    .await
+) -> Result<Option<GiftCard>, AppError> {
+    list::fetch_by_id(state.db(), &SPEC, gift_card_id).await
 }
 
 // Looked up by the code staff type in at redemption time. Deliberately the only

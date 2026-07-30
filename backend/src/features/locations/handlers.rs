@@ -4,7 +4,12 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::{auth::AuthenticatedUser, error::AppError, state::AppState};
+use crate::{
+    auth::AuthenticatedUser,
+    error::AppError,
+    list::{ListParams, Page},
+    state::AppState,
+};
 
 use super::{
     service,
@@ -14,8 +19,9 @@ use super::{
 pub async fn list_locations(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,
-) -> Result<Json<Vec<Location>>, AppError> {
-    Ok(Json(service::list_locations(&state).await?))
+    params: ListParams,
+) -> Result<Json<Page<Location>>, AppError> {
+    Ok(Json(service::list_locations(&state, &params).await?))
 }
 
 pub async fn create_location(

@@ -4,7 +4,12 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::{auth::AuthenticatedUser, error::AppError, state::AppState};
+use crate::{
+    auth::AuthenticatedUser,
+    error::AppError,
+    list::{ListParams, Page},
+    state::AppState,
+};
 
 use super::{
     service,
@@ -16,8 +21,9 @@ use super::{
 pub async fn list_invoices(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,
-) -> Result<Json<Vec<InvoiceListItem>>, AppError> {
-    Ok(Json(service::list_invoices(&state).await?))
+    params: ListParams,
+) -> Result<Json<Page<InvoiceListItem>>, AppError> {
+    Ok(Json(service::list_invoices(&state, &params).await?))
 }
 
 pub async fn create_invoice(

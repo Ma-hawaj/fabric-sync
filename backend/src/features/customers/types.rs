@@ -42,12 +42,15 @@ pub struct Measurement {
     pub mobile_pocket_length_by_width: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Customer {
     pub id: Uuid,
     pub name: String,
     pub mobile_no: String,
+    // Postgres builds this array itself (see the repository's `json_agg`), so
+    // it decodes straight off the row rather than being grouped app-side.
+    #[sqlx(json)]
     pub measurements: Vec<Measurement>,
 }
 
