@@ -10,11 +10,14 @@ import {
 } from '@/components/ui/combobox'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { NumberField } from '@/components/form/fields'
+import type { AnyFormApi } from '@/components/form/fields'
 import type { Location } from '@/features/locations/types/location'
-import type { InventoryFormApi } from '../types/inventory-form'
 
+// Typed as AnyFormApi rather than InventoryFormApi because the products form
+// reuses this row over its own `entries` array — see the comment atop
+// components/form/fields.tsx for why these props stay loosely typed.
 interface StockEntryRowProps {
-  form: InventoryFormApi
+  form: AnyFormApi
   entryIndex: number
   locations: Location[]
   removable: boolean

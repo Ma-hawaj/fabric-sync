@@ -44,9 +44,42 @@ export interface InvoiceCustomerDraft {
   orders: InvoiceOrderDraft[]
 }
 
+// A retail line. Unlike an order, a product is priced per unit and multiplied
+// out, since products carry a list price the picker prefills.
+export interface InvoiceProductDraft {
+  key: string
+  productId: string
+  quantity: NumberInput
+  unitPrice: NumberInput
+}
+
+// A gift card sold on this invoice. Selling stored value is not a taxable
+// supply, so its amount is added to the total outside the VAT base.
+export interface InvoiceGiftCardDraft {
+  key: string
+  code: string
+  amount: NumberInput
+  // ISO date, or blank for a card that never expires.
+  expiresOn: string
+}
+
+// A gift card spent on this invoice — tender, applied after VAT.
+export interface GiftCardRedemptionDraft {
+  key: string
+  code: string
+  amount: NumberInput
+}
+
 export interface InvoiceFormValues {
   date: string
   receivingBranch: string
+  // Who a sale with no tailoring orders is billed to; a tailoring invoice
+  // finds its customer through the orders instead.
+  customerId: string
+  // One "sold from" location for every product line, since product stock is
+  // held per location. Distinct from receivingBranch, which is where a
+  // finished order is collected.
+  productBranch: string
   discount: NumberInput
   discountUnit: DiscountUnit
   paymentStatus: PaymentStatus
@@ -55,6 +88,9 @@ export interface InvoiceFormValues {
   // amountPaid is greater than zero.
   paymentType: PaymentType | ''
   customers: InvoiceCustomerDraft[]
+  products: InvoiceProductDraft[]
+  giftCards: InvoiceGiftCardDraft[]
+  redemptions: GiftCardRedemptionDraft[]
 }
 
 // The validator generic slots are left as `any` — this form has no
@@ -99,5 +135,51 @@ export function createEmptyCustomer(): InvoiceCustomerDraft {
     mobileNo: '',
     measurement: createEmptyMeasurement(),
     orders: [createEmptyOrder()],
+  }
+}
+
+// The form page and the schema tests both build from here, so a new field
+// can't be added to InvoiceFormValues without both picking it up.
+export function createEmptyInvoiceForm(): InvoiceFormValues {
+  return {
+    date: new Date().toISOString().slice(0, 10),
+    receivingBranch: '',
+    customerId: '',
+    productBranch: '',
+    discount: '',
+    discountUnit: 'amount',
+    paymentStatus: 'unpaid',
+    amountPaid: '',
+    paymentType: '',
+    customers: [createEmptyCustomer()],
+    products: [],
+    giftCards: [],
+    redemptions: [],
+  }
+}
+
+export function createEmptyProductLine(): InvoiceProductDraft {
+  return {
+    key: crypto.randomUUID(),
+    productId: '',
+    quantity: 1,
+    unitPrice: '',
+  }
+}
+
+export function createEmptyGiftCardLine(): InvoiceGiftCardDraft {
+  return {
+    key: crypto.randomUUID(),
+    code: '',
+    amount: '',
+    expiresOn: '',
+  }
+}
+
+export function createEmptyRedemption(): GiftCardRedemptionDraft {
+  return {
+    key: crypto.randomUUID(),
+    code: '',
+    amount: '',
   }
 }

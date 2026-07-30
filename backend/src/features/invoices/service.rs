@@ -1,6 +1,12 @@
+use std::collections::HashSet;
+
 use crate::{
     error::AppError,
-    features::customers::{repository as customers_repository, types::measurement_values_equal},
+    features::{
+        customers::{repository as customers_repository, types::measurement_values_equal},
+        gift_cards::{repository as gift_cards_repository, service as gift_cards_service},
+        products::repository as products_repository,
+    },
     state::AppState,
 };
 
@@ -9,8 +15,8 @@ use uuid::Uuid;
 use super::{
     repository,
     types::{
-        CreateInvoiceInput, CreatedInvoice, DiscountUnit, InvoiceCustomerInput, InvoiceListItem,
-        PaymentType, ReceivedInvoice,
+        CreateInvoiceInput, CreateProductLineInput, CreatedInvoice, DiscountUnit,
+        InvoiceCustomerInput, InvoiceListItem, PaymentType, ReceivedInvoice,
     },
 };
 
@@ -43,30 +49,71 @@ pub async fn receive_invoice(
 const VAT_RATE: f64 = 0.1;
 
 fn round2(value: f64) -> f64 {
-    (value * 100.0).round() / 100.0
+    // The trailing `+ 0.0` normalizes negative zero: std's `Sum` for floats
+    // folds from `-0.0` (the true additive identity), so summing an empty list
+    // of lines yields `-0.0` and would serialize as `-0.0` in the response.
+    (value * 100.0).round() / 100.0 + 0.0
 }
 
-fn compute_total(input: &CreateInvoiceInput) -> f64 {
-    let subtotal: f64 = input
+// Unlike an order, whose price is the whole line, a product line is priced per
+// unit and multiplied out.
+fn product_line_total(line: &CreateProductLineInput) -> f64 {
+    round2(line.quantity * line.unit_price)
+}
+
+/// What an invoice comes to. `total` is the gross amount charged with VAT
+/// included; `redeemed` is gift card tender applied against it, kept separate
+/// so `total_price` keeps meaning "what this sale was worth" regardless of how
+/// it was paid for.
+struct InvoiceTotals {
+    total: f64,
+    redeemed: f64,
+}
+
+fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
+    let order_subtotal: f64 = input
         .customers
         .iter()
         .flat_map(|customer| &customer.orders)
         .map(|order| order.price)
         .sum();
 
+    let product_subtotal: f64 = input.products.iter().map(product_line_total).sum();
+    let taxable_subtotal = order_subtotal + product_subtotal;
+
     let discount_amount = match input.discount_unit {
         DiscountUnit::Amount => input.discount,
-        DiscountUnit::Percent => subtotal * input.discount / 100.0,
+        DiscountUnit::Percent => taxable_subtotal * input.discount / 100.0,
     };
 
-    let taxable = (subtotal - discount_amount).max(0.0);
-    round2(taxable * (1.0 + VAT_RATE))
+    let taxable = (taxable_subtotal - discount_amount).max(0.0);
+
+    // Selling stored value is not a taxable supply — VAT is charged when the
+    // card is spent — so a gift card's face value is neither discounted nor
+    // taxed. It is simply added to what the customer owes.
+    let gift_card_sales: f64 = input.gift_cards.iter().map(|card| card.amount).sum();
+
+    InvoiceTotals {
+        total: round2(taxable * (1.0 + VAT_RATE) + gift_card_sales),
+        redeemed: round2(
+            input
+                .gift_card_redemptions
+                .iter()
+                .map(|redemption| redemption.amount)
+                .sum(),
+        ),
+    }
 }
 
 fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
-    if input.customers.is_empty() {
+    let has_orders = input
+        .customers
+        .iter()
+        .any(|customer| !customer.orders.is_empty());
+
+    if !has_orders && input.products.is_empty() && input.gift_cards.is_empty() {
         return Err(AppError::BadRequest(
-            "an invoice needs at least one customer".to_string(),
+            "an invoice needs at least one order, product, or gift card".to_string(),
         ));
     }
 
@@ -87,11 +134,53 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
             _ => {}
         }
 
+        // A customer block exists to carry orders and a measurement snapshot;
+        // an empty one would write a measurement nothing references.
         if customer.orders.is_empty() {
             return Err(AppError::BadRequest(
                 "each invoice customer needs at least one order".to_string(),
             ));
         }
+    }
+
+    for line in &input.products {
+        if line.quantity <= 0.0 {
+            return Err(AppError::BadRequest(
+                "a product line needs a quantity greater than zero".to_string(),
+            ));
+        }
+
+        if line.unit_price < 0.0 {
+            return Err(AppError::BadRequest(
+                "a product price cannot be negative".to_string(),
+            ));
+        }
+    }
+
+    for card in &input.gift_cards {
+        gift_cards_service::normalize_code(&card.code)?;
+        gift_cards_service::validate_amount(card.amount)?;
+    }
+
+    let mut redeemed_codes = HashSet::new();
+    for redemption in &input.gift_card_redemptions {
+        let code = gift_cards_service::normalize_code(&redemption.code)?;
+        gift_cards_service::validate_amount(redemption.amount)?;
+
+        if !redeemed_codes.insert(code) {
+            return Err(AppError::BadRequest(
+                "the same gift card cannot be applied twice to one invoice".to_string(),
+            ));
+        }
+    }
+
+    // Gift cards are tender, so they can settle an invoice but never overpay
+    // it — the excess would be change the card can't give back.
+    let totals = compute_totals(input);
+    if totals.redeemed > totals.total {
+        return Err(AppError::BadRequest(
+            "gift cards cover more than the invoice total".to_string(),
+        ));
     }
 
     Ok(())
@@ -138,6 +227,19 @@ mod tests {
         })
     }
 
+    fn product(quantity: f64, unit_price: f64) -> serde_json::Value {
+        serde_json::json!({
+            "productId": "0197fdd2-6a67-7000-8000-000000000003",
+            "quantity": quantity,
+            "unitPrice": unit_price,
+            "branchId": "0197fdd2-6a67-7000-8000-000000000004",
+        })
+    }
+
+    fn gift_card(amount: f64) -> serde_json::Value {
+        serde_json::json!({ "code": "GC-1", "amount": amount })
+    }
+
     fn invoice(
         discount: f64,
         discount_unit: &str,
@@ -152,6 +254,23 @@ mod tests {
         }))
     }
 
+    // A sale with no tailoring at all: the customer blocks are gone and the
+    // lines are whatever is passed in.
+    fn retail_invoice(extra: serde_json::Value) -> CreateInvoiceInput {
+        let mut base = serde_json::json!({
+            "date": "2026-07-19",
+            "discountUnit": "amount",
+            "paymentStatus": "unpaid",
+        });
+
+        let object = base.as_object_mut().unwrap();
+        for (key, value) in extra.as_object().unwrap() {
+            object.insert(key.clone(), value.clone());
+        }
+
+        input(base)
+    }
+
     #[test]
     fn total_adds_vat_on_top_of_summed_order_prices() {
         let input = invoice(
@@ -159,25 +278,87 @@ mod tests {
             "amount",
             vec![customer(vec![order(100.0), order(100.0)])],
         );
-        assert_eq!(compute_total(&input), 220.0);
+        assert_eq!(compute_totals(&input).total, 220.0);
     }
 
     #[test]
     fn flat_discount_is_subtracted_before_vat() {
         let input = invoice(50.0, "amount", vec![customer(vec![order(150.0)])]);
-        assert_eq!(compute_total(&input), 110.0);
+        assert_eq!(compute_totals(&input).total, 110.0);
     }
 
     #[test]
     fn percentage_discount_applies_to_the_subtotal() {
         let input = invoice(10.0, "percent", vec![customer(vec![order(200.0)])]);
-        assert_eq!(compute_total(&input), 198.0);
+        assert_eq!(compute_totals(&input).total, 198.0);
     }
 
     #[test]
     fn discount_larger_than_subtotal_floors_at_zero() {
         let input = invoice(500.0, "amount", vec![customer(vec![order(100.0)])]);
-        assert_eq!(compute_total(&input), 0.0);
+        assert_eq!(compute_totals(&input).total, 0.0);
+    }
+
+    #[test]
+    fn a_product_line_is_priced_per_unit_and_taxed_like_an_order() {
+        let input = retail_invoice(serde_json::json!({ "products": [product(3.0, 40.0)] }));
+        // 3 × 40 = 120, + 10% = 132
+        assert_eq!(compute_totals(&input).total, 132.0);
+    }
+
+    #[test]
+    fn products_and_orders_share_one_taxable_subtotal() {
+        let mut input = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
+        input.products = serde_json::from_value(serde_json::json!([product(1.0, 100.0)])).unwrap();
+        // (100 + 100) × 1.10 = 220
+        assert_eq!(compute_totals(&input).total, 220.0);
+    }
+
+    #[test]
+    fn a_gift_card_sale_is_added_at_face_value_without_vat() {
+        let input = retail_invoice(serde_json::json!({ "giftCards": [gift_card(200.0)] }));
+        assert_eq!(compute_totals(&input).total, 200.0);
+    }
+
+    #[test]
+    fn vat_applies_only_to_the_goods_sold_alongside_a_gift_card() {
+        let input = retail_invoice(serde_json::json!({
+            "products": [product(1.0, 100.0)],
+            "giftCards": [gift_card(200.0)],
+        }));
+        // 100 × 1.10 = 110, plus the card's untaxed 200
+        assert_eq!(compute_totals(&input).total, 310.0);
+    }
+
+    #[test]
+    fn a_percentage_discount_does_not_reach_gift_card_sales() {
+        let mut input = retail_invoice(serde_json::json!({
+            "products": [product(1.0, 100.0)],
+            "giftCards": [gift_card(200.0)],
+        }));
+        input.discount = 10.0;
+        input.discount_unit = DiscountUnit::Percent;
+        // 10% off the 100 of goods only: 90 × 1.10 = 99, plus 200
+        assert_eq!(compute_totals(&input).total, 299.0);
+    }
+
+    #[test]
+    fn an_invoice_with_nothing_to_redeem_reports_a_positive_zero() {
+        let input = retail_invoice(serde_json::json!({ "products": [product(1.0, 100.0)] }));
+        // -0.0 == 0.0, so this checks the sign bit rather than the value: a
+        // negative zero would reach the client as "-0.0".
+        assert!(compute_totals(&input).redeemed.is_sign_positive());
+    }
+
+    #[test]
+    fn redeeming_a_gift_card_does_not_change_the_invoice_total() {
+        let input = retail_invoice(serde_json::json!({
+            "products": [product(1.0, 100.0)],
+            "giftCardRedemptions": [{ "code": "GC-1", "amount": 50.0 }],
+        }));
+        let totals = compute_totals(&input);
+        assert_eq!(totals.total, 110.0);
+        assert_eq!(totals.redeemed, 50.0);
     }
 
     #[test]
@@ -201,6 +382,67 @@ mod tests {
         let invoice = invoice(0.0, "amount", vec![]);
         assert!(validate(&invoice).is_err());
     }
+
+    #[test]
+    fn accepts_an_invoice_of_only_products() {
+        let invoice = retail_invoice(serde_json::json!({ "products": [product(2.0, 30.0)] }));
+        assert!(validate(&invoice).is_ok());
+    }
+
+    #[test]
+    fn accepts_an_invoice_of_only_gift_cards() {
+        let invoice = retail_invoice(serde_json::json!({ "giftCards": [gift_card(150.0)] }));
+        assert!(validate(&invoice).is_ok());
+    }
+
+    #[test]
+    fn rejects_an_invoice_with_no_lines_of_any_kind() {
+        let invoice = retail_invoice(serde_json::json!({}));
+        let error = validate(&invoice).unwrap_err();
+        assert!(matches!(error, AppError::BadRequest(_)));
+    }
+
+    #[test]
+    fn rejects_a_product_line_without_a_quantity() {
+        for quantity in [0.0, -1.0] {
+            let invoice =
+                retail_invoice(serde_json::json!({ "products": [product(quantity, 30.0)] }));
+            let error = validate(&invoice).unwrap_err();
+            assert!(matches!(error, AppError::BadRequest(_)), "{quantity}");
+        }
+    }
+
+    #[test]
+    fn rejects_the_same_gift_card_applied_twice_to_one_invoice() {
+        let invoice = retail_invoice(serde_json::json!({
+            "products": [product(1.0, 500.0)],
+            "giftCardRedemptions": [
+                { "code": "GC-1", "amount": 50.0 },
+                { "code": " gc-1 ", "amount": 25.0 },
+            ],
+        }));
+        let error = validate(&invoice).unwrap_err();
+        assert!(matches!(error, AppError::BadRequest(_)));
+    }
+
+    #[test]
+    fn rejects_redemptions_worth_more_than_the_invoice() {
+        let invoice = retail_invoice(serde_json::json!({
+            "products": [product(1.0, 100.0)],
+            "giftCardRedemptions": [{ "code": "GC-1", "amount": 200.0 }],
+        }));
+        let error = validate(&invoice).unwrap_err();
+        assert!(matches!(error, AppError::BadRequest(_)));
+    }
+
+    #[test]
+    fn accepts_a_redemption_that_settles_the_invoice_exactly() {
+        let invoice = retail_invoice(serde_json::json!({
+            "products": [product(1.0, 100.0)],
+            "giftCardRedemptions": [{ "code": "GC-1", "amount": 110.0 }],
+        }));
+        assert!(validate(&invoice).is_ok());
+    }
 }
 
 pub async fn create_invoice(
@@ -209,11 +451,12 @@ pub async fn create_invoice(
 ) -> Result<CreatedInvoice, AppError> {
     validate(&input)?;
 
-    let total_price = compute_total(&input);
+    let totals = compute_totals(&input);
 
     let mut tx = state.db().begin().await?;
 
-    let invoice_id = repository::insert_invoice(&mut tx, &input, total_price).await?;
+    let invoice_id =
+        repository::insert_invoice(&mut tx, &input, totals.total, totals.redeemed).await?;
 
     for customer in &input.customers {
         let customer_id = resolve_customer_id(&mut tx, customer).await?;
@@ -238,10 +481,83 @@ pub async fn create_invoice(
         }
     }
 
+    for line in &input.products {
+        // The decrement is guarded in SQL, so `None` means the location either
+        // never stocked this product or no longer holds enough of it. Reading
+        // the name for the message costs an extra query only on that path.
+        let description = products_repository::decrement_stock(
+            &mut tx,
+            line.product_id,
+            line.branch_id,
+            line.quantity,
+        )
+        .await?;
+
+        let Some(description) = description else {
+            let name = products_repository::product_name(&mut tx, line.product_id)
+                .await?
+                .ok_or_else(|| {
+                    AppError::BadRequest(format!("no product with id {}", line.product_id))
+                })?;
+
+            return Err(AppError::BadRequest(format!(
+                "not enough {name} in stock at the selected location"
+            )));
+        };
+
+        repository::insert_product_item(
+            &mut tx,
+            invoice_id,
+            line,
+            &description,
+            product_line_total(line),
+        )
+        .await?;
+    }
+
+    for card in &input.gift_cards {
+        let code = gift_cards_service::normalize_code(&card.code)?;
+
+        let gift_card_id = gift_cards_repository::insert_gift_card(
+            &mut tx,
+            &code,
+            card.amount,
+            // The card belongs to whoever the invoice is billed to, when the
+            // sale names someone at all.
+            input.customer_id,
+            card.expires_on,
+        )
+        .await?;
+
+        repository::insert_gift_card_item(
+            &mut tx,
+            invoice_id,
+            gift_card_id,
+            &format!("Gift card {code}"),
+            card.amount,
+        )
+        .await?;
+    }
+
+    for redemption in &input.gift_card_redemptions {
+        let code = gift_cards_service::normalize_code(&redemption.code)?;
+        let gift_card_id =
+            gift_cards_service::redeem(&mut tx, &code, redemption.amount, input.date).await?;
+
+        gift_cards_repository::insert_redemption(
+            &mut tx,
+            gift_card_id,
+            invoice_id,
+            redemption.amount,
+        )
+        .await?;
+    }
+
     tx.commit().await?;
 
     Ok(CreatedInvoice {
         id: invoice_id,
-        total_price,
+        total_price: totals.total,
+        gift_card_redeemed: totals.redeemed,
     })
 }

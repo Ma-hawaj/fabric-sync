@@ -80,31 +80,145 @@ const customerDraftSchema = z
     }
   })
 
-const customersArraySchema = z
-  .array(customerDraftSchema)
-  .min(1, 'Add at least one customer.')
+// No `.min(1)` any more: an invoice may consist entirely of products or gift
+// cards. The "at least one line" rule moved to the top-level superRefine.
+const customersArraySchema = z.array(customerDraftSchema)
+
+const productLineDraftSchema = z
+  .object({
+    key: z.string(),
+    productId: z.string(),
+    quantity: numberInputSchema,
+    unitPrice: numberInputSchema,
+  })
+  .superRefine((line, ctx) => {
+    if (!line.productId) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick a product.',
+        path: ['productId'],
+      })
+    }
+    if (line.quantity === '' || line.quantity <= 0) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter a quantity greater than 0.',
+        path: ['quantity'],
+      })
+    }
+    if (line.unitPrice === '') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter a unit price.',
+        path: ['unitPrice'],
+      })
+    }
+  })
+
+const giftCardLineDraftSchema = z
+  .object({
+    key: z.string(),
+    code: z.string(),
+    amount: numberInputSchema,
+    expiresOn: z.string(),
+  })
+  .superRefine((line, ctx) => {
+    if (!line.code.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter a gift card code.',
+        path: ['code'],
+      })
+    }
+    if (line.amount === '' || line.amount <= 0) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter an amount greater than 0.',
+        path: ['amount'],
+      })
+    }
+  })
+
+const redemptionDraftSchema = z
+  .object({
+    key: z.string(),
+    code: z.string(),
+    amount: numberInputSchema,
+  })
+  .superRefine((redemption, ctx) => {
+    if (!redemption.code.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick a gift card.',
+        path: ['code'],
+      })
+    }
+    if (redemption.amount === '' || redemption.amount <= 0) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter an amount greater than 0.',
+        path: ['amount'],
+      })
+    }
+  })
 
 export const invoiceFormSchema = z
   .object({
     date: z.string(),
     receivingBranch: z.string(),
+    customerId: z.string(),
+    productBranch: z.string(),
     discount: numberInputSchema,
     discountUnit: z.enum(['amount', 'percent']),
     paymentStatus: z.enum(['unpaid', 'partial', 'paid']),
     amountPaid: numberInputSchema,
     paymentType: z.enum(['benefit', 'cash', 'card', '']),
     customers: customersArraySchema,
+    products: z.array(productLineDraftSchema),
+    giftCards: z.array(giftCardLineDraftSchema),
+    redemptions: z.array(redemptionDraftSchema),
   })
-  .superRefine((invoice, ctx) => {
-    if (
-      invoice.amountPaid !== '' &&
-      invoice.amountPaid > 0 &&
-      !invoice.paymentType
-    ) {
+  .superRefine((value, ctx) => {
+    if (value.amountPaid !== '' && value.amountPaid > 0 && !value.paymentType) {
       ctx.addIssue({
         code: 'custom',
         message: 'Pick how the advance payment was made.',
         path: ['paymentType'],
       })
     }
+
+    const hasOrders = value.customers.some(
+      (customer) => customer.orders.length > 0,
+    )
+    if (!hasOrders && !value.products.length && !value.giftCards.length) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Add at least one order, product, or gift card.',
+        path: ['customers'],
+      })
+    }
+
+    // Product stock is held per location, so a sale has to name one.
+    if (value.products.length && !value.productBranch) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick the location these products are sold from.',
+        path: ['productBranch'],
+      })
+    }
+
+    const seenCodes = new Set<string>()
+    value.redemptions.forEach((redemption, index) => {
+      const code = redemption.code.trim().toUpperCase()
+      if (!code || !seenCodes.has(code)) {
+        seenCodes.add(code)
+        return
+      }
+
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Each gift card can only be applied once.',
+        path: ['redemptions', index, 'code'],
+      })
+    })
   })

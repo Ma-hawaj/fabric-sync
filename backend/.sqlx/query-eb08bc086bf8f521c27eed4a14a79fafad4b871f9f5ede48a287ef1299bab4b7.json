@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE gift_cards\n        SET balance = balance - $2::float8\n        WHERE id = $1\n        RETURNING balance::float8 AS \"balance!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "balance!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "eb08bc086bf8f521c27eed4a14a79fafad4b871f9f5ede48a287ef1299bab4b7"
+}

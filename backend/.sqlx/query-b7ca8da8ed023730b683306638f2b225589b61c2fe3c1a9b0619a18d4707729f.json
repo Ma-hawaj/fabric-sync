@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE invoices\n        SET amount_paid = total_price - gift_card_redeemed,\n            payment_status = 'paid',\n            final_payment_type = $2\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b7ca8da8ed023730b683306638f2b225589b61c2fe3c1a9b0619a18d4707729f"
+}

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO invoice_items (\n            invoice_id, kind, gift_card_id,\n            description, quantity, unit_price, line_total\n        )\n        VALUES ($1, 'gift_card', $2, $3, 1, $4::float8, $4::float8)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9bb34f16512003cbbf97ba855ce9b438ffc39aa5093e82ac5a7fa959d510d830"
+}

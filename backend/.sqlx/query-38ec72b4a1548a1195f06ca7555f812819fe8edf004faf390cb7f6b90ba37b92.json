@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE products\n        SET name = COALESCE($2, name),\n            sku = CASE\n                WHEN $3::text IS NULL THEN sku\n                WHEN $3 = '' THEN NULL\n                ELSE $3\n            END,\n            unit_price = COALESCE($4::float8, unit_price),\n            is_active = COALESCE($5, is_active)\n        WHERE id = $1\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Float8",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "38ec72b4a1548a1195f06ca7555f812819fe8edf004faf390cb7f6b90ba37b92"
+}

@@ -102,7 +102,9 @@ pub async fn mark_invoice_paid(
     sqlx::query!(
         r#"
         UPDATE invoices
-        SET amount_paid = total_price, payment_status = 'paid', final_payment_type = $2
+        SET amount_paid = total_price - gift_card_redeemed,
+            payment_status = 'paid',
+            final_payment_type = $2
         WHERE id = $1
         "#,
         invoice_id,

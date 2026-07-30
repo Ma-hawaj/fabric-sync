@@ -79,6 +79,43 @@ pub struct CreateOrderInput {
     pub more_details: Option<String>,
 }
 
+/// A retail line: a product sold as-is. Unlike an order it has no measurement
+/// and no material behind it, which is why it lands in `invoice_items` rather
+/// than `orders`.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateProductLineInput {
+    pub product_id: Uuid,
+    pub quantity: f64,
+    // Snapshot of the product's list price at the time of sale; the client
+    // prefills it from the catalog, but staff can override it per line.
+    pub unit_price: f64,
+    // Which location the stock comes off — product_stock is per-location, so a
+    // sale has to name one.
+    pub branch_id: Uuid,
+}
+
+/// A gift card sold on this invoice. Selling stored value is not a taxable
+/// supply — VAT is charged when the card is spent — so the amount is added to
+/// the total outside the VAT base.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateGiftCardLineInput {
+    pub code: String,
+    pub amount: f64,
+    #[serde(default)]
+    pub expires_on: Option<NaiveDate>,
+}
+
+/// A gift card spent on this invoice. Tender rather than a discount, so it is
+/// applied after VAT and does not change `total_price`.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GiftCardRedemptionInput {
+    pub code: String,
+    pub amount: f64,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NewCustomerInput {
@@ -117,7 +154,21 @@ pub struct CreateInvoiceInput {
     // amount_paid is greater than zero (validated in service.rs).
     #[serde(default)]
     pub payment_type: Option<PaymentType>,
+    // A tailoring invoice finds its customer through its orders; a sale of only
+    // products or gift cards has none to go through, so the buyer is named
+    // directly here instead.
+    #[serde(default)]
+    pub customer_id: Option<Uuid>,
+    // Defaulted rather than required: an invoice may now consist entirely of
+    // products or gift cards, with no customer block at all.
+    #[serde(default)]
     pub customers: Vec<InvoiceCustomerInput>,
+    #[serde(default)]
+    pub products: Vec<CreateProductLineInput>,
+    #[serde(default)]
+    pub gift_cards: Vec<CreateGiftCardLineInput>,
+    #[serde(default)]
+    pub gift_card_redemptions: Vec<GiftCardRedemptionInput>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -125,6 +176,9 @@ pub struct CreateInvoiceInput {
 pub struct CreatedInvoice {
     pub id: Uuid,
     pub total_price: f64,
+    // Echoed back so the client can confirm how much gift card tender was
+    // actually applied against the total.
+    pub gift_card_redeemed: f64,
 }
 
 // One row of GET /invoices. Deserialize is only used to decode the
@@ -170,4 +224,7 @@ pub struct InvoiceListItem {
     pub advance_amount: f64,
     pub advance_payment_type: Option<String>,
     pub final_payment_type: Option<String>,
+    /// Gift card tender applied to this invoice. Not part of `amount_paid`:
+    /// together they add up to `total_price` on a settled invoice.
+    pub gift_card_redeemed: f64,
 }

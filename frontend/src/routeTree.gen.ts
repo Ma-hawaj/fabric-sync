@@ -14,14 +14,19 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
 import { Route as AuthenticatedOrdersRouteImport } from './routes/_authenticated/orders'
+import { Route as AuthenticatedProductsIndexRouteImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedLocationsIndexRouteImport } from './routes/_authenticated/locations/index'
 import { Route as AuthenticatedInvoicesIndexRouteImport } from './routes/_authenticated/invoices/index'
 import { Route as AuthenticatedInventoryIndexRouteImport } from './routes/_authenticated/inventory/index'
+import { Route as AuthenticatedGiftCardsIndexRouteImport } from './routes/_authenticated/gift-cards/index'
 import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers/index'
+import { Route as AuthenticatedProductsNewRouteImport } from './routes/_authenticated/products/new'
 import { Route as AuthenticatedLocationsNewRouteImport } from './routes/_authenticated/locations/new'
 import { Route as AuthenticatedInvoicesNewRouteImport } from './routes/_authenticated/invoices/new'
 import { Route as AuthenticatedInventoryNewRouteImport } from './routes/_authenticated/inventory/new'
+import { Route as AuthenticatedGiftCardsNewRouteImport } from './routes/_authenticated/gift-cards/new'
 import { Route as AuthenticatedCustomersNewRouteImport } from './routes/_authenticated/customers/new'
+import { Route as AuthenticatedProductsProductIdEditRouteImport } from './routes/_authenticated/products/$productId/edit'
 import { Route as AuthenticatedLocationsLocationIdEditRouteImport } from './routes/_authenticated/locations/$locationId/edit'
 
 const DashboardRoute = DashboardRouteImport.update({
@@ -48,6 +53,12 @@ const AuthenticatedOrdersRoute = AuthenticatedOrdersRouteImport.update({
   path: '/orders',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedProductsIndexRoute =
+  AuthenticatedProductsIndexRouteImport.update({
+    id: '/products/',
+    path: '/products/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedLocationsIndexRoute =
   AuthenticatedLocationsIndexRouteImport.update({
     id: '/locations/',
@@ -66,10 +77,22 @@ const AuthenticatedInventoryIndexRoute =
     path: '/inventory/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedGiftCardsIndexRoute =
+  AuthenticatedGiftCardsIndexRouteImport.update({
+    id: '/gift-cards/',
+    path: '/gift-cards/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedCustomersIndexRoute =
   AuthenticatedCustomersIndexRouteImport.update({
     id: '/customers/',
     path: '/customers/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedProductsNewRoute =
+  AuthenticatedProductsNewRouteImport.update({
+    id: '/products/new',
+    path: '/products/new',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedLocationsNewRoute =
@@ -90,10 +113,22 @@ const AuthenticatedInventoryNewRoute =
     path: '/inventory/new',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedGiftCardsNewRoute =
+  AuthenticatedGiftCardsNewRouteImport.update({
+    id: '/gift-cards/new',
+    path: '/gift-cards/new',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedCustomersNewRoute =
   AuthenticatedCustomersNewRouteImport.update({
     id: '/customers/new',
     path: '/customers/new',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedProductsProductIdEditRoute =
+  AuthenticatedProductsProductIdEditRouteImport.update({
+    id: '/products/$productId/edit',
+    path: '/products/$productId/edit',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedLocationsLocationIdEditRoute =
@@ -109,14 +144,19 @@ export interface FileRoutesByFullPath {
   '/orders': typeof AuthenticatedOrdersRoute
   '/users': typeof AuthenticatedUsersRoute
   '/customers/new': typeof AuthenticatedCustomersNewRoute
+  '/gift-cards/new': typeof AuthenticatedGiftCardsNewRoute
   '/inventory/new': typeof AuthenticatedInventoryNewRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
   '/locations/new': typeof AuthenticatedLocationsNewRoute
+  '/products/new': typeof AuthenticatedProductsNewRoute
   '/customers/': typeof AuthenticatedCustomersIndexRoute
+  '/gift-cards/': typeof AuthenticatedGiftCardsIndexRoute
   '/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/invoices/': typeof AuthenticatedInvoicesIndexRoute
   '/locations/': typeof AuthenticatedLocationsIndexRoute
+  '/products/': typeof AuthenticatedProductsIndexRoute
   '/locations/$locationId/edit': typeof AuthenticatedLocationsLocationIdEditRoute
+  '/products/$productId/edit': typeof AuthenticatedProductsProductIdEditRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -124,14 +164,19 @@ export interface FileRoutesByTo {
   '/orders': typeof AuthenticatedOrdersRoute
   '/users': typeof AuthenticatedUsersRoute
   '/customers/new': typeof AuthenticatedCustomersNewRoute
+  '/gift-cards/new': typeof AuthenticatedGiftCardsNewRoute
   '/inventory/new': typeof AuthenticatedInventoryNewRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
   '/locations/new': typeof AuthenticatedLocationsNewRoute
+  '/products/new': typeof AuthenticatedProductsNewRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
+  '/gift-cards': typeof AuthenticatedGiftCardsIndexRoute
   '/inventory': typeof AuthenticatedInventoryIndexRoute
   '/invoices': typeof AuthenticatedInvoicesIndexRoute
   '/locations': typeof AuthenticatedLocationsIndexRoute
+  '/products': typeof AuthenticatedProductsIndexRoute
   '/locations/$locationId/edit': typeof AuthenticatedLocationsLocationIdEditRoute
+  '/products/$productId/edit': typeof AuthenticatedProductsProductIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -141,14 +186,19 @@ export interface FileRoutesById {
   '/_authenticated/orders': typeof AuthenticatedOrdersRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/customers/new': typeof AuthenticatedCustomersNewRoute
+  '/_authenticated/gift-cards/new': typeof AuthenticatedGiftCardsNewRoute
   '/_authenticated/inventory/new': typeof AuthenticatedInventoryNewRoute
   '/_authenticated/invoices/new': typeof AuthenticatedInvoicesNewRoute
   '/_authenticated/locations/new': typeof AuthenticatedLocationsNewRoute
+  '/_authenticated/products/new': typeof AuthenticatedProductsNewRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
+  '/_authenticated/gift-cards/': typeof AuthenticatedGiftCardsIndexRoute
   '/_authenticated/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/_authenticated/invoices/': typeof AuthenticatedInvoicesIndexRoute
   '/_authenticated/locations/': typeof AuthenticatedLocationsIndexRoute
+  '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
   '/_authenticated/locations/$locationId/edit': typeof AuthenticatedLocationsLocationIdEditRoute
+  '/_authenticated/products/$productId/edit': typeof AuthenticatedProductsProductIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -158,14 +208,19 @@ export interface FileRouteTypes {
     | '/orders'
     | '/users'
     | '/customers/new'
+    | '/gift-cards/new'
     | '/inventory/new'
     | '/invoices/new'
     | '/locations/new'
+    | '/products/new'
     | '/customers/'
+    | '/gift-cards/'
     | '/inventory/'
     | '/invoices/'
     | '/locations/'
+    | '/products/'
     | '/locations/$locationId/edit'
+    | '/products/$productId/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -173,14 +228,19 @@ export interface FileRouteTypes {
     | '/orders'
     | '/users'
     | '/customers/new'
+    | '/gift-cards/new'
     | '/inventory/new'
     | '/invoices/new'
     | '/locations/new'
+    | '/products/new'
     | '/customers'
+    | '/gift-cards'
     | '/inventory'
     | '/invoices'
     | '/locations'
+    | '/products'
     | '/locations/$locationId/edit'
+    | '/products/$productId/edit'
   id:
     | '__root__'
     | '/'
@@ -189,14 +249,19 @@ export interface FileRouteTypes {
     | '/_authenticated/orders'
     | '/_authenticated/users'
     | '/_authenticated/customers/new'
+    | '/_authenticated/gift-cards/new'
     | '/_authenticated/inventory/new'
     | '/_authenticated/invoices/new'
     | '/_authenticated/locations/new'
+    | '/_authenticated/products/new'
     | '/_authenticated/customers/'
+    | '/_authenticated/gift-cards/'
     | '/_authenticated/inventory/'
     | '/_authenticated/invoices/'
     | '/_authenticated/locations/'
+    | '/_authenticated/products/'
     | '/_authenticated/locations/$locationId/edit'
+    | '/_authenticated/products/$productId/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -242,6 +307,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOrdersRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/products/': {
+      id: '/_authenticated/products/'
+      path: '/products'
+      fullPath: '/products/'
+      preLoaderRoute: typeof AuthenticatedProductsIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/locations/': {
       id: '/_authenticated/locations/'
       path: '/locations'
@@ -263,11 +335,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInventoryIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/gift-cards/': {
+      id: '/_authenticated/gift-cards/'
+      path: '/gift-cards'
+      fullPath: '/gift-cards/'
+      preLoaderRoute: typeof AuthenticatedGiftCardsIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/customers/': {
       id: '/_authenticated/customers/'
       path: '/customers'
       fullPath: '/customers/'
       preLoaderRoute: typeof AuthenticatedCustomersIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/products/new': {
+      id: '/_authenticated/products/new'
+      path: '/products/new'
+      fullPath: '/products/new'
+      preLoaderRoute: typeof AuthenticatedProductsNewRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/locations/new': {
@@ -291,11 +377,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInventoryNewRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/gift-cards/new': {
+      id: '/_authenticated/gift-cards/new'
+      path: '/gift-cards/new'
+      fullPath: '/gift-cards/new'
+      preLoaderRoute: typeof AuthenticatedGiftCardsNewRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/customers/new': {
       id: '/_authenticated/customers/new'
       path: '/customers/new'
       fullPath: '/customers/new'
       preLoaderRoute: typeof AuthenticatedCustomersNewRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/products/$productId/edit': {
+      id: '/_authenticated/products/$productId/edit'
+      path: '/products/$productId/edit'
+      fullPath: '/products/$productId/edit'
+      preLoaderRoute: typeof AuthenticatedProductsProductIdEditRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/locations/$locationId/edit': {
@@ -312,29 +412,40 @@ interface AuthenticatedRouteChildren {
   AuthenticatedOrdersRoute: typeof AuthenticatedOrdersRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
   AuthenticatedCustomersNewRoute: typeof AuthenticatedCustomersNewRoute
+  AuthenticatedGiftCardsNewRoute: typeof AuthenticatedGiftCardsNewRoute
   AuthenticatedInventoryNewRoute: typeof AuthenticatedInventoryNewRoute
   AuthenticatedInvoicesNewRoute: typeof AuthenticatedInvoicesNewRoute
   AuthenticatedLocationsNewRoute: typeof AuthenticatedLocationsNewRoute
+  AuthenticatedProductsNewRoute: typeof AuthenticatedProductsNewRoute
   AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
+  AuthenticatedGiftCardsIndexRoute: typeof AuthenticatedGiftCardsIndexRoute
   AuthenticatedInventoryIndexRoute: typeof AuthenticatedInventoryIndexRoute
   AuthenticatedInvoicesIndexRoute: typeof AuthenticatedInvoicesIndexRoute
   AuthenticatedLocationsIndexRoute: typeof AuthenticatedLocationsIndexRoute
+  AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedLocationsLocationIdEditRoute: typeof AuthenticatedLocationsLocationIdEditRoute
+  AuthenticatedProductsProductIdEditRoute: typeof AuthenticatedProductsProductIdEditRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedOrdersRoute: AuthenticatedOrdersRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
   AuthenticatedCustomersNewRoute: AuthenticatedCustomersNewRoute,
+  AuthenticatedGiftCardsNewRoute: AuthenticatedGiftCardsNewRoute,
   AuthenticatedInventoryNewRoute: AuthenticatedInventoryNewRoute,
   AuthenticatedInvoicesNewRoute: AuthenticatedInvoicesNewRoute,
   AuthenticatedLocationsNewRoute: AuthenticatedLocationsNewRoute,
+  AuthenticatedProductsNewRoute: AuthenticatedProductsNewRoute,
   AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
+  AuthenticatedGiftCardsIndexRoute: AuthenticatedGiftCardsIndexRoute,
   AuthenticatedInventoryIndexRoute: AuthenticatedInventoryIndexRoute,
   AuthenticatedInvoicesIndexRoute: AuthenticatedInvoicesIndexRoute,
   AuthenticatedLocationsIndexRoute: AuthenticatedLocationsIndexRoute,
+  AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
   AuthenticatedLocationsLocationIdEditRoute:
     AuthenticatedLocationsLocationIdEditRoute,
+  AuthenticatedProductsProductIdEditRoute:
+    AuthenticatedProductsProductIdEditRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
