@@ -4,6 +4,7 @@ import type { MeasurementDraft } from '@/features/customers/types/measurement-fo
 
 export type CustomerMode = 'existing' | 'new'
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
+export type PaymentType = 'benefit' | 'cash' | 'card'
 // A flat amount in the business currency, or a percentage of the subtotal —
 // deliberately not tied to a specific currency code (see lib/currency.ts).
 export type DiscountUnit = 'amount' | 'percent'
@@ -83,6 +84,9 @@ export interface InvoiceFormValues {
   discountUnit: DiscountUnit
   paymentStatus: PaymentStatus
   amountPaid: NumberInput
+  // The method used for the advance payment above — required whenever
+  // amountPaid is greater than zero.
+  paymentType: PaymentType | ''
   customers: InvoiceCustomerDraft[]
   products: InvoiceProductDraft[]
   giftCards: InvoiceGiftCardDraft[]
@@ -146,6 +150,7 @@ export function createEmptyInvoiceForm(): InvoiceFormValues {
     discountUnit: 'amount',
     paymentStatus: 'unpaid',
     amountPaid: '',
+    paymentType: '',
     customers: [createEmptyCustomer()],
     products: [],
     giftCards: [],

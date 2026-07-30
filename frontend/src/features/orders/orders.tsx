@@ -3,16 +3,22 @@ import { useDataTable } from '@/hooks/use-data-table'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getOrderColumns } from './components/order-columns'
+import { ReceiveOrderDialog } from './components/receive-order-dialog'
 import { useOrders } from './hooks/use-orders'
+import type { Order } from './types/orders'
 
 export function OrdersPage() {
   const { data: orders = [], isLoading } = useOrders()
+  const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(null)
 
   // The material filter offers exactly the material names present in the
   // fetched orders.
   const columns = React.useMemo(() => {
     const materials = [...new Set(orders.map((o) => o.material))].sort()
-    return getOrderColumns(materials.map((m) => ({ label: m, value: m })))
+    return getOrderColumns(
+      materials.map((m) => ({ label: m, value: m })),
+      setSelectedOrder,
+    )
   }, [orders])
 
   const { table } = useDataTable({
@@ -41,6 +47,11 @@ export function OrdersPage() {
           <DataTableToolbar table={table} />
         </DataTable>
       )}
+
+      <ReceiveOrderDialog
+        order={selectedOrder}
+        onOpenChange={(open) => !open && setSelectedOrder(null)}
+      />
     </div>
   )
 }

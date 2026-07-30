@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO invoices (\n            invoice_date, branch_id, discount, discount_unit,\n            payment_status, amount_paid, total_price,\n            advance_amount, advance_payment_type,\n            customer_id, gift_card_redeemed\n        )\n        VALUES (\n            $1, $2, $3::float8, $4, $5, $6::float8, $7::float8,\n            $6::float8, $8, $9, $10::float8\n        )\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Date",
+        "Uuid",
+        "Float8",
+        "Text",
+        "Text",
+        "Float8",
+        "Float8",
+        "Text",
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0e44ab0a10453d55a52798fd1ad0f2798a08b4fb037c6113046675c31449a2f5"
+}

@@ -24,6 +24,8 @@ import {
   Receipt,
 } from 'lucide-react'
 import { useOrders } from '@/features/orders/hooks/use-orders'
+import { ThobDiagram } from './thob-diagram'
+import { MEASUREMENT_GROUPS, fieldsInGroup } from '../data/measurement-fields'
 import type { Customer } from '../types/customers'
 
 interface CustomerDetailsSheetProps {
@@ -38,6 +40,7 @@ export function CustomerDetailsSheet({
   const [activeMeasurementId, setActiveMeasurementId] = React.useState<
     string | null
   >(null)
+  const [hoveredField, setHoveredField] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     setActiveMeasurementId(customer?.measurements[0]?.id ?? null)
@@ -104,7 +107,7 @@ export function CustomerDetailsSheet({
                       {customerOrders.map((order) => (
                         <TableRow key={order.id}>
                           <TableCell className="font-medium">
-                            {order.invoice}
+                            {order.invoiceId}
                           </TableCell>
                           <TableCell>
                             {order.invoiceDate.toLocaleDateString()}
@@ -164,110 +167,48 @@ export function CustomerDetailsSheet({
                 </div>
 
                 {activeMeasurement && (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                    {/* Section: Main Body Dimensions */}
-                    <StyleSection title="Body Dimensions">
-                      <MetricItem
-                        label="Length FL"
-                        value={activeMeasurement.lengthFl}
-                      />
-                      <MetricItem
-                        label="Length BL"
-                        value={activeMeasurement.lengthBl}
-                      />
-                      <MetricItem
-                        label="Chest"
-                        value={activeMeasurement.chest}
-                      />
-                      <MetricItem
-                        label="Waist"
-                        value={activeMeasurement.waist}
-                      />
-                      <MetricItem label="Hips" value={activeMeasurement.hips} />
-                      <MetricItem
-                        label="Shoulder"
-                        value={activeMeasurement.shoulder}
-                      />
-                      <MetricItem
-                        label="Sleeve Length"
-                        value={activeMeasurement.sleeveLength}
-                      />
-                      <MetricItem label="Neck" value={activeMeasurement.neck} />
-                      <MetricItem
-                        label="Arm Hole (Aram)"
-                        value={activeMeasurement.aramHole}
-                      />
-                      <MetricItem
-                        label="Open Hand"
-                        value={activeMeasurement.openHand}
-                      />
-                      <MetricItem
-                        label="Cuff Width"
-                        value={activeMeasurement.cuffWidth}
-                      />
-                      <MetricItem
-                        label="Cuffling Type"
-                        value={activeMeasurement.cuffling}
-                      />
-                    </StyleSection>
+                  <div className="@container animate-in fade-in slide-in-from-bottom-2 duration-200">
+                    <div className="grid gap-5 @2xl:grid-cols-[minmax(0,1fr)_16rem] @4xl:grid-cols-[minmax(0,1fr)_21rem]">
+                      <div className="order-2 space-y-6 @2xl:order-1">
+                        {MEASUREMENT_GROUPS.map((group) => {
+                          const recorded = fieldsInGroup(group.id)
+                            .map((field) => ({
+                              field,
+                              value: activeMeasurement[field.name],
+                            }))
+                            .filter(
+                              ({ value }) =>
+                                value !== undefined && value !== '',
+                            )
+                          if (recorded.length === 0) return null
 
-                    {/* Section: Extra Customizations */}
-                    <StyleSection title="Pocket & Fold Specifications">
-                      <MetricItem
-                        label="Front Pocket Length"
-                        value={activeMeasurement.frantPocketLength}
-                      />
-                      <MetricItem
-                        label="Front Pocket L x W"
-                        value={activeMeasurement.farntPocketLengthByWidth}
-                      />
-                      <MetricItem
-                        label="Side Pocket"
-                        value={activeMeasurement.sidePocket}
-                      />
-                      <MetricItem
-                        label="Mobile Pocket L x W"
-                        value={activeMeasurement.mobilePocketLengthByWidth}
-                      />
-                      <MetricItem label="FO" value={activeMeasurement.fo} />
-                      <MetricItem
-                        label="FO Width"
-                        value={activeMeasurement.foWidth}
-                      />
-                      <MetricItem
-                        label="Open Fold"
-                        value={activeMeasurement.openFold}
-                      />
-                      <MetricItem
-                        label="Button Fold"
-                        value={activeMeasurement.buttonFold}
-                      />
-                    </StyleSection>
+                          return (
+                            <StyleSection key={group.id} title={group.title}>
+                              {recorded.map(({ field, value }) => (
+                                <MetricItem
+                                  key={field.name}
+                                  label={field.label}
+                                  value={value}
+                                  onHover={() => setHoveredField(field.name)}
+                                  onLeave={() => setHoveredField(null)}
+                                />
+                              ))}
+                            </StyleSection>
+                          )
+                        })}
+                      </div>
 
-                    {/* Section: Tailoring Extra Info */}
-                    {(activeMeasurement.fullBody ||
-                      activeMeasurement.chestUp ||
-                      activeMeasurement.neckWidth ||
-                      activeMeasurement.sleeveHaffButton) && (
-                      <StyleSection title="Additional Details">
-                        <MetricItem
-                          label="Full Body Fit"
-                          value={activeMeasurement.fullBody}
+                      <aside className="order-1 h-fit rounded-xl border border-border/60 bg-card p-3 shadow-sm @2xl:order-2 @2xl:sticky @2xl:top-4">
+                        <ThobDiagram
+                          activeField={hoveredField}
+                          values={activeMeasurement}
+                          onSelectField={(name) => setHoveredField(name)}
                         />
-                        <MetricItem
-                          label="Chest Up"
-                          value={activeMeasurement.chestUp}
-                        />
-                        <MetricItem
-                          label="Neck Width"
-                          value={activeMeasurement.neckWidth}
-                        />
-                        <MetricItem
-                          label="Sleeve Half Button"
-                          value={activeMeasurement.sleeveHaffButton}
-                        />
-                      </StyleSection>
-                    )}
+                        <p className="mt-1 text-center text-xs text-muted-foreground">
+                          Hover a measurement to locate it on the thob.
+                        </p>
+                      </aside>
+                    </div>
                   </div>
                 )}
               </div>
@@ -282,13 +223,21 @@ export function CustomerDetailsSheet({
 function MetricItem({
   label,
   value,
+  onHover,
+  onLeave,
 }: {
   label: string
   value?: string | number
+  onHover?: () => void
+  onLeave?: () => void
 }) {
   if (value === undefined || value === '') return null
   return (
-    <div className="flex flex-col border-b border-border/30 pb-2">
+    <div
+      className="flex flex-col border-b border-border/30 pb-2 transition-colors hover:border-blue-500/60"
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+    >
       <span className="text-xs text-muted-foreground font-medium">{label}</span>
       <span className="text-sm font-semibold text-foreground mt-0.5">
         {value}

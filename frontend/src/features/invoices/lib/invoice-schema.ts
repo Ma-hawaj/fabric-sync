@@ -172,12 +172,21 @@ export const invoiceFormSchema = z
     discountUnit: z.enum(['amount', 'percent']),
     paymentStatus: z.enum(['unpaid', 'partial', 'paid']),
     amountPaid: numberInputSchema,
+    paymentType: z.enum(['benefit', 'cash', 'card', '']),
     customers: customersArraySchema,
     products: z.array(productLineDraftSchema),
     giftCards: z.array(giftCardLineDraftSchema),
     redemptions: z.array(redemptionDraftSchema),
   })
   .superRefine((value, ctx) => {
+    if (value.amountPaid !== '' && value.amountPaid > 0 && !value.paymentType) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick how the advance payment was made.',
+        path: ['paymentType'],
+      })
+    }
+
     const hasOrders = value.customers.some(
       (customer) => customer.orders.length > 0,
     )

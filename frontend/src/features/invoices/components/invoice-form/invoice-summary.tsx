@@ -33,9 +33,16 @@ import type {
   InvoiceGiftCardDraft,
   InvoiceProductDraft,
   PaymentStatus,
+  PaymentType,
 } from '../../types/invoice-form'
 
-const VAT_RATE = 0.15
+const PAYMENT_TYPE_OPTIONS: { value: PaymentType; label: string }[] = [
+  { value: 'benefit', label: 'Benefit' },
+  { value: 'cash', label: 'Cash' },
+  { value: 'card', label: 'Card' },
+]
+
+const VAT_RATE = 0.1
 
 function customerDisplayName(
   draft: InvoiceCustomerDraft,
@@ -347,7 +354,7 @@ export function InvoiceSummary({
                   return (
                     <>
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">VAT (15%)</span>
+                        <span className="text-muted-foreground">VAT (10%)</span>
                         <span>
                           {CURRENCY} {vat.toFixed(2)}
                         </span>
@@ -420,6 +427,42 @@ export function InvoiceSummary({
                           label="Amount Paid"
                         />
                       </div>
+
+                      {paid > 0 && (
+                        <form.Field name={'paymentType' as never}>
+                          {(field: any) => (
+                            <div className="space-y-1">
+                              <Label htmlFor={field.name}>
+                                Advance Payment Method
+                              </Label>
+                              <Select
+                                items={PAYMENT_TYPE_OPTIONS}
+                                value={field.state.value}
+                                onValueChange={(value: PaymentType) =>
+                                  field.handleChange(value)
+                                }
+                              >
+                                <SelectTrigger
+                                  id={field.name}
+                                  className="w-full"
+                                >
+                                  <SelectValue placeholder="Select payment method..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PAYMENT_TYPE_OPTIONS.map((option) => (
+                                    <SelectItem
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </form.Field>
+                      )}
 
                       <div className="flex justify-between font-semibold pt-1">
                         <span>Balance Due</span>

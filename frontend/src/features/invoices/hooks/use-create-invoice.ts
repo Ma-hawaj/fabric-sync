@@ -91,6 +91,7 @@ function invoicePayload(values: InvoiceFormValues) {
     discountUnit: values.discountUnit,
     paymentStatus: values.paymentStatus,
     amountPaid: numberOrZero(values.amountPaid),
+    paymentType: values.paymentType || null,
     // Only meaningful for a sale with no orders to find a customer through;
     // it is left blank otherwise.
     customerId: values.customerId || null,

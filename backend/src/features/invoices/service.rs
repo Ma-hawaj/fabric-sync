@@ -10,11 +10,13 @@ use crate::{
     state::AppState,
 };
 
+use uuid::Uuid;
+
 use super::{
     repository,
     types::{
         CreateInvoiceInput, CreateProductLineInput, CreatedInvoice, DiscountUnit,
-        InvoiceCustomerInput, InvoiceListItem,
+        InvoiceCustomerInput, InvoiceListItem, PaymentType, ReceivedInvoice,
     },
 };
 
@@ -22,9 +24,29 @@ pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, App
     Ok(repository::list_invoices(state).await?)
 }
 
+/// Marks every order on the invoice received and settles the remaining
+/// balance in one action — the whole-invoice counterpart to
+/// features::orders::receive_order, for when everything is collected (and
+/// paid) at once.
+pub async fn receive_invoice(
+    state: &AppState,
+    invoice_id: Uuid,
+    payment_type: PaymentType,
+) -> Result<ReceivedInvoice, AppError> {
+    let mut tx = state.db().begin().await?;
+
+    let received = repository::receive_invoice(&mut tx, invoice_id, payment_type)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
+
+    tx.commit().await?;
+
+    Ok(received)
+}
+
 // Matches the frontend's invoice summary; the stored total is
 // (subtotal - discount) + VAT, floored at zero before tax.
-const VAT_RATE: f64 = 0.15;
+const VAT_RATE: f64 = 0.1;
 
 fn round2(value: f64) -> f64 {
     // The trailing `+ 0.0` normalizes negative zero: std's `Sum` for floats
@@ -92,6 +114,12 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
     if !has_orders && input.products.is_empty() && input.gift_cards.is_empty() {
         return Err(AppError::BadRequest(
             "an invoice needs at least one order, product, or gift card".to_string(),
+        ));
+    }
+
+    if input.amount_paid > 0.0 && input.payment_type.is_none() {
+        return Err(AppError::BadRequest(
+            "an advance payment needs a paymentType".to_string(),
         ));
     }
 
@@ -250,19 +278,19 @@ mod tests {
             "amount",
             vec![customer(vec![order(100.0), order(100.0)])],
         );
-        assert_eq!(compute_totals(&input).total, 230.0);
+        assert_eq!(compute_totals(&input).total, 220.0);
     }
 
     #[test]
     fn flat_discount_is_subtracted_before_vat() {
         let input = invoice(50.0, "amount", vec![customer(vec![order(150.0)])]);
-        assert_eq!(compute_totals(&input).total, 115.0);
+        assert_eq!(compute_totals(&input).total, 110.0);
     }
 
     #[test]
     fn percentage_discount_applies_to_the_subtotal() {
         let input = invoice(10.0, "percent", vec![customer(vec![order(200.0)])]);
-        assert_eq!(compute_totals(&input).total, 207.0);
+        assert_eq!(compute_totals(&input).total, 198.0);
     }
 
     #[test]
@@ -274,16 +302,16 @@ mod tests {
     #[test]
     fn a_product_line_is_priced_per_unit_and_taxed_like_an_order() {
         let input = retail_invoice(serde_json::json!({ "products": [product(3.0, 40.0)] }));
-        // 3 × 40 = 120, + 15% = 138
-        assert_eq!(compute_totals(&input).total, 138.0);
+        // 3 × 40 = 120, + 10% = 132
+        assert_eq!(compute_totals(&input).total, 132.0);
     }
 
     #[test]
     fn products_and_orders_share_one_taxable_subtotal() {
         let mut input = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
         input.products = serde_json::from_value(serde_json::json!([product(1.0, 100.0)])).unwrap();
-        // (100 + 100) × 1.15 = 230
-        assert_eq!(compute_totals(&input).total, 230.0);
+        // (100 + 100) × 1.10 = 220
+        assert_eq!(compute_totals(&input).total, 220.0);
     }
 
     #[test]
@@ -298,8 +326,8 @@ mod tests {
             "products": [product(1.0, 100.0)],
             "giftCards": [gift_card(200.0)],
         }));
-        // 100 × 1.15 = 115, plus the card's untaxed 200
-        assert_eq!(compute_totals(&input).total, 315.0);
+        // 100 × 1.10 = 110, plus the card's untaxed 200
+        assert_eq!(compute_totals(&input).total, 310.0);
     }
 
     #[test]
@@ -310,8 +338,8 @@ mod tests {
         }));
         input.discount = 10.0;
         input.discount_unit = DiscountUnit::Percent;
-        // 10% off the 100 of goods only: 90 × 1.15 = 103.5, plus 200
-        assert_eq!(compute_totals(&input).total, 303.5);
+        // 10% off the 100 of goods only: 90 × 1.10 = 99, plus 200
+        assert_eq!(compute_totals(&input).total, 299.0);
     }
 
     #[test]
@@ -329,7 +357,7 @@ mod tests {
             "giftCardRedemptions": [{ "code": "GC-1", "amount": 50.0 }],
         }));
         let totals = compute_totals(&input);
-        assert_eq!(totals.total, 115.0);
+        assert_eq!(totals.total, 110.0);
         assert_eq!(totals.redeemed, 50.0);
     }
 
@@ -411,7 +439,7 @@ mod tests {
     fn accepts_a_redemption_that_settles_the_invoice_exactly() {
         let invoice = retail_invoice(serde_json::json!({
             "products": [product(1.0, 100.0)],
-            "giftCardRedemptions": [{ "code": "GC-1", "amount": 115.0 }],
+            "giftCardRedemptions": [{ "code": "GC-1", "amount": 110.0 }],
         }));
         assert!(validate(&invoice).is_ok());
     }

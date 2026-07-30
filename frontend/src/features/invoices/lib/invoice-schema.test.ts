@@ -217,6 +217,37 @@ describe('invoiceFormSchema', () => {
     expect(error?.path).toEqual(['redemptions', 1, 'code'])
   })
 
+  it('requires a payment type when an advance payment is entered', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      orders: [validOrder()],
+    }
+    const withAdvance = { ...baseValues([customer]), amountPaid: 100 }
+    const result = invoiceFormSchema.safeParse(withAdvance)
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toMatch(/payment was made/i)
+      expect(result.error.issues[0]?.path).toEqual(['paymentType'])
+    }
+  })
+
+  it('accepts an advance payment once a payment type is picked', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      orders: [validOrder()],
+    }
+    const withPaymentType = {
+      ...baseValues([customer]),
+      amountPaid: 100,
+      paymentType: 'cash' as const,
+    }
+    expect(invoiceFormSchema.safeParse(withPaymentType).success).toBe(true)
+  })
+
   it('reports the correct customer path in multi-customer invoices', () => {
     const good = {
       ...createEmptyCustomer(),

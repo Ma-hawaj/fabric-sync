@@ -35,6 +35,13 @@ CREATE TABLE material_stock (
     UNIQUE (material_id, branch_id)
 );
 
+-- An invoice is settled in up to two payments: an advance taken up front (at
+-- invoice creation) and a final payment that clears the remaining balance
+-- (when the order is received) — each may use a different payment method,
+-- hence the separate advance/final payment type columns. amount_paid tracks
+-- the running total paid so far; advance_amount snapshots what the advance
+-- payment was, since amount_paid is overwritten to total_price once the
+-- final payment settles the balance.
 CREATE TABLE invoices (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     total_price NUMERIC(10, 2) NOT NULL DEFAULT 0,
@@ -44,13 +51,18 @@ CREATE TABLE invoices (
     discount_unit TEXT NOT NULL DEFAULT 'amount' CHECK (discount_unit IN ('amount', 'percent')),
     payment_status TEXT NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid', 'partial', 'paid')),
     amount_paid NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    advance_amount NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (advance_amount >= 0),
+    advance_payment_type TEXT CHECK (advance_payment_type IN ('benefit', 'cash', 'card')),
+    final_payment_type TEXT CHECK (final_payment_type IN ('benefit', 'cash', 'card')),
     -- A tailoring invoice finds its customer through orders → measurements, but
     -- a sale of only products or gift cards has no orders to go through. This
     -- names the buyer directly for those; it stays NULL on ordinary invoices.
     customer_id UUID REFERENCES customers(id),
     -- A gift card is tender rather than a discount, so total_price stays the
     -- gross amount charged and this sits alongside amount_paid instead of
-    -- reducing the total.
+    -- reducing the total. It is a third settlement channel next to the advance
+    -- and final payments above, so what the customer actually hands over to
+    -- clear the invoice is total_price - gift_card_redeemed.
     gift_card_redeemed NUMERIC(10, 2) NOT NULL DEFAULT 0
 );
 
@@ -97,7 +109,9 @@ CREATE TABLE orders (
     collar TEXT,
     sleeve TEXT,
     patti TEXT,
-    more_details TEXT
+    more_details TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'received')),
+    received_at TIMESTAMPTZ
 );
 
 -- A finished good sold as-is, as opposed to `materials`, which are raw fabric
