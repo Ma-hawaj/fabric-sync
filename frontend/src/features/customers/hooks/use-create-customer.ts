@@ -78,11 +78,11 @@ export function useCreateCustomer() {
 
   return useMutation({
     mutationFn: createCustomer,
-    onSuccess: (customer) => {
-      queryClient.setQueryData<Customer[]>(['customers'], (customers = []) => [
-        ...customers,
-        customer,
-      ])
+    onSuccess: () => {
+      // The cache holds one entry per page-and-filter combination now, and
+      // each holds an envelope rather than a bare array, so there is no
+      // single list to splice into. Prefix matching refreshes them all.
+      void queryClient.invalidateQueries({ queryKey: ['customers'] })
     },
   })
 }

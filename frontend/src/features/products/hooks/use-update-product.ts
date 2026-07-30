@@ -57,12 +57,11 @@ export function useUpdateProduct() {
 
   return useMutation({
     mutationFn: updateProduct,
-    onSuccess: (product) => {
-      queryClient.setQueryData<Product[]>(['products'], (products = []) =>
-        products
-          .map((existing) => (existing.id === product.id ? product : existing))
-          .sort((a, b) => a.name.localeCompare(b.name)),
-      )
+    onSuccess: () => {
+      // The cache holds one entry per page-and-filter combination now, and
+      // each holds an envelope rather than a bare array, so there is no
+      // single list to splice into. Prefix matching refreshes them all.
+      void queryClient.invalidateQueries({ queryKey: ['products'] })
     },
   })
 }

@@ -34,7 +34,7 @@ Migrations live in `backend/migrations` and run automatically at startup (`sqlx:
 cargo sqlx prepare
 ```
 
-`cargo sqlx prepare --check` runs in CI and fails if `backend/.sqlx` is stale — regenerate it any time a query changes, not just when tests fail.
+`cargo sqlx prepare --check` runs in CI and fails if `backend/.sqlx` is stale — regenerate it any time a query changes, not just when tests fail. The cache covers the writes and the by-code lookup; the list queries are built at runtime by `src/list/` and are deliberately absent from it.
 
 ### Frontend (`cd frontend`)
 
@@ -65,6 +65,12 @@ VITE_API_BASE_URL=http://localhost:3001 pnpm run dev
 - `app.rs` merges each feature's router (health, customers, materials, locations, invoices, orders) and applies `CorsLayer` (permissive `Any` origin/methods/headers — the frontend origin is never known at compile time and auth is bearer-token rather than cookie based) then `TraceLayer`, onto `AppState`.
 - `AppState` (`state.rs`) holds `Config`, the `PgPool`, and `TokenIntrospection`, and is the single piece of shared state injected into handlers via axum's `State` extractor.
 - **Auth**: `auth.rs` implements OAuth2/OIDC token introspection (`TokenIntrospection::discover` does OIDC discovery or uses `OAUTH_INTROSPECTION_URL` directly; `require_auth` is an axum middleware that validates the bearer token and inserts `AuthenticatedUser` as a request extension). **The `require_auth` middleware and its imports are commented out in `app.rs`**, while every handler in every domain feature still extracts `Extension<AuthenticatedUser>`. The consequence is worth knowing before you debug anything: with the middleware disabled the extension is never inserted, so **every domain route returns 500** — only `GET /health` responds. That is the current state of the app, not a bug you introduced. When wiring up protected routes, re-enable/extend the `route_layer(middleware::from_fn_with_state(...))` pattern there rather than inventing a new mechanism.
+- **List endpoints share one layer** (`backend/src/list/`): a feature declares a `ListSpec` — its `SELECT`, the public field names that may be filtered or sorted, and a tie-breaker order — and calls `list::fetch_page`. Don't write paging or filtering per endpoint. The builder wraps the feature's query as a CTE and applies `WHERE`/`ORDER BY`/`LIMIT` to its _output_ columns, which is why the `json_agg` + `GROUP BY` shapes and the invoice list's lateral aggregates need no rewriting; each base query yields one row per entity, so `LIMIT` counts entities, and `count(*) OVER ()` carries the filtered total. `list::fetch_by_id` reuses the same `ListSpec`, so a base query is written once.
+  - A column a table shows but the database doesn't store (an invoice's customer names, a material's stock total, a location's `uses`, an order's balance due) has to be **computed in the base query** to be filterable or sortable — the browser can no longer derive it, because it only holds one page.
+  - Rows decode via `#[derive(sqlx::FromRow)]` on the existing DTO, with `#[sqlx(json)]` on the aggregated JSON fields. Extra output columns that exist only to be filtered on are ignored by `FromRow`.
+  - The query-string contract mirrors the frontend's filter DSL exactly (`page`, `perPage`, `sort=[{id,desc}]`, `filters=[{id,value,variant,operator}]`, `joinOperator`); the enums in `list/params.rs` are the spec. **Omitting `perPage` returns every row** — that is what keeps the form pickers working — and an explicit `perPage` is clamped to `MAX_PER_PAGE`.
+  - Client strings never reach SQL as identifiers: a field name is looked up in the `ListSpec` and resolved to a fixed expression, operators map to fixed fragments, and values always become bind parameters. Keep it that way when adding an operator.
+  - These queries are **runtime-built**, so they are not in the `.sqlx` cache and get no compile-time checking. `list/sql.rs`'s tests assert the generated SQL text and bind order instead; add a case there when you add an operator.
 - **Errors**: all fallible backend code returns `Result<_, AppError>` (`error.rs`), a single enum with one `IntoResponse` impl. Variants: `Auth`, `Io`, `Sqlx`, `Migration` (all 500), `NotFound` (404), `Conflict` (409), `BadRequest` (400). Add new variants there rather than converting to strings/status codes ad hoc in handlers.
 - **Postgres error codes map to HTTP automatically** in `From<sqlx::Error>`: SQLSTATE `23505` (unique_violation) becomes a 409 `Conflict`, `23503` (foreign_key_violation) becomes a 400 `BadRequest`. Leaning on a database constraint therefore gives you the right status for free — `branch.name`'s `UNIQUE` is what makes a duplicate location name a 409 rather than a 500, with no handler code involved.
 - Config (`config.rs`) is read once from env vars at startup into a plain struct (`Config::from_env()`); there's no config file or hot-reload — add new settings as additional env-var-backed fields.
@@ -74,8 +80,10 @@ VITE_API_BASE_URL=http://localhost:3001 pnpm run dev
 - **Feature-module layout** mirrors the backend: `src/features/<name>/` contains `<name>.tsx` (list page), `components/`, `hooks/`, `types/`, and — where the feature needs them — `lib/` (zod schemas, pricing helpers) and `data/` (static option lists). Form pages sit at the feature root next to the list page (`customer-form.tsx`, `invoice-form.tsx`, `inventory-form.tsx`, `location-form.tsx`). Routes in `src/routes` are thin — they wire a route path to a feature page component.
 - **Data fetching is real, not mocked.** Every hook under `src/features/*/hooks/` fetches the backend through `apiBaseUrl`; there are no hardcoded arrays or artificial delays left anywhere. `src/lib/api.ts` is one line — `export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''` — and every hook imports it.
 - **TanStack Query setup**: a single `QueryClient` is created once in `main.tsx` and passed both to `QueryClientProvider` (for component-level `useQuery`/`useMutation`) and into the router's context (`router.tsx`/`main.tsx`'s `<App>`) so route `loader`s can also use it (e.g. `context.queryClient.ensureQueryData(...)`). There's no central query-key or query-options registry — each feature hook defines its own `queryKey`/`queryFn`/`staleTime` inline and is the unit other components import (e.g. `customers.tsx` calls `useCustomers()`); follow that per-feature-hook pattern for new data, and keep `staleTime` explicit (every existing hook uses 5 minutes) rather than relying on the default.
-- **Query keys are flat and sometimes shared across features**: `['customers']`, `['orders']`, `['invoices']`, `['locations']`, and `['materials']` — the last used by both `inventory/hooks/use-inventory.ts` and `invoices/hooks/use-materials.ts`, which keep separate `Material` types over the same endpoint. Keys are unparameterized on purpose; filtering happens client-side (see the locations section below), which also keeps `setQueryData`-based tests simple.
-- **Mutation hooks** live beside the query hooks and follow one of two cache strategies. Patch the cache with `setQueryData` when the endpoint returns the affected entity (`use-create-customer.ts`, `use-add-stock.ts`, `use-create-location.ts`, `use-update-location.ts`); invalidate when one write touches several lists (`use-create-invoice.ts` invalidates `['customers']`, `['invoices']`, and `['orders']`). Prefix a floating invalidate with `void` — eslint's `no-floating-promises` is on.
+- **Paging, filtering and sorting happen on the server**, through one shared layer per side — don't hand-roll either half for a new list. On the frontend that is `src/lib/list-params.ts` (URL keys, and the translation from table filter state into the API's filter DSL), `src/hooks/use-list-params.ts` (reads the URL, returns the request) and `src/hooks/use-list-query.ts` (issues it). A feature's list hook is a call to `useListQuery` with an endpoint and a key; see `features/invoices/hooks/use-invoices.ts`. The backend half is `backend/src/list/` — see the backend section.
+- **Query keys are `[name, serializedRequest]`**: `['invoices', 'page=1&perPage=10']`. The second segment is the serialized page/sort/filter state, so each combination caches separately, and prefix matching on `['invoices']` still invalidates them all. `''` is the unpaginated request — the key the `useAllX` hooks use.
+- **Two hooks per resource where forms need one.** The paginated hook takes `searchParams` and backs a table; the `useAllX` companion sends no `perPage`, which tells the API to return everything, and backs a form picker (`useAllCustomers`, `useAllLocations`, `useAllProducts`, `useAllInventory`, and invoices' `useMaterials`). Reach for the `All` variant only for a picker that genuinely needs every row. This is also what separates the two `Material` types that used to share one `['materials']` cache entry.
+- **Mutation hooks** live beside the query hooks and **invalidate**; they never `setQueryData`. There is no single list to patch any more — the cache holds one envelope per page-and-filter combination — so `invalidateQueries({ queryKey: ['customers'] })` is the only correct move. Prefix a floating invalidate with `void` — eslint's `no-floating-promises` is on.
 - **Auth is currently stubbed**: `src/lib/auth.tsx`'s `AuthProvider` hardcodes `isAuthenticated: true` — there is no real login flow or stored bearer token yet, despite the root README describing one. No request sends an `Authorization` header either, so the two sides have to be fixed together: re-enabling `require_auth` on the backend would turn today's 500s into 401s until a real login exists. `src/routes/_authenticated.tsx` guards routes via `beforeLoad` using this stubbed `context.auth`, with its redirect-to-`/login` path commented out in favor of redirecting to `/`. Don't assume a working login screen exists; check this file before building on top of auth state.
 - Protected pages live under `src/routes/_authenticated/`: customers, inventory, invoices, and locations (each an `index` + `new` pair; locations also has `$locationId/edit`), plus flat `orders.tsx` and `users.tsx`. `src/routes/index.tsx` and `dashboard.tsx` are outside that guard. Each route file sets `staticData: { title }`, which is the entire breadcrumb integration — `components/breadcrumbs.tsx` reads titles off matches generically, so there's no route-segment-to-label map to update.
 - **Names don't line up between the two sides**, which is the most common source of confusion:
@@ -93,6 +101,7 @@ VITE_API_BASE_URL=http://localhost:3001 pnpm run dev
   ```
 
   This writes into `src/components/ui/` using the aliases in `components.json` (`@/components`, `@/lib`, `@/hooks`, etc.) — run it from `frontend/` so paths resolve correctly, and expect it to match the existing hand-styled primitives already there rather than pulling in Radix/shadcn defaults wholesale.
+
 - Styling: Tailwind CSS 4 via the `@tailwindcss/vite` plugin (no separate Tailwind config file to edit — see `src/styles.css` for theme tokens). Toasts are `sonner`; theming is `components/theme-provider.tsx`.
 
 ## Forms and validation
@@ -118,9 +127,13 @@ There is no fetch wrapper — hooks call `fetch` directly against `apiBaseUrl`. 
 
 ## Data tables and URL state
 
-`src/hooks/use-data-table.ts` is the entry point (note: `src/hooks/`, not `src/components/data-table/`), and it syncs page, perPage, sort, and filters into the URL query string via **`nuqs`** — the adapter is wired in `routes/__root.tsx`. `src/components/data-table/` holds the presentational pieces (`DataTable`, toolbar, column header, pagination, filter controls); all five feature tables compose from there, so prefer that over bespoke table UI.
+`src/hooks/use-data-table.ts` is the entry point (note: `src/hooks/`, not `src/components/data-table/`), and it syncs page, perPage, sort, and filters into the URL query string via **`nuqs`** — the adapter is wired in `routes/__root.tsx`. `src/components/data-table/` holds the presentational pieces (`DataTable`, toolbar, column header, pagination, filter controls); all seven feature tables compose from there, so prefer that over bespoke table UI.
 
-Columns drive their own filter UI through `meta`: set `label`, `placeholder`, and `variant` (`'text' | 'multiSelect' | …`, plus `options` for the select variants) and the toolbar builds the control. One gotcha — a `multiSelect` filter's value arrives at `filterFn` as a `string[]` (nuqs parses it with `parseAsArrayOf`), so the filter function must handle arrays and return `true` when the array is empty. Supporting modules: `src/config/data-table.ts` (filter operator registry), `src/types/data-table.ts`, `src/lib/data-table.ts`, `src/lib/parsers.ts`.
+Its `manualPagination`/`manualSorting`/`manualFiltering` options all default to **`true`** — the server does the work — so a page passes `pageCount` and `rowCount` from the query and otherwise leaves them alone. A page reads its URL state with `useListParams` **before** fetching (the query has to be issued before there is data to build a table from), and both hooks read the same nuqs keys, defined once in `lib/list-params.ts`. Note the URL keeps one key per filterable column (`?name=ali&status=paid,unpaid`) while the _request_ carries the DSL; `toFilterDsl` is the single point of translation.
+
+Columns drive their own filter UI through `meta`: set `label`, `placeholder`, and `variant` (`'text' | 'multiSelect' | …`, plus `options` for the select variants) and the toolbar builds the control. The `variant` now does double duty — it also picks the operator sent to the API (`text` contains, `multiSelect` matches any of, `range`/`dateRange` compare between), so a column with no `variant` cannot be filtered at all. Columns carry **no `filterFn`**: nothing client-side filters any more.
+
+Two things that follow from the server doing the work: an option list must be _declared_, not derived from the rows on screen (those are one page — `invoices.tsx` and `orders.tsx` source theirs from their own queries), and an option's `value` is the token the API matches on while its `label` is what staff read (`location-columns.tsx`, `product-columns.tsx` and `gift-card-columns.tsx` all rely on that split). Supporting modules: `src/config/data-table.ts` (filter operator registry), `src/types/data-table.ts`, `src/lib/data-table.ts`, `src/lib/parsers.ts`.
 
 ## Database schema notes
 
@@ -130,14 +143,18 @@ Columns drive their own filter UI through `meta`: set `label`, `placeholder`, an
 
 Current backend routes, by feature module:
 
-| Module | Routes |
-| --- | --- |
-| `health` | `GET /health` |
-| `customers` | `GET /customers`, `POST /customers` |
-| `materials` | `GET /materials`, `POST /materials`, `POST /materials/:id/stock` |
-| `locations` | `GET /locations`, `POST /locations`, `PATCH /locations/:id` |
-| `invoices` | `GET /invoices`, `POST /invoices` |
-| `orders` | `GET /orders` |
+| Module       | Routes                                                                                          |
+| ------------ | ----------------------------------------------------------------------------------------------- |
+| `health`     | `GET /health`                                                                                   |
+| `customers`  | `GET /customers`, `POST /customers`                                                             |
+| `materials`  | `GET /materials`, `POST /materials`, `POST /materials/:id/stock`                                |
+| `locations`  | `GET /locations`, `POST /locations`, `PATCH /locations/:id`                                     |
+| `invoices`   | `GET /invoices`, `POST /invoices`, `POST /invoices/:id/receive`                                 |
+| `orders`     | `GET /orders`, `POST /orders/:id/receive`                                                       |
+| `products`   | `GET /products`, `POST /products`, `PATCH /products/:id`, `POST /products/:id/stock`            |
+| `gift_cards` | `GET /gift-cards`, `POST /gift-cards`, `PATCH /gift-cards/:id`, `GET /gift-cards/by-code/:code` |
+
+Every `GET` list route above is served by the shared list layer and returns `{data, page, perPage, total, pageCount}` — never a bare array.
 
 Path params use axum 0.7's `:id` syntax (0.8 switched to `{id}` — don't copy that from newer axum docs).
 
@@ -149,7 +166,7 @@ Path params use axum 0.7's `:id` syntax (0.8 switched to `{id}` — don't copy t
 
 A location is a `branch` row, and it carries two **independent** flags rather than one type column: `receives_orders` (customers collect finished orders there — a branch) and `holds_stock` (material stock lives there — a store). A location can be either or both; "neither" is rejected in `locations/service.rs` and in `location-schema.ts`. `is_active` retires a location without disturbing the `material_stock` rows and invoices that still reference it.
 
-`GET /locations` deliberately returns **every** location, inactive ones included, because the Locations page lists them behind a status filter. Consumers narrow the list client-side using the two helpers in `frontend/src/features/locations/lib/location-filters.ts` — `orderReceivingLocations` (the invoice form's receiving branch) and `stockLocations` (the inventory stock-entry picker). New pickers should call those rather than reading the flags inline; that file is the single place the rules live. One deliberate exception: the inventory column facet in `inventory.tsx` stays unfiltered, since it filters materials by where stock already sits and a since-deactivated location should remain selectable there.
+`GET /locations` deliberately returns **every** location, inactive ones included, because the Locations page lists them behind a status filter (and, like every list endpoint, it returns every row only when the caller omits `perPage`). Consumers narrow the list using the two helpers in `frontend/src/features/locations/lib/location-filters.ts` — `orderReceivingLocations` (the invoice form's receiving branch) and `stockLocations` (the inventory stock-entry picker). New pickers should call those rather than reading the flags inline; that file is the single place the rules live. One deliberate exception: the inventory column facet in `inventory.tsx` stays unfiltered, since it filters materials by where stock already sits and a since-deactivated location should remain selectable there.
 
 `PATCH /locations/:id` accepts any subset of the fields (`COALESCE` per column in the repository), so the list page's activate/deactivate action is one statement and doesn't need to round-trip the whole row.
 
@@ -157,7 +174,7 @@ A location is a `branch` row, and it carries two **independent** flags rather th
 
 **Backend** — inline `#[cfg(test)] mod tests` blocks for pure logic only: invoice totals (`invoices/service.rs`), measurement comparison (`customers/types.rs`), location validation (`locations/service.rs`). `serde_json` is the only dev-dependency, so there is no DB or HTTP integration harness; the testable seam for a new feature is a pure `fn` in `service.rs`. Tests build input DTOs with `serde_json::from_value(json!({...}))`.
 
-**Frontend** — vitest + jsdom + `@testing-library/react`, configured under `test:` in `vite.config.ts`. **There is no `@testing-library/jest-dom`**, so assertions are `.toBeTruthy()` / `.toBeNull()`, never `.toBeInTheDocument()`. Component tests seed the cache with `client.setQueryData(['key'], fixture)` rather than mocking `fetch`, and mock `@tanstack/react-router` where a component uses `useNavigate`/`Link`. Schema tests build fixtures from the production `createEmptyXForm()` factory and assert on both the message (case-insensitive regex) and the issue `path`.
+**Frontend** — vitest + jsdom + `@testing-library/react`, configured under `test:` in `vite.config.ts`. **There is no `@testing-library/jest-dom`**, so assertions are `.toBeTruthy()` / `.toBeNull()`, never `.toBeInTheDocument()`. Component tests seed the cache rather than mocking `fetch` — with `client.setQueryData(allRowsKey('materials'), listResponse(fixture))`, since list hooks cache an envelope under a `[name, request]` key; both helpers are in `src/lib/list-fixtures.ts`. They also and mock `@tanstack/react-router` where a component uses `useNavigate`/`Link`. Schema tests build fixtures from the production `createEmptyXForm()` factory and assert on both the message (case-insensitive regex) and the issue `path`.
 
 ## CI
 

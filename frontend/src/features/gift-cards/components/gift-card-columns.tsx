@@ -12,26 +12,6 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: CURRENCY,
 })
 
-function amountRangeFilter(cellValue: number, filterValue: unknown) {
-  if (!Array.isArray(filterValue)) return true
-  const [minVal, maxVal] = filterValue
-  const min = minVal != null ? Number(minVal) : undefined
-  const max = maxVal != null ? Number(maxVal) : undefined
-  if (min !== undefined && !isNaN(min) && cellValue < min) return false
-  if (max !== undefined && !isNaN(max) && cellValue > max) return false
-  return true
-}
-
-function matchesAnySelected(cellValue: string[], filterValue: unknown) {
-  if (
-    !filterValue ||
-    (Array.isArray(filterValue) && filterValue.length === 0)
-  ) {
-    return true
-  }
-  return (filterValue as string[]).some((value) => cellValue.includes(value))
-}
-
 export const getGiftCardColumns = (
   onToggleActive: (card: GiftCard) => void,
   isToggling: boolean,
@@ -47,11 +27,6 @@ export const getGiftCardColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) =>
-      row
-        .getValue<string>(columnId)
-        .toLowerCase()
-        .includes(String(filterValue).toLowerCase()),
     meta: {
       label: 'Code',
       placeholder: 'Filter code...',
@@ -83,8 +58,6 @@ export const getGiftCardColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) =>
-      amountRangeFilter(row.getValue<number>(columnId), filterValue),
     meta: {
       label: 'Balance',
       variant: 'range',
@@ -107,11 +80,6 @@ export const getGiftCardColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) =>
-      row
-        .getValue<string>(columnId)
-        .toLowerCase()
-        .includes(String(filterValue).toLowerCase()),
     meta: {
       label: 'Bought By',
       placeholder: 'Filter customer...',
@@ -151,17 +119,17 @@ export const getGiftCardColumns = (
     },
     enableSorting: false,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) =>
-      matchesAnySelected(row.getValue<string[]>(columnId), filterValue),
     meta: {
       label: 'Status',
       placeholder: 'Filter status...',
       variant: 'multiSelect',
+      // Values are the tokens the API's derived `status` column emits; the
+      // labels stay the words staff read.
       options: [
-        { label: 'Active', value: 'Active' },
-        { label: 'Spent', value: 'Spent' },
-        { label: 'Expired', value: 'Expired' },
-        { label: 'Voided', value: 'Voided' },
+        { label: 'Active', value: 'active' },
+        { label: 'Spent', value: 'spent' },
+        { label: 'Expired', value: 'expired' },
+        { label: 'Voided', value: 'voided' },
       ],
     },
   },

@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/combobox'
 import { NumberField, TextField } from '@/components/form/fields'
 import { ApiError } from '@/features/customers/hooks/use-create-customer'
-import { useCustomers } from '@/features/customers/hooks/use-customers'
+import { useAllCustomers } from '@/features/customers/hooks/use-customers'
 import { CURRENCY } from '@/lib/currency'
 import { useCreateGiftCard } from './hooks/use-create-gift-card'
 import { giftCardFormSchema } from './lib/gift-card-schema'
@@ -22,7 +22,7 @@ import type { Customer } from '@/features/customers/types/customers'
 
 export function GiftCardFormPage() {
   const navigate = useNavigate()
-  const { data: customers = [] } = useCustomers()
+  const { data: customers } = useAllCustomers()
   const createGiftCard = useCreateGiftCard()
 
   const form = useForm({

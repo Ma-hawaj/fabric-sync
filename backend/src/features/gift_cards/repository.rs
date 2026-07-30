@@ -20,7 +20,15 @@ const SPEC: ListSpec = ListSpec {
             c.name AS customer_name,
             g.expires_on,
             g.is_active,
-            CASE WHEN g.is_active THEN 'active' ELSE 'inactive' END AS status
+            -- Mirrors `giftCardStatus` in the frontend and `check_redeemable`
+            -- in this feature's service: a card can be unusable for three
+            -- separate reasons, and the list filters on the combined status.
+            CASE
+                WHEN NOT g.is_active THEN 'voided'
+                WHEN g.balance <= 0 THEN 'spent'
+                WHEN g.expires_on IS NOT NULL AND g.expires_on < CURRENT_DATE THEN 'expired'
+                ELSE 'active'
+            END AS status
         FROM gift_cards g
         LEFT JOIN customers c ON c.id = g.customer_id
     "#,

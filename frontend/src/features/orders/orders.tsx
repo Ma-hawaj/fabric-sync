@@ -4,29 +4,36 @@ import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getOrderColumns } from './components/order-columns'
 import { ReceiveOrderDialog } from './components/receive-order-dialog'
+import { useAllInventory } from '@/features/inventory/hooks/use-inventory'
+import { useListParams } from '@/hooks/use-list-params'
 import { useOrders } from './hooks/use-orders'
 import type { Order } from './types/orders'
 
 export function OrdersPage() {
-  const { data: orders = [], isLoading } = useOrders()
   const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(null)
 
-  // The material filter offers exactly the material names present in the
-  // fetched orders.
+  // The material filter offers every material, from its own query. Deriving the
+  // options from the orders on screen would, under server-side paging, offer
+  // only the ones the current page happens to mention.
+  const { data: materials } = useAllInventory()
   const columns = React.useMemo(() => {
-    const materials = [...new Set(orders.map((o) => o.material))].sort()
+    const names = [
+      ...new Set(materials.map((material) => material.name)),
+    ].sort()
     return getOrderColumns(
-      materials.map((m) => ({ label: m, value: m })),
+      names.map((name) => ({ label: name, value: name })),
       setSelectedOrder,
     )
-  }, [orders])
+  }, [materials])
+
+  const { searchParams } = useListParams({ columns })
+  const { data: orders, pageCount, total, isLoading } = useOrders(searchParams)
 
   const { table } = useDataTable({
     data: orders,
     columns,
-    manualFiltering: false,
-    manualSorting: false,
-    manualPagination: false,
+    pageCount,
+    rowCount: total,
   })
 
   return (
