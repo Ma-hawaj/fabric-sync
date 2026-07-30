@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            i.id,\n            i.invoice_number,\n            i.invoice_date,\n            i.created_at,\n            i.discount::float8 AS \"discount!\",\n            i.discount_unit,\n            i.payment_status,\n            i.total_price::float8 AS \"total_price!\",\n            i.amount_paid::float8 AS \"amount_paid!\",\n            i.advance_amount::float8 AS \"advance_amount!\",\n            i.advance_payment_type,\n            i.final_payment_type,\n            i.gift_card_redeemed::float8 AS \"gift_card_redeemed!\",\n            -- The `?` suffixes are for sqlx: it reads nullability off the\n            -- column definition, which says NOT NULL, and can't see that a\n            -- LEFT JOIN may not match.\n            b.name AS \"branch_name?\",\n            c.name AS \"buyer_name?\",\n            c.mobile_no AS \"buyer_mobile_no?\"\n        FROM invoices i\n        LEFT JOIN branch b ON b.id = i.branch_id\n        LEFT JOIN customers c ON c.id = i.customer_id\n        WHERE i.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "invoice_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "invoice_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "discount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "discount_unit",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "payment_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "total_price!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 8,
+        "name": "amount_paid!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 9,
+        "name": "advance_amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 10,
+        "name": "advance_payment_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "final_payment_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "gift_card_redeemed!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 13,
+        "name": "branch_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 14,
+        "name": "buyer_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "buyer_mobile_no?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      null,
+      null,
+      null,
+      true,
+      true,
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e96b7d9efa3cf8989a5b47e1ce73ecd4503fd46e02624b4b6605fb7787803cda"
+}

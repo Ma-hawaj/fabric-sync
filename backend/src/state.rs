@@ -1,5 +1,5 @@
 use crate::auth::TokenIntrospection;
-use crate::config::Config;
+use crate::config::{Config, InvoiceBranding};
 use sqlx::PgPool;
 
 #[derive(Clone, Debug)]
@@ -28,5 +28,9 @@ impl AppState {
 
     pub fn db(&self) -> &PgPool {
         &self.db
+    }
+
+    pub fn invoice_branding(&self) -> &InvoiceBranding {
+        &self.config.invoice_branding
     }
 }
