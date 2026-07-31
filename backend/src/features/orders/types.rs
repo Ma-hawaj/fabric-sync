@@ -7,7 +7,7 @@ pub use crate::features::invoices::types::PaymentType;
 // One row of GET /orders — an order line joined with its invoice, customer,
 // and material for the orders list page, plus the invoice's payment state so
 // the page can show balance due and settle it via receive_order below.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderListItem {
     pub id: Uuid,

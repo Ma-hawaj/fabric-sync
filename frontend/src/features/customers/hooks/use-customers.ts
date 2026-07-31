@@ -1,19 +1,28 @@
-import { useQuery } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
+import { useListQuery } from '@/hooks/use-list-query'
 import type { Customer } from '../types/customers'
 
-async function fetchCustomers(): Promise<Customer[]> {
-  const response = await fetch(`${apiBaseUrl}/customers`)
-  if (!response.ok) {
-    throw new Error(`Failed to load customers (${response.status})`)
-  }
-  return response.json()
+const ENDPOINT = '/customers'
+const QUERY_KEY = 'customers'
+const ALL = new URLSearchParams()
+
+export function useCustomers(searchParams: URLSearchParams) {
+  return useListQuery<Customer>({
+    endpoint: ENDPOINT,
+    queryKey: QUERY_KEY,
+    searchParams,
+  })
 }
 
-export function useCustomers() {
-  return useQuery({
-    queryKey: ['customers'],
-    queryFn: fetchCustomers,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+/**
+ * The whole list, unpaginated — the form pickers need every row to populate a
+ * combobox. An empty request omits `perPage`, which is what tells the API not to
+ * page. The key shares the `customers` prefix with the paginated hook, so one
+ * invalidation refreshes both.
+ */
+export function useAllCustomers() {
+  return useListQuery<Customer>({
+    endpoint: ENDPOINT,
+    queryKey: QUERY_KEY,
+    searchParams: ALL,
   })
 }

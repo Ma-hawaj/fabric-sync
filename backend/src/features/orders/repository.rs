@@ -1,16 +1,18 @@
 use uuid::Uuid;
 
-use crate::state::AppState;
+use crate::{
+    error::AppError,
+    list::{self, ColumnDef, ColumnKind, ListParams, ListSpec},
+    state::AppState,
+};
 
 use super::types::{OrderListItem, PaymentType};
 
-async fn fetch_orders(
-    state: &AppState,
-    order_id: Option<Uuid>,
-) -> Result<Vec<OrderListItem>, sqlx::Error> {
-    sqlx::query_as!(
-        OrderListItem,
-        r#"
+// `balance_due` and `payment_method` are shown as columns on the orders page and
+// so have to be sortable and filterable; they are derived here rather than in
+// the browser, which is the only place that can page over them.
+const SPEC: ListSpec = ListSpec {
+    base_sql: r#"
         SELECT
             o.id,
             o.invoice_id,
@@ -19,38 +21,73 @@ async fn fetch_orders(
             c.name AS customer_name,
             c.mobile_no AS customer_mobile,
             mat.name AS material,
-            o.material_amount::float8 AS "material_amount!",
-            o.price::float8 AS "price!",
+            o.material_amount::float8 AS material_amount,
+            o.price::float8 AS price,
             o.status,
-            i.total_price::float8 AS "invoice_total_price!",
-            i.amount_paid::float8 AS "invoice_amount_paid!",
+            i.total_price::float8 AS invoice_total_price,
+            i.amount_paid::float8 AS invoice_amount_paid,
             i.payment_status AS invoice_payment_status,
-            i.advance_amount::float8 AS "invoice_advance_amount!",
+            i.advance_amount::float8 AS invoice_advance_amount,
             i.advance_payment_type AS invoice_advance_payment_type,
-            i.final_payment_type AS invoice_final_payment_type
+            i.final_payment_type AS invoice_final_payment_type,
+            GREATEST(i.total_price - i.amount_paid, 0)::float8 AS balance_due,
+            COALESCE(i.final_payment_type, i.advance_payment_type) AS payment_method
         FROM orders o
         JOIN invoices i ON i.id = o.invoice_id
         JOIN measurements m ON m.id = o.measurement_id
         JOIN customers c ON c.id = m.customer_id
         JOIN materials mat ON mat.id = o.material_id
-        WHERE $1::uuid IS NULL OR o.id = $1
-        ORDER BY o.id DESC
-        "#,
-        order_id,
-    )
-    .fetch_all(state.db())
-    .await
-}
+    "#,
+    columns: &[
+        ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        ("invoiceId", ColumnDef::new("invoice_id", ColumnKind::Uuid)),
+        (
+            "invoiceDate",
+            ColumnDef::new("invoice_date", ColumnKind::Date),
+        ),
+        (
+            "customerName",
+            ColumnDef::new("customer_name", ColumnKind::Text),
+        ),
+        (
+            "customerMobile",
+            ColumnDef::new("customer_mobile", ColumnKind::Text),
+        ),
+        ("material", ColumnDef::new("material", ColumnKind::Text)),
+        (
+            "materialAmount",
+            ColumnDef::new("material_amount", ColumnKind::Number),
+        ),
+        ("price", ColumnDef::new("price", ColumnKind::Number)),
+        ("status", ColumnDef::new("status", ColumnKind::Text)),
+        (
+            "invoicePaymentStatus",
+            ColumnDef::new("invoice_payment_status", ColumnKind::Text),
+        ),
+        (
+            "balanceDue",
+            ColumnDef::new("balance_due", ColumnKind::Number),
+        ),
+        (
+            "paymentMethod",
+            ColumnDef::new("payment_method", ColumnKind::Text),
+        ),
+    ],
+    default_order: "id DESC",
+};
 
-pub async fn list_orders(state: &AppState) -> Result<Vec<OrderListItem>, sqlx::Error> {
-    fetch_orders(state, None).await
+pub async fn list_orders(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<OrderListItem>, AppError> {
+    list::fetch_page(state.db(), &SPEC, params).await
 }
 
 pub async fn get_order(
     state: &AppState,
     order_id: Uuid,
-) -> Result<Option<OrderListItem>, sqlx::Error> {
-    Ok(fetch_orders(state, Some(order_id)).await?.pop())
+) -> Result<Option<OrderListItem>, AppError> {
+    list::fetch_by_id(state.db(), &SPEC, order_id).await
 }
 
 /// Marks the order received and returns its `invoice_id`, or `None` if the

@@ -16,15 +16,6 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 
 // Both the "Locations" and "Status" columns filter an array-valued cell
 // against the multiSelect toolbar filter, which hands over a string[].
-function matchesAnySelected(cellValue: string[], filterValue: unknown) {
-  if (
-    !filterValue ||
-    (Array.isArray(filterValue) && filterValue.length === 0)
-  ) {
-    return true
-  }
-  return (filterValue as string[]).some((value) => cellValue.includes(value))
-}
 
 export const getProductColumns = (
   onToggleActive: (product: Product) => void,
@@ -41,10 +32,6 @@ export const getProductColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) => {
-      const cellValue = row.getValue<string>(columnId)
-      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
-    },
     meta: {
       label: 'Name',
       placeholder: 'Filter name...',
@@ -63,10 +50,6 @@ export const getProductColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) => {
-      const cellValue = row.getValue<string | null>(columnId) ?? ''
-      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
-    },
     meta: {
       label: 'SKU',
       placeholder: 'Filter SKU...',
@@ -85,16 +68,6 @@ export const getProductColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) => {
-      const cellValue = row.getValue<number>(columnId)
-      if (!Array.isArray(filterValue)) return true
-      const [minVal, maxVal] = filterValue
-      const min = minVal != null ? Number(minVal) : undefined
-      const max = maxVal != null ? Number(maxVal) : undefined
-      if (min !== undefined && !isNaN(min) && cellValue < min) return false
-      if (max !== undefined && !isNaN(max) && cellValue > max) return false
-      return true
-    },
     meta: {
       label: 'Price',
       variant: 'range',
@@ -119,8 +92,6 @@ export const getProductColumns = (
     ),
     enableSorting: false,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) =>
-      matchesAnySelected(row.getValue<string[]>(columnId), filterValue),
     meta: {
       label: 'Locations',
       placeholder: 'Filter locations...',
@@ -159,15 +130,13 @@ export const getProductColumns = (
       ),
     enableSorting: false,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) =>
-      matchesAnySelected(row.getValue<string[]>(columnId), filterValue),
     meta: {
       label: 'Status',
       placeholder: 'Filter status...',
       variant: 'multiSelect',
       options: [
-        { label: 'Active', value: 'Active' },
-        { label: 'Inactive', value: 'Inactive' },
+        { label: 'Active', value: 'active' },
+        { label: 'Inactive', value: 'inactive' },
       ],
     },
   },

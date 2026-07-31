@@ -23,7 +23,7 @@ import {
   Calendar,
   Receipt,
 } from 'lucide-react'
-import { useOrders } from '@/features/orders/hooks/use-orders'
+import { useCustomerOrders } from '@/features/orders/hooks/use-orders'
 import { ThobDiagram } from './thob-diagram'
 import { MEASUREMENT_GROUPS, fieldsInGroup } from '../data/measurement-fields'
 import type { Customer } from '../types/customers'
@@ -46,11 +46,7 @@ export function CustomerDetailsSheet({
     setActiveMeasurementId(customer?.measurements[0]?.id ?? null)
   }, [customer])
 
-  const { data: orders = [] } = useOrders()
-  const customerOrders = React.useMemo(
-    () => orders.filter((order) => order.customerMobile === customer?.mobileNo),
-    [orders, customer],
-  )
+  const { data: customerOrders } = useCustomerOrders(customer?.mobileNo)
 
   const activeMeasurement = React.useMemo(() => {
     if (!customer || customer.measurements.length === 0) return null

@@ -14,13 +14,13 @@ import {
   ComboboxList,
 } from '@/components/ui/combobox'
 import { ApiError } from '@/features/customers/hooks/use-create-customer'
-import { useCustomers } from '@/features/customers/hooks/use-customers'
-import { useLocations } from '@/features/locations/hooks/use-locations'
+import { useAllCustomers } from '@/features/customers/hooks/use-customers'
+import { useAllLocations } from '@/features/locations/hooks/use-locations'
 import {
   orderReceivingLocations,
   stockLocations,
 } from '@/features/locations/lib/location-filters'
-import { useProducts } from '@/features/products/hooks/use-products'
+import { useAllProducts } from '@/features/products/hooks/use-products'
 import { CURRENCY } from '@/lib/currency'
 import { CustomerBlock } from './components/invoice-form/customer-block'
 import { GiftCardBlock } from './components/invoice-form/gift-card-block'
@@ -42,12 +42,12 @@ import type { Location } from '@/features/locations/types/location'
 
 export function InvoiceFormPage() {
   const navigate = useNavigate()
-  const { data: existingCustomers = [] } = useCustomers()
-  const { data: materials = [] } = useMaterials()
+  const { data: existingCustomers } = useAllCustomers()
+  const { data: materials } = useMaterials()
   // "Receiving Branch" is where the customer collects the finished order, so
   // it lists only locations flagged as receiving orders — a store that just
   // holds material stock is not a collection point.
-  const { data: allLocations = [] } = useLocations()
+  const { data: allLocations } = useAllLocations()
   const branches = React.useMemo(
     () => orderReceivingLocations(allLocations),
     [allLocations],
@@ -58,7 +58,7 @@ export function InvoiceFormPage() {
     () => stockLocations(allLocations),
     [allLocations],
   )
-  const { data: allProducts = [] } = useProducts()
+  const { data: allProducts } = useAllProducts()
   const products = React.useMemo(
     () => allProducts.filter((product) => product.isActive),
     [allProducts],

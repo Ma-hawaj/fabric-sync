@@ -1,14 +1,21 @@
 use uuid::Uuid;
 
-use crate::{error::AppError, state::AppState};
+use crate::{
+    error::AppError,
+    list::{self, ListParams},
+    state::AppState,
+};
 
 use super::{
     repository,
     types::{OrderListItem, PaymentType},
 };
 
-pub async fn list_orders(state: &AppState) -> Result<Vec<OrderListItem>, AppError> {
-    Ok(repository::list_orders(state).await?)
+pub async fn list_orders(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<OrderListItem>, AppError> {
+    repository::list_orders(state, params).await
 }
 
 /// Marks an order received and, once every order on its invoice has been

@@ -36,9 +36,15 @@ export function DataTablePagination<TData>({
       )}
       {...props}
     >
+      {/*
+        The row total is the server's count of everything matching the current
+        filters, via `rowCount`. `getFilteredRowModel()` would only ever count
+        the page in hand, so it would report "1 of 10" on a table of hundreds.
+        Selection is still page-scoped, which is what the left-hand number says.
+      */}
       <div className="flex-1 whitespace-nowrap text-muted-foreground text-sm">
         {table.getFilteredSelectedRowModel().rows.length} of{' '}
-        {table.getFilteredRowModel().rows.length} row(s) selected.
+        {table.getRowCount()} row(s) selected.
       </div>
       <div className="flex flex-col-reverse items-center gap-4 sm:flex-row sm:gap-6 lg:gap-8">
         <div className="flex items-center space-x-2 rtl:space-x-reverse">

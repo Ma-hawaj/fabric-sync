@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { listResponse } from '@/lib/list-fixtures'
 import { CustomerDetailsSheet } from './customer-details-sheet'
 import type { Customer } from '../types/customers'
 
@@ -22,7 +23,7 @@ const CUSTOMER: Customer = {
 
 function renderSheet(customer: Customer | null) {
   const client = new QueryClient()
-  client.setQueryData(['orders'], [])
+  client.setQueryData(['orders', ''], listResponse([]))
   return render(
     <QueryClientProvider client={client}>
       <CustomerDetailsSheet customer={customer} onOpenChange={() => {}} />
