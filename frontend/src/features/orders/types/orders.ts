@@ -21,6 +21,12 @@ export interface OrderStageEntry {
    */
   applicable: boolean
   status: OrderStageStatus
+  /**
+   * Derived, not stored: the moment the previous stage finished (or the pass
+   * began, for the first stage). Set once a stage is recorded, or for the one
+   * currently outstanding; null for anything further down the queue.
+   */
+  startedAt: string | null
   completedAt: string | null
   locationId: string | null
   location: string | null
@@ -60,9 +66,15 @@ export interface Order {
   materialAmount: number
   price: number
   status: OrderStatus
-  /** Where the garment is made; null until production is assigned. */
+  /**
+   * Where the garment is made. An explicit assignment always wins; absent
+   * one, a material stocked at exactly one location is inferred — see
+   * productionLocationInferred. Null when neither is available.
+   */
   productionLocationId: string | null
   productionLocation: string | null
+  /** True when productionLocation was inferred rather than assigned by staff. */
+  productionLocationInferred: boolean
   /** Where the customer collects, taken from the invoice's branch. */
   receivingLocationId: string | null
   receivingLocation: string | null

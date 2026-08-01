@@ -53,6 +53,28 @@ export function stageStatusLabel(entry: OrderStageEntry): string {
   return 'Pending'
 }
 
+const stageDateTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+})
+
+/**
+ * "Jul 20, 10:03 AM → Jul 20, 2:15 PM" once a stage is done or skipped;
+ * "Waiting since Jul 22, 9:00 AM" for the stage currently outstanding; null
+ * for anything not yet reached. Start times are derived, not stored — a stage
+ * starts the moment the previous one finished.
+ */
+export function stageTimingLabel(entry: OrderStageEntry): string | null {
+  if (!entry.startedAt) return null
+
+  const started = stageDateTimeFormatter.format(new Date(entry.startedAt))
+  if (entry.completedAt) {
+    const finished = stageDateTimeFormatter.format(new Date(entry.completedAt))
+    return `${started} → ${finished}`
+  }
+  return `Waiting since ${started}`
+}
+
 const REPAIR_STATUS_LABELS: Record<RepairStatus, string> = {
   open: 'Open',
   in_progress: 'In progress',

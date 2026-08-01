@@ -20,6 +20,7 @@ async fn fetch_orders(
             c.name AS customer_name,
             c.mobile_no AS customer_mobile,
             mat.name AS material,
+            o.material_id,
             o.material_amount::float8 AS "material_amount!",
             o.price::float8 AS "price!",
             o.status,
@@ -58,6 +59,41 @@ pub async fn list_orders(state: &AppState) -> Result<Vec<OrderRow>, sqlx::Error>
 
 pub async fn get_order(state: &AppState, order_id: Uuid) -> Result<Option<OrderRow>, sqlx::Error> {
     Ok(fetch_orders(state, Some(order_id)).await?.pop())
+}
+
+/// Materials stocked at exactly one location that's actually usable (active,
+/// holds stock, and has some quantity on hand) — the set a production location
+/// can be safely inferred for. A material split across several qualifying
+/// locations, or with none, is simply absent from the result; the caller falls
+/// back to leaving it for staff to assign.
+pub async fn single_stock_locations(
+    state: &AppState,
+    material_ids: &[Uuid],
+) -> Result<Vec<(Uuid, Uuid, String)>, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT
+            ms.material_id AS "material_id!",
+            (array_agg(ms.branch_id))[1] AS "branch_id!",
+            (array_agg(b.name))[1] AS "branch_name!"
+        FROM material_stock ms
+        JOIN branch b ON b.id = ms.branch_id
+        WHERE ms.material_id = ANY($1)
+          AND ms.quantity > 0
+          AND b.is_active
+          AND b.holds_stock
+        GROUP BY ms.material_id
+        HAVING COUNT(DISTINCT ms.branch_id) = 1
+        "#,
+        material_ids,
+    )
+    .fetch_all(state.db())
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.material_id, row.branch_id, row.branch_name))
+        .collect())
 }
 
 /// The whole stage catalog, retired stages included — a stage completed before

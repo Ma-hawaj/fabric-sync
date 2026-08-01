@@ -1,4 +1,6 @@
-use chrono::{DateTime, Utc};
+use std::collections::HashMap;
+
+use chrono::{DateTime, NaiveDate, Utc};
 use uuid::Uuid;
 
 use crate::{error::AppError, state::AppState};
@@ -29,6 +31,69 @@ fn stage_applies(
         (Some(production), Some(receiving)) => production != receiving,
         _ => false,
     }
+}
+
+// An explicit assignment (via PATCH /orders/:id) always wins. Absent one, a
+// material stocked at exactly one usable location is inferred, so staff don't
+// have to assign the obvious answer by hand — but a material split across
+// several locations is left alone rather than guessed at, since there's
+// nothing here to disambiguate it with.
+fn effective_production(
+    assigned_id: Option<Uuid>,
+    assigned_name: Option<&str>,
+    material_id: Uuid,
+    single_location_materials: &HashMap<Uuid, (Uuid, String)>,
+) -> (Option<Uuid>, Option<String>, bool) {
+    if let Some(id) = assigned_id {
+        return (Some(id), assigned_name.map(str::to_string), false);
+    }
+
+    match single_location_materials.get(&material_id) {
+        Some((id, name)) => (Some(*id), Some(name.clone()), true),
+        None => (None, None, false),
+    }
+}
+
+// Midnight UTC on the given date, used as the starting point for a pass's
+// first stage when there is no earlier stage to chain from. Coarser than a
+// real timestamp — the schema has no created_at to draw on — but it's the
+// closest thing already in the data (invoice_date for the build, reported_on
+// for a repair).
+fn date_start(date: NaiveDate) -> DateTime<Utc> {
+    date.and_hms_opt(0, 0, 0)
+        .expect("midnight is always a valid time")
+        .and_utc()
+}
+
+// Chains each stage's start to the previous stage's finish, so the checklist
+// reads as a timeline without a separate "start" action or column. A stage
+// that doesn't apply is transparent to the chain — it never got acted on and
+// never will, so it neither takes a start time nor blocks the next one from
+// getting one. The chain stops at the first applicable stage still pending:
+// that one gets a start (queued since); nothing further down the list does,
+// since work hasn't reached it yet.
+fn with_start_times(
+    mut stages: Vec<OrderStageEntry>,
+    pass_started_at: DateTime<Utc>,
+) -> Vec<OrderStageEntry> {
+    let mut previous_finish = pass_started_at;
+    let mut reached_current = false;
+
+    for stage in &mut stages {
+        if !stage.applicable || reached_current {
+            stage.started_at = None;
+            continue;
+        }
+
+        stage.started_at = Some(previous_finish);
+
+        match stage.completed_at {
+            Some(completed_at) => previous_finish = completed_at,
+            None => reached_current = true,
+        }
+    }
+
+    stages
 }
 
 // Overlays the recorded actions onto the live catalog for one pass — the
@@ -66,6 +131,9 @@ fn assemble_stages(
                 status: recorded
                     .map(|row| row.status.clone())
                     .unwrap_or_else(|| StageStatus::Pending.as_str().to_string()),
+                // Filled in by `with_start_times` once the full pass is
+                // assembled; assemble_stages only knows this one stage.
+                started_at: None,
                 completed_at: recorded.map(|row| row.completed_at),
                 location_id: recorded.and_then(|row| row.location_id),
                 location: recorded.and_then(|row| row.location.clone()),
@@ -136,18 +204,30 @@ fn assemble_order(
     catalog: &[StageRow],
     progress: &[ProgressRow],
     repairs: &[RepairRow],
+    single_location_materials: &HashMap<Uuid, (Uuid, String)>,
 ) -> OrderListItem {
+    let (production_location_id, production_location, production_location_inferred) =
+        effective_production(
+            row.production_location_id,
+            row.production_location.as_deref(),
+            row.material_id,
+            single_location_materials,
+        );
+
     let build_progress: Vec<ProgressRow> = progress
         .iter()
         .filter(|entry| entry.order_id == row.id && entry.repair_id.is_none())
         .cloned()
         .collect();
 
-    let stages = assemble_stages(
-        catalog,
-        &build_progress,
-        row.production_location_id,
-        row.receiving_location_id,
+    let stages = with_start_times(
+        assemble_stages(
+            catalog,
+            &build_progress,
+            production_location_id,
+            row.receiving_location_id,
+        ),
+        date_start(row.invoice_date),
     );
     let current_stage = current_stage_name(&stages);
 
@@ -161,11 +241,14 @@ fn assemble_order(
                 .cloned()
                 .collect();
 
-            let stages = assemble_stages(
-                catalog,
-                &repair_progress,
-                row.production_location_id,
-                row.receiving_location_id,
+            let stages = with_start_times(
+                assemble_stages(
+                    catalog,
+                    &repair_progress,
+                    production_location_id,
+                    row.receiving_location_id,
+                ),
+                date_start(repair.reported_on),
             );
 
             OrderRepair {
@@ -193,8 +276,9 @@ fn assemble_order(
         material_amount: row.material_amount,
         price: row.price,
         status: row.status,
-        production_location_id: row.production_location_id,
-        production_location: row.production_location,
+        production_location_id,
+        production_location,
+        production_location_inferred,
         receiving_location_id: row.receiving_location_id,
         receiving_location: row.receiving_location,
         stages,
@@ -209,8 +293,19 @@ fn assemble_order(
     }
 }
 
-// The checklist is derived rather than stored, so it takes three small reads
-// alongside the order query. Assembling in Rust keeps that logic in pure
+async fn single_location_map(
+    state: &AppState,
+    material_ids: &[Uuid],
+) -> Result<HashMap<Uuid, (Uuid, String)>, AppError> {
+    Ok(repository::single_stock_locations(state, material_ids)
+        .await?
+        .into_iter()
+        .map(|(material_id, branch_id, branch_name)| (material_id, (branch_id, branch_name)))
+        .collect())
+}
+
+// The checklist is derived rather than stored, so it takes a handful of small
+// reads alongside the order query. Assembling in Rust keeps that logic in pure
 // functions the tests below can reach, rather than a lateral join nothing can
 // exercise without a database.
 async fn assemble(state: &AppState, rows: Vec<OrderRow>) -> Result<Vec<OrderListItem>, AppError> {
@@ -219,13 +314,23 @@ async fn assemble(state: &AppState, rows: Vec<OrderRow>) -> Result<Vec<OrderList
     }
 
     let order_ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
+    let material_ids: Vec<Uuid> = rows.iter().map(|row| row.material_id).collect();
     let catalog = repository::list_stage_catalog(state).await?;
     let progress = repository::list_progress(state, &order_ids).await?;
     let repairs = repository::list_repairs(state, &order_ids).await?;
+    let single_location_materials = single_location_map(state, &material_ids).await?;
 
     Ok(rows
         .into_iter()
-        .map(|row| assemble_order(row, &catalog, &progress, &repairs))
+        .map(|row| {
+            assemble_order(
+                row,
+                &catalog,
+                &progress,
+                &repairs,
+                &single_location_materials,
+            )
+        })
         .collect())
 }
 
@@ -311,11 +416,20 @@ pub async fn set_stage(
         }
     }
 
+    let single_location_materials =
+        single_location_map(state, std::slice::from_ref(&order.material_id)).await?;
+    let (effective_production_id, _, _) = effective_production(
+        order.production_location_id,
+        order.production_location.as_deref(),
+        order.material_id,
+        &single_location_materials,
+    );
+
     validate_delivery_location(
         stage.requires_delivery,
         stage_applies(
             stage.requires_delivery,
-            order.production_location_id,
+            effective_production_id,
             order.receiving_location_id,
         ),
         input.status,
@@ -453,6 +567,10 @@ mod tests {
 
     fn branch() -> Uuid {
         Uuid::from_u128(901)
+    }
+
+    fn cotton() -> Uuid {
+        Uuid::from_u128(902)
     }
 
     #[test]
@@ -623,5 +741,120 @@ mod tests {
         assert!(validate_delivery_location(true, true, StageStatus::Skipped, None).is_ok());
         assert!(validate_delivery_location(true, false, StageStatus::Done, None).is_ok());
         assert!(validate_delivery_location(false, true, StageStatus::Done, None).is_ok());
+    }
+
+    #[test]
+    fn an_explicit_assignment_always_wins_over_inference() {
+        let mut single_location = HashMap::new();
+        single_location.insert(cotton(), (workshop(), "Central Workshop".to_string()));
+
+        let (id, name, inferred) = effective_production(
+            Some(branch()),
+            Some("Riyadh Main Branch"),
+            cotton(),
+            &single_location,
+        );
+
+        assert_eq!(id, Some(branch()));
+        assert_eq!(name.as_deref(), Some("Riyadh Main Branch"));
+        assert!(!inferred);
+    }
+
+    #[test]
+    fn a_material_stocked_at_exactly_one_location_is_inferred() {
+        let mut single_location = HashMap::new();
+        single_location.insert(cotton(), (workshop(), "Central Workshop".to_string()));
+
+        let (id, name, inferred) = effective_production(None, None, cotton(), &single_location);
+
+        assert_eq!(id, Some(workshop()));
+        assert_eq!(name.as_deref(), Some("Central Workshop"));
+        assert!(inferred);
+    }
+
+    #[test]
+    fn a_material_split_across_locations_is_left_for_staff_to_assign() {
+        // A material stocked at more than one location never enters the map in
+        // the first place (repository::single_stock_locations filters it out),
+        // so an absent entry is exactly what an ambiguous material looks like.
+        let single_location = HashMap::new();
+
+        let (id, name, inferred) = effective_production(None, None, cotton(), &single_location);
+
+        assert_eq!(id, None);
+        assert_eq!(name, None);
+        assert!(!inferred);
+    }
+
+    #[test]
+    fn only_the_current_stage_gets_a_start_time_when_nothing_is_recorded() {
+        let base = Utc::now();
+
+        let stages = with_start_times(
+            assemble_stages(&catalog(), &[], Some(workshop()), Some(branch())),
+            base,
+        );
+
+        assert_eq!(stages[0].started_at, Some(base)); // Cutting: the current stage
+        assert_eq!(stages[1].started_at, None);
+        assert_eq!(stages[2].started_at, None);
+        assert_eq!(stages[3].started_at, None);
+    }
+
+    #[test]
+    fn each_recorded_stage_starts_when_the_previous_one_finished() {
+        let base = Utc::now();
+        let cutting_done = base + chrono::Duration::hours(2);
+        let sewing_done = cutting_done + chrono::Duration::hours(3);
+
+        let mut cutting = progress(1, "done");
+        cutting.completed_at = cutting_done;
+        let mut sewing = progress(2, "done");
+        sewing.completed_at = sewing_done;
+
+        let stages = with_start_times(
+            assemble_stages(
+                &catalog(),
+                &[cutting, sewing],
+                Some(workshop()),
+                Some(branch()),
+            ),
+            base,
+        );
+
+        assert_eq!(stages[0].started_at, Some(base));
+        assert_eq!(stages[0].completed_at, Some(cutting_done));
+        assert_eq!(stages[1].started_at, Some(cutting_done));
+        assert_eq!(stages[1].completed_at, Some(sewing_done));
+        // Finishing is the current stage: it started when Sewing finished, and
+        // nothing further down the list has a start time yet.
+        assert_eq!(stages[2].started_at, Some(sewing_done));
+        assert_eq!(stages[3].started_at, None);
+    }
+
+    #[test]
+    fn a_stage_that_does_not_apply_never_gets_a_start_time_and_is_invisible_to_the_chain() {
+        let base = Utc::now();
+        let progress_rows = [
+            progress(1, "done"),
+            progress(2, "done"),
+            progress(3, "done"),
+        ];
+
+        // Produced and collected at the same branch, so Location delivery
+        // never applies — it sits last in sort order but must not swallow a
+        // start time meant for nothing, nor stop Finishing's from chaining.
+        let stages = with_start_times(
+            assemble_stages(
+                &catalog(),
+                &progress_rows,
+                Some(workshop()),
+                Some(workshop()),
+            ),
+            base,
+        );
+
+        assert!(stages[2].started_at.is_some());
+        assert_eq!(stages[3].started_at, None);
     }
 }

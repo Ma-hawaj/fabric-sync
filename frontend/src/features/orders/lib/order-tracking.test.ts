@@ -7,6 +7,7 @@ import {
   repairStatusLabel,
   stageFilterOptions,
   stageStatusLabel,
+  stageTimingLabel,
 } from './order-tracking'
 import type {
   Order,
@@ -28,6 +29,7 @@ function stage(
     requiresDelivery: false,
     applicable: true,
     status,
+    startedAt: null,
     completedAt: null,
     locationId: null,
     location: null,
@@ -50,6 +52,7 @@ function order(overrides: Partial<Order>): Order {
     status: 'pending',
     productionLocationId: 'workshop',
     productionLocation: 'Central Workshop',
+    productionLocationInferred: false,
     receivingLocationId: 'branch',
     receivingLocation: 'Riyadh Main Branch',
     stages: [],
@@ -165,6 +168,30 @@ describe('stageStatusLabel', () => {
     expect(stageStatusLabel(stage('Cutting', 1, 'done'))).toBe('Done')
     expect(stageStatusLabel(stage('Cutting', 1, 'skipped'))).toBe('Skipped')
     expect(stageStatusLabel(stage('Cutting', 1, 'pending'))).toBe('Pending')
+  })
+})
+
+describe('stageTimingLabel', () => {
+  it('is null for a stage nothing has reached yet', () => {
+    expect(stageTimingLabel(stage('Finishing', 3, 'pending'))).toBeNull()
+  })
+
+  it('shows a waiting-since time for the current stage', () => {
+    const label = stageTimingLabel(
+      stage('Sewing', 2, 'pending', { startedAt: '2026-07-20T10:00:00Z' }),
+    )
+    expect(label).toMatch(/^Waiting since/)
+  })
+
+  it('shows a start-to-finish range for a recorded stage', () => {
+    const label = stageTimingLabel(
+      stage('Cutting', 1, 'done', {
+        startedAt: '2026-07-20T10:00:00Z',
+        completedAt: '2026-07-20T12:30:00Z',
+      }),
+    )
+    expect(label).toMatch(/→/)
+    expect(label).not.toMatch(/waiting/i)
   })
 })
 

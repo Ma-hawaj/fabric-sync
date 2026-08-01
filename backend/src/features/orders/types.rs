@@ -94,6 +94,7 @@ pub struct OrderRow {
     pub customer_name: String,
     pub customer_mobile: String,
     pub material: String,
+    pub material_id: Uuid,
     pub material_amount: f64,
     pub price: f64,
     pub status: String,
@@ -124,6 +125,11 @@ pub struct OrderStageEntry {
     pub applicable: bool,
     /// `"pending"`, `"done"`, or `"skipped"`.
     pub status: String,
+    /// Derived, not stored: the moment the previous stage finished (or the
+    /// pass began, for the first stage). Only set for a stage that has been
+    /// recorded, or the one currently outstanding — a stage further down the
+    /// queue has nothing to chain from yet.
+    pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
     pub location_id: Option<Uuid>,
     pub location: Option<String>,
@@ -163,9 +169,16 @@ pub struct OrderListItem {
     pub price: f64,
     pub status: String,
     /// Where the garment is made. Only when this differs from the receiving
-    /// location does a delivery stage apply.
+    /// location does a delivery stage apply. An explicit assignment (via PATCH)
+    /// always wins; absent one, a material stocked at exactly one location is
+    /// inferred — see `production_location_inferred`.
     pub production_location_id: Option<Uuid>,
     pub production_location: Option<String>,
+    /// True when `production_location_id` was inferred from `material_stock`
+    /// rather than assigned by staff. Never true alongside a stored
+    /// `orders.production_branch_id` — an explicit assignment always displaces
+    /// the inference.
+    pub production_location_inferred: bool,
     /// Where the customer collects, taken from the invoice's branch.
     pub receiving_location_id: Option<Uuid>,
     pub receiving_location: Option<String>,

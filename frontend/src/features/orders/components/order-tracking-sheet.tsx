@@ -28,6 +28,7 @@ import {
   repairStatusLabel,
   stageBadgeVariant,
   stageStatusLabel,
+  stageTimingLabel,
 } from '../lib/order-tracking'
 import { useSetOrderStage } from '../hooks/use-set-order-stage'
 import { useUpdateOrder } from '../hooks/use-update-order'
@@ -136,6 +137,12 @@ function ProductionLocationPicker({ order }: { order: Order }) {
         Collected from {order.receivingLocation ?? 'an unassigned branch'}. A
         delivery stage only applies while these two differ.
       </p>
+      {order.productionLocationInferred && (
+        <p className="text-xs text-muted-foreground">
+          Inferred from where {order.material} is stocked — pick a location to
+          confirm it explicitly.
+        </p>
+      )}
     </section>
   )
 }
@@ -243,6 +250,11 @@ function StageRow({
           {!stage.applicable && (
             <p className="mt-1 text-xs text-muted-foreground">
               Not needed — produced at the collection branch.
+            </p>
+          )}
+          {stageTimingLabel(stage) && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {stageTimingLabel(stage)}
             </p>
           )}
           {stage.location && (
