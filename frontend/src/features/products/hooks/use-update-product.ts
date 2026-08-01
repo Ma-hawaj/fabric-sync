@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/features/customers/hooks/use-create-customer'
-import { apiBaseUrl } from '@/lib/api'
+import { apiBaseUrl, apiFetch } from '@/lib/api'
 import type { Product } from '../types/product'
 
 // PATCH accepts any subset of the fields, so this serves both the edit form
@@ -21,7 +21,7 @@ async function updateProduct({
   entries,
   ...changes
 }: UpdateProductInput): Promise<Product> {
-  const response = await fetch(`${apiBaseUrl}/products/${id}`, {
+  const response = await apiFetch(`${apiBaseUrl}/products/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(changes),
@@ -38,7 +38,7 @@ async function updateProduct({
 
   // Stock is added through its own endpoint, which also returns the full
   // product — so its response is the newer of the two.
-  const stockResponse = await fetch(`${apiBaseUrl}/products/${id}/stock`, {
+  const stockResponse = await apiFetch(`${apiBaseUrl}/products/${id}/stock`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ entries }),

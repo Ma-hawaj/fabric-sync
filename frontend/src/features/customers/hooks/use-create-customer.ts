@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
+import { apiBaseUrl, apiFetch } from '@/lib/api'
 import type { CustomerFormValues } from '../types/customer-form'
 import type { Customer } from '../types/customers'
 import type { MeasurementDraft } from '../types/measurement-form'
@@ -53,7 +53,7 @@ export function measurementPayload(measurement: MeasurementDraft) {
 }
 
 async function createCustomer(values: CustomerFormValues): Promise<Customer> {
-  const response = await fetch(`${apiBaseUrl}/customers`, {
+  const response = await apiFetch(`${apiBaseUrl}/customers`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

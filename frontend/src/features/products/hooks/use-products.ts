@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
+import { apiBaseUrl, apiFetch } from '@/lib/api'
 import type { Product } from '../types/product'
 
 async function fetchProducts(): Promise<Product[]> {
-  const response = await fetch(`${apiBaseUrl}/products`)
+  const response = await apiFetch(`${apiBaseUrl}/products`)
   if (!response.ok) {
     throw new Error(`Failed to load products (${response.status})`)
   }

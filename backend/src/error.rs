@@ -6,6 +6,7 @@ use axum::{
 #[derive(Debug)]
 pub enum AppError {
     Auth(String),
+    Unauthorized(String),
     Io(std::io::Error),
     Sqlx(sqlx::Error),
     Migration(sqlx::migrate::MigrateError),
@@ -51,6 +52,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
             Self::Auth(error) => (StatusCode::INTERNAL_SERVER_ERROR, error),
+            Self::Unauthorized(message) => (StatusCode::UNAUTHORIZED, message),
             Self::Io(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
             Self::Sqlx(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
             Self::Migration(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),

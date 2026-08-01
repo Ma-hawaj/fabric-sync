@@ -1,6 +1,6 @@
 use axum::{
     extract::{Request, State},
-    http::{header::AUTHORIZATION, StatusCode},
+    http::header::AUTHORIZATION,
     middleware::Next,
     response::Response,
 };
@@ -18,7 +18,7 @@ use openidconnect::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{config::Config, state::AppState};
+use crate::{config::Config, error::AppError, state::AppState};
 
 type IntrospectionClient = BasicClient<EndpointNotSet, EndpointNotSet, EndpointSet>;
 type DiscoveryMetadata = ProviderMetadata<
@@ -159,19 +159,19 @@ pub async fn require_auth(
     State(state): State<AppState>,
     mut request: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, AppError> {
     let token = request
         .headers()
         .get(AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .ok_or_else(|| AppError::Unauthorized("missing bearer token".to_string()))?;
 
     let user = state
         .token_introspection()
         .introspect_bearer_token(token)
         .await
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        .map_err(AppError::Unauthorized)?;
 
     request.extensions_mut().insert(user);
 

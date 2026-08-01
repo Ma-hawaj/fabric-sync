@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
+import { apiBaseUrl, apiFetch } from '@/lib/api'
 import {
   ApiError,
   measurementPayload,
@@ -107,7 +107,7 @@ function invoicePayload(values: InvoiceFormValues) {
 async function createInvoice(
   values: InvoiceFormValues,
 ): Promise<CreatedInvoice> {
-  const response = await fetch(`${apiBaseUrl}/invoices`, {
+  const response = await apiFetch(`${apiBaseUrl}/invoices`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(invoicePayload(values)),

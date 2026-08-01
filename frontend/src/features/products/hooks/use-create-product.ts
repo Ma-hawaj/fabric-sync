@@ -1,12 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/features/customers/hooks/use-create-customer'
-import { apiBaseUrl } from '@/lib/api'
+import { apiBaseUrl, apiFetch } from '@/lib/api'
 import { stockEntriesPayload } from '../lib/product-payload'
 import type { Product } from '../types/product'
 import type { ProductFormValues } from '../types/product-form'
 
 async function createProduct(values: ProductFormValues): Promise<Product> {
-  const response = await fetch(`${apiBaseUrl}/products`, {
+  const response = await apiFetch(`${apiBaseUrl}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

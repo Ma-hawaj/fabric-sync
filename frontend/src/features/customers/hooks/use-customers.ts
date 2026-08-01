@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
+import { apiBaseUrl, apiFetch } from '@/lib/api'
 import type { Customer } from '../types/customers'
 
 async function fetchCustomers(): Promise<Customer[]> {
-  const response = await fetch(`${apiBaseUrl}/customers`)
+  const response = await apiFetch(`${apiBaseUrl}/customers`)
   if (!response.ok) {
     throw new Error(`Failed to load customers (${response.status})`)
   }

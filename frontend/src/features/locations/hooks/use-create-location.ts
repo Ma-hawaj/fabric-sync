@@ -1,11 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/features/customers/hooks/use-create-customer'
-import { apiBaseUrl } from '@/lib/api'
+import { apiBaseUrl, apiFetch } from '@/lib/api'
 import type { LocationFormValues } from '../types/location-form'
 import type { Location } from '../types/location'
 
 async function createLocation(values: LocationFormValues): Promise<Location> {
-  const response = await fetch(`${apiBaseUrl}/locations`, {
+  const response = await apiFetch(`${apiBaseUrl}/locations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

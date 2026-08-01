@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
+import { apiBaseUrl, apiFetch } from '@/lib/api'
 import type { Location } from '../types/location'
 
 async function fetchLocations(): Promise<Location[]> {
-  const response = await fetch(`${apiBaseUrl}/locations`)
+  const response = await apiFetch(`${apiBaseUrl}/locations`)
   if (!response.ok) {
     throw new Error(`Failed to load locations (${response.status})`)
   }

@@ -65,9 +65,7 @@ function UserMenu() {
 
   if (!isAuthenticated || !user) {
     return (
-      <SidebarMenuButton
-        render={<Link to="/" search={{ redirect: '/dashboard' }} />}
-      >
+      <SidebarMenuButton render={<Link to="/dashboard" />}>
         <LogInIcon />
         <span>Sign in</span>
       </SidebarMenuButton>

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
+import { apiBaseUrl, apiFetch } from '@/lib/api'
 import { ApiError } from '@/features/customers/hooks/use-create-customer'
 import type { Material } from '../types/inventory'
 import type { InventoryFormValues } from '../types/inventory-form'
@@ -30,7 +30,7 @@ async function addStock(values: InventoryFormValues): Promise<Material> {
           },
         }
 
-  const response = await fetch(request.url, {
+  const response = await apiFetch(request.url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request.body),

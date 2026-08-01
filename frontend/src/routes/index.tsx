@@ -20,16 +20,12 @@ function Home() {
           Operational workspace for fabric data synchronization
         </h1>
         <p className="mt-3 max-w-2xl text-muted-foreground">
-          Sign in with an access token to reach authenticated views and call the
-          protected backend APIs.
+          Sign in with your identity provider account to reach authenticated
+          views and call the protected backend APIs.
         </p>
       </div>
       <div className="flex gap-3">
-        <Link
-          to={isAuthenticated ? '/dashboard' : '/'}
-          search={isAuthenticated ? undefined : { redirect: '/dashboard' }}
-          className={cn(buttonVariants())}
-        >
+        <Link to="/dashboard" className={cn(buttonVariants())}>
           {isAuthenticated ? 'Open dashboard' : 'Sign in'}
         </Link>
         <Link

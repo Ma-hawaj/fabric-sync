@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/features/customers/hooks/use-create-customer'
-import { apiBaseUrl } from '@/lib/api'
+import { apiBaseUrl, apiFetch } from '@/lib/api'
 import type { Location } from '../types/location'
 
 // PATCH accepts any subset of the fields, so this serves both the edit form
@@ -18,7 +18,7 @@ async function updateLocation({
   id,
   ...changes
 }: UpdateLocationInput): Promise<Location> {
-  const response = await fetch(`${apiBaseUrl}/locations/${id}`, {
+  const response = await apiFetch(`${apiBaseUrl}/locations/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(changes),

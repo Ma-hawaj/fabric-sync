@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
+import { apiBaseUrl, apiFetch } from '@/lib/api'
 import { ApiError } from '@/features/customers/hooks/use-create-customer'
 import type { Order, PaymentType } from '../types/orders'
 
@@ -12,7 +12,7 @@ async function receiveOrder({
   orderId,
   paymentType,
 }: ReceiveOrderInput): Promise<Order> {
-  const response = await fetch(`${apiBaseUrl}/orders/${orderId}/receive`, {
+  const response = await apiFetch(`${apiBaseUrl}/orders/${orderId}/receive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ paymentType }),
