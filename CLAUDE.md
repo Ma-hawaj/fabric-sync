@@ -83,7 +83,7 @@ VITE_API_BASE_URL=http://localhost:3001 pnpm run dev
 - **Names don't line up between the two sides**, which is the most common source of confusion:
   - frontend feature `inventory` (route `/inventory`) talks to the backend `materials` feature (`GET/POST /materials`, `POST /materials/:id/stock`)
   - backend feature `locations` reads and writes the table named `branch`
-  - `routes/_authenticated/users.tsx` exists with no `users` feature or table behind it
+  - `routes/_authenticated/users.tsx` exists but isn't wired to the backend `users` feature below it
   - the invoice form's `receivingBranch` field is serialized as `branchId`
 - **Measurements are described in one place**: `features/customers/data/measurement-fields.ts` lists every measurement once — label, group, input kind (number/text/select + options) and the callout geometry that points at it on the thob sketch. Both the entry form (`components/measurement-fields.tsx`) and the read-only customer sheet (`components/customer-details-sheet.tsx`) render from that list, and `components/thob-diagram.tsx` draws the sketch itself from `data/thob-sketch.ts`. Adding a measurement means adding a `MeasurementDraft` field plus one entry here (a test asserts the two stay in step) — not touching either page.
 - UI primitives: `src/components/ui/` are local shadcn/Base UI-style primitives (not a node_modules package) — extend/copy this pattern for new primitives rather than pulling in a component library.
@@ -161,8 +161,11 @@ Current backend routes, by feature module:
 | `invoices` | `GET /invoices`, `POST /invoices` |
 | `orders` | `GET /orders`, `PATCH /orders/:id`, `POST /orders/:id/receive`, `POST /orders/:id/stages/:stageId`, `POST /orders/:id/repairs`, `PATCH /orders/:id/repairs/:repairId` |
 | `order_stages` | `GET /order-stages`, `POST /order-stages`, `PATCH /order-stages/:id` |
+| `users` | `GET /users` |
 
 Path params use axum 0.7's `:id` syntax (0.8 switched to `{id}` — don't copy that from newer axum docs).
+
+**`users` is mocked.** `features/users/service.rs::list_users` returns four hardcoded `User { id, name }` values — there's no table, no `repository.rs`, and the handler's `AppState` parameter is currently unused. The plan is to back it with Zitadel's user directory once real auth is wired up (`require_auth` is disabled — see above); `id` is a plain `String` rather than a `Uuid` because it's meant to eventually hold a Zitadel subject, not an id this app generates.
 
 **Invoice totals apply 15% VAT after the discount, floored at zero.** The rate is written twice — `VAT_RATE` in `backend/src/features/invoices/service.rs` (authoritative; the stored total) and again in `frontend/src/features/invoices/components/invoice-form/invoice-summary.tsx` (the on-screen running total). Change one and you must change the other. Note `frontend/.../lib/invoice-pricing.ts` only computes per-line totals — it has no VAT in it. Currency is single-valued by design: `CURRENCY = 'SAR'` in `src/lib/currency.ts`.
 
