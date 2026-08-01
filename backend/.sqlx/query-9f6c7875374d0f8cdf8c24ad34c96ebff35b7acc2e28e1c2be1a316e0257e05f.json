@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE order_repairs\n        SET status = 'in_progress'\n        WHERE id = $1 AND status = 'open'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9f6c7875374d0f8cdf8c24ad34c96ebff35b7acc2e28e1c2be1a316e0257e05f"
+}

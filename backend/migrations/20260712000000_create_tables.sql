@@ -111,7 +111,77 @@ CREATE TABLE orders (
     patti TEXT,
     more_details TEXT,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'received')),
-    received_at TIMESTAMPTZ
+    received_at TIMESTAMPTZ,
+    -- Where the garment is actually made, which is not necessarily where the
+    -- customer collects it (that is the invoice's branch_id). NULL until
+    -- production is assigned. When the two differ the garment has to be moved
+    -- between locations, which is what a `requires_delivery` stage tracks.
+    production_branch_id UUID REFERENCES branch(id)
+);
+
+-- The stages a garment passes through in production. Staff edit this list, so
+-- it is a table rather than more values on orders.status — same reasoning as
+-- `branch`, and the same retirement rule: is_active instead of a delete, so the
+-- progress rows pointing at a retired stage stay readable.
+CREATE TABLE order_stages (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    name TEXT NOT NULL UNIQUE,
+    sort_order INTEGER NOT NULL,
+    -- Marks a stage that only applies when the garment changes location. It is
+    -- treated as not applicable on an order produced where the customer
+    -- collects, rather than left hanging as an unfinished step.
+    requires_delivery BOOLEAN NOT NULL DEFAULT FALSE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- Seeded in the migration rather than a dev seed, so every environment starts
+-- with a usable list. Staff are free to rename, reorder, or retire these.
+INSERT INTO order_stages (name, sort_order, requires_delivery) VALUES
+    ('Cutting', 1, FALSE),
+    ('Sewing', 2, FALSE),
+    ('Finishing', 3, FALSE),
+    ('Location delivery', 4, TRUE);
+
+-- A finished order brought back for modification or repair. Each return is its
+-- own record with its own pass through the stage checklist, so an order
+-- repaired twice keeps both histories. `charge` is recorded for the books;
+-- billing a repair through an invoice is out of scope for now, which is why
+-- there is no invoice_id here.
+CREATE TABLE order_repairs (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    order_id UUID NOT NULL REFERENCES orders(id),
+    reason TEXT NOT NULL,
+    reported_on DATE NOT NULL DEFAULT CURRENT_DATE,
+    charge NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (charge >= 0),
+    status TEXT NOT NULL DEFAULT 'open'
+        CHECK (status IN ('open', 'in_progress', 'completed', 'cancelled')),
+    completed_at TIMESTAMPTZ,
+    notes TEXT
+);
+
+-- Records only the stages actually acted on. The checklist itself is derived by
+-- overlaying these rows onto the live `order_stages` list, so adding or
+-- retiring a stage takes effect on in-flight orders with no backfill, and
+-- nothing has to be seeded when an invoice creates an order.
+--
+-- repair_id NULL is the original build; a repair's pass carries its id.
+CREATE TABLE order_stage_progress (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    order_id UUID NOT NULL REFERENCES orders(id),
+    repair_id UUID REFERENCES order_repairs(id),
+    stage_id UUID NOT NULL REFERENCES order_stages(id),
+    -- 'skipped' is how a stage that doesn't apply to this particular garment is
+    -- cleared without pretending it was done. Undoing a stage deletes the row
+    -- rather than storing a third 'pending' value.
+    status TEXT NOT NULL CHECK (status IN ('done', 'skipped')),
+    completed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Where a delivery stage delivered to. NULL on every other stage.
+    location_id UUID REFERENCES branch(id),
+    notes TEXT,
+    -- NULLS NOT DISTINCT so the build pass (repair_id NULL) is constrained to
+    -- one row per stage too; without it Postgres treats every NULL as distinct
+    -- and the build pass could accumulate duplicates.
+    UNIQUE NULLS NOT DISTINCT (order_id, repair_id, stage_id)
 );
 
 -- A finished good sold as-is, as opposed to `materials`, which are raw fabric

@@ -17,3 +17,13 @@ export function stockLocations(locations: Location[]): Location[] {
     (location) => location.isActive && location.holdsStock,
   )
 }
+
+/**
+ * Locations a garment can be made at. Production happens where the material is,
+ * so this currently follows the stock rule — but it is named separately so that
+ * if a dedicated production capability is ever added to `branch`, this is the
+ * one place that changes rather than every picker.
+ */
+export function productionLocations(locations: Location[]): Location[] {
+  return stockLocations(locations)
+}

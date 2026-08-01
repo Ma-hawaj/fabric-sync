@@ -2,6 +2,45 @@ export type OrderStatus = 'pending' | 'received'
 export type InvoicePaymentStatus = 'unpaid' | 'partial' | 'paid'
 export type PaymentType = 'benefit' | 'cash' | 'card'
 
+/** `pending` is the absence of a recorded action, not a stored value. */
+export type OrderStageStatus = 'pending' | 'done' | 'skipped'
+export type RepairStatus = 'open' | 'in_progress' | 'completed' | 'cancelled'
+
+// One entry of an assembled checklist. The backend derives these by overlaying
+// what has been recorded onto the live stage catalog, so a stage added or
+// retired on the Order Stages page shows up here immediately.
+export interface OrderStageEntry {
+  stageId: string
+  name: string
+  sortOrder: number
+  requiresDelivery: boolean
+  /**
+   * False when a delivery stage doesn't apply because the garment is produced
+   * where the customer collects it. A non-applicable entry never blocks the
+   * order.
+   */
+  applicable: boolean
+  status: OrderStageStatus
+  completedAt: string | null
+  locationId: string | null
+  location: string | null
+  notes: string | null
+}
+
+// A return for rework. An order can accumulate several over its life, each with
+// its own independent pass through the same checklist.
+export interface OrderRepair {
+  id: string
+  reason: string
+  reportedOn: string
+  charge: number
+  status: RepairStatus
+  completedAt: string | null
+  notes: string | null
+  stages: OrderStageEntry[]
+  currentStage: string | null
+}
+
 // One row of GET /orders — an order line joined with its invoice, customer,
 // and material. invoiceDate arrives as an ISO date string and is parsed to a
 // Date in use-orders.ts for the table's date-range filter.
@@ -21,6 +60,16 @@ export interface Order {
   materialAmount: number
   price: number
   status: OrderStatus
+  /** Where the garment is made; null until production is assigned. */
+  productionLocationId: string | null
+  productionLocation: string | null
+  /** Where the customer collects, taken from the invoice's branch. */
+  receivingLocationId: string | null
+  receivingLocation: string | null
+  stages: OrderStageEntry[]
+  /** First applicable stage still outstanding; null once the build is done. */
+  currentStage: string | null
+  repairs: OrderRepair[]
   invoiceTotalPrice: number
   invoiceAmountPaid: number
   invoicePaymentStatus: InvoicePaymentStatus

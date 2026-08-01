@@ -36,6 +36,8 @@ cargo sqlx prepare
 
 `cargo sqlx prepare --check` runs in CI and fails if `backend/.sqlx` is stale — regenerate it any time a query changes, not just when tests fail.
 
+Sample data for local work lives in `backend/seeds/dev_seed.sql` and is loaded at startup by `SEED_DEV_DATA=true cargo run` (locations, materials, products, customers with repeat measurement visits, invoices across every payment state, gift cards, and twelve orders spread across the tracking checklist with four repairs). It only runs against a database with no customers yet — `seed::run` guards on that, so repeated runs are safe and it can never touch real rows. The script is executed with `sqlx::raw_sql`, **not** the `query!` macros, deliberately: `raw_sql` is unchecked, so the seed contributes nothing to `backend/.sqlx` and can't break `cargo sqlx prepare --check`. The backend reads the flag off the process env — there is no `dotenvy`, so `.env` is for docker compose only.
+
 ### Frontend (`cd frontend`)
 
 Package manager is **pnpm** (see `frontend/pnpm-lock.yaml`, `frontend/pnpm-workspace.yaml`, and CI) even though the root README says `npm` — use pnpm.
@@ -124,9 +126,25 @@ Columns drive their own filter UI through `meta`: set `label`, `placeholder`, an
 
 ## Database schema notes
 
-`backend/migrations/20260712000000_create_tables.sql` — the only migration — defines `branch`, `customers`, `materials`, `material_stock`, `invoices`, `measurements`, `orders`. All primary keys are `UUID DEFAULT uuidv7()` — time-ordered (sortable/monotonic by creation, unlike `gen_random_uuid()`'s v4), which is why Postgres 18+ is required (see above).
+`backend/migrations/20260712000000_create_tables.sql` — the only migration — defines `branch`, `customers`, `materials`, `material_stock`, `invoices`, `measurements`, `orders`, `order_stages`, `order_repairs`, `order_stage_progress`. All primary keys are `UUID DEFAULT uuidv7()` — time-ordered (sortable/monotonic by creation, unlike `gen_random_uuid()`'s v4), which is why Postgres 18+ is required (see above).
 
 `measurements` is one flat row per visit (`measurement_date` plus 24 measurement columns) — repeat visits are repeat rows, which is exactly what the `json_agg (... ORDER BY m.measurement_date DESC)` aggregation below depends on. `material_stock` holds a quantity per material/location pair (`UNIQUE (material_id, branch_id)`) because a material can be stocked at more than one location.
+
+## Order tracking and repairs
+
+Production progress is **derived, never stored per order**. Three tables carry it:
+
+- `order_stages` — the staff-editable catalog (`name UNIQUE`, `sort_order`, `requires_delivery`, `is_active`), seeded in the migration with Cutting / Sewing / Finishing / Location delivery. It's a table rather than more values on `orders.status` precisely so staff can change it, and it retires with `is_active` like `branch` rather than deleting.
+- `order_repairs` — a garment brought back for rework. An order can have several; each is `open → in_progress → completed | cancelled` with an optional `charge` (recorded for the books, never billed to an invoice).
+- `order_stage_progress` — only the stages actually acted on (`done` or `skipped`). `repair_id` NULL is the original build; a repair's rework pass carries its id. `UNIQUE NULLS NOT DISTINCT (order_id, repair_id, stage_id)` is what makes the upsert work on the build pass too — plain `UNIQUE` would treat every NULL as distinct.
+
+A checklist is built by overlaying the progress rows onto the live catalog, so **adding or retiring a stage takes effect on in-flight orders with no backfill**, and invoice creation seeds nothing (`insert_order` is unchanged). A retired stage stays on an order that already recorded it. Undoing a stage **deletes** its row — absence *is* "not done yet", which is why there is no stored `pending`.
+
+`orders.production_branch_id` is where the garment is made; the invoice's `branch_id` is where the customer collects. A `requires_delivery` stage is reported `applicable: false` when the two match or either is unknown, so it never blocks an order that never had to move.
+
+The assembly lives in pure functions in `orders/service.rs` (`stage_applies`, `assemble_stages`, `current_stage_name`) fed by four flat queries rather than one lateral join — that is the only seam the backend's test setup can exercise. **`orders.status` and invoice settlement are untouched by all of this**: `receive_order` still works with stages outstanding, and `invoice_fully_received` still counts `status <> 'received'`.
+
+Frontend display rules live in one place, `features/orders/lib/order-tracking.ts` (`currentStageLabel`, `stageFilterOptions`, `openRepairCount`, …) — the Stage/Repairs columns and the tracking sheet both read from it. The catalog is administered at `/order-stages`, a file-for-file mirror of the `locations` feature.
 
 Current backend routes, by feature module:
 
@@ -137,7 +155,8 @@ Current backend routes, by feature module:
 | `materials` | `GET /materials`, `POST /materials`, `POST /materials/:id/stock` |
 | `locations` | `GET /locations`, `POST /locations`, `PATCH /locations/:id` |
 | `invoices` | `GET /invoices`, `POST /invoices` |
-| `orders` | `GET /orders` |
+| `orders` | `GET /orders`, `PATCH /orders/:id`, `POST /orders/:id/receive`, `POST /orders/:id/stages/:stageId`, `POST /orders/:id/repairs`, `PATCH /orders/:id/repairs/:repairId` |
+| `order_stages` | `GET /order-stages`, `POST /order-stages`, `PATCH /order-stages/:id` |
 
 Path params use axum 0.7's `:id` syntax (0.8 switched to `{id}` — don't copy that from newer axum docs).
 
@@ -149,13 +168,13 @@ Path params use axum 0.7's `:id` syntax (0.8 switched to `{id}` — don't copy t
 
 A location is a `branch` row, and it carries two **independent** flags rather than one type column: `receives_orders` (customers collect finished orders there — a branch) and `holds_stock` (material stock lives there — a store). A location can be either or both; "neither" is rejected in `locations/service.rs` and in `location-schema.ts`. `is_active` retires a location without disturbing the `material_stock` rows and invoices that still reference it.
 
-`GET /locations` deliberately returns **every** location, inactive ones included, because the Locations page lists them behind a status filter. Consumers narrow the list client-side using the two helpers in `frontend/src/features/locations/lib/location-filters.ts` — `orderReceivingLocations` (the invoice form's receiving branch) and `stockLocations` (the inventory stock-entry picker). New pickers should call those rather than reading the flags inline; that file is the single place the rules live. One deliberate exception: the inventory column facet in `inventory.tsx` stays unfiltered, since it filters materials by where stock already sits and a since-deactivated location should remain selectable there.
+`GET /locations` deliberately returns **every** location, inactive ones included, because the Locations page lists them behind a status filter. Consumers narrow the list client-side using the helpers in `frontend/src/features/locations/lib/location-filters.ts` — `orderReceivingLocations` (the invoice form's receiving branch, and a delivery stage's destination), `stockLocations` (the inventory stock-entry picker), and `productionLocations` (an order's "made at" picker, currently an alias of the stock rule since production happens where the material is — named separately so a dedicated capability flag would only change that one function). New pickers should call those rather than reading the flags inline; that file is the single place the rules live. One deliberate exception: the inventory column facet in `inventory.tsx` stays unfiltered, since it filters materials by where stock already sits and a since-deactivated location should remain selectable there.
 
 `PATCH /locations/:id` accepts any subset of the fields (`COALESCE` per column in the repository), so the list page's activate/deactivate action is one statement and doesn't need to round-trip the whole row.
 
 ## Tests
 
-**Backend** — inline `#[cfg(test)] mod tests` blocks for pure logic only: invoice totals (`invoices/service.rs`), measurement comparison (`customers/types.rs`), location validation (`locations/service.rs`). `serde_json` is the only dev-dependency, so there is no DB or HTTP integration harness; the testable seam for a new feature is a pure `fn` in `service.rs`. Tests build input DTOs with `serde_json::from_value(json!({...}))`.
+**Backend** — inline `#[cfg(test)] mod tests` blocks for pure logic only: invoice totals (`invoices/service.rs`), measurement comparison (`customers/types.rs`), location validation (`locations/service.rs`), stage-name/position validation (`order_stages/service.rs`), and the tracking derivation (`orders/service.rs` — delivery applicability, checklist assembly, current stage, repair validation). `serde_json` is the only dev-dependency, so there is no DB or HTTP integration harness; the testable seam for a new feature is a pure `fn` in `service.rs`. Tests build input DTOs with `serde_json::from_value(json!({...}))`.
 
 **Frontend** — vitest + jsdom + `@testing-library/react`, configured under `test:` in `vite.config.ts`. **There is no `@testing-library/jest-dom`**, so assertions are `.toBeTruthy()` / `.toBeNull()`, never `.toBeInTheDocument()`. Component tests seed the cache with `client.setQueryData(['key'], fixture)` rather than mocking `fetch`, and mock `@tanstack/react-router` where a component uses `useNavigate`/`Link`. Schema tests build fixtures from the production `createEmptyXForm()` factory and assert on both the message (case-insensitive regex) and the issue `path`.
 

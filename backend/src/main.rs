@@ -3,6 +3,7 @@ mod auth;
 mod config;
 mod error;
 mod features;
+mod seed;
 mod state;
 
 use std::net::SocketAddr;
@@ -27,6 +28,11 @@ async fn main() -> Result<(), error::AppError> {
         .connect(&config.database_url)
         .await?;
     sqlx::migrate!().run(&db).await?;
+
+    if config.seed_dev_data {
+        seed::run(&db).await?;
+    }
+
     let token_introspection = auth::TokenIntrospection::discover(&config)
         .await
         .map_err(error::AppError::Auth)?;
