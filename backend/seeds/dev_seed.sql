@@ -163,51 +163,47 @@ INSERT INTO order_repairs (id, order_id, reason, reported_on, charge, status, co
 
 -- Only stages actually acted on are stored; everything else is derived as
 -- pending. Stages are looked up by name because the migration lets uuidv7()
--- generate their ids.
+-- generate their ids. One checklist per order — a repair is tracked by its
+-- own record and status above, not a second pass through these rows.
 --
 -- The spread is deliberate: order 01 not started, 02 mid-cut, 03 and 04 at
--- Finishing (04 having skipped a stage), 05 fully delivered, 06 finished
--- without a delivery because it never left its branch, 10 waiting on delivery.
-INSERT INTO order_stage_progress (order_id, repair_id, stage_id, status, completed_at, location_id, notes)
-SELECT v.order_id, v.repair_id, s.id, v.status, v.completed_at, v.location_id, v.notes
+-- Finishing (04 having skipped a stage), 05 fully delivered, 06 and 07
+-- finished without a delivery because they never left their branch (07 also
+-- carries a completed repair above), 09 mid-run, 10 waiting on delivery, 11
+-- started with no production location assigned yet.
+INSERT INTO order_stage_progress (order_id, stage_id, status, completed_at, location_id, notes)
+SELECT v.order_id, s.id, v.status, v.completed_at, v.location_id, v.notes
 FROM (VALUES
     -- Order 02: cutting done, sewing next.
-    ('019a0000-0009-7000-8000-000000000002'::uuid, NULL::uuid, 'Cutting',           'done',    now() - interval '9 days',  NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000002'::uuid, 'Cutting',           'done',    now() - interval '9 days',  NULL::uuid, NULL::text),
     -- Order 03: through sewing, finishing next.
-    ('019a0000-0009-7000-8000-000000000003'::uuid, NULL::uuid, 'Cutting',           'done',    now() - interval '8 days',  NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-000000000003'::uuid, NULL::uuid, 'Sewing',            'done',    now() - interval '5 days',  NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000003'::uuid, 'Cutting',           'done',    now() - interval '8 days',  NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000003'::uuid, 'Sewing',            'done',    now() - interval '5 days',  NULL::uuid, NULL::text),
     -- Order 04: sewing skipped, so finishing is next despite the gap.
-    ('019a0000-0009-7000-8000-000000000004'::uuid, NULL::uuid, 'Cutting',           'done',    now() - interval '8 days',  NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-000000000004'::uuid, NULL::uuid, 'Sewing',            'skipped', now() - interval '6 days',  NULL::uuid, 'Reused the panel cut for the matching thobe.'),
+    ('019a0000-0009-7000-8000-000000000004'::uuid, 'Cutting',           'done',    now() - interval '8 days',  NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000004'::uuid, 'Sewing',            'skipped', now() - interval '6 days',  NULL::uuid, 'Reused the panel cut for the matching thobe.'),
     -- Order 05: the full run, including a delivery to the collecting branch.
-    ('019a0000-0009-7000-8000-000000000005'::uuid, NULL::uuid, 'Cutting',           'done',    now() - interval '9 days',  NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-000000000005'::uuid, NULL::uuid, 'Sewing',            'done',    now() - interval '6 days',  NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-000000000005'::uuid, NULL::uuid, 'Finishing',         'done',    now() - interval '4 days',  NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-000000000005'::uuid, NULL::uuid, 'Location delivery', 'done',    now() - interval '3 days',  '019a0000-0001-7000-8000-000000000002'::uuid, 'Sent with the Wednesday run.'),
+    ('019a0000-0009-7000-8000-000000000005'::uuid, 'Cutting',           'done',    now() - interval '9 days',  NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000005'::uuid, 'Sewing',            'done',    now() - interval '6 days',  NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000005'::uuid, 'Finishing',         'done',    now() - interval '4 days',  NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000005'::uuid, 'Location delivery', 'done',    now() - interval '3 days',  '019a0000-0001-7000-8000-000000000002'::uuid, 'Sent with the Wednesday run.'),
     -- Order 06: produced at the branch it is collected from, so it is finished
     -- after Finishing — the delivery stage never applied.
-    ('019a0000-0009-7000-8000-000000000006'::uuid, NULL::uuid, 'Cutting',           'done',    now() - interval '28 days', NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-000000000006'::uuid, NULL::uuid, 'Sewing',            'done',    now() - interval '25 days', NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-000000000006'::uuid, NULL::uuid, 'Finishing',         'done',    now() - interval '22 days', NULL::uuid, NULL::text),
-    -- Order 07: same, and it has a completed repair below.
-    ('019a0000-0009-7000-8000-000000000007'::uuid, NULL::uuid, 'Cutting',           'done',    now() - interval '28 days', NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-000000000007'::uuid, NULL::uuid, 'Sewing',            'done',    now() - interval '24 days', NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-000000000007'::uuid, NULL::uuid, 'Finishing',         'done',    now() - interval '21 days', NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000006'::uuid, 'Cutting',           'done',    now() - interval '28 days', NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000006'::uuid, 'Sewing',            'done',    now() - interval '25 days', NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000006'::uuid, 'Finishing',         'done',    now() - interval '22 days', NULL::uuid, NULL::text),
+    -- Order 07: same, and it has a completed repair recorded above.
+    ('019a0000-0009-7000-8000-000000000007'::uuid, 'Cutting',           'done',    now() - interval '28 days', NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000007'::uuid, 'Sewing',            'done',    now() - interval '24 days', NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000007'::uuid, 'Finishing',         'done',    now() - interval '21 days', NULL::uuid, NULL::text),
     -- Order 09: mid-run.
-    ('019a0000-0009-7000-8000-000000000009'::uuid, NULL::uuid, 'Cutting',           'done',    now() - interval '4 days',  NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-000000000009'::uuid, NULL::uuid, 'Sewing',            'done',    now() - interval '2 days',  NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000009'::uuid, 'Cutting',           'done',    now() - interval '4 days',  NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-000000000009'::uuid, 'Sewing',            'done',    now() - interval '2 days',  NULL::uuid, NULL::text),
     -- Order 10: made, waiting on the move to the collecting branch.
-    ('019a0000-0009-7000-8000-00000000000a'::uuid, NULL::uuid, 'Cutting',           'done',    now() - interval '5 days',  NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-00000000000a'::uuid, NULL::uuid, 'Sewing',            'done',    now() - interval '3 days',  NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-00000000000a'::uuid, NULL::uuid, 'Finishing',         'done',    now() - interval '1 days',  NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-00000000000a'::uuid, 'Cutting',           'done',    now() - interval '5 days',  NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-00000000000a'::uuid, 'Sewing',            'done',    now() - interval '3 days',  NULL::uuid, NULL::text),
+    ('019a0000-0009-7000-8000-00000000000a'::uuid, 'Finishing',         'done',    now() - interval '1 days',  NULL::uuid, NULL::text),
     -- Order 11: started, no production location assigned yet.
-    ('019a0000-0009-7000-8000-00000000000b'::uuid, NULL::uuid, 'Cutting',           'done',    now() - interval '2 days',  NULL::uuid, NULL::text),
-    -- Repair 02 (in progress): rework needs no re-cutting.
-    ('019a0000-0009-7000-8000-000000000006'::uuid, '019a0000-000d-7000-8000-000000000002'::uuid, 'Cutting', 'skipped', now() - interval '7 days', NULL::uuid, 'Nothing to re-cut.'),
-    ('019a0000-0009-7000-8000-000000000006'::uuid, '019a0000-000d-7000-8000-000000000002'::uuid, 'Sewing',  'done',    now() - interval '6 days', NULL::uuid, NULL::text),
-    -- Repair 03 (completed): its own full pass, independent of the build's.
-    ('019a0000-0009-7000-8000-000000000007'::uuid, '019a0000-000d-7000-8000-000000000003'::uuid, 'Cutting',   'skipped', now() - interval '12 days', NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-000000000007'::uuid, '019a0000-000d-7000-8000-000000000003'::uuid, 'Sewing',    'done',    now() - interval '8 days',  NULL::uuid, NULL::text),
-    ('019a0000-0009-7000-8000-000000000007'::uuid, '019a0000-000d-7000-8000-000000000003'::uuid, 'Finishing', 'done',    now() - interval '5 days',  NULL::uuid, NULL::text)
-) AS v(order_id, repair_id, stage_name, status, completed_at, location_id, notes)
+    ('019a0000-0009-7000-8000-00000000000b'::uuid, 'Cutting',           'done',    now() - interval '2 days',  NULL::uuid, NULL::text)
+) AS v(order_id, stage_name, status, completed_at, location_id, notes)
 JOIN order_stages s ON s.name = v.stage_name;

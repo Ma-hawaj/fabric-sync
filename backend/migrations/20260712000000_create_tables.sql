@@ -164,11 +164,12 @@ CREATE TABLE order_repairs (
 -- retiring a stage takes effect on in-flight orders with no backfill, and
 -- nothing has to be seeded when an invoice creates an order.
 --
--- repair_id NULL is the original build; a repair's pass carries its id.
+-- One checklist per order, covering the original build only — a repair is
+-- tracked by its own record and status (see order_repairs above), not by a
+-- second pass through these stages.
 CREATE TABLE order_stage_progress (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     order_id UUID NOT NULL REFERENCES orders(id),
-    repair_id UUID REFERENCES order_repairs(id),
     stage_id UUID NOT NULL REFERENCES order_stages(id),
     -- 'skipped' is how a stage that doesn't apply to this particular garment is
     -- cleared without pretending it was done. Undoing a stage deletes the row
@@ -178,10 +179,7 @@ CREATE TABLE order_stage_progress (
     -- Where a delivery stage delivered to. NULL on every other stage.
     location_id UUID REFERENCES branch(id),
     notes TEXT,
-    -- NULLS NOT DISTINCT so the build pass (repair_id NULL) is constrained to
-    -- one row per stage too; without it Postgres treats every NULL as distinct
-    -- and the build pass could accumulate duplicates.
-    UNIQUE NULLS NOT DISTINCT (order_id, repair_id, stage_id)
+    UNIQUE (order_id, stage_id)
 );
 
 -- A finished good sold as-is, as opposed to `materials`, which are raw fabric

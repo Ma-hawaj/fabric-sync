@@ -56,13 +56,12 @@ pub struct StageRow {
     pub is_active: bool,
 }
 
-/// A recorded stage action, flat as it comes out of the database. `repair_id`
-/// is `None` for the original build and carries a repair's id for its rework
-/// pass.
+/// A recorded stage action, flat as it comes out of the database. One
+/// checklist per order — a repair is tracked by its own record and status,
+/// not by a second pass through these stages.
 #[derive(Clone, Debug)]
 pub struct ProgressRow {
     pub order_id: Uuid,
-    pub repair_id: Option<Uuid>,
     pub stage_id: Uuid,
     pub status: String,
     pub completed_at: DateTime<Utc>,
@@ -146,9 +145,6 @@ pub struct OrderRepair {
     pub status: String,
     pub completed_at: Option<DateTime<Utc>>,
     pub notes: Option<String>,
-    /// The repair's own pass through the checklist, independent of the build's.
-    pub stages: Vec<OrderStageEntry>,
-    pub current_stage: Option<String>,
 }
 
 // One row of GET /orders — an order line joined with its invoice, customer,
@@ -215,8 +211,6 @@ pub struct UpdateOrderInput {
 #[serde(rename_all = "camelCase")]
 pub struct SetStageInput {
     pub status: StageStatus,
-    /// Omitted to act on the original build, set to act on a repair's pass.
-    pub repair_id: Option<Uuid>,
     /// Where a delivery stage delivered to. Required when completing a stage
     /// that needs a delivery.
     pub location_id: Option<Uuid>,

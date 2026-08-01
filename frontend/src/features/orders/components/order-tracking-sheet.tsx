@@ -150,11 +150,9 @@ function ProductionLocationPicker({ order }: { order: Order }) {
 function StageChecklist({
   order,
   stages,
-  repairId,
 }: {
   order: Order
   stages: OrderStageEntry[]
-  repairId?: string
 }) {
   if (stages.length === 0) {
     return (
@@ -167,26 +165,13 @@ function StageChecklist({
   return (
     <ul className="space-y-2">
       {stages.map((stage) => (
-        <StageRow
-          key={stage.stageId}
-          order={order}
-          stage={stage}
-          repairId={repairId}
-        />
+        <StageRow key={stage.stageId} order={order} stage={stage} />
       ))}
     </ul>
   )
 }
 
-function StageRow({
-  order,
-  stage,
-  repairId,
-}: {
-  order: Order
-  stage: OrderStageEntry
-  repairId?: string
-}) {
+function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
   const setStage = useSetOrderStage()
   const { data: locations = [] } = useLocations()
   const [destination, setDestination] = React.useState('')
@@ -212,7 +197,6 @@ function StageRow({
       orderId: order.id,
       stageId: stage.stageId,
       status,
-      repairId,
       locationId,
     })
     toast.promise(pending, {
@@ -309,18 +293,14 @@ function StageRow({
 
       {needsDestination && stage.status === 'pending' && (
         <div className="mt-3 space-y-1">
-          <Label
-            htmlFor={`destination-${stage.stageId}-${repairId ?? 'build'}`}
-          >
-            Deliver To
-          </Label>
+          <Label htmlFor={`destination-${stage.stageId}`}>Deliver To</Label>
           <Select
             items={destinationOptions}
             value={destination}
             onValueChange={(value: string) => setDestination(value)}
           >
             <SelectTrigger
-              id={`destination-${stage.stageId}-${repairId ?? 'build'}`}
+              id={`destination-${stage.stageId}`}
               className="w-full"
             >
               <SelectValue placeholder="Pick a destination..." />
@@ -412,12 +392,6 @@ function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
         </Badge>
       </div>
 
-      <StageChecklist
-        order={order}
-        stages={repair.stages}
-        repairId={repair.id}
-      />
-
       {!isFinished && (
         <div className="flex justify-end gap-1">
           <Button
@@ -429,6 +403,17 @@ function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
           >
             Cancel Repair
           </Button>
+          {repair.status === 'open' && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 w-auto px-2"
+              disabled={updateRepair.isPending}
+              onClick={() => void setStatus('in_progress')}
+            >
+              Start
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"

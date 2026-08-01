@@ -7,8 +7,6 @@ interface SetOrderStageInput {
   orderId: string
   stageId: string
   status: OrderStageStatus
-  /** Omitted to act on the original build, set to act on a repair's pass. */
-  repairId?: string
   /** Required when completing a stage that needs a delivery. */
   locationId?: string
   notes?: string
@@ -42,8 +40,8 @@ export function useSetOrderStage() {
   return useMutation({
     mutationFn: setOrderStage,
     onSuccess: () => {
-      // One stage change moves the derived current stage and, on a repair's
-      // pass, its status too — so the whole row is refetched.
+      // One stage change moves the derived current stage, so the whole row is
+      // refetched rather than patched.
       void queryClient.invalidateQueries({ queryKey: ['orders'] })
     },
   })

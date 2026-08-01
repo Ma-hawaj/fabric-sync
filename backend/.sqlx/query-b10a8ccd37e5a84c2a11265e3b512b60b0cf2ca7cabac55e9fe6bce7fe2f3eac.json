@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            p.order_id,\n            p.repair_id,\n            p.stage_id,\n            p.status,\n            p.completed_at,\n            p.location_id,\n            b.name AS \"location?\",\n            p.notes\n        FROM order_stage_progress p\n        LEFT JOIN branch b ON b.id = p.location_id\n        WHERE p.order_id = ANY($1)\n        ",
+  "query": "\n        SELECT\n            p.order_id,\n            p.stage_id,\n            p.status,\n            p.completed_at,\n            p.location_id,\n            b.name AS \"location?\",\n            p.notes\n        FROM order_stage_progress p\n        LEFT JOIN branch b ON b.id = p.location_id\n        WHERE p.order_id = ANY($1)\n        ",
   "describe": {
     "columns": [
       {
@@ -10,36 +10,31 @@
       },
       {
         "ordinal": 1,
-        "name": "repair_id",
-        "type_info": "Uuid"
-      },
-      {
-        "ordinal": 2,
         "name": "stage_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 3,
+        "ordinal": 2,
         "name": "status",
         "type_info": "Text"
       },
       {
-        "ordinal": 4,
+        "ordinal": 3,
         "name": "completed_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "location_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "location?",
         "type_info": "Text"
       },
       {
-        "ordinal": 7,
+        "ordinal": 6,
         "name": "notes",
         "type_info": "Text"
       }
@@ -51,7 +46,6 @@
     },
     "nullable": [
       false,
-      true,
       false,
       false,
       false,
@@ -60,5 +54,5 @@
       true
     ]
   },
-  "hash": "b1d6ad637f1f31825d7734c9dfe1519c49da5f7b575e0563556e6ff2ea1740ba"
+  "hash": "b10a8ccd37e5a84c2a11265e3b512b60b0cf2ca7cabac55e9fe6bce7fe2f3eac"
 }

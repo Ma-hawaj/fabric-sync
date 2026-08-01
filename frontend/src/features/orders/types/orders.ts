@@ -33,8 +33,9 @@ export interface OrderStageEntry {
   notes: string | null
 }
 
-// A return for rework. An order can accumulate several over its life, each with
-// its own independent pass through the same checklist.
+// A return for rework. An order can accumulate several over its life. A
+// repair is tracked by its own record and status, not a second pass through
+// the order's stage checklist.
 export interface OrderRepair {
   id: string
   reason: string
@@ -43,8 +44,6 @@ export interface OrderRepair {
   status: RepairStatus
   completedAt: string | null
   notes: string | null
-  stages: OrderStageEntry[]
-  currentStage: string | null
 }
 
 // One row of GET /orders — an order line joined with its invoice, customer,

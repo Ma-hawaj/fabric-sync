@@ -77,8 +77,6 @@ function repair(overrides: Partial<OrderRepair>): OrderRepair {
     status: 'open',
     completedAt: null,
     notes: null,
-    stages: [],
-    currentStage: null,
     ...overrides,
   }
 }

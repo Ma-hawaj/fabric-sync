@@ -216,7 +216,7 @@ fn assemble_order(
 
     let build_progress: Vec<ProgressRow> = progress
         .iter()
-        .filter(|entry| entry.order_id == row.id && entry.repair_id.is_none())
+        .filter(|entry| entry.order_id == row.id)
         .cloned()
         .collect();
 
@@ -231,37 +231,19 @@ fn assemble_order(
     );
     let current_stage = current_stage_name(&stages);
 
+    // A repair is tracked by its own record and status, not a second pass
+    // through the checklist — one order, one checklist.
     let repairs = repairs
         .iter()
         .filter(|repair| repair.order_id == row.id)
-        .map(|repair| {
-            let repair_progress: Vec<ProgressRow> = progress
-                .iter()
-                .filter(|entry| entry.repair_id == Some(repair.id))
-                .cloned()
-                .collect();
-
-            let stages = with_start_times(
-                assemble_stages(
-                    catalog,
-                    &repair_progress,
-                    production_location_id,
-                    row.receiving_location_id,
-                ),
-                date_start(repair.reported_on),
-            );
-
-            OrderRepair {
-                id: repair.id,
-                reason: repair.reason.clone(),
-                reported_on: repair.reported_on,
-                charge: repair.charge,
-                status: repair.status.clone(),
-                completed_at: repair.completed_at,
-                notes: repair.notes.clone(),
-                current_stage: current_stage_name(&stages),
-                stages,
-            }
+        .map(|repair| OrderRepair {
+            id: repair.id,
+            reason: repair.reason.clone(),
+            reported_on: repair.reported_on,
+            charge: repair.charge,
+            status: repair.status.clone(),
+            completed_at: repair.completed_at,
+            notes: repair.notes.clone(),
         })
         .collect();
 
@@ -408,14 +390,6 @@ pub async fn set_stage(
         .find(|stage| stage.id == stage_id)
         .ok_or_else(|| AppError::NotFound(format!("order stage {stage_id} not found")))?;
 
-    if let Some(repair_id) = input.repair_id {
-        if !repository::repair_belongs_to_order(state, repair_id, order_id).await? {
-            return Err(AppError::NotFound(format!(
-                "repair {repair_id} not found on order {order_id}"
-            )));
-        }
-    }
-
     let single_location_materials =
         single_location_map(state, std::slice::from_ref(&order.material_id)).await?;
     let (effective_production_id, _, _) = effective_production(
@@ -439,24 +413,17 @@ pub async fn set_stage(
     let mut tx = state.db().begin().await?;
 
     if input.status == StageStatus::Pending {
-        repository::clear_stage(&mut tx, order_id, input.repair_id, stage_id).await?;
+        repository::clear_stage(&mut tx, order_id, stage_id).await?;
     } else {
         repository::set_stage(
             &mut tx,
             order_id,
-            input.repair_id,
             stage_id,
             input.status.as_str(),
             input.location_id,
             input.notes.as_deref(),
         )
         .await?;
-
-        // Acting on a repair's checklist is what starts it; staff shouldn't
-        // have to set the status separately before getting to work.
-        if let Some(repair_id) = input.repair_id {
-            repository::start_repair(&mut tx, repair_id).await?;
-        }
     }
 
     tx.commit().await?;
@@ -551,7 +518,6 @@ mod tests {
     fn progress(stage_sort_order: i32, status: &str) -> ProgressRow {
         ProgressRow {
             order_id: Uuid::nil(),
-            repair_id: None,
             stage_id: Uuid::from_u128(stage_sort_order as u128),
             status: status.to_string(),
             completed_at: Utc::now(),

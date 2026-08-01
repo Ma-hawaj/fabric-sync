@@ -124,7 +124,6 @@ pub async fn list_progress(
         r#"
         SELECT
             p.order_id,
-            p.repair_id,
             p.stage_id,
             p.status,
             p.completed_at,
@@ -252,14 +251,12 @@ pub async fn update_order(
     .await
 }
 
-/// Records a stage as done or skipped. The upsert leans on the
-/// `NULLS NOT DISTINCT` unique index, so re-recording a stage overwrites the
-/// previous entry rather than stacking duplicates — on the build pass
-/// (`repair_id` NULL) as much as on a repair's.
+/// Records a stage as done or skipped. The upsert leans on the unique index,
+/// so re-recording a stage overwrites the previous entry rather than stacking
+/// duplicates.
 pub async fn set_stage(
     tx: &mut sqlx::PgTransaction<'_>,
     order_id: Uuid,
-    repair_id: Option<Uuid>,
     stage_id: Uuid,
     status: &str,
     location_id: Option<Uuid>,
@@ -268,10 +265,10 @@ pub async fn set_stage(
     sqlx::query!(
         r#"
         INSERT INTO order_stage_progress (
-            order_id, repair_id, stage_id, status, location_id, notes
+            order_id, stage_id, status, location_id, notes
         )
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (order_id, repair_id, stage_id)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (order_id, stage_id)
         DO UPDATE SET
             status = EXCLUDED.status,
             completed_at = now(),
@@ -279,7 +276,6 @@ pub async fn set_stage(
             notes = EXCLUDED.notes
         "#,
         order_id,
-        repair_id,
         stage_id,
         status,
         location_id,
@@ -292,46 +288,19 @@ pub async fn set_stage(
 }
 
 /// Undoes a stage by removing its row, which puts it back to pending — the
-/// checklist is derived, so an absent row *is* "not done yet". `IS NOT
-/// DISTINCT FROM` because the build pass matches on a NULL repair_id, which
-/// plain `=` would never match.
+/// checklist is derived, so an absent row *is* "not done yet".
 pub async fn clear_stage(
     tx: &mut sqlx::PgTransaction<'_>,
     order_id: Uuid,
-    repair_id: Option<Uuid>,
     stage_id: Uuid,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         DELETE FROM order_stage_progress
-        WHERE order_id = $1
-          AND stage_id = $3
-          AND repair_id IS NOT DISTINCT FROM $2
+        WHERE order_id = $1 AND stage_id = $2
         "#,
         order_id,
-        repair_id,
         stage_id,
-    )
-    .execute(&mut **tx)
-    .await?;
-
-    Ok(())
-}
-
-/// Moves a repair off `open` the moment work starts on it. The guard is in the
-/// WHERE clause rather than a read-then-write, so a repair already completed or
-/// cancelled is never dragged back to in-progress.
-pub async fn start_repair(
-    tx: &mut sqlx::PgTransaction<'_>,
-    repair_id: Uuid,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"
-        UPDATE order_repairs
-        SET status = 'in_progress'
-        WHERE id = $1 AND status = 'open'
-        "#,
-        repair_id,
     )
     .execute(&mut **tx)
     .await?;
