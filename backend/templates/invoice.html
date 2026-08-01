@@ -159,7 +159,7 @@
       .panels {
         display: flex;
         gap: 10px;
-        margin-top: 12px;
+        margin-top: 10px;
       }
 
       .panel {
@@ -206,7 +206,7 @@
 
       table {
         width: 100%;
-        margin-top: 12px;
+        margin-top: 10px;
         border-collapse: collapse;
         font-size: 10.5px;
       }
@@ -230,7 +230,7 @@
       }
 
       tbody td {
-        padding: 6px 8px;
+        padding: 5px 8px;
         border-bottom: 1px solid var(--rule);
         vertical-align: top;
       }
@@ -264,13 +264,20 @@
         font-weight: 600;
       }
 
+      /* The totals, the QR and the footer travel together. Splitting them
+         leaves a page carrying nothing but "Thank you for your business",
+         which is what happens as soon as the line table nearly fills the
+         page — so they are one unbreakable block rather than three. */
+      .closing {
+        break-inside: avoid;
+      }
+
       .summary {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
         gap: 16px;
-        margin-top: 14px;
-        break-inside: avoid;
+        margin-top: 10px;
       }
 
       .qr {
@@ -299,7 +306,7 @@
       }
 
       .totals td {
-        padding: 4px 8px;
+        padding: 2px 8px;
         border: none;
       }
 
@@ -325,7 +332,7 @@
       }
 
       footer {
-        margin-top: 18px;
+        margin-top: 10px;
         padding-top: 8px;
         border-top: 1px solid var(--rule);
         text-align: center;
@@ -481,86 +488,88 @@
       </tbody>
     </table>
 
-    <section class="summary">
-      <figure class="qr">
-        {{ qr_svg | safe }}
-        <figcaption>امسح للتحقق · Scan to verify</figcaption>
-      </figure>
+    <div class="closing">
+      <section class="summary">
+        <figure class="qr">
+          {{ qr_svg | safe }}
+          <figcaption>امسح للتحقق · Scan to verify</figcaption>
+        </figure>
 
-      <table class="totals">
-        <tr>
-          <td class="label">
-            المجموع الفرعي <span class="en">Subtotal</span>
-          </td>
-          <td class="num">{{ currency }} {{ amounts.subtotal }}</td>
-        </tr>
-        {% if invoice.totals.discountAmount > 0 %}
+        <table class="totals">
           <tr>
             <td class="label">
-              الخصم
-              {%- if invoice.totals.discountUnit == "percent" %}
+              المجموع الفرعي <span class="en">Subtotal</span>
+            </td>
+            <td class="num">{{ currency }} {{ amounts.subtotal }}</td>
+          </tr>
+          {% if invoice.totals.discountAmount > 0 %}
+            <tr>
+              <td class="label">
+                الخصم
+                {%- if invoice.totals.discountUnit == "percent" %}
                 ({{ amounts.discountPercent }}%)
-              {%- endif %}
-              <span class="en">Discount</span>
-            </td>
-            <td class="num">− {{ currency }} {{ amounts.discountAmount }}</td>
-          </tr>
+                {%- endif %}
+                <span class="en">Discount</span>
+              </td>
+              <td class="num">− {{ currency }} {{ amounts.discountAmount }}</td>
+            </tr>
+            <tr>
+              <td class="label">
+                الوعاء الضريبي <span class="en">Taxable amount</span>
+              </td>
+              <td class="num">{{ currency }} {{ amounts.taxable }}</td>
+            </tr>
+          {% endif %}
           <tr>
             <td class="label">
-              الوعاء الضريبي <span class="en">Taxable amount</span>
+              ضريبة القيمة المضافة {{ vat_percent }}%
+              <span class="en">VAT {{ vat_percent }}%</span>
             </td>
-            <td class="num">{{ currency }} {{ amounts.taxable }}</td>
+            <td class="num">{{ currency }} {{ amounts.vat }}</td>
           </tr>
-        {% endif %}
-        <tr>
-          <td class="label">
-            ضريبة القيمة المضافة {{ vat_percent }}%
-            <span class="en">VAT {{ vat_percent }}%</span>
-          </td>
-          <td class="num">{{ currency }} {{ amounts.vat }}</td>
-        </tr>
-        {% if invoice.totals.giftCardSales > 0 %}
-          <tr>
-            <td class="label">
-              بطاقات الهدايا <span class="en">Gift cards sold</span>
+          {% if invoice.totals.giftCardSales > 0 %}
+            <tr>
+              <td class="label">
+                بطاقات الهدايا <span class="en">Gift cards sold</span>
+              </td>
+              <td class="num">{{ currency }} {{ amounts.giftCardSales }}</td>
+            </tr>
+          {% endif %}
+          <tr class="grand">
+            <td>
+              الإجمالي شامل الضريبة
+              <span class="en">Total incl. VAT</span>
             </td>
-            <td class="num">{{ currency }} {{ amounts.giftCardSales }}</td>
+            <td class="num">{{ currency }} {{ amounts.total }}</td>
           </tr>
-        {% endif %}
-        <tr class="grand">
-          <td>
-            الإجمالي شامل الضريبة
-            <span class="en">Total incl. VAT</span>
-          </td>
-          <td class="num">{{ currency }} {{ amounts.total }}</td>
-        </tr>
-        {% if invoice.totals.giftCardRedeemed > 0 %}
-          <tr>
-            <td class="label">
-              مدفوع ببطاقة هدية <span class="en">Paid by gift card</span>
-              {% for redemption in invoice.redemptions %}
-                <span class="line-note" dir="ltr">{{ redemption.code }}</span>
-              {% endfor %}
-            </td>
-            <td class="num">− {{ currency }} {{ amounts.giftCardRedeemed }}</td>
+          {% if invoice.totals.giftCardRedeemed > 0 %}
+            <tr>
+              <td class="label">
+                مدفوع ببطاقة هدية <span class="en">Paid by gift card</span>
+                {% for redemption in invoice.redemptions %}
+                  <span class="line-note" dir="ltr">{{ redemption.code }}</span>
+                {% endfor %}
+              </td>
+              <td class="num">− {{ currency }} {{ amounts.giftCardRedeemed }}</td>
+            </tr>
+          {% endif %}
+          {% if invoice.totals.amountPaid > 0 %}
+            <tr>
+              <td class="label">المدفوع <span class="en">Paid</span></td>
+              <td class="num">− {{ currency }} {{ amounts.amountPaid }}</td>
+            </tr>
+          {% endif %}
+          <tr class="due">
+            <td>المبلغ المستحق <span class="en">Balance due</span></td>
+            <td class="num">{{ currency }} {{ amounts.balanceDue }}</td>
           </tr>
-        {% endif %}
-        {% if invoice.totals.amountPaid > 0 %}
-          <tr>
-            <td class="label">المدفوع <span class="en">Paid</span></td>
-            <td class="num">− {{ currency }} {{ amounts.amountPaid }}</td>
-          </tr>
-        {% endif %}
-        <tr class="due">
-          <td>المبلغ المستحق <span class="en">Balance due</span></td>
-          <td class="num">{{ currency }} {{ amounts.balanceDue }}</td>
-        </tr>
-      </table>
-    </section>
+        </table>
+      </section>
 
-    <footer>
-      شكراً لتعاملكم معنا · Thank you for your business
-      <div dir="ltr">INV-{{ invoice.invoiceNumber }} · {{ invoice.date }}</div>
-    </footer>
+      <footer>
+        شكراً لتعاملكم معنا · Thank you for your business
+        <div dir="ltr">INV-{{ invoice.invoiceNumber }} · {{ invoice.date }}</div>
+      </footer>
+    </div>
   </body>
 </html>
