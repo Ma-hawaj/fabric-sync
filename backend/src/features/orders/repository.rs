@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
-use super::types::{OrderRow, PaymentType, ProgressRow, RepairRow, StageRow};
+use super::types::{AssignmentRow, OrderRow, PaymentType, ProgressRow, RepairRow, StageRow};
 
 async fn fetch_orders(
     state: &AppState,
@@ -138,6 +138,75 @@ pub async fn list_progress(
     )
     .fetch_all(state.db())
     .await
+}
+
+/// Every recorded assignment for the given orders, flat — independent of
+/// `list_progress`, since a stage is assignable whether or not it's been done.
+pub async fn list_assignments(
+    state: &AppState,
+    order_ids: &[Uuid],
+) -> Result<Vec<AssignmentRow>, sqlx::Error> {
+    sqlx::query_as!(
+        AssignmentRow,
+        r#"
+        SELECT order_id, stage_id, assignee_id, assignee_name
+        FROM order_stage_assignments
+        WHERE order_id = ANY($1)
+        "#,
+        order_ids,
+    )
+    .fetch_all(state.db())
+    .await
+}
+
+/// Assigns a stage, overwriting any previous assignee. `assignee_name` is
+/// resolved by the caller against the user directory rather than trusted from
+/// the client — see `orders/service.rs::set_assignee`.
+pub async fn set_assignee(
+    state: &AppState,
+    order_id: Uuid,
+    stage_id: Uuid,
+    assignee_id: &str,
+    assignee_name: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO order_stage_assignments (order_id, stage_id, assignee_id, assignee_name)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (order_id, stage_id)
+        DO UPDATE SET
+            assignee_id = EXCLUDED.assignee_id,
+            assignee_name = EXCLUDED.assignee_name,
+            assigned_at = now()
+        "#,
+        order_id,
+        stage_id,
+        assignee_id,
+        assignee_name,
+    )
+    .execute(state.db())
+    .await?;
+
+    Ok(())
+}
+
+pub async fn clear_assignee(
+    state: &AppState,
+    order_id: Uuid,
+    stage_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        DELETE FROM order_stage_assignments
+        WHERE order_id = $1 AND stage_id = $2
+        "#,
+        order_id,
+        stage_id,
+    )
+    .execute(state.db())
+    .await?;
+
+    Ok(())
 }
 
 pub async fn list_repairs(

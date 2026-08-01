@@ -34,6 +34,8 @@ function stage(
     locationId: null,
     location: null,
     notes: null,
+    assigneeId: null,
+    assigneeName: null,
     ...overrides,
   }
 }

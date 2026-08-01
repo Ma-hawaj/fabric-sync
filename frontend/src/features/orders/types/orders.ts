@@ -31,6 +31,12 @@ export interface OrderStageEntry {
   locationId: string | null
   location: string | null
   notes: string | null
+  /**
+   * Who's assigned, independent of `status` — a stage can be assigned before
+   * it's done. Null when nobody has been assigned.
+   */
+  assigneeId: string | null
+  assigneeName: string | null
 }
 
 // A return for rework. An order can accumulate several over its life. A

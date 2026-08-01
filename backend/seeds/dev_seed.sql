@@ -207,3 +207,17 @@ FROM (VALUES
     ('019a0000-0009-7000-8000-00000000000b'::uuid, 'Cutting',           'done',    now() - interval '2 days',  NULL::uuid, NULL::text)
 ) AS v(order_id, stage_name, status, completed_at, location_id, notes)
 JOIN order_stages s ON s.name = v.stage_name;
+
+-- Assignment is independent of progress, so the spread deliberately covers
+-- both: order 01 assigns its current (untouched) stage ahead of any work,
+-- order 09 assigns its delivery — two stages past the current one (Finishing)
+-- and not yet reached — and order 03 names who did an already-completed
+-- stage. assignee_id matches the mock users in features/users/service.rs.
+INSERT INTO order_stage_assignments (order_id, stage_id, assignee_id, assignee_name)
+SELECT v.order_id, s.id, v.assignee_id, v.assignee_name
+FROM (VALUES
+    ('019a0000-0009-7000-8000-000000000001'::uuid, 'Cutting',           'mock-user-1', 'Ahmed Al-Sayed'),
+    ('019a0000-0009-7000-8000-000000000003'::uuid, 'Cutting',           'mock-user-2', 'Fatima Al-Zahrani'),
+    ('019a0000-0009-7000-8000-000000000009'::uuid, 'Location delivery', 'mock-user-3', 'Yusuf Al-Mutairi')
+) AS v(order_id, stage_name, assignee_id, assignee_name)
+JOIN order_stages s ON s.name = v.stage_name;

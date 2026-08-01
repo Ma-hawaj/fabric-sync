@@ -8,11 +8,12 @@ use crate::{error::AppError, state::AppState};
 use super::{
     repository,
     types::{
-        CreateRepairInput, OrderListItem, OrderRepair, OrderRow, OrderStageEntry, PaymentType,
-        ProgressRow, RepairRow, RepairStatus, SetStageInput, StageRow, StageStatus,
-        UpdateOrderInput, UpdateRepairInput,
+        AssignStageInput, AssignmentRow, CreateRepairInput, OrderListItem, OrderRepair, OrderRow,
+        OrderStageEntry, PaymentType, ProgressRow, RepairRow, RepairStatus, SetStageInput,
+        StageRow, StageStatus, UpdateOrderInput, UpdateRepairInput,
     },
 };
+use crate::features::users;
 
 // A delivery stage only matters when the garment actually has to move. Produced
 // at the branch the customer collects from — or with no production location
@@ -138,9 +139,33 @@ fn assemble_stages(
                 location_id: recorded.and_then(|row| row.location_id),
                 location: recorded.and_then(|row| row.location.clone()),
                 notes: recorded.and_then(|row| row.notes.clone()),
+                // Filled in by `with_assignees`; assemble_stages doesn't see
+                // assignments at all, since they're independent of progress.
+                assignee_id: None,
+                assignee_name: None,
             })
         })
         .collect()
+}
+
+// Overlays who's assigned onto an already-assembled checklist. Separate from
+// assemble_stages because assignment has nothing to do with progress — a
+// stage can be assigned whether it's pending, done, or skipped.
+fn with_assignees(
+    mut stages: Vec<OrderStageEntry>,
+    assignments: &[AssignmentRow],
+) -> Vec<OrderStageEntry> {
+    for stage in &mut stages {
+        if let Some(assignment) = assignments
+            .iter()
+            .find(|assignment| assignment.stage_id == stage.stage_id)
+        {
+            stage.assignee_id = Some(assignment.assignee_id.clone());
+            stage.assignee_name = Some(assignment.assignee_name.clone());
+        }
+    }
+
+    stages
 }
 
 // The first applicable stage nobody has acted on yet. `None` means the pass is
@@ -203,6 +228,7 @@ fn assemble_order(
     row: OrderRow,
     catalog: &[StageRow],
     progress: &[ProgressRow],
+    assignments: &[AssignmentRow],
     repairs: &[RepairRow],
     single_location_materials: &HashMap<Uuid, (Uuid, String)>,
 ) -> OrderListItem {
@@ -219,15 +245,23 @@ fn assemble_order(
         .filter(|entry| entry.order_id == row.id)
         .cloned()
         .collect();
+    let build_assignments: Vec<AssignmentRow> = assignments
+        .iter()
+        .filter(|assignment| assignment.order_id == row.id)
+        .cloned()
+        .collect();
 
-    let stages = with_start_times(
-        assemble_stages(
-            catalog,
-            &build_progress,
-            production_location_id,
-            row.receiving_location_id,
+    let stages = with_assignees(
+        with_start_times(
+            assemble_stages(
+                catalog,
+                &build_progress,
+                production_location_id,
+                row.receiving_location_id,
+            ),
+            date_start(row.invoice_date),
         ),
-        date_start(row.invoice_date),
+        &build_assignments,
     );
     let current_stage = current_stage_name(&stages);
 
@@ -299,6 +333,7 @@ async fn assemble(state: &AppState, rows: Vec<OrderRow>) -> Result<Vec<OrderList
     let material_ids: Vec<Uuid> = rows.iter().map(|row| row.material_id).collect();
     let catalog = repository::list_stage_catalog(state).await?;
     let progress = repository::list_progress(state, &order_ids).await?;
+    let assignments = repository::list_assignments(state, &order_ids).await?;
     let repairs = repository::list_repairs(state, &order_ids).await?;
     let single_location_materials = single_location_map(state, &material_ids).await?;
 
@@ -309,6 +344,7 @@ async fn assemble(state: &AppState, rows: Vec<OrderRow>) -> Result<Vec<OrderList
                 row,
                 &catalog,
                 &progress,
+                &assignments,
                 &repairs,
                 &single_location_materials,
             )
@@ -431,6 +467,46 @@ pub async fn set_stage(
     load_order(state, order_id).await
 }
 
+/// Assigns or clears a stage's assignee, independent of `set_stage` — a stage
+/// is assignable whether it's pending, done, or skipped. `assignee_name` is
+/// resolved here against the (currently mocked) user directory rather than
+/// trusted from the client, matching how a location's name is always looked
+/// up server-side instead of taken from the request.
+pub async fn set_assignee(
+    state: &AppState,
+    order_id: Uuid,
+    stage_id: Uuid,
+    input: AssignStageInput,
+) -> Result<OrderListItem, AppError> {
+    repository::get_order(state, order_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
+
+    let catalog = repository::list_stage_catalog(state).await?;
+    if !catalog.iter().any(|stage| stage.id == stage_id) {
+        return Err(AppError::NotFound(format!(
+            "order stage {stage_id} not found"
+        )));
+    }
+
+    match input.assignee_id {
+        Some(assignee_id) => {
+            let users = users::service::list_users(state).await?;
+            let user = users
+                .iter()
+                .find(|user| user.id == assignee_id)
+                .ok_or_else(|| AppError::BadRequest(format!("unknown user {assignee_id}")))?;
+
+            repository::set_assignee(state, order_id, stage_id, &user.id, &user.name).await?;
+        }
+        None => {
+            repository::clear_assignee(state, order_id, stage_id).await?;
+        }
+    }
+
+    load_order(state, order_id).await
+}
+
 pub async fn create_repair(
     state: &AppState,
     order_id: Uuid,
@@ -524,6 +600,15 @@ mod tests {
             location_id: None,
             location: None,
             notes: None,
+        }
+    }
+
+    fn assignment(stage_sort_order: i32, assignee_id: &str, assignee_name: &str) -> AssignmentRow {
+        AssignmentRow {
+            order_id: Uuid::nil(),
+            stage_id: Uuid::from_u128(stage_sort_order as u128),
+            assignee_id: assignee_id.to_string(),
+            assignee_name: assignee_name.to_string(),
         }
     }
 
@@ -822,5 +907,48 @@ mod tests {
 
         assert!(stages[2].started_at.is_some());
         assert_eq!(stages[3].started_at, None);
+    }
+
+    #[test]
+    fn an_assigned_stage_carries_its_assignee() {
+        let stages = with_assignees(
+            assemble_stages(&catalog(), &[], Some(workshop()), Some(branch())),
+            &[assignment(1, "mock-user-1", "Ahmed Al-Sayed")],
+        );
+
+        assert_eq!(stages[0].assignee_id.as_deref(), Some("mock-user-1"));
+        assert_eq!(stages[0].assignee_name.as_deref(), Some("Ahmed Al-Sayed"));
+        assert_eq!(stages[1].assignee_id, None);
+    }
+
+    #[test]
+    fn assignment_is_independent_of_progress() {
+        // Sewing is assigned but nobody has touched it yet — it's still the
+        // stage the checklist reports as current.
+        let stages = with_assignees(
+            assemble_stages(
+                &catalog(),
+                &[progress(1, "done")],
+                Some(workshop()),
+                Some(branch()),
+            ),
+            &[assignment(2, "mock-user-2", "Fatima Al-Zahrani")],
+        );
+
+        assert_eq!(current_stage_name(&stages).as_deref(), Some("Sewing"));
+        assert_eq!(
+            stages[1].assignee_name.as_deref(),
+            Some("Fatima Al-Zahrani")
+        );
+    }
+
+    #[test]
+    fn an_unassigned_stage_carries_no_assignee() {
+        let stages = with_assignees(
+            assemble_stages(&catalog(), &[], Some(workshop()), Some(branch())),
+            &[],
+        );
+
+        assert!(stages.iter().all(|entry| entry.assignee_id.is_none()));
     }
 }

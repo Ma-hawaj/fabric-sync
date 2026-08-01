@@ -9,8 +9,8 @@ use crate::{auth::AuthenticatedUser, error::AppError, state::AppState};
 use super::{
     service,
     types::{
-        CreateRepairInput, OrderListItem, ReceiveOrderInput, SetStageInput, UpdateOrderInput,
-        UpdateRepairInput,
+        AssignStageInput, CreateRepairInput, OrderListItem, ReceiveOrderInput, SetStageInput,
+        UpdateOrderInput, UpdateRepairInput,
     },
 };
 
@@ -49,6 +49,17 @@ pub async fn set_stage(
 ) -> Result<Json<OrderListItem>, AppError> {
     Ok(Json(
         service::set_stage(&state, order_id, stage_id, input).await?,
+    ))
+}
+
+pub async fn set_assignee(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path((order_id, stage_id)): Path<(Uuid, Uuid)>,
+    Json(input): Json<AssignStageInput>,
+) -> Result<Json<OrderListItem>, AppError> {
+    Ok(Json(
+        service::set_assignee(&state, order_id, stage_id, input).await?,
     ))
 }
 

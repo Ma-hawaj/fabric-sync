@@ -70,6 +70,17 @@ pub struct ProgressRow {
     pub notes: Option<String>,
 }
 
+/// Who is assigned to a stage, independent of `ProgressRow` — a stage is
+/// assignable before it is done, so this can't live on a row that only
+/// exists once one is.
+#[derive(Clone, Debug)]
+pub struct AssignmentRow {
+    pub order_id: Uuid,
+    pub stage_id: Uuid,
+    pub assignee_id: String,
+    pub assignee_name: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct RepairRow {
     pub id: Uuid,
@@ -133,6 +144,10 @@ pub struct OrderStageEntry {
     pub location_id: Option<Uuid>,
     pub location: Option<String>,
     pub notes: Option<String>,
+    /// Who is assigned, if anyone — independent of `status`, since a stage can
+    /// be assigned before it's done.
+    pub assignee_id: Option<String>,
+    pub assignee_name: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -215,6 +230,15 @@ pub struct SetStageInput {
     /// that needs a delivery.
     pub location_id: Option<Uuid>,
     pub notes: Option<String>,
+}
+
+/// Body for `PUT /orders/:id/stages/:stageId/assignee`. `None` (omitted or
+/// explicit `null` — the body has no other field, so the two are
+/// indistinguishable and mean the same thing here) clears the assignment.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssignStageInput {
+    pub assignee_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

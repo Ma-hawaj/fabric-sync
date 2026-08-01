@@ -182,6 +182,27 @@ CREATE TABLE order_stage_progress (
     UNIQUE (order_id, stage_id)
 );
 
+-- Who's responsible for a stage, independent of order_stage_progress: a stage
+-- can be assigned before any work happens, so it can't be a column on rows
+-- that only exist once a stage is done or skipped. One assignee at a time per
+-- order/stage — assigning again overwrites rather than stacking, and there is
+-- no repair_id here for the same reason order_stage_progress dropped it: a
+-- repair is tracked by its own record, not a second pass through the stages.
+--
+-- assignee_id is TEXT rather than a foreign key because there is no local
+-- user table yet (see features/users) — it is mocked pending real auth and a
+-- Zitadel-backed directory. assignee_name is denormalized alongside it so a
+-- past assignment still reads sensibly if that mock list ever changes.
+CREATE TABLE order_stage_assignments (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    order_id UUID NOT NULL REFERENCES orders(id),
+    stage_id UUID NOT NULL REFERENCES order_stages(id),
+    assignee_id TEXT NOT NULL,
+    assignee_name TEXT NOT NULL,
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (order_id, stage_id)
+);
+
 -- A finished good sold as-is, as opposed to `materials`, which are raw fabric
 -- consumed by a tailoring order. A product carries a list price because it
 -- sells at one; an order's price is typed in per line instead. Deactivating a

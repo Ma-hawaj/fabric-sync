@@ -24,16 +24,22 @@ import {
   orderReceivingLocations,
   productionLocations,
 } from '@/features/locations/lib/location-filters'
+import { useUsers } from '@/features/users/hooks/use-users'
 import {
   repairStatusLabel,
   stageBadgeVariant,
   stageStatusLabel,
   stageTimingLabel,
 } from '../lib/order-tracking'
+import { useSetAssignee } from '../hooks/use-set-assignee'
 import { useSetOrderStage } from '../hooks/use-set-order-stage'
 import { useUpdateOrder } from '../hooks/use-update-order'
 import { useUpdateRepair } from '../hooks/use-update-repair'
 import type { Order, OrderRepair, OrderStageEntry } from '../types/orders'
+
+// Base UI's Select reserves the empty string, so "nobody assigned" needs a
+// real sentinel value rather than ''.
+const UNASSIGNED = '__unassigned__'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -253,6 +259,7 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
 
         {stage.applicable && (
           <div className="flex shrink-0 items-center gap-1">
+            <AssigneePicker order={order} stage={stage} />
             {stage.status === 'pending' ? (
               <>
                 <Button
@@ -316,6 +323,67 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
         </div>
       )}
     </li>
+  )
+}
+
+function AssigneePicker({
+  order,
+  stage,
+}: {
+  order: Order
+  stage: OrderStageEntry
+}) {
+  const { data: users = [] } = useUsers()
+  const setAssignee = useSetAssignee()
+
+  const options = React.useMemo(
+    () => users.map((user) => ({ value: user.id, label: user.name })),
+    [users],
+  )
+
+  const handleChange = async (value: string) => {
+    const assigneeId = value === UNASSIGNED ? undefined : value
+    const pending = setAssignee.mutateAsync({
+      orderId: order.id,
+      stageId: stage.stageId,
+      assigneeId,
+    })
+    toast.promise(pending, {
+      loading: 'Updating assignee...',
+      success: assigneeId
+        ? `${stage.name} assigned to ${options.find((option) => option.value === assigneeId)?.label ?? 'someone'}.`
+        : `${stage.name} was unassigned.`,
+      error: 'Could not update the assignee. Please try again.',
+    })
+    try {
+      await pending
+    } catch {
+      return
+    }
+  }
+
+  return (
+    <Select
+      items={[{ value: UNASSIGNED, label: 'Unassigned' }, ...options]}
+      value={stage.assigneeId ?? UNASSIGNED}
+      onValueChange={(value: string) => void handleChange(value)}
+    >
+      <SelectTrigger
+        id={`assignee-${stage.stageId}`}
+        size="sm"
+        className="h-8 w-auto max-w-[9rem]"
+      >
+        <SelectValue placeholder="Unassigned" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 

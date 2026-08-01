@@ -36,7 +36,7 @@ cargo sqlx prepare
 
 `cargo sqlx prepare --check` runs in CI and fails if `backend/.sqlx` is stale — regenerate it any time a query changes, not just when tests fail.
 
-Sample data for local work lives in `backend/seeds/dev_seed.sql` and is loaded at startup by `SEED_DEV_DATA=true cargo run` (locations, materials, products, customers with repeat measurement visits, invoices across every payment state, gift cards, and twelve orders spread across the tracking checklist with four repairs). It only runs against a database with no customers yet — `seed::run` guards on that, so repeated runs are safe and it can never touch real rows. The script is executed with `sqlx::raw_sql`, **not** the `query!` macros, deliberately: `raw_sql` is unchecked, so the seed contributes nothing to `backend/.sqlx` and can't break `cargo sqlx prepare --check`. The backend reads the flag off the process env — there is no `dotenvy`, so `.env` is for docker compose only.
+Sample data for local work lives in `backend/seeds/dev_seed.sql` and is loaded at startup by `SEED_DEV_DATA=true cargo run` (locations, materials, products, customers with repeat measurement visits, invoices across every payment state, gift cards, and twelve orders spread across the tracking checklist with four repairs and a few stage assignments). It only runs against a database with no customers yet — `seed::run` guards on that, so repeated runs are safe and it can never touch real rows. The script is executed with `sqlx::raw_sql`, **not** the `query!` macros, deliberately: `raw_sql` is unchecked, so the seed contributes nothing to `backend/.sqlx` and can't break `cargo sqlx prepare --check`. The backend reads the flag off the process env — there is no `dotenvy`, so `.env` is for docker compose only.
 
 ### Frontend (`cd frontend`)
 
@@ -132,11 +132,12 @@ Columns drive their own filter UI through `meta`: set `label`, `placeholder`, an
 
 ## Order tracking and repairs
 
-Production progress is **derived, never stored per order**. Three tables carry it:
+Production progress is **derived, never stored per order**. Four tables carry it:
 
 - `order_stages` — the staff-editable catalog (`name UNIQUE`, `sort_order`, `requires_delivery`, `is_active`), seeded in the migration with Cutting / Sewing / Finishing / Location delivery. It's a table rather than more values on `orders.status` precisely so staff can change it, and it retires with `is_active` like `branch` rather than deleting.
 - `order_repairs` — a garment brought back for rework. An order can have several; each is `open → in_progress → completed | cancelled` with an optional `charge` (recorded for the books, never billed to an invoice).
 - `order_stage_progress` — only the stages actually acted on (`done` or `skipped`), one checklist per order (`UNIQUE (order_id, stage_id)`). A repair does **not** get its own pass through these stages — it's tracked by `order_repairs.status` alone (`open → in_progress → completed | cancelled`, moved by staff via `PATCH .../repairs/:repairId`, not by acting on a checklist).
+- `order_stage_assignments` — who's assigned to a stage, deliberately **separate** from `order_stage_progress` (`UNIQUE (order_id, stage_id)`, no status column at all). A stage is assignable before it's ever touched, so this can't live on a row that only exists once a stage is done or skipped — assignment and progress are independent, and a stage can be assigned, reassigned, or cleared regardless of where it is in the checklist. `assignee_id`/`assignee_name` are plain `TEXT`, not a foreign key — see the `users` note below.
 
 A checklist is built by overlaying the progress rows onto the live catalog, so **adding or retiring a stage takes effect on in-flight orders with no backfill**, and invoice creation seeds nothing (`insert_order` is unchanged). A retired stage stays on an order that already recorded it. Undoing a stage **deletes** its row — absence *is* "not done yet", which is why there is no stored `pending`.
 
@@ -146,9 +147,11 @@ A checklist is built by overlaying the progress rows onto the live catalog, so *
 
 **Stage timing is derived, not stored.** `OrderStageEntry.startedAt` has no backing column — `orders/service.rs::with_start_times` chains each stage's start to the previous stage's `completedAt` (a non-applicable stage is transparent to the chain: no start time, and it doesn't block the next one from getting one). The very first stage's start is midnight UTC on `invoice_date` — the closest thing to a creation timestamp the schema has, since `orders` has no `created_at`. Only a recorded stage or the current outstanding one gets a start time; anything further down the queue is `null` since work hasn't reached it.
 
-The assembly lives in pure functions in `orders/service.rs` (`stage_applies`, `assemble_stages`, `current_stage_name`, `effective_production`, `with_start_times`) fed by five flat queries rather than one lateral join — that is the only seam the backend's test setup can exercise. **`orders.status` and invoice settlement are untouched by all of this**: `receive_order` still works with stages outstanding, and `invoice_fully_received` still counts `status <> 'received'`.
+**A stage is assignable independent of its status.** `PUT /orders/:id/stages/:stageId/assignee` (body `{ assigneeId }`, omitted or `null` clears it) upserts `order_stage_assignments`; `orders/service.rs::set_assignee` resolves `assigneeId` against `users::service::list_users` server-side and stores the resolved name, rather than trusting a display name from the client. `orders/service.rs::with_assignees` overlays the result onto an already-assembled checklist — it's a separate pass from `assemble_stages`/`with_start_times`, since assignment has nothing to do with progress.
 
-Frontend display rules live in one place, `features/orders/lib/order-tracking.ts` (`currentStageLabel`, `stageFilterOptions`, `openRepairCount`, `stageTimingLabel`, …) — the Stage/Repairs columns and the tracking sheet both read from it. The catalog is administered at `/order-stages`, a file-for-file mirror of the `locations` feature.
+The assembly lives in pure functions in `orders/service.rs` (`stage_applies`, `assemble_stages`, `current_stage_name`, `effective_production`, `with_start_times`, `with_assignees`) fed by flat queries rather than one lateral join — that is the only seam the backend's test setup can exercise. **`orders.status` and invoice settlement are untouched by all of this**: `receive_order` still works with stages outstanding, and `invoice_fully_received` still counts `status <> 'received'`.
+
+Frontend display rules live in one place, `features/orders/lib/order-tracking.ts` (`currentStageLabel`, `stageFilterOptions`, `openRepairCount`, `stageTimingLabel`, …) — the Stage/Repairs columns and the tracking sheet both read from it. The catalog is administered at `/order-stages`, a file-for-file mirror of the `locations` feature. The assignee picker in the tracking sheet (`components/order-tracking-sheet.tsx`) is fed by `features/users/hooks/use-users.ts`, a plain `GET /users` query — unrelated to `routes/_authenticated/users.tsx`, which is still its own unwired stub.
 
 Current backend routes, by feature module:
 
@@ -159,13 +162,13 @@ Current backend routes, by feature module:
 | `materials` | `GET /materials`, `POST /materials`, `POST /materials/:id/stock` |
 | `locations` | `GET /locations`, `POST /locations`, `PATCH /locations/:id` |
 | `invoices` | `GET /invoices`, `POST /invoices` |
-| `orders` | `GET /orders`, `PATCH /orders/:id`, `POST /orders/:id/receive`, `POST /orders/:id/stages/:stageId`, `POST /orders/:id/repairs`, `PATCH /orders/:id/repairs/:repairId` |
+| `orders` | `GET /orders`, `PATCH /orders/:id`, `POST /orders/:id/receive`, `POST /orders/:id/stages/:stageId`, `PUT /orders/:id/stages/:stageId/assignee`, `POST /orders/:id/repairs`, `PATCH /orders/:id/repairs/:repairId` |
 | `order_stages` | `GET /order-stages`, `POST /order-stages`, `PATCH /order-stages/:id` |
 | `users` | `GET /users` |
 
 Path params use axum 0.7's `:id` syntax (0.8 switched to `{id}` — don't copy that from newer axum docs).
 
-**`users` is mocked.** `features/users/service.rs::list_users` returns four hardcoded `User { id, name }` values — there's no table, no `repository.rs`, and the handler's `AppState` parameter is currently unused. The plan is to back it with Zitadel's user directory once real auth is wired up (`require_auth` is disabled — see above); `id` is a plain `String` rather than a `Uuid` because it's meant to eventually hold a Zitadel subject, not an id this app generates.
+**`users` is mocked.** `features/users/service.rs::list_users` returns four hardcoded `User { id, name }` values — there's no table, no `repository.rs`, and the handler's `AppState` parameter is currently unused. The plan is to back it with Zitadel's user directory once real auth is wired up (`require_auth` is disabled — see above); `id` is a plain `String` rather than a `Uuid` because it's meant to eventually hold a Zitadel subject, not an id this app generates. It's `pub(crate)` (see `users/mod.rs`) so `orders/service.rs::set_assignee` can resolve an assignee's display name against it directly — the same cross-feature-call pattern `invoices` already uses against `customers`/`products`.
 
 **Invoice totals apply 15% VAT after the discount, floored at zero.** The rate is written twice — `VAT_RATE` in `backend/src/features/invoices/service.rs` (authoritative; the stored total) and again in `frontend/src/features/invoices/components/invoice-form/invoice-summary.tsx` (the on-screen running total). Change one and you must change the other. Note `frontend/.../lib/invoice-pricing.ts` only computes per-line totals — it has no VAT in it. Currency is single-valued by design: `CURRENCY = 'SAR'` in `src/lib/currency.ts`.
 

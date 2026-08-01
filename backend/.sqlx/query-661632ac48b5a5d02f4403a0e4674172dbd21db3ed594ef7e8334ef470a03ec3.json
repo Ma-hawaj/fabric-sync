@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO order_stage_assignments (order_id, stage_id, assignee_id, assignee_name)\n        VALUES ($1, $2, $3, $4)\n        ON CONFLICT (order_id, stage_id)\n        DO UPDATE SET\n            assignee_id = EXCLUDED.assignee_id,\n            assignee_name = EXCLUDED.assignee_name,\n            assigned_at = now()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "661632ac48b5a5d02f4403a0e4674172dbd21db3ed594ef7e8334ef470a03ec3"
+}
