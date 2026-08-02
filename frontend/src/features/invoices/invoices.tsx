@@ -5,9 +5,12 @@ import { useDataTable } from '@/hooks/use-data-table'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
+import { toast } from 'sonner'
 import { getInvoiceColumns } from './components/invoice-columns'
+import { InvoiceDetailsSheet } from './components/invoice-details-sheet'
 import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
 import { useInvoices } from './hooks/use-invoices'
+import { printInvoiceDocument } from './lib/print-invoice'
 import type { Invoice } from './types/invoices'
 
 export function InvoicesPage() {
@@ -15,6 +18,15 @@ export function InvoicesPage() {
   const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(
     null,
   )
+  const [viewedInvoice, setViewedInvoice] = React.useState<Invoice | null>(null)
+
+  const exportPdf = React.useCallback((invoice: Invoice) => {
+    toast.promise(printInvoiceDocument(invoice.id), {
+      loading: 'Preparing the invoice...',
+      success: 'Invoice ready — choose "Save as PDF" to download it.',
+      error: 'Could not prepare this invoice. Please try again.',
+    })
+  }, [])
 
   // The materials filter offers exactly the material names present in the
   // fetched invoices.
@@ -23,8 +35,10 @@ export function InvoicesPage() {
     return getInvoiceColumns(
       materials.map((m) => ({ label: m, value: m })),
       setSelectedInvoice,
+      setViewedInvoice,
+      exportPdf,
     )
-  }, [invoices])
+  }, [invoices, exportPdf])
 
   const { table } = useDataTable({
     data: invoices,
@@ -62,6 +76,11 @@ export function InvoicesPage() {
       <ReceiveInvoiceDialog
         invoice={selectedInvoice}
         onOpenChange={(open) => !open && setSelectedInvoice(null)}
+      />
+
+      <InvoiceDetailsSheet
+        invoice={viewedInvoice}
+        onOpenChange={(open) => !open && setViewedInvoice(null)}
       />
     </div>
   )
