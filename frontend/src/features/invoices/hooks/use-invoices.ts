@@ -1,13 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiBaseUrl, apiFetch } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 import type { Invoice } from '../types/invoices'
 
 async function fetchInvoices(): Promise<Invoice[]> {
-  const response = await apiFetch(`${apiBaseUrl}/invoices`)
-  if (!response.ok) {
-    throw new Error(`Failed to load invoices (${response.status})`)
-  }
-  return response.json()
+  const { data } = await apiClient.get<Invoice[]>('/invoices')
+  return data
 }
 
 export function useInvoices() {

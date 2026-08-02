@@ -1,15 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiBaseUrl, apiFetch } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 import type { Order } from '../types/orders'
 
 async function fetchOrders(): Promise<Order[]> {
-  const response = await apiFetch(`${apiBaseUrl}/orders`)
-  if (!response.ok) {
-    throw new Error(`Failed to load orders (${response.status})`)
-  }
-  const orders: (Omit<Order, 'invoiceDate'> & { invoiceDate: string })[] =
-    await response.json()
-  return orders.map((order) => ({
+  const { data } =
+    await apiClient.get<
+      (Omit<Order, 'invoiceDate'> & { invoiceDate: string })[]
+    >('/orders')
+  return data.map((order) => ({
     ...order,
     invoiceDate: new Date(order.invoiceDate),
   }))

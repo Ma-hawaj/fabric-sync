@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiBaseUrl, apiFetch } from '@/lib/api'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
+import { apiClient } from '@/lib/api'
 import type { Material } from '../types/inventory'
 import type { InventoryFormValues } from '../types/inventory-form'
 
@@ -14,34 +13,19 @@ function entriesPayload(values: InventoryFormValues) {
 // Both endpoints return the full updated material, so the cache can be
 // patched from the response instead of refetching the whole list.
 async function addStock(values: InventoryFormValues): Promise<Material> {
-  const request =
+  const { data } =
     values.mode === 'existing'
-      ? {
-          url: `${apiBaseUrl}/materials/${values.materialId}/stock`,
-          body: { entries: entriesPayload(values) },
-        }
-      : {
-          url: `${apiBaseUrl}/materials`,
-          body: {
-            name: values.name,
-            sku: values.sku.trim() || null,
-            unit: values.unit,
-            entries: entriesPayload(values),
-          },
-        }
-
-  const response = await apiFetch(request.url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request.body),
-  })
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to save stock (${response.status})`,
-      response.status,
-    )
-  }
-  return response.json()
+      ? await apiClient.post<Material>(
+          `/materials/${values.materialId}/stock`,
+          { entries: entriesPayload(values) },
+        )
+      : await apiClient.post<Material>('/materials', {
+          name: values.name,
+          sku: values.sku.trim() || null,
+          unit: values.unit,
+          entries: entriesPayload(values),
+        })
+  return data
 }
 
 export function useAddStock() {

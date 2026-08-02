@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiBaseUrl, apiFetch } from '@/lib/api'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
+import { apiClient } from '@/lib/api'
 import type { Order, PaymentType } from '../types/orders'
 
 interface ReceiveOrderInput {
@@ -12,18 +11,10 @@ async function receiveOrder({
   orderId,
   paymentType,
 }: ReceiveOrderInput): Promise<Order> {
-  const response = await apiFetch(`${apiBaseUrl}/orders/${orderId}/receive`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ paymentType }),
+  const { data } = await apiClient.post<Order>(`/orders/${orderId}/receive`, {
+    paymentType,
   })
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to receive order (${response.status})`,
-      response.status,
-    )
-  }
-  return response.json()
+  return data
 }
 
 export function useReceiveOrder() {
