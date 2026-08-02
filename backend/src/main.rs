@@ -36,7 +36,15 @@ async fn main() -> Result<(), error::AppError> {
     let token_introspection = auth::TokenIntrospection::discover(&config)
         .await
         .map_err(error::AppError::Auth)?;
-    let app = app::router(AppState::new(config, db, token_introspection));
+    let zitadel_users = features::users::zitadel::ZitadelUserDirectory::discover(&config)
+        .await
+        .map_err(error::AppError::Auth)?;
+    let app = app::router(AppState::new(
+        config,
+        db,
+        token_introspection,
+        zitadel_users,
+    ));
 
     axum::serve(listener, app).await?;
 
