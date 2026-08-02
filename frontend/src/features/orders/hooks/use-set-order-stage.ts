@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
+import { apiClient } from '@/lib/api'
 import type { Order, OrderStageStatus } from '../types/orders'
 
 interface SetOrderStageInput {
@@ -17,21 +16,11 @@ async function setOrderStage({
   stageId,
   ...body
 }: SetOrderStageInput): Promise<Order> {
-  const response = await fetch(
-    `${apiBaseUrl}/orders/${orderId}/stages/${stageId}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    },
+  const { data } = await apiClient.post<Order>(
+    `/orders/${orderId}/stages/${stageId}`,
+    body,
   )
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to update stage (${response.status})`,
-      response.status,
-    )
-  }
-  return response.json()
+  return data
 }
 
 export function useSetOrderStage() {

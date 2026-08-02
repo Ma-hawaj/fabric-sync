@@ -1,28 +1,17 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
-import { apiBaseUrl } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 import { stockEntriesPayload } from '../lib/product-payload'
 import type { Product } from '../types/product'
 import type { ProductFormValues } from '../types/product-form'
 
 async function createProduct(values: ProductFormValues): Promise<Product> {
-  const response = await fetch(`${apiBaseUrl}/products`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: values.name,
-      sku: values.sku.trim() || null,
-      unitPrice: values.unitPrice === '' ? 0 : values.unitPrice,
-      entries: stockEntriesPayload(values.entries),
-    }),
+  const { data } = await apiClient.post<Product>('/products', {
+    name: values.name,
+    sku: values.sku.trim() || null,
+    unitPrice: values.unitPrice === '' ? 0 : values.unitPrice,
+    entries: stockEntriesPayload(values.entries),
   })
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to create product (${response.status})`,
-      response.status,
-    )
-  }
-  return response.json()
+  return data
 }
 
 export function useCreateProduct() {

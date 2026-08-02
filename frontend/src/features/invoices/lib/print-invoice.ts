@@ -1,5 +1,4 @@
-import { apiBaseUrl } from '@/lib/api'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
+import { apiClient } from '@/lib/api'
 
 // How long to wait for the print dialog before tearing the iframe down, when
 // the browser gives us no afterprint event to go on (Safari doesn't fire one
@@ -12,24 +11,18 @@ const TEARDOWN_FALLBACK_MS = 60_000
  *
  * The HTML is fetched and written into a hidden iframe rather than navigated
  * to, for two reasons: the app's own page — sidebar, toolbars and all — never
- * enters the print output, and the request is an ordinary `fetch`, so it can
- * carry an Authorization header once there is one to carry. A plain
- * `<iframe src>` could not.
+ * enters the print output, and the request goes through `apiClient`, so it
+ * carries an Authorization header. A plain `<iframe src>` could not.
  *
  * Resolves once the print dialog has been opened, not once the user has
  * finished with it — the browser gives no way to tell whether they saved a PDF
  * or cancelled.
  */
 export async function printInvoiceDocument(invoiceId: string): Promise<void> {
-  const response = await fetch(`${apiBaseUrl}/invoices/${invoiceId}/document`)
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to load the invoice document (${response.status})`,
-      response.status,
-    )
-  }
-
-  const html = await response.text()
+  const { data: html } = await apiClient.get<string>(
+    `/invoices/${invoiceId}/document`,
+    { responseType: 'text' },
+  )
 
   const frame = document.createElement('iframe')
   frame.setAttribute('aria-hidden', 'true')

@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
+import { apiClient } from '@/lib/api'
 import { byPosition } from '../lib/order-stage-order'
 import type { OrderStage } from '../types/order-stage'
 
@@ -19,18 +18,11 @@ async function updateOrderStage({
   id,
   ...changes
 }: UpdateOrderStageInput): Promise<OrderStage> {
-  const response = await fetch(`${apiBaseUrl}/order-stages/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(changes),
-  })
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to update order stage (${response.status})`,
-      response.status,
-    )
-  }
-  return response.json()
+  const { data } = await apiClient.patch<OrderStage>(
+    `/order-stages/${id}`,
+    changes,
+  )
+  return data
 }
 
 export function useUpdateOrderStage() {

@@ -12,7 +12,7 @@ import {
   ComboboxList,
 } from '@/components/ui/combobox'
 import { NumberField, TextField } from '@/components/form/fields'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
+import { ApiError } from '@/lib/api'
 import { useCustomers } from '@/features/customers/hooks/use-customers'
 import { CURRENCY } from '@/lib/currency'
 import { useCreateGiftCard } from './hooks/use-create-gift-card'

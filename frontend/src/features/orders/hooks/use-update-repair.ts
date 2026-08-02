@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
+import { apiClient } from '@/lib/api'
 import type { Order, RepairStatus } from '../types/orders'
 
 // PATCH accepts any subset, so this serves both the Complete/Cancel actions
@@ -19,21 +18,11 @@ async function updateRepair({
   repairId,
   ...changes
 }: UpdateRepairInput): Promise<Order> {
-  const response = await fetch(
-    `${apiBaseUrl}/orders/${orderId}/repairs/${repairId}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(changes),
-    },
+  const { data } = await apiClient.patch<Order>(
+    `/orders/${orderId}/repairs/${repairId}`,
+    changes,
   )
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to update repair (${response.status})`,
-      response.status,
-    )
-  }
-  return response.json()
+  return data
 }
 
 export function useUpdateRepair() {

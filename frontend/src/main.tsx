@@ -21,6 +21,10 @@ const rootElement = document.getElementById('app')!
 function App() {
   const auth = useAuth()
 
+  if (auth.isLoading) {
+    return null
+  }
+
   return <RouterProvider router={router} context={{ auth, queryClient }} />
 }
 

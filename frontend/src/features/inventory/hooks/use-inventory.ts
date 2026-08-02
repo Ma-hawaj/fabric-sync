@@ -1,13 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 import type { Material } from '../types/inventory'
 
 async function fetchMaterials(): Promise<Material[]> {
-  const response = await fetch(`${apiBaseUrl}/materials`)
-  if (!response.ok) {
-    throw new Error(`Failed to load materials (${response.status})`)
-  }
-  return response.json()
+  const { data } = await apiClient.get<Material[]>('/materials')
+  return data
 }
 
 export function useInventory() {

@@ -1,18 +1,8 @@
 import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { createFileRoute, Link, redirect } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 
-export const Route = createFileRoute('/dashboard')({
-  beforeLoad: ({ context, location }) => {
-    if (!context.auth.isAuthenticated) {
-      throw redirect({
-        to: '/login',
-        search: {
-          redirect: location.href,
-        },
-      })
-    }
-  },
+export const Route = createFileRoute('/_authenticated/dashboard')({
   component: Dashboard,
 })
 
@@ -29,8 +19,8 @@ function Dashboard() {
           Dashboard
         </h1>
         <p className="mt-3 max-w-2xl text-muted-foreground">
-          This route is only available after a bearer token is stored in the
-          frontend auth context.
+          This route is only available after signing in through the identity
+          provider.
         </p>
       </div>
       <div className="flex gap-3">

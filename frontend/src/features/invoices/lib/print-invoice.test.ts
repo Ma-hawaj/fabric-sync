@@ -1,18 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { printInvoiceDocument } from './print-invoice'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
+import { ApiError, apiClient } from '@/lib/api'
 
 const DOCUMENT_HTML = '<!doctype html><html><body>Invoice INV-42</body></html>'
 
-function mockFetch(response: Partial<Response>) {
-  const fetchMock = vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    text: () => Promise.resolve(DOCUMENT_HTML),
-    ...response,
-  })
-  vi.stubGlobal('fetch', fetchMock)
-  return fetchMock
+function mockGet(result: { data?: string; status?: number; ok?: boolean }) {
+  const { ok = true, status = 200, data = DOCUMENT_HTML } = result
+  const getMock = vi
+    .spyOn(apiClient, 'get')
+    .mockImplementation(() =>
+      ok
+        ? Promise.resolve({ data, status })
+        : Promise.reject(new ApiError(`Request failed (${status})`, status)),
+    )
+  return getMock
 }
 
 // jsdom implements neither printing nor iframe loading: nothing sets srcdoc
@@ -67,17 +68,19 @@ afterEach(() => {
 
 describe('printInvoiceDocument', () => {
   it('prints the document the backend rendered, in a hidden frame', async () => {
-    const fetchMock = mockFetch({})
+    const getMock = mockGet({})
     const { print, restore } = stubIframeBehaviour()
 
     await printInvoiceDocument('inv-1')
 
-    expect(fetchMock).toHaveBeenCalledWith('/invoices/inv-1/document')
+    expect(getMock).toHaveBeenCalledWith('/invoices/inv-1/document', {
+      responseType: 'text',
+    })
 
     const frame = document.querySelector('iframe')
     expect(frame).toBeTruthy()
     // The fetched HTML is written into the frame rather than the frame being
-    // pointed at the URL, so the request can carry auth headers later.
+    // pointed at the URL, so the request can carry auth headers.
     expect(frame?.getAttribute('srcdoc')).toBe(DOCUMENT_HTML)
     expect(frame?.style.visibility).toBe('hidden')
     expect(print).toHaveBeenCalled()
@@ -86,7 +89,7 @@ describe('printInvoiceDocument', () => {
   })
 
   it('throws an ApiError carrying the status when the document fails to load', async () => {
-    mockFetch({ ok: false, status: 404 })
+    mockGet({ ok: false, status: 404 })
     const { restore } = stubIframeBehaviour()
 
     await expect(printInvoiceDocument('inv-1')).rejects.toThrow(ApiError)

@@ -1,17 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 import type { CustomerFormValues } from '../types/customer-form'
 import type { Customer } from '../types/customers'
 import type { MeasurementDraft } from '../types/measurement-form'
-
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-  ) {
-    super(message)
-  }
-}
 
 // Blank strings mean "not entered" in a MeasurementDraft; the backend wants
 // those fields absent (null) rather than empty strings.
@@ -53,24 +44,14 @@ export function measurementPayload(measurement: MeasurementDraft) {
 }
 
 async function createCustomer(values: CustomerFormValues): Promise<Customer> {
-  const response = await fetch(`${apiBaseUrl}/customers`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: values.name,
-      mobileNo: values.mobileNo,
-      measurement: values.addMeasurement
-        ? measurementPayload(values.measurement)
-        : null,
-    }),
+  const { data } = await apiClient.post<Customer>('/customers', {
+    name: values.name,
+    mobileNo: values.mobileNo,
+    measurement: values.addMeasurement
+      ? measurementPayload(values.measurement)
+      : null,
   })
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to create customer (${response.status})`,
-      response.status,
-    )
-  }
-  return response.json()
+  return data
 }
 
 export function useCreateCustomer() {

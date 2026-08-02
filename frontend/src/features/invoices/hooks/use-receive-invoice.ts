@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
+import { apiClient } from '@/lib/api'
 import type { PaymentType } from '../types/invoices'
 
 interface ReceiveInvoiceInput {
@@ -19,18 +18,11 @@ async function receiveInvoice({
   invoiceId,
   paymentType,
 }: ReceiveInvoiceInput): Promise<ReceivedInvoice> {
-  const response = await fetch(`${apiBaseUrl}/invoices/${invoiceId}/receive`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ paymentType }),
-  })
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to receive invoice (${response.status})`,
-      response.status,
-    )
-  }
-  return response.json()
+  const { data } = await apiClient.post<ReceivedInvoice>(
+    `/invoices/${invoiceId}/receive`,
+    { paymentType },
+  )
+  return data
 }
 
 export function useReceiveInvoice() {

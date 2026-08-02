@@ -1,14 +1,11 @@
-use axum::{
-    // middleware,
-    Router,
-};
+use axum::{middleware, Router};
 use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
 };
 
 use crate::{
-    // auth,
+    auth,
     features::{
         customers, gift_cards, health, invoices, locations, materials, order_stages, orders,
         products, users,
@@ -29,20 +26,55 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(health::router())
         .merge(
-            customers::router(), //     .route_layer(
-                                 //     middleware::from_fn_with_state(
-                                 //     state.clone(),
-                                 //     auth::require_auth,
-                                 // )),
+            customers::router().route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::require_auth,
+            )),
         )
-        .merge(materials::router())
-        .merge(locations::router())
-        .merge(invoices::router())
-        .merge(orders::router())
-        .merge(order_stages::router())
-        .merge(products::router())
-        .merge(gift_cards::router())
-        .merge(users::router())
+        .merge(
+            materials::router().route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::require_auth,
+            )),
+        )
+        .merge(
+            locations::router().route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::require_auth,
+            )),
+        )
+        .merge(
+            invoices::router().route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::require_auth,
+            )),
+        )
+        .merge(orders::router().route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_auth,
+        )))
+        .merge(
+            products::router().route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::require_auth,
+            )),
+        )
+        .merge(
+            gift_cards::router().route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::require_auth,
+            )),
+        )
+        .merge(
+            order_stages::router().route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::require_auth,
+            )),
+        )
+        .merge(users::router().route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_auth,
+        )))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)

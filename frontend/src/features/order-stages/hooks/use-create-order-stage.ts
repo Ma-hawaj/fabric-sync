@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
+import { apiClient } from '@/lib/api'
 import { byPosition } from '../lib/order-stage-order'
 import type { OrderStage } from '../types/order-stage'
 import type { OrderStageFormValues } from '../types/order-stage-form'
@@ -8,22 +7,12 @@ import type { OrderStageFormValues } from '../types/order-stage-form'
 async function createOrderStage(
   values: OrderStageFormValues,
 ): Promise<OrderStage> {
-  const response = await fetch(`${apiBaseUrl}/order-stages`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: values.name,
-      sortOrder: Number(values.sortOrder),
-      requiresDelivery: values.requiresDelivery,
-    }),
+  const { data } = await apiClient.post<OrderStage>('/order-stages', {
+    name: values.name,
+    sortOrder: Number(values.sortOrder),
+    requiresDelivery: values.requiresDelivery,
   })
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to create order stage (${response.status})`,
-      response.status,
-    )
-  }
-  return response.json()
+  return data
 }
 
 export function useCreateOrderStage() {

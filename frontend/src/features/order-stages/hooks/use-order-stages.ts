@@ -1,13 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 import type { OrderStage } from '../types/order-stage'
 
 async function fetchOrderStages(): Promise<OrderStage[]> {
-  const response = await fetch(`${apiBaseUrl}/order-stages`)
-  if (!response.ok) {
-    throw new Error(`Failed to load order stages (${response.status})`)
-  }
-  return response.json()
+  const { data } = await apiClient.get<OrderStage[]>('/order-stages')
+  return data
 }
 
 export function useOrderStages() {

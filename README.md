@@ -77,7 +77,12 @@ docker compose up -d --wait
 - Zitadel console: `http://localhost:8080/ui/console`
 - Postgres: `postgres://postgres:postgres@localhost:5432/fabric_sync` (matches the backend's default `DATABASE_URL`)
 
-After the stack is up, create an OAuth application in the Zitadel console and set `OAUTH_CLIENT_ID`/`OAUTH_CLIENT_SECRET` for the backend accordingly.
+After the stack is up, create two OAuth applications in the Zitadel console, in the same project:
+
+- **Backend introspection client** — confidential (has a client secret). Copy its client ID/secret into `OAUTH_CLIENT_ID`/`OAUTH_CLIENT_SECRET` for the backend.
+- **Frontend SPA client** — public, PKCE, no client secret. Set its redirect URI and post-logout redirect URI to `http://localhost:3000/` (must match `VITE_OIDC_REDIRECT_URI`/`VITE_OIDC_POST_LOGOUT_REDIRECT_URI`), and copy its client ID into `VITE_OIDC_CLIENT_ID` for the frontend.
+
+If a valid access token gets a 401 from the backend unexpectedly, check the `aud` claim Zitadel puts on tokens issued to the SPA client against whatever `OAUTH_RESOURCE_AUDIENCE` is set to — either add the backend's client ID as an audience in Zitadel, or leave `OAUTH_RESOURCE_AUDIENCE` unset locally.
 
 ## Backend
 
@@ -138,7 +143,14 @@ npm run build
 npm run check
 ```
 
-Routes are defined in `frontend/src/routes`. Protected frontend routes redirect to `/login` when there is no stored bearer token. The login screen stores an access token in local storage and authenticated API calls send it as a bearer token.
+Routes are defined in `frontend/src/routes`. Protected frontend routes (under `_authenticated/`) redirect straight to the identity provider's hosted login (Authorization Code + PKCE, via `react-oidc-context`/`oidc-client-ts`) when there is no active session — there is no local `/login` page. The access token is held in `sessionStorage` for the tab's lifetime and attached as a bearer token to every backend API call.
+
+Copy `frontend/.env.example` to `frontend/.env` and set the OIDC vars for your identity provider (config is generic/OIDC-standard, so any provider works, not just Zitadel):
+
+- `VITE_OIDC_AUTHORITY` — issuer URL
+- `VITE_OIDC_CLIENT_ID` — the frontend SPA client's ID (see "Local Infrastructure" above)
+- `VITE_OIDC_REDIRECT_URI` / `VITE_OIDC_POST_LOGOUT_REDIRECT_URI`, default `http://localhost:3000/`
+- `VITE_OIDC_SCOPE`, default `openid profile email`
 
 For local development with the frontend and backend on different origins, set `VITE_API_BASE_URL` before starting Vite:
 

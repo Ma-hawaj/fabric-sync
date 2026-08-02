@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
+import { apiClient } from '@/lib/api'
 import type { Order } from '../types/orders'
 
 interface CreateRepairInput {
@@ -14,18 +13,11 @@ async function createRepair({
   orderId,
   ...body
 }: CreateRepairInput): Promise<Order> {
-  const response = await fetch(`${apiBaseUrl}/orders/${orderId}/repairs`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to log repair (${response.status})`,
-      response.status,
-    )
-  }
-  return response.json()
+  const { data } = await apiClient.post<Order>(
+    `/orders/${orderId}/repairs`,
+    body,
+  )
+  return data
 }
 
 export function useCreateRepair() {
