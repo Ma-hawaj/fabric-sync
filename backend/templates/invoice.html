@@ -1,0 +1,575 @@
+{#
+  The invoice document. Edit this file to change how a printed invoice looks.
+
+  Set INVOICE_TEMPLATE_DIR to this directory and the changes show up on the
+  next request, with no rebuild. Unset, the copy compiled into the binary is
+  used instead (see src/features/invoices/document.rs).
+
+  Everything must stay self-contained — inline styles, inline SVG, `data:`
+  URIs. The page is printed from an iframe with no origin of its own to
+  resolve relative URLs against, and will later be rendered by a headless
+  browser that may have no network access.
+
+  Available:
+    invoice    — GET /invoices/:id, camelCase (see types.rs InvoiceDetail)
+    company    — COMPANY_* env vars (see config.rs InvoiceBranding)
+    currency   — currency code, e.g. "BHD"
+    amounts    — every money figure, pre-formatted; keyed as documented below
+    vat_percent— the VAT rate as a whole number, e.g. "10"
+    qr_svg     — the TLV QR code, as inline SVG markup
+
+  Amount keys: subtotal, discountAmount, taxable, vat, giftCardSales, total,
+  giftCardRedeemed, amountPaid, balanceDue, line<N>UnitPrice, line<N>Total,
+  redemption<N> — where <N> is the zero-based index in invoice.lines /
+  invoice.redemptions.
+#}
+{%- set status_labels = {
+  "paid": ("مدفوعة", "Paid"),
+  "partial": ("مدفوعة جزئياً", "Partially paid"),
+  "unpaid": ("غير مدفوعة", "Unpaid")
+} -%}
+{%- set payment_labels = {
+  "benefit": ("بنفت", "Benefit"),
+  "cash": ("نقداً", "Cash"),
+  "card": ("بطاقة", "Card")
+} -%}
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Invoice INV-{{ invoice.invoiceNumber }}</title>
+    <style>
+      /* A4 with a printer-safe margin. The document is one page for a typical
+         invoice and flows onto a second only when the line table is long. */
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
+
+      :root {
+        --ink: #10151c;
+        --muted: #6b7280;
+        --rule: #d8dee7;
+        --tint: #f4f6f9;
+        --accent: #1d4ed8;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 12mm;
+        /* Noto Sans Arabic first so Arabic and Latin share one family where it
+           is installed; the rest are the fallbacks that ship with common
+           systems. If this is later rendered by headless Chromium, install an
+           Arabic font in that image rather than embedding one here. */
+        font-family: 'Noto Sans Arabic', 'IBM Plex Sans Arabic', 'Segoe UI',
+          Tahoma, Arial, sans-serif;
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--ink);
+        background: #fff;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      @media print {
+        body {
+          padding: 0;
+        }
+      }
+
+      /* Every label is bilingual: Arabic on top, English beneath it. */
+      .en {
+        display: block;
+        font-size: 0.82em;
+        color: var(--muted);
+        font-weight: 400;
+        direction: ltr;
+        text-align: right;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid var(--ink);
+      }
+
+      .logo {
+        max-height: 68px;
+        max-width: 190px;
+        object-fit: contain;
+      }
+
+      .company-name {
+        margin: 0;
+        font-size: 19px;
+        font-weight: 700;
+        line-height: 1.25;
+      }
+
+      .company-name .en {
+        font-size: 13px;
+        color: var(--ink);
+      }
+
+      .company-meta {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .company-meta div + div {
+        margin-top: 1px;
+      }
+
+      .doc-title {
+        text-align: left;
+        flex-shrink: 0;
+      }
+
+      .doc-title h2 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .doc-title .en {
+        text-align: left;
+        font-size: 11px;
+      }
+
+      .doc-number {
+        margin-top: 6px;
+        font-family: 'SFMono-Regular', Consolas, monospace;
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--accent);
+        direction: ltr;
+        text-align: left;
+      }
+
+      .panels {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .panel {
+        flex: 1;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: var(--tint);
+      }
+
+      .panel h3 {
+        margin: 0 0 5px;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .row + .row {
+        margin-top: 2px;
+      }
+
+      .row dt {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .row dd {
+        margin: 0;
+        font-weight: 600;
+        text-align: left;
+      }
+
+      dl {
+        margin: 0;
+      }
+
+      table {
+        width: 100%;
+        margin-top: 10px;
+        border-collapse: collapse;
+        font-size: 10.5px;
+      }
+
+      thead th {
+        background: var(--ink);
+        color: #fff;
+        font-size: 9.5px;
+        font-weight: 600;
+        text-align: right;
+        padding: 6px 8px;
+        /* A long invoice repeats its headers on the second page. */
+      }
+
+      thead {
+        display: table-header-group;
+      }
+
+      tbody tr {
+        break-inside: avoid;
+      }
+
+      tbody td {
+        padding: 5px 8px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+
+      .num {
+        text-align: left;
+        direction: ltr;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+
+      .line-desc {
+        font-weight: 600;
+      }
+
+      .line-note {
+        display: block;
+        margin-top: 1px;
+        color: var(--muted);
+        font-size: 9.5px;
+      }
+
+      .exempt {
+        display: inline-block;
+        margin-top: 2px;
+        padding: 0 4px;
+        border-radius: 3px;
+        background: #fef3c7;
+        color: #92400e;
+        font-size: 8.5px;
+        font-weight: 600;
+      }
+
+      /* The totals, the QR and the footer travel together. Splitting them
+         leaves a page carrying nothing but "Thank you for your business",
+         which is what happens as soon as the line table nearly fills the
+         page — so they are one unbreakable block rather than three. */
+      .closing {
+        break-inside: avoid;
+      }
+
+      .summary {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-top: 10px;
+      }
+
+      .qr {
+        text-align: center;
+        flex-shrink: 0;
+      }
+
+      .qr svg {
+        width: 108px;
+        height: 108px;
+        display: block;
+      }
+
+      .qr figcaption {
+        margin-top: 3px;
+        font-size: 8.5px;
+        color: var(--muted);
+        max-width: 108px;
+      }
+
+      .totals {
+        width: 56%;
+        border-collapse: collapse;
+        margin: 0;
+        font-size: 11px;
+      }
+
+      .totals td {
+        padding: 2px 8px;
+        border: none;
+      }
+
+      .totals tr + tr td {
+        border-top: 1px solid var(--rule);
+      }
+
+      .totals .label {
+        color: var(--muted);
+      }
+
+      .totals .grand td {
+        border-top: 2px solid var(--ink);
+        font-size: 13px;
+        font-weight: 700;
+        padding-top: 6px;
+      }
+
+      .totals .due td {
+        border-top: 1px solid var(--rule);
+        font-weight: 700;
+        color: var(--accent);
+      }
+
+      footer {
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px solid var(--rule);
+        text-align: center;
+        color: var(--muted);
+        font-size: 9.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        {% if company.logoDataUrl %}
+          <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
+        {% endif %}
+        <h1 class="company-name">
+          {{ company.nameAr }}
+          <span class="en">{{ company.nameEn }}</span>
+        </h1>
+        <div class="company-meta">
+          {% if company.addressAr %}<div>{{ company.addressAr }}</div>{% endif %}
+          {% if company.addressEn %}<div dir="ltr">{{ company.addressEn }}</div>{% endif %}
+          {% if company.phone %}<div dir="ltr">{{ company.phone }}</div>{% endif %}
+          {% if company.email %}<div dir="ltr">{{ company.email }}</div>{% endif %}
+          {% if company.crNumber %}
+            <div>س.ت / CR: <span dir="ltr">{{ company.crNumber }}</span></div>
+          {% endif %}
+          {% if company.vatNumber %}
+            <div>
+              الرقم الضريبي / VAT:
+              <span dir="ltr">{{ company.vatNumber }}</span>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="doc-title">
+        <h2>
+          فاتورة ضريبية
+          <span class="en">Tax Invoice</span>
+        </h2>
+        <div class="doc-number">INV-{{ invoice.invoiceNumber }}</div>
+      </div>
+    </header>
+
+    <section class="panels">
+      <div class="panel">
+        <h3>تفاصيل الفاتورة · Invoice details</h3>
+        <dl>
+          <div class="row">
+            <dt>التاريخ<span class="en">Date</span></dt>
+            <dd dir="ltr">{{ invoice.date }}</dd>
+          </div>
+          {% if invoice.branchName %}
+            <div class="row">
+              <dt>الفرع<span class="en">Branch</span></dt>
+              <dd>{{ invoice.branchName }}</dd>
+            </div>
+          {% endif %}
+          <div class="row">
+            <dt>الحالة<span class="en">Status</span></dt>
+            <dd>
+              {%- set status = status_labels[invoice.paymentStatus] -%}
+              {% if status %}
+                {{ status[0] }} <span class="en">{{ status[1] }}</span>
+              {% else %}
+                {{ invoice.paymentStatus }}
+              {% endif %}
+            </dd>
+          </div>
+          {% set method = invoice.finalPaymentType or invoice.advancePaymentType %}
+          {% if method %}
+            <div class="row">
+              <dt>طريقة الدفع<span class="en">Payment method</span></dt>
+              <dd>
+                {%- set label = payment_labels[method] -%}
+                {% if label %}
+                  {{ label[0] }} <span class="en">{{ label[1] }}</span>
+                {% else %}
+                  {{ method }}
+                {% endif %}
+              </dd>
+            </div>
+          {% endif %}
+        </dl>
+      </div>
+
+      <div class="panel">
+        <h3>العميل · Customer</h3>
+        {#
+          `customers` is the buyer if the invoice names one, and otherwise the
+          people its tailoring lines were measured for — one invoice can cover
+          several. Deduplicated in document.rs.
+        #}
+        <dl>
+          {% for customer in customers %}
+            <div class="row">
+              <dt>{{ customer.name }}</dt>
+              <dd dir="ltr">{{ customer.mobileNo }}</dd>
+            </div>
+          {% else %}
+            <div class="row">
+              <dt>عميل نقدي<span class="en">Walk-in customer</span></dt>
+            </div>
+          {% endfor %}
+        </dl>
+      </div>
+    </section>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 4%">#</th>
+          <th>البند <span class="en">Description</span></th>
+          <th class="num" style="width: 11%">
+            الكمية <span class="en">Qty</span>
+          </th>
+          <th class="num" style="width: 17%">
+            السعر <span class="en">Unit price</span>
+          </th>
+          <th class="num" style="width: 19%">
+            الإجمالي <span class="en">Amount</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in invoice.lines %}
+          <tr>
+            <td class="num">{{ loop.index }}</td>
+            <td>
+              <span class="line-desc">{{ line.description }}</span>
+              {% if line.customer %}
+                <span class="line-note">{{ line.customer.name }}</span>
+              {% endif %}
+              {% if line.detail %}
+                <span class="line-note">{{ line.detail }}</span>
+              {% endif %}
+              {% if not line.taxable %}
+                <span class="exempt">
+                  غير خاضع للضريبة · Not subject to VAT
+                </span>
+              {% endif %}
+            </td>
+            <td class="num">
+              {{ amounts["line" ~ loop.index0 ~ "Quantity"] }}
+              {%- if line.unit %} {{ line.unit }}{% endif %}
+            </td>
+            <td class="num">
+              {{ amounts["line" ~ loop.index0 ~ "UnitPrice"] }}
+            </td>
+            <td class="num">{{ amounts["line" ~ loop.index0 ~ "Total"] }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="closing">
+      <section class="summary">
+        <figure class="qr">
+          {{ qr_svg | safe }}
+          <figcaption>امسح للتحقق · Scan to verify</figcaption>
+        </figure>
+
+        <table class="totals">
+          <tr>
+            <td class="label">
+              المجموع الفرعي <span class="en">Subtotal</span>
+            </td>
+            <td class="num">{{ currency }} {{ amounts.subtotal }}</td>
+          </tr>
+          {% if invoice.totals.discountAmount > 0 %}
+            <tr>
+              <td class="label">
+                الخصم
+                {%- if invoice.totals.discountUnit == "percent" %}
+                ({{ amounts.discountPercent }}%)
+                {%- endif %}
+                <span class="en">Discount</span>
+              </td>
+              <td class="num">− {{ currency }} {{ amounts.discountAmount }}</td>
+            </tr>
+            <tr>
+              <td class="label">
+                الوعاء الضريبي <span class="en">Taxable amount</span>
+              </td>
+              <td class="num">{{ currency }} {{ amounts.taxable }}</td>
+            </tr>
+          {% endif %}
+          <tr>
+            <td class="label">
+              ضريبة القيمة المضافة {{ vat_percent }}%
+              <span class="en">VAT {{ vat_percent }}%</span>
+            </td>
+            <td class="num">{{ currency }} {{ amounts.vat }}</td>
+          </tr>
+          {% if invoice.totals.giftCardSales > 0 %}
+            <tr>
+              <td class="label">
+                بطاقات الهدايا <span class="en">Gift cards sold</span>
+              </td>
+              <td class="num">{{ currency }} {{ amounts.giftCardSales }}</td>
+            </tr>
+          {% endif %}
+          <tr class="grand">
+            <td>
+              الإجمالي شامل الضريبة
+              <span class="en">Total incl. VAT</span>
+            </td>
+            <td class="num">{{ currency }} {{ amounts.total }}</td>
+          </tr>
+          {% if invoice.totals.giftCardRedeemed > 0 %}
+            <tr>
+              <td class="label">
+                مدفوع ببطاقة هدية <span class="en">Paid by gift card</span>
+                {% for redemption in invoice.redemptions %}
+                  <span class="line-note" dir="ltr">{{ redemption.code }}</span>
+                {% endfor %}
+              </td>
+              <td class="num">− {{ currency }} {{ amounts.giftCardRedeemed }}</td>
+            </tr>
+          {% endif %}
+          {% if invoice.totals.amountPaid > 0 %}
+            <tr>
+              <td class="label">المدفوع <span class="en">Paid</span></td>
+              <td class="num">− {{ currency }} {{ amounts.amountPaid }}</td>
+            </tr>
+          {% endif %}
+          <tr class="due">
+            <td>المبلغ المستحق <span class="en">Balance due</span></td>
+            <td class="num">{{ currency }} {{ amounts.balanceDue }}</td>
+          </tr>
+        </table>
+      </section>
+
+      <footer>
+        شكراً لتعاملكم معنا · Thank you for your business
+        <div dir="ltr">INV-{{ invoice.invoiceNumber }} · {{ invoice.date }}</div>
+      </footer>
+    </div>
+  </body>
+</html>

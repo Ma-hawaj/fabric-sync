@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT order_id, stage_id, assignee_id, assignee_name\n        FROM order_stage_assignments\n        WHERE order_id = ANY($1)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "order_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "stage_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "assignee_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "assignee_name",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5797c278d1fbde4c25a32122bddd3396a80011257e5a7d402982c31636b7eea0"
+}

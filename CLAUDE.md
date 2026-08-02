@@ -36,6 +36,8 @@ cargo sqlx prepare
 
 `cargo sqlx prepare --check` runs in CI and fails if `backend/.sqlx` is stale — regenerate it any time a query changes, not just when tests fail.
 
+Sample data for local work lives in `backend/seeds/dev_seed.sql` and is loaded at startup by `SEED_DEV_DATA=true cargo run` (locations, materials, products, customers with repeat measurement visits, invoices across every payment state, gift cards, and twelve orders spread across the tracking checklist with four repairs and a few stage assignments). It only runs against a database with no customers yet — `seed::run` guards on that, so repeated runs are safe and it can never touch real rows. The script is executed with `sqlx::raw_sql`, **not** the `query!` macros, deliberately: `raw_sql` is unchecked, so the seed contributes nothing to `backend/.sqlx` and can't break `cargo sqlx prepare --check`. The backend reads the flag off the process env — there is no `dotenvy`, so `.env` is for docker compose only.
+
 ### Frontend (`cd frontend`)
 
 Package manager is **pnpm** (see `frontend/pnpm-lock.yaml`, `frontend/pnpm-workspace.yaml`, and CI) even though the root README says `npm` — use pnpm.
@@ -81,7 +83,7 @@ VITE_API_BASE_URL=http://localhost:3001 pnpm run dev
 - **Names don't line up between the two sides**, which is the most common source of confusion:
   - frontend feature `inventory` (route `/inventory`) talks to the backend `materials` feature (`GET/POST /materials`, `POST /materials/:id/stock`)
   - backend feature `locations` reads and writes the table named `branch`
-  - `routes/_authenticated/users.tsx` exists with no `users` feature or table behind it
+  - `routes/_authenticated/users.tsx` exists but isn't wired to the backend `users` feature below it
   - the invoice form's `receivingBranch` field is serialized as `branchId`
 - **Measurements are described in one place**: `features/customers/data/measurement-fields.ts` lists every measurement once — label, group, input kind (number/text/select + options) and the callout geometry that points at it on the thob sketch. Both the entry form (`components/measurement-fields.tsx`) and the read-only customer sheet (`components/customer-details-sheet.tsx`) render from that list, and `components/thob-diagram.tsx` draws the sketch itself from `data/thob-sketch.ts`. Adding a measurement means adding a `MeasurementDraft` field plus one entry here (a test asserts the two stay in step) — not touching either page.
 - UI primitives: `src/components/ui/` are local shadcn/Base UI-style primitives (not a node_modules package) — extend/copy this pattern for new primitives rather than pulling in a component library.
@@ -124,9 +126,32 @@ Columns drive their own filter UI through `meta`: set `label`, `placeholder`, an
 
 ## Database schema notes
 
-`backend/migrations/20260712000000_create_tables.sql` — the only migration — defines `branch`, `customers`, `materials`, `material_stock`, `invoices`, `measurements`, `orders`. All primary keys are `UUID DEFAULT uuidv7()` — time-ordered (sortable/monotonic by creation, unlike `gen_random_uuid()`'s v4), which is why Postgres 18+ is required (see above).
+`backend/migrations/20260712000000_create_tables.sql` — the only migration — defines `branch`, `customers`, `materials`, `material_stock`, `invoices`, `measurements`, `orders`, `order_stages`, `order_repairs`, `order_stage_progress`. All primary keys are `UUID DEFAULT uuidv7()` — time-ordered (sortable/monotonic by creation, unlike `gen_random_uuid()`'s v4), which is why Postgres 18+ is required (see above).
 
 `measurements` is one flat row per visit (`measurement_date` plus 24 measurement columns) — repeat visits are repeat rows, which is exactly what the `json_agg (... ORDER BY m.measurement_date DESC)` aggregation below depends on. `material_stock` holds a quantity per material/location pair (`UNIQUE (material_id, branch_id)`) because a material can be stocked at more than one location.
+
+## Order tracking and repairs
+
+Production progress is **derived, never stored per order**. Four tables carry it:
+
+- `order_stages` — the staff-editable catalog (`name UNIQUE`, `sort_order`, `requires_delivery`, `is_active`), seeded in the migration with Cutting / Sewing / Finishing / Location delivery. It's a table rather than more values on `orders.status` precisely so staff can change it, and it retires with `is_active` like `branch` rather than deleting.
+- `order_repairs` — a garment brought back for rework. An order can have several; each is `open → in_progress → completed | cancelled` with an optional `charge` (recorded for the books, never billed to an invoice).
+- `order_stage_progress` — only the stages actually acted on (`done` or `skipped`), one checklist per order (`UNIQUE (order_id, stage_id)`). A repair does **not** get its own pass through these stages — it's tracked by `order_repairs.status` alone (`open → in_progress → completed | cancelled`, moved by staff via `PATCH .../repairs/:repairId`, not by acting on a checklist).
+- `order_stage_assignments` — who's assigned to a stage, deliberately **separate** from `order_stage_progress` (`UNIQUE (order_id, stage_id)`, no status column at all). A stage is assignable before it's ever touched, so this can't live on a row that only exists once a stage is done or skipped — assignment and progress are independent, and a stage can be assigned, reassigned, or cleared regardless of where it is in the checklist. `assignee_id`/`assignee_name` are plain `TEXT`, not a foreign key — see the `users` note below.
+
+A checklist is built by overlaying the progress rows onto the live catalog, so **adding or retiring a stage takes effect on in-flight orders with no backfill**, and invoice creation seeds nothing (`insert_order` is unchanged). A retired stage stays on an order that already recorded it. Undoing a stage **deletes** its row — absence *is* "not done yet", which is why there is no stored `pending`.
+
+`orders.production_branch_id` is where the garment is made; the invoice's `branch_id` is where the customer collects. A `requires_delivery` stage is reported `applicable: false` when the two match or either is unknown, so it never blocks an order that never had to move.
+
+**Production location is inferred when it isn't set.** An explicit `orders.production_branch_id` (set via `PATCH /orders/:id`) always wins. Absent one, `orders/service.rs::effective_production` looks at `material_stock` for the order's material: if it's stocked at exactly one active, stock-holding location with `quantity > 0`, that location is used and the response carries `productionLocationInferred: true`; a material split across several locations (or with none) is left `null` for staff to assign, since there's nothing to disambiguate it with. `orders/repository.rs::single_stock_locations` does the underlying query (`GROUP BY material_id HAVING COUNT(DISTINCT branch_id) = 1`), batched once per `GET /orders` call. The inferred value feeds `stage_applies` exactly like an explicit one, so a delivery stage can become required with no staff action at all.
+
+**Stage timing is derived, not stored.** `OrderStageEntry.startedAt` has no backing column — `orders/service.rs::with_start_times` chains each stage's start to the previous stage's `completedAt` (a non-applicable stage is transparent to the chain: no start time, and it doesn't block the next one from getting one). The very first stage's start is midnight UTC on `invoice_date` — the closest thing to a creation timestamp the schema has, since `orders` has no `created_at`. Only a recorded stage or the current outstanding one gets a start time; anything further down the queue is `null` since work hasn't reached it.
+
+**A stage is assignable independent of its status.** `PUT /orders/:id/stages/:stageId/assignee` (body `{ assigneeId }`, omitted or `null` clears it) upserts `order_stage_assignments`; `orders/service.rs::set_assignee` resolves `assigneeId` against `users::service::list_users` server-side and stores the resolved name, rather than trusting a display name from the client. `orders/service.rs::with_assignees` overlays the result onto an already-assembled checklist — it's a separate pass from `assemble_stages`/`with_start_times`, since assignment has nothing to do with progress.
+
+The assembly lives in pure functions in `orders/service.rs` (`stage_applies`, `assemble_stages`, `current_stage_name`, `effective_production`, `with_start_times`, `with_assignees`) fed by flat queries rather than one lateral join — that is the only seam the backend's test setup can exercise. **`orders.status` and invoice settlement are untouched by all of this**: `receive_order` still works with stages outstanding, and `invoice_fully_received` still counts `status <> 'received'`.
+
+Frontend display rules live in one place, `features/orders/lib/order-tracking.ts` (`currentStageLabel`, `stageFilterOptions`, `openRepairCount`, `stageTimingLabel`, …) — the Stage/Repairs columns and the tracking sheet both read from it. The catalog is administered at `/order-stages`, a file-for-file mirror of the `locations` feature. The assignee picker in the tracking sheet (`components/order-tracking-sheet.tsx`) is fed by `features/users/hooks/use-users.ts`, a plain `GET /users` query — unrelated to `routes/_authenticated/users.tsx`, which is still its own unwired stub.
 
 Current backend routes, by feature module:
 
@@ -136,26 +161,45 @@ Current backend routes, by feature module:
 | `customers` | `GET /customers`, `POST /customers` |
 | `materials` | `GET /materials`, `POST /materials`, `POST /materials/:id/stock` |
 | `locations` | `GET /locations`, `POST /locations`, `PATCH /locations/:id` |
-| `invoices` | `GET /invoices`, `POST /invoices` |
-| `orders` | `GET /orders` |
+| `invoices` | `GET /invoices`, `POST /invoices`, `GET /invoices/:id`, `GET /invoices/:id/document`, `POST /invoices/:id/receive` |
+| `orders` | `GET /orders`, `PATCH /orders/:id`, `POST /orders/:id/receive`, `POST /orders/:id/stages/:stageId`, `PUT /orders/:id/stages/:stageId/assignee`, `POST /orders/:id/repairs`, `PATCH /orders/:id/repairs/:repairId` |
+| `order_stages` | `GET /order-stages`, `POST /order-stages`, `PATCH /order-stages/:id` |
+| `users` | `GET /users` |
 
 Path params use axum 0.7's `:id` syntax (0.8 switched to `{id}` — don't copy that from newer axum docs).
 
-**Invoice totals apply 15% VAT after the discount, floored at zero.** The rate is written twice — `VAT_RATE` in `backend/src/features/invoices/service.rs` (authoritative; the stored total) and again in `frontend/src/features/invoices/components/invoice-form/invoice-summary.tsx` (the on-screen running total). Change one and you must change the other. Note `frontend/.../lib/invoice-pricing.ts` only computes per-line totals — it has no VAT in it. Currency is single-valued by design: `CURRENCY = 'SAR'` in `src/lib/currency.ts`.
+**`users` is mocked.** `features/users/service.rs::list_users` returns four hardcoded `User { id, name }` values — there's no table, no `repository.rs`, and the handler's `AppState` parameter is currently unused. The plan is to back it with Zitadel's user directory once real auth is wired up (`require_auth` is disabled — see above); `id` is a plain `String` rather than a `Uuid` because it's meant to eventually hold a Zitadel subject, not an id this app generates. It's `pub(crate)` (see `users/mod.rs`) so `orders/service.rs::set_assignee` can resolve an assignee's display name against it directly — the same cross-feature-call pattern `invoices` already uses against `customers`/`products`.
+
+**Invoice totals apply 10% VAT after the discount, floored at zero.** The rate is written twice — `VAT_RATE` in `backend/src/features/invoices/service.rs` (authoritative; the stored total) and again in `frontend/src/features/invoices/components/invoice-form/invoice-summary.tsx` (the on-screen running total). Change one and you must change the other. Note `frontend/.../lib/invoice-pricing.ts` only computes per-line totals — it has no VAT in it. Currency is single-valued by design: `CURRENCY = 'BHD'` in `src/lib/currency.ts`, and `CURRENCY`/`CURRENCY_DECIMALS` in `invoices/document.rs` for the printed document (BHD is a three-decimal currency, so amounts print as fils even though they are stored `NUMERIC(10, 2)`).
+
+`service::breakdown` is the single place the arithmetic between the line items and the total lives, shared by `compute_totals` on the create path and `get_invoice` on the read path. The `invoices` table stores only `total_price`, `discount` and `discount_unit` — never the VAT — so anything that has to *show* VAT rebuilds it from the lines; going through one function is what stops the printed figures and the stored total from drifting. Each component is rounded before the total is summed, so the numbers add up when read down the page.
 
 **Customer + measurements query** (`features/customers/repository.rs`): a single query does `LEFT JOIN measurements` grouped per customer, aggregating each customer's measurements with `COALESCE(json_agg(to_jsonb(m) ORDER BY m.measurement_date DESC, m.id DESC) FILTER (WHERE m.id IS NOT NULL), '[]')` — Postgres builds the nested JSON array directly, no app-side grouping. `Measurement` (`types.rs`) decodes that JSON via `#[serde(rename_all(serialize = "camelCase", deserialize = "snake_case"))]`: deserialize expects Postgres' raw column names (what `to_jsonb` produces), serialize emits camelCase for the frontend — one struct, two directions. `date` is the one field whose column name (`measurement_date`) doesn't match the Rust field name, so it has its own `#[serde(rename(deserialize = "measurement_date"))]` on top of the container-level rename. If you add a measurement column, no query changes are needed (`to_jsonb` picks it up automatically) — just add the matching field to `Measurement` with the same name as the column (or an explicit rename if they diverge, as with `date`).
+
+## The printed invoice
+
+`GET /invoices/:id/document` renders an invoice as a **self-contained bilingual HTML page** (RTL, Arabic + English, A4, with a TLV QR code). It is deliberately HTML and not a PDF: Arabic needs a real text shaper, which the pure-Rust PDF crates and `@react-pdf/renderer` don't have and a browser already is — so whatever displays the page prints it. Today that is the user's browser; the same markup can later be handed to headless Chromium to email invoices unattended, with no template rewrite. That is also why it renders **server-side rather than in the frontend**: a React print view can't be rendered without a logged-in browser.
+
+- **`backend/templates/invoice.html` is the file to edit to restyle it** — minijinja, with the available context documented in a comment at the top. It is `include_str!`-embedded by default; set `INVOICE_TEMPLATE_DIR` to load from disk instead, and design changes need no rebuild.
+- Keep it self-contained: inline `<style>`, inline SVG, `data:` URIs. It is printed from an iframe with no origin of its own, and a future PDF renderer may have no network.
+- Money is pre-formatted in `document.rs` and handed to the template as the `amounts` map, so editing the design can't change how amounts are written. Template logic stays presentational — the customer dedup, the QR, and every number are computed in Rust.
+- Company identity comes from `COMPANY_*` env vars (`config.rs`'s `InvoiceBranding`), never from the template.
+- The QR payload is a base64 TLV of five fields (seller, VAT number, timestamp, total, VAT). The length byte is a **byte** count, which is what makes an Arabic seller name easy to get wrong. **Not validated against any tax authority's certification suite** — verify before relying on it for filings.
+- `invoices.invoice_number` (identity) and `created_at` exist for this: a tax invoice needs a human-readable number and an issue time, and the uuidv7 key and bare `invoice_date` gave neither.
+
+On the frontend, `features/invoices/lib/print-invoice.ts` fetches that HTML and writes it into a hidden iframe via `srcdoc`, then prints the frame. Two reasons it isn't a `<iframe src>` or a print route: the app shell (`__root.tsx` wraps *every* route in the sidebar) never reaches the print output, and an ordinary `fetch` can carry an `Authorization` header once one exists. Reached from three places — the invoices table row action, the details sheet, and the invoice form's `Save & Export PDF`.
 
 ## Locations and capability flags
 
 A location is a `branch` row, and it carries two **independent** flags rather than one type column: `receives_orders` (customers collect finished orders there — a branch) and `holds_stock` (material stock lives there — a store). A location can be either or both; "neither" is rejected in `locations/service.rs` and in `location-schema.ts`. `is_active` retires a location without disturbing the `material_stock` rows and invoices that still reference it.
 
-`GET /locations` deliberately returns **every** location, inactive ones included, because the Locations page lists them behind a status filter. Consumers narrow the list client-side using the two helpers in `frontend/src/features/locations/lib/location-filters.ts` — `orderReceivingLocations` (the invoice form's receiving branch) and `stockLocations` (the inventory stock-entry picker). New pickers should call those rather than reading the flags inline; that file is the single place the rules live. One deliberate exception: the inventory column facet in `inventory.tsx` stays unfiltered, since it filters materials by where stock already sits and a since-deactivated location should remain selectable there.
+`GET /locations` deliberately returns **every** location, inactive ones included, because the Locations page lists them behind a status filter. Consumers narrow the list client-side using the helpers in `frontend/src/features/locations/lib/location-filters.ts` — `orderReceivingLocations` (the invoice form's receiving branch, and a delivery stage's destination), `stockLocations` (the inventory stock-entry picker), and `productionLocations` (an order's "made at" picker, currently an alias of the stock rule since production happens where the material is — named separately so a dedicated capability flag would only change that one function). New pickers should call those rather than reading the flags inline; that file is the single place the rules live. One deliberate exception: the inventory column facet in `inventory.tsx` stays unfiltered, since it filters materials by where stock already sits and a since-deactivated location should remain selectable there.
 
 `PATCH /locations/:id` accepts any subset of the fields (`COALESCE` per column in the repository), so the list page's activate/deactivate action is one statement and doesn't need to round-trip the whole row.
 
 ## Tests
 
-**Backend** — inline `#[cfg(test)] mod tests` blocks for pure logic only: invoice totals (`invoices/service.rs`), measurement comparison (`customers/types.rs`), location validation (`locations/service.rs`). `serde_json` is the only dev-dependency, so there is no DB or HTTP integration harness; the testable seam for a new feature is a pure `fn` in `service.rs`. Tests build input DTOs with `serde_json::from_value(json!({...}))`.
+**Backend** — inline `#[cfg(test)] mod tests` blocks for pure logic only: invoice totals (`invoices/service.rs`), measurement comparison (`customers/types.rs`), location validation (`locations/service.rs`), stage-name/position validation (`order_stages/service.rs`), and the tracking derivation (`orders/service.rs` — delivery applicability, checklist assembly, current stage, repair validation, production-location inference, stage timing). `serde_json` is the only dev-dependency, so there is no DB or HTTP integration harness; the testable seam for a new feature is a pure `fn` in `service.rs`. Tests build input DTOs with `serde_json::from_value(json!({...}))`.
 
 **Frontend** — vitest + jsdom + `@testing-library/react`, configured under `test:` in `vite.config.ts`. **There is no `@testing-library/jest-dom`**, so assertions are `.toBeTruthy()` / `.toBeNull()`, never `.toBeInTheDocument()`. Component tests seed the cache with `client.setQueryData(['key'], fixture)` rather than mocking `fetch`, and mock `@tanstack/react-router` where a component uses `useNavigate`/`Link`. Schema tests build fixtures from the production `createEmptyXForm()` factory and assert on both the message (case-insensitive regex) and the issue `path`.
 

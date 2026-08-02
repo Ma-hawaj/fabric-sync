@@ -1,3 +1,4 @@
+mod document;
 mod handlers;
 mod repository;
 mod routes;

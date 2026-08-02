@@ -3,6 +3,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { CURRENCY } from '@/lib/currency'
+import {
+  COMPLETED,
+  currentStageLabel,
+  openRepairCount,
+} from '../lib/order-tracking'
 import type { Order } from '../types/orders'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -38,7 +43,9 @@ const paymentTypeLabels: Record<
 
 export function getOrderColumns(
   materialOptions: { label: string; value: string }[],
+  stageOptions: { label: string; value: string }[],
   onReceive: (order: Order) => void,
+  onTrack: (order: Order) => void,
 ): ColumnDef<Order, any>[] {
   return [
     {
@@ -239,6 +246,57 @@ export function getOrderColumns(
       },
     },
     {
+      id: 'stage',
+      accessorFn: currentStageLabel,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Stage" />
+      ),
+      cell: ({ row }) => {
+        const label = row.getValue<string>('stage')
+        return (
+          <Badge variant={label === COMPLETED ? 'default' : 'secondary'}>
+            {label}
+          </Badge>
+        )
+      },
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: (row, columnId, filterValue) => {
+        if (
+          !filterValue ||
+          (Array.isArray(filterValue) && filterValue.length === 0)
+        )
+          return true
+        const cellValue = row.getValue<string>(columnId)
+        return (filterValue as string[]).includes(cellValue)
+      },
+      meta: {
+        label: 'Stage',
+        placeholder: 'Filter stage...',
+        variant: 'multiSelect',
+        options: stageOptions,
+      },
+    },
+    {
+      id: 'repairs',
+      accessorFn: openRepairCount,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Repairs" />
+      ),
+      cell: ({ row }) => {
+        const open = row.getValue<number>('repairs')
+        const total = row.original.repairs.length
+        if (total === 0) return <div className="text-muted-foreground">—</div>
+        return (
+          <Badge variant={open > 0 ? 'secondary' : 'outline'}>
+            {open > 0 ? `${open} open` : `${total} closed`}
+          </Badge>
+        )
+      },
+      enableSorting: true,
+      enableColumnFilter: false,
+    },
+    {
       id: 'balanceDue',
       accessorFn: (order) =>
         Math.max(order.invoiceTotalPrice - order.invoiceAmountPaid, 0),
@@ -312,15 +370,25 @@ export function getOrderColumns(
       cell: ({ row }) => {
         const order = row.original
         return (
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={order.status === 'received'}
-            onClick={() => onReceive(order)}
-            className="h-8 w-auto px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
-          >
-            {order.status === 'received' ? 'Received' : 'Mark Received'}
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onTrack(order)}
+              className="h-8 w-auto px-2"
+            >
+              Track
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={order.status === 'received'}
+              onClick={() => onReceive(order)}
+              className="h-8 w-auto px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
+            >
+              {order.status === 'received' ? 'Received' : 'Mark Received'}
+            </Button>
+          </div>
         )
       },
     },

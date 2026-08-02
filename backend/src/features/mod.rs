@@ -4,5 +4,7 @@ pub mod health;
 pub mod invoices;
 pub mod locations;
 pub mod materials;
+pub mod order_stages;
 pub mod orders;
 pub mod products;
+pub mod users;

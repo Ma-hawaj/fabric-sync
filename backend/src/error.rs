@@ -13,6 +13,11 @@ pub enum AppError {
     NotFound(String),
     Conflict(String),
     BadRequest(String),
+    /// The invoice document template failed to load or render. A server fault
+    /// like the others above it, but worth its own variant because the
+    /// template can be replaced at runtime (INVOICE_TEMPLATE_DIR), so this is
+    /// the one 500 an operator can cause — and fix — without a deploy.
+    Template(String),
 }
 
 impl From<std::io::Error> for AppError {
@@ -42,6 +47,22 @@ impl From<sqlx::Error> for AppError {
     }
 }
 
+impl From<minijinja::Error> for AppError {
+    fn from(error: minijinja::Error) -> Self {
+        // minijinja's Display is a one-liner; the chained cause carries the
+        // line number and the failing expression, which is the half that
+        // actually tells you what to fix in the template.
+        let mut message = error.to_string();
+        let mut source = std::error::Error::source(&error);
+        while let Some(cause) = source {
+            message.push_str(&format!(": {cause}"));
+            source = cause.source();
+        }
+
+        Self::Template(message)
+    }
+}
+
 impl From<sqlx::migrate::MigrateError> for AppError {
     fn from(error: sqlx::migrate::MigrateError) -> Self {
         Self::Migration(error)
@@ -59,6 +80,7 @@ impl IntoResponse for AppError {
             Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
             Self::Conflict(message) => (StatusCode::CONFLICT, message),
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
+            Self::Template(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
         };
 
         (status, message).into_response()

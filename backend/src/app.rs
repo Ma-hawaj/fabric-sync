@@ -6,7 +6,10 @@ use tower_http::{
 
 use crate::{
     auth,
-    features::{customers, gift_cards, health, invoices, locations, materials, orders, products},
+    features::{
+        customers, gift_cards, health, invoices, locations, materials, order_stages, orders,
+        products, users,
+    },
     state::AppState,
 };
 
@@ -62,6 +65,16 @@ pub fn router(state: AppState) -> Router {
                 auth::require_auth,
             )),
         )
+        .merge(
+            order_stages::router().route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::require_auth,
+            )),
+        )
+        .merge(users::router().route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_auth,
+        )))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)

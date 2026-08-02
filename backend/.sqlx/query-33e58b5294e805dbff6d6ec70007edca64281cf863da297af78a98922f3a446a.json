@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO order_stage_progress (\n            order_id, stage_id, status, location_id, notes\n        )\n        VALUES ($1, $2, $3, $4, $5)\n        ON CONFLICT (order_id, stage_id)\n        DO UPDATE SET\n            status = EXCLUDED.status,\n            completed_at = now(),\n            location_id = EXCLUDED.location_id,\n            notes = EXCLUDED.notes\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "33e58b5294e805dbff6d6ec70007edca64281cf863da297af78a98922f3a446a"
+}

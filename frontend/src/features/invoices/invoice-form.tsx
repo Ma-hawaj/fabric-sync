@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
-import { PlusIcon } from 'lucide-react'
+import { FileDownIcon, PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -30,6 +30,7 @@ import { RedemptionBlock } from './components/invoice-form/redemption-block'
 import { useCreateInvoice } from './hooks/use-create-invoice'
 import { useMaterials } from './hooks/use-materials'
 import { invoiceFormSchema } from './lib/invoice-schema'
+import { printInvoiceDocument } from './lib/print-invoice'
 import {
   createEmptyCustomer,
   createEmptyGiftCardLine,
@@ -71,6 +72,9 @@ export function InvoiceFormPage() {
     [allProducts],
   )
   const createInvoice = useCreateInvoice()
+  // Which of the two submit buttons was pressed. A ref rather than state
+  // because it is read once inside onSubmit and must not re-render the form.
+  const exportAfterSave = React.useRef(false)
 
   // A plain type annotation (not `satisfies`) so TFormData widens to
   // InvoiceFormValues' union members (e.g. `discount: number | ''`) rather
@@ -93,11 +97,26 @@ export function InvoiceFormPage() {
             : 'Could not save this invoice. Please try again.',
       })
 
+      let created
       try {
-        await pending
+        created = await pending
       } catch {
         return
       }
+
+      // The old Print button here printed the form itself — inputs, sidebar
+      // and all — because before this there was no invoice document to print.
+      // There is now, but only once the invoice has an id, which is why this
+      // saves first rather than being a button of its own.
+      if (exportAfterSave.current) {
+        exportAfterSave.current = false
+        try {
+          await printInvoiceDocument(created.id)
+        } catch {
+          toast.error('The invoice was saved, but the PDF could not be opened.')
+        }
+      }
+
       await navigate({ to: '/invoices' })
     },
   })
@@ -351,11 +370,15 @@ export function InvoiceFormPage() {
 
         <div className="flex justify-end gap-2">
           <Button
-            type="button"
+            type="submit"
             variant="outline"
-            onClick={() => window.print()}
+            disabled={createInvoice.isPending}
+            onClick={() => {
+              exportAfterSave.current = true
+            }}
           >
-            Print
+            <FileDownIcon className="h-4 w-4" />
+            Save & Export PDF
           </Button>
           <Button type="submit" disabled={createInvoice.isPending}>
             Save
