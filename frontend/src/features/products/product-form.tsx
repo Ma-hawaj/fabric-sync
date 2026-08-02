@@ -5,6 +5,7 @@ import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, FieldLabel } from '@/components/ui/field'
+import { LoadingIndicator } from '@/components/ui/loading-indicator'
 import { NumberField, TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { ApiError } from '@/lib/api'
@@ -31,11 +32,7 @@ export function ProductFormPage({ productId }: { productId?: string }) {
     : undefined
 
   if (productId && isLoading) {
-    return (
-      <div className="text-center text-sm text-muted-foreground py-10">
-        Loading product...
-      </div>
-    )
+    return <LoadingIndicator label="Loading product..." />
   }
 
   if (productId && !existing) {

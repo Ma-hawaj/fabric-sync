@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { useDataTable } from '@/hooks/use-data-table'
 import { Button } from '@/components/ui/button'
+import { LoadingIndicator } from '@/components/ui/loading-indicator'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getInventoryColumns } from './components/inventory-columns'
@@ -46,9 +47,7 @@ export function InventoryPage() {
       </div>
 
       {isLoading ? (
-        <div className="text-center text-sm text-muted-foreground py-10">
-          Loading inventory...
-        </div>
+        <LoadingIndicator label="Loading inventory..." />
       ) : (
         <DataTable table={table}>
           <DataTableToolbar table={table} />

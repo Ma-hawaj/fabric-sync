@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
+import { LoadingIndicator } from '@/components/ui/loading-indicator'
 import { TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { ApiError } from '@/lib/api'
@@ -39,11 +40,7 @@ export function LocationFormPage({ locationId }: { locationId?: string }) {
     : undefined
 
   if (locationId && isLoading) {
-    return (
-      <div className="text-center text-sm text-muted-foreground py-10">
-        Loading location...
-      </div>
-    )
+    return <LoadingIndicator label="Loading location..." />
   }
 
   if (locationId && !existing) {

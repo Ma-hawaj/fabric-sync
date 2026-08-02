@@ -4,6 +4,7 @@ import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { useDataTable } from '@/hooks/use-data-table'
 import { Button } from '@/components/ui/button'
+import { LoadingIndicator } from '@/components/ui/loading-indicator'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { useLocations } from '@/features/locations/hooks/use-locations'
@@ -69,9 +70,7 @@ export function ProductsPage() {
       </div>
 
       {isLoading ? (
-        <div className="text-center text-sm text-muted-foreground py-10">
-          Loading products...
-        </div>
+        <LoadingIndicator label="Loading products..." />
       ) : (
         <DataTable table={table}>
           <DataTableToolbar table={table} />

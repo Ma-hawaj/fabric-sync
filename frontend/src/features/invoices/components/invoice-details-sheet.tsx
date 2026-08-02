@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { LoadingIndicator } from '@/components/ui/loading-indicator'
 import { FileDownIcon, ReceiptText, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { CURRENCY } from '@/lib/currency'
@@ -82,9 +83,10 @@ export function InvoiceDetailsSheet({
             </SheetHeader>
 
             {isLoading && (
-              <div className="text-center text-sm text-muted-foreground">
-                Loading invoice details...
-              </div>
+              <LoadingIndicator
+                label="Loading invoice details..."
+                className="py-6"
+              />
             )}
 
             {isError && (
