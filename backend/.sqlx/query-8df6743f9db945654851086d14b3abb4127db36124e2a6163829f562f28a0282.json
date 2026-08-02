@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            ms.material_id AS \"material_id!\",\n            (array_agg(ms.branch_id))[1] AS \"branch_id!\",\n            (array_agg(b.name))[1] AS \"branch_name!\"\n        FROM material_stock ms\n        JOIN branch b ON b.id = ms.branch_id\n        WHERE ms.material_id = ANY($1)\n          AND ms.quantity > 0\n          AND b.is_active\n          AND b.holds_stock\n        GROUP BY ms.material_id\n        HAVING COUNT(DISTINCT ms.branch_id) = 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "material_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "branch_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "branch_name!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "8df6743f9db945654851086d14b3abb4127db36124e2a6163829f562f28a0282"
+}

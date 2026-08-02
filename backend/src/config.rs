@@ -36,6 +36,10 @@ pub struct Config {
     pub oauth_client_secret: Option<String>,
     pub oauth_introspection_url: Option<String>,
     pub oauth_resource_audience: Option<String>,
+    /// Loads `seeds/dev_seed.sql` at startup. Off unless explicitly enabled,
+    /// and the seed itself refuses to run against a database that already has
+    /// data — see `seed::run`.
+    pub seed_dev_data: bool,
     pub invoice_branding: InvoiceBranding,
 }
 
@@ -87,6 +91,9 @@ impl Config {
             .ok();
         let oauth_introspection_url = env::var("OAUTH_INTROSPECTION_URL").ok();
         let oauth_resource_audience = env::var("OAUTH_RESOURCE_AUDIENCE").ok();
+        let seed_dev_data = env::var("SEED_DEV_DATA")
+            .map(|value| value == "true" || value == "1")
+            .unwrap_or(false);
 
         Self {
             port,
@@ -96,6 +103,7 @@ impl Config {
             oauth_client_secret,
             oauth_introspection_url,
             oauth_resource_audience,
+            seed_dev_data,
             invoice_branding: InvoiceBranding::from_env(),
         }
     }

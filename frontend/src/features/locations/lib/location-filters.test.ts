@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { orderReceivingLocations, stockLocations } from './location-filters'
+import {
+  orderReceivingLocations,
+  productionLocations,
+  stockLocations,
+} from './location-filters'
 import type { Location } from '../types/location'
 
 function location(overrides: Partial<Location>): Location {
@@ -43,10 +47,17 @@ describe('stockLocations', () => {
   })
 })
 
-describe('both filters', () => {
-  it('exclude deactivated locations even when the capability is set', () => {
+describe('productionLocations', () => {
+  it('offers the locations a garment can be made at', () => {
+    expect(productionLocations(ALL).map((l) => l.id)).toEqual(['store', 'both'])
+  })
+})
+
+describe('every filter', () => {
+  it('excludes deactivated locations even when the capability is set', () => {
     const deactivatedBranch = location({ id: 'x', isActive: false })
     expect(orderReceivingLocations([deactivatedBranch])).toEqual([])
     expect(stockLocations([deactivatedBranch])).toEqual([])
+    expect(productionLocations([deactivatedBranch])).toEqual([])
   })
 })

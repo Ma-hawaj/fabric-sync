@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM order_stage_assignments\n        WHERE order_id = $1 AND stage_id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fce56c1cffafa4f5ff314af607df4ecfffe5eb576e84a8351df0a93b1819f32c"
+}
