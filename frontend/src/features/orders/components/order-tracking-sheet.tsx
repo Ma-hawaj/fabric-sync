@@ -72,7 +72,7 @@ export function OrderTrackingSheet({
               </SheetDescription>
             </SheetHeader>
 
-            <div className="space-y-6 px-4 pb-6">
+            <div className="space-y-6 px-6 pb-6">
               <ProductionLocationPicker order={order} />
               <Separator />
               <section className="space-y-3">
