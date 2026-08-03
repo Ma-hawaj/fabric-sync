@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { parseAsString, useQueryState } from 'nuqs'
 import { useDataTable } from '@/hooks/use-data-table'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
@@ -13,8 +14,12 @@ import type { Order } from './types/orders'
 export function OrdersPage() {
   const { data: orders = [], isLoading } = useOrders()
   const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(null)
-  const [trackedOrderId, setTrackedOrderId] = React.useState<string | null>(
-    null,
+  // Synced to the URL (rather than plain state) so a link from elsewhere —
+  // the invoice details sheet's tailoring lines — can open this order's
+  // tracking sheet directly.
+  const [trackedOrderId, setTrackedOrderId] = useQueryState(
+    'trackOrderId',
+    parseAsString,
   )
   const [repairOrderId, setRepairOrderId] = React.useState<string | null>(null)
 

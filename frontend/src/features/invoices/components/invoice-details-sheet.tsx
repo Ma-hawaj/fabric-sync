@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import {
   Sheet,
   SheetContent,
@@ -45,6 +46,7 @@ export function InvoiceDetailsSheet({
   onOpenChange,
 }: InvoiceDetailsSheetProps) {
   const { data: detail, isLoading, isError } = useInvoice(invoice?.id ?? null)
+  const navigate = useNavigate()
 
   return (
     <Sheet
@@ -138,37 +140,53 @@ export function InvoiceDetailsSheet({
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {detail.lines.map((line, index) => (
-                          <TableRow key={`${line.description}-${index}`}>
-                            <TableCell>
-                              <div className="font-medium">
-                                {line.description}
-                              </div>
-                              {line.customer && (
-                                <div className="text-xs text-muted-foreground">
-                                  {line.customer.name}
+                        {detail.lines.map((line, index) => {
+                          const orderId =
+                            line.kind === 'order' ? line.orderId : null
+                          return (
+                            <TableRow
+                              key={`${line.description}-${index}`}
+                              className={orderId ? 'cursor-pointer' : undefined}
+                              onClick={
+                                orderId
+                                  ? () =>
+                                      void navigate({
+                                        to: '/orders',
+                                        search: { trackOrderId: orderId },
+                                      })
+                                  : undefined
+                              }
+                            >
+                              <TableCell>
+                                <div className="font-medium">
+                                  {line.description}
                                 </div>
-                              )}
-                              {line.detail && (
-                                <div className="text-xs text-muted-foreground">
-                                  {line.detail}
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="secondary">
-                                {LINE_KIND_LABELS[line.kind]}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-end tabular-nums">
-                              {line.quantity}
-                              {line.unit ? ` ${line.unit}` : ''}
-                            </TableCell>
-                            <TableCell className="text-end font-medium tabular-nums">
-                              {currencyFormatter.format(line.lineTotal)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                                {line.customer && (
+                                  <div className="text-xs text-muted-foreground">
+                                    {line.customer.name}
+                                  </div>
+                                )}
+                                {line.detail && (
+                                  <div className="text-xs text-muted-foreground">
+                                    {line.detail}
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="secondary">
+                                  {LINE_KIND_LABELS[line.kind]}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-end tabular-nums">
+                                {line.quantity}
+                                {line.unit ? ` ${line.unit}` : ''}
+                              </TableCell>
+                              <TableCell className="text-end font-medium tabular-nums">
+                                {currencyFormatter.format(line.lineTotal)}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
                       </TableBody>
                     </Table>
                   </div>

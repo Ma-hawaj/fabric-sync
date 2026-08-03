@@ -91,6 +91,7 @@ pub async fn fetch_invoice_detail(
     let orders = sqlx::query!(
         r#"
         SELECT
+            o.id AS order_id,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile_no,
             mat.name AS material_name,
@@ -149,6 +150,7 @@ pub async fn fetch_invoice_detail(
         .into_iter()
         .map(|row| InvoiceDetailLine {
             kind: InvoiceLineKind::Order,
+            order_id: Some(row.order_id),
             description: row.material_name,
             detail: order_specification(
                 row.thobe_type,
@@ -181,6 +183,7 @@ pub async fn fetch_invoice_detail(
             } else {
                 InvoiceLineKind::Product
             },
+            order_id: None,
             description: row.description,
             detail: None,
             customer: None,
