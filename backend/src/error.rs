@@ -83,6 +83,14 @@ impl IntoResponse for AppError {
             Self::Template(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
         };
 
+        // Recorded onto the request-wide span (see request_log::log_request)
+        // rather than logged here directly — this is what turns a silent 500
+        // into a field on the one canonical line for the request, instead of
+        // a second, disconnected log line.
+        let span = tracing::Span::current();
+        span.record("status", status.as_u16());
+        span.record("error", message.as_str());
+
         (status, message).into_response()
     }
 }
