@@ -37,5 +37,6 @@ export interface Customer {
   name: string
   nameArabic?: string
   mobileNo: string
+  marketingOptIn: boolean
   measurements: Measurement[]
 }

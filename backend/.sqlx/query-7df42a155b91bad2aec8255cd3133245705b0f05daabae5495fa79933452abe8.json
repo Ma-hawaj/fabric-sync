@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            c.id,\n            c.body,\n            c.template_name,\n            c.created_by,\n            c.created_at,\n            COALESCE(\n                json_agg(jsonb_build_object(\n                    'id', r.id,\n                    'customerId', r.customer_id,\n                    'customerName', cu.name,\n                    'mobileNo', r.mobile_no,\n                    'status', r.status,\n                    'errorMessage', r.error_message,\n                    'sentAt', r.sent_at\n                ) ORDER BY cu.name)\n                    FILTER (WHERE r.id IS NOT NULL),\n                '[]'\n            ) AS \"recipients!: Json<Vec<CampaignRecipient>>\"\n        FROM notification_campaigns c\n        LEFT JOIN notification_recipients r ON r.campaign_id = c.id\n        LEFT JOIN customers cu ON cu.id = r.customer_id\n        WHERE $1::uuid IS NULL OR c.id = $1\n        GROUP BY c.id, c.body, c.template_name, c.created_by, c.created_at\n        ORDER BY c.created_at DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "body",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "template_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "created_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "recipients!: Json<Vec<CampaignRecipient>>",
+        "type_info": "Json"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "7df42a155b91bad2aec8255cd3133245705b0f05daabae5495fa79933452abe8"
+}

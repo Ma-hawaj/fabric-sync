@@ -47,6 +47,7 @@ async function createCustomer(values: CustomerFormValues): Promise<Customer> {
   const { data } = await apiClient.post<Customer>('/customers', {
     name: values.name,
     mobileNo: values.mobileNo,
+    marketingOptIn: values.marketingOptIn,
     measurement: values.addMeasurement
       ? measurementPayload(values.measurement)
       : null,

@@ -1,11 +1,29 @@
 import type { ColumnDef } from '@tanstack/react-table'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import type { Customer } from '../types/customers'
-import { EyeIcon } from 'lucide-react'
+import { BellIcon, BellOffIcon, EyeIcon } from 'lucide-react'
+
+export const OPTED_IN_LABEL = 'Opted in'
+export const OPTED_OUT_LABEL = 'Opted out'
+
+// Shared with order-stage-columns.tsx's/location-columns.tsx's identical
+// recipe: the multiSelect toolbar filter always hands back a string[].
+function matchesAnySelected(cellValue: string[], filterValue: unknown) {
+  if (
+    !filterValue ||
+    (Array.isArray(filterValue) && filterValue.length === 0)
+  ) {
+    return true
+  }
+  return (filterValue as string[]).some((value) => cellValue.includes(value))
+}
 
 export const getCustomerColumns = (
   onViewDetails: (customer: Customer) => void,
+  onToggleOptIn: (customer: Customer) => void,
+  isTogglingOptIn: boolean,
 ): ColumnDef<Customer, any>[] => [
   {
     accessorKey: 'id',
@@ -68,18 +86,69 @@ export const getCustomerColumns = (
     },
   },
   {
+    id: 'marketingOptIn',
+    accessorFn: (customer) => [
+      customer.marketingOptIn ? OPTED_IN_LABEL : OPTED_OUT_LABEL,
+    ],
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Marketing" />
+    ),
+    cell: ({ row }) =>
+      row.original.marketingOptIn ? (
+        <Badge variant="secondary">{OPTED_IN_LABEL}</Badge>
+      ) : (
+        <Badge variant="outline" className="text-muted-foreground">
+          {OPTED_OUT_LABEL}
+        </Badge>
+      ),
+    enableSorting: false,
+    enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) =>
+      matchesAnySelected(row.getValue<string[]>(columnId), filterValue),
+    meta: {
+      label: 'Marketing',
+      placeholder: 'Filter...',
+      variant: 'multiSelect',
+      options: [
+        { label: OPTED_IN_LABEL, value: OPTED_IN_LABEL },
+        { label: OPTED_OUT_LABEL, value: OPTED_OUT_LABEL },
+      ],
+    },
+  },
+  {
     id: 'actions',
     header: 'Actions',
     cell: ({ row }) => (
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => onViewDetails(row.original)}
-        className="h-8 w-auto px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
-      >
-        <EyeIcon className="mr-1.5 h-4 w-4" />
-        View Details
-      </Button>
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onViewDetails(row.original)}
+          className="h-8 w-auto px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
+        >
+          <EyeIcon className="mr-1.5 h-4 w-4" />
+          View Details
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={isTogglingOptIn}
+          onClick={() => onToggleOptIn(row.original)}
+          className="h-8 w-auto px-2"
+        >
+          {row.original.marketingOptIn ? (
+            <>
+              <BellOffIcon className="mr-1.5 h-4 w-4" />
+              Opt out
+            </>
+          ) : (
+            <>
+              <BellIcon className="mr-1.5 h-4 w-4" />
+              Opt in
+            </>
+          )}
+        </Button>
+      </div>
     ),
   },
 ]

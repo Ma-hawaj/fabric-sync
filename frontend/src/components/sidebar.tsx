@@ -38,6 +38,7 @@ import {
   ChevronsUpDownIcon,
   LogInIcon,
   LogOutIcon,
+  MegaphoneIcon,
   SunIcon,
 } from 'lucide-react'
 
@@ -52,6 +53,7 @@ const navItems = [
     exact: false,
   },
   { to: '/customers', label: 'Customers', icon: ContactIcon, exact: false },
+  { to: '/marketing', label: 'Marketing', icon: MegaphoneIcon, exact: false },
   { to: '/inventory', label: 'Inventory', icon: PackageIcon, exact: false },
   { to: '/products', label: 'Products', icon: ShoppingBagIcon, exact: false },
   { to: '/gift-cards', label: 'Gift Cards', icon: GiftIcon, exact: false },

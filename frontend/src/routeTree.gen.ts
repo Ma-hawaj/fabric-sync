@@ -16,6 +16,7 @@ import { Route as AuthenticatedOrdersRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedProductsIndexRouteImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedOrderStagesIndexRouteImport } from './routes/_authenticated/order-stages/index'
+import { Route as AuthenticatedMarketingIndexRouteImport } from './routes/_authenticated/marketing/index'
 import { Route as AuthenticatedLocationsIndexRouteImport } from './routes/_authenticated/locations/index'
 import { Route as AuthenticatedInvoicesIndexRouteImport } from './routes/_authenticated/invoices/index'
 import { Route as AuthenticatedInventoryIndexRouteImport } from './routes/_authenticated/inventory/index'
@@ -23,6 +24,7 @@ import { Route as AuthenticatedGiftCardsIndexRouteImport } from './routes/_authe
 import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers/index'
 import { Route as AuthenticatedProductsNewRouteImport } from './routes/_authenticated/products/new'
 import { Route as AuthenticatedOrderStagesNewRouteImport } from './routes/_authenticated/order-stages/new'
+import { Route as AuthenticatedMarketingNewRouteImport } from './routes/_authenticated/marketing/new'
 import { Route as AuthenticatedLocationsNewRouteImport } from './routes/_authenticated/locations/new'
 import { Route as AuthenticatedInvoicesNewRouteImport } from './routes/_authenticated/invoices/new'
 import { Route as AuthenticatedInventoryNewRouteImport } from './routes/_authenticated/inventory/new'
@@ -68,6 +70,12 @@ const AuthenticatedOrderStagesIndexRoute =
     path: '/order-stages/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedMarketingIndexRoute =
+  AuthenticatedMarketingIndexRouteImport.update({
+    id: '/marketing/',
+    path: '/marketing/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedLocationsIndexRoute =
   AuthenticatedLocationsIndexRouteImport.update({
     id: '/locations/',
@@ -108,6 +116,12 @@ const AuthenticatedOrderStagesNewRoute =
   AuthenticatedOrderStagesNewRouteImport.update({
     id: '/order-stages/new',
     path: '/order-stages/new',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedMarketingNewRoute =
+  AuthenticatedMarketingNewRouteImport.update({
+    id: '/marketing/new',
+    path: '/marketing/new',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedLocationsNewRoute =
@@ -169,6 +183,7 @@ export interface FileRoutesByFullPath {
   '/inventory/new': typeof AuthenticatedInventoryNewRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
   '/locations/new': typeof AuthenticatedLocationsNewRoute
+  '/marketing/new': typeof AuthenticatedMarketingNewRoute
   '/order-stages/new': typeof AuthenticatedOrderStagesNewRoute
   '/products/new': typeof AuthenticatedProductsNewRoute
   '/customers/': typeof AuthenticatedCustomersIndexRoute
@@ -176,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/invoices/': typeof AuthenticatedInvoicesIndexRoute
   '/locations/': typeof AuthenticatedLocationsIndexRoute
+  '/marketing/': typeof AuthenticatedMarketingIndexRoute
   '/order-stages/': typeof AuthenticatedOrderStagesIndexRoute
   '/products/': typeof AuthenticatedProductsIndexRoute
   '/locations/$locationId/edit': typeof AuthenticatedLocationsLocationIdEditRoute
@@ -192,6 +208,7 @@ export interface FileRoutesByTo {
   '/inventory/new': typeof AuthenticatedInventoryNewRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
   '/locations/new': typeof AuthenticatedLocationsNewRoute
+  '/marketing/new': typeof AuthenticatedMarketingNewRoute
   '/order-stages/new': typeof AuthenticatedOrderStagesNewRoute
   '/products/new': typeof AuthenticatedProductsNewRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
@@ -199,6 +216,7 @@ export interface FileRoutesByTo {
   '/inventory': typeof AuthenticatedInventoryIndexRoute
   '/invoices': typeof AuthenticatedInvoicesIndexRoute
   '/locations': typeof AuthenticatedLocationsIndexRoute
+  '/marketing': typeof AuthenticatedMarketingIndexRoute
   '/order-stages': typeof AuthenticatedOrderStagesIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/locations/$locationId/edit': typeof AuthenticatedLocationsLocationIdEditRoute
@@ -217,6 +235,7 @@ export interface FileRoutesById {
   '/_authenticated/inventory/new': typeof AuthenticatedInventoryNewRoute
   '/_authenticated/invoices/new': typeof AuthenticatedInvoicesNewRoute
   '/_authenticated/locations/new': typeof AuthenticatedLocationsNewRoute
+  '/_authenticated/marketing/new': typeof AuthenticatedMarketingNewRoute
   '/_authenticated/order-stages/new': typeof AuthenticatedOrderStagesNewRoute
   '/_authenticated/products/new': typeof AuthenticatedProductsNewRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
@@ -224,6 +243,7 @@ export interface FileRoutesById {
   '/_authenticated/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/_authenticated/invoices/': typeof AuthenticatedInvoicesIndexRoute
   '/_authenticated/locations/': typeof AuthenticatedLocationsIndexRoute
+  '/_authenticated/marketing/': typeof AuthenticatedMarketingIndexRoute
   '/_authenticated/order-stages/': typeof AuthenticatedOrderStagesIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
   '/_authenticated/locations/$locationId/edit': typeof AuthenticatedLocationsLocationIdEditRoute
@@ -242,6 +262,7 @@ export interface FileRouteTypes {
     | '/inventory/new'
     | '/invoices/new'
     | '/locations/new'
+    | '/marketing/new'
     | '/order-stages/new'
     | '/products/new'
     | '/customers/'
@@ -249,6 +270,7 @@ export interface FileRouteTypes {
     | '/inventory/'
     | '/invoices/'
     | '/locations/'
+    | '/marketing/'
     | '/order-stages/'
     | '/products/'
     | '/locations/$locationId/edit'
@@ -265,6 +287,7 @@ export interface FileRouteTypes {
     | '/inventory/new'
     | '/invoices/new'
     | '/locations/new'
+    | '/marketing/new'
     | '/order-stages/new'
     | '/products/new'
     | '/customers'
@@ -272,6 +295,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/invoices'
     | '/locations'
+    | '/marketing'
     | '/order-stages'
     | '/products'
     | '/locations/$locationId/edit'
@@ -289,6 +313,7 @@ export interface FileRouteTypes {
     | '/_authenticated/inventory/new'
     | '/_authenticated/invoices/new'
     | '/_authenticated/locations/new'
+    | '/_authenticated/marketing/new'
     | '/_authenticated/order-stages/new'
     | '/_authenticated/products/new'
     | '/_authenticated/customers/'
@@ -296,6 +321,7 @@ export interface FileRouteTypes {
     | '/_authenticated/inventory/'
     | '/_authenticated/invoices/'
     | '/_authenticated/locations/'
+    | '/_authenticated/marketing/'
     | '/_authenticated/order-stages/'
     | '/_authenticated/products/'
     | '/_authenticated/locations/$locationId/edit'
@@ -359,6 +385,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOrderStagesIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/marketing/': {
+      id: '/_authenticated/marketing/'
+      path: '/marketing'
+      fullPath: '/marketing/'
+      preLoaderRoute: typeof AuthenticatedMarketingIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/locations/': {
       id: '/_authenticated/locations/'
       path: '/locations'
@@ -406,6 +439,13 @@ declare module '@tanstack/react-router' {
       path: '/order-stages/new'
       fullPath: '/order-stages/new'
       preLoaderRoute: typeof AuthenticatedOrderStagesNewRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/marketing/new': {
+      id: '/_authenticated/marketing/new'
+      path: '/marketing/new'
+      fullPath: '/marketing/new'
+      preLoaderRoute: typeof AuthenticatedMarketingNewRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/locations/new': {
@@ -476,6 +516,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedInventoryNewRoute: typeof AuthenticatedInventoryNewRoute
   AuthenticatedInvoicesNewRoute: typeof AuthenticatedInvoicesNewRoute
   AuthenticatedLocationsNewRoute: typeof AuthenticatedLocationsNewRoute
+  AuthenticatedMarketingNewRoute: typeof AuthenticatedMarketingNewRoute
   AuthenticatedOrderStagesNewRoute: typeof AuthenticatedOrderStagesNewRoute
   AuthenticatedProductsNewRoute: typeof AuthenticatedProductsNewRoute
   AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
@@ -483,6 +524,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedInventoryIndexRoute: typeof AuthenticatedInventoryIndexRoute
   AuthenticatedInvoicesIndexRoute: typeof AuthenticatedInvoicesIndexRoute
   AuthenticatedLocationsIndexRoute: typeof AuthenticatedLocationsIndexRoute
+  AuthenticatedMarketingIndexRoute: typeof AuthenticatedMarketingIndexRoute
   AuthenticatedOrderStagesIndexRoute: typeof AuthenticatedOrderStagesIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedLocationsLocationIdEditRoute: typeof AuthenticatedLocationsLocationIdEditRoute
@@ -499,6 +541,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedInventoryNewRoute: AuthenticatedInventoryNewRoute,
   AuthenticatedInvoicesNewRoute: AuthenticatedInvoicesNewRoute,
   AuthenticatedLocationsNewRoute: AuthenticatedLocationsNewRoute,
+  AuthenticatedMarketingNewRoute: AuthenticatedMarketingNewRoute,
   AuthenticatedOrderStagesNewRoute: AuthenticatedOrderStagesNewRoute,
   AuthenticatedProductsNewRoute: AuthenticatedProductsNewRoute,
   AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
@@ -506,6 +549,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedInventoryIndexRoute: AuthenticatedInventoryIndexRoute,
   AuthenticatedInvoicesIndexRoute: AuthenticatedInvoicesIndexRoute,
   AuthenticatedLocationsIndexRoute: AuthenticatedLocationsIndexRoute,
+  AuthenticatedMarketingIndexRoute: AuthenticatedMarketingIndexRoute,
   AuthenticatedOrderStagesIndexRoute: AuthenticatedOrderStagesIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
   AuthenticatedLocationsLocationIdEditRoute:

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { useDataTable } from '@/hooks/use-data-table'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
@@ -8,16 +9,43 @@ import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getCustomerColumns } from './components/customer-columns'
 import { CustomerDetailsSheet } from './components/customer-details-sheet'
 import { useCustomers } from './hooks/use-customers'
+import { useUpdateCustomer } from './hooks/use-update-customer'
 import type { Customer } from './types/customers'
 
 export function CustomersPage() {
   const { data: customers = [], isLoading } = useCustomers()
   const [selectedCustomer, setSelectedCustomer] =
     React.useState<Customer | null>(null)
+  const updateCustomer = useUpdateCustomer()
+
+  const toggleOptIn = React.useCallback(
+    (customer: Customer) => {
+      const pending = updateCustomer.mutateAsync({
+        id: customer.id,
+        marketingOptIn: !customer.marketingOptIn,
+      })
+      toast.promise(pending, {
+        loading: customer.marketingOptIn
+          ? `Opting ${customer.name} out...`
+          : `Opting ${customer.name} in...`,
+        success: (updated) =>
+          updated.marketingOptIn
+            ? `${updated.name} will now receive marketing messages.`
+            : `${updated.name} was opted out of marketing messages.`,
+        error: 'Could not update this customer. Please try again.',
+      })
+    },
+    [updateCustomer],
+  )
 
   const columns = React.useMemo(
-    () => getCustomerColumns(setSelectedCustomer),
-    [],
+    () =>
+      getCustomerColumns(
+        setSelectedCustomer,
+        toggleOptIn,
+        updateCustomer.isPending,
+      ),
+    [toggleOptIn, updateCustomer.isPending],
   )
 
   const { table } = useDataTable({

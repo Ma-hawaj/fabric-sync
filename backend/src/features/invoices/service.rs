@@ -318,6 +318,7 @@ async fn resolve_customer_id(
             tx,
             &new_customer.name,
             &new_customer.mobile_no,
+            false,
         )
         .await?),
         // Already rejected by validate().

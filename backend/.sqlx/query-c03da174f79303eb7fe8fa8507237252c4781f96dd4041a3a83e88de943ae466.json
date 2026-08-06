@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO customers (name, mobile_no)\n        VALUES ($1, $2)\n        RETURNING id\n        ",
+  "query": "\n        INSERT INTO customers (name, mobile_no, marketing_opt_in)\n        VALUES ($1, $2, $3)\n        RETURNING id\n        ",
   "describe": {
     "columns": [
       {
@@ -12,12 +12,13 @@
     "parameters": {
       "Left": [
         "Text",
-        "Text"
+        "Text",
+        "Bool"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "b78301f8135fa594d155f759b5fe0a62bb555bc92305fa5cd6f2ae35cda5f2bd"
+  "hash": "c03da174f79303eb7fe8fa8507237252c4781f96dd4041a3a83e88de943ae466"
 }
