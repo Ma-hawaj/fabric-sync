@@ -237,6 +237,10 @@ pub enum InvoiceLineKind {
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceDetailLine {
     pub kind: InvoiceLineKind,
+    /// Only set for an `Order` line — lets the frontend link straight to that
+    /// order's tracking. `None` for a product or gift card line, which has no
+    /// corresponding `orders` row.
+    pub order_id: Option<Uuid>,
     pub description: String,
     /// The made-to-measure specification (thobe type, collar, sleeve…),
     /// already joined into one human-readable string. `None` for retail lines.

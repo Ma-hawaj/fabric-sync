@@ -62,7 +62,7 @@ export function OrderTrackingSheet({
       open={order !== null}
       onOpenChange={(open) => !open && onOpenChange(false)}
     >
-      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+      <SheetContent className="data-[side=right]:w-full data-[side=right]:sm:w-3/4 data-[side=right]:sm:max-w-[42vw] overflow-y-auto">
         {order && (
           <>
             <SheetHeader>
@@ -72,7 +72,7 @@ export function OrderTrackingSheet({
               </SheetDescription>
             </SheetHeader>
 
-            <div className="space-y-6 px-4 pb-6">
+            <div className="space-y-6 px-6 pb-6">
               <ProductionLocationPicker order={order} />
               <Separator />
               <section className="space-y-3">

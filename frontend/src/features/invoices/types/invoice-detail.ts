@@ -17,6 +17,8 @@ export interface InvoiceParty {
  */
 export interface InvoiceLine {
   kind: InvoiceLineKind
+  /** Only set for an `order` line — lets it link straight to that order's tracking. */
+  orderId: string | null
   description: string
   /** The made-to-measure specification, already joined into one string. */
   detail: string | null

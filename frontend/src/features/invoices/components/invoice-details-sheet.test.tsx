@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { InvoiceDetailsSheet } from './invoice-details-sheet'
 import type { Invoice } from '../types/invoices'
 import type { InvoiceDetail } from '../types/invoice-detail'
+
+const navigateMock = vi.fn()
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => navigateMock,
+}))
 
 const INVOICE: Invoice = {
   id: 'inv-1',
@@ -33,6 +38,7 @@ const DETAIL: InvoiceDetail = {
   lines: [
     {
       kind: 'order',
+      orderId: 'order-1',
       description: 'Japanese Toray Cotton',
       detail: 'Thobe: Saudi · Collar: Classic',
       customer: { name: 'Ahmed Al-Mansoori', mobileNo: '+973-3311-2233' },
@@ -44,6 +50,7 @@ const DETAIL: InvoiceDetail = {
     },
     {
       kind: 'gift_card',
+      orderId: null,
       description: 'Gift card GC-2026-A1',
       detail: null,
       customer: null,
@@ -84,6 +91,10 @@ function renderSheet(detail: InvoiceDetail | null) {
 }
 
 describe('InvoiceDetailsSheet', () => {
+  beforeEach(() => {
+    navigateMock.mockClear()
+  })
+
   it('titles the sheet with the human-readable invoice number', () => {
     renderSheet(DETAIL)
 
@@ -115,5 +126,24 @@ describe('InvoiceDetailsSheet', () => {
 
     expect(screen.queryByText('Loading invoice details...')).toBeTruthy()
     expect(screen.queryByText('Balance due')).toBeNull()
+  })
+
+  it("sends a tailoring line to that order's tracking sheet on the Orders page", () => {
+    renderSheet(DETAIL)
+
+    fireEvent.click(screen.getByText('Japanese Toray Cotton'))
+
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: '/orders',
+      search: { trackOrderId: 'order-1' },
+    })
+  })
+
+  it('does not wire up a click for a gift card line, which has no order', () => {
+    renderSheet(DETAIL)
+
+    fireEvent.click(screen.getByText('Gift card GC-2026-A1'))
+
+    expect(navigateMock).not.toHaveBeenCalled()
   })
 })
