@@ -1,8 +1,5 @@
 use axum::{middleware, Router};
-use tower_http::{
-    cors::{Any, CorsLayer},
-    trace::TraceLayer,
-};
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::{
     auth,
@@ -10,6 +7,7 @@ use crate::{
         customers, gift_cards, health, invoices, locations, materials, order_stages, orders,
         products, users,
     },
+    request_log,
     state::AppState,
 };
 
@@ -76,6 +74,15 @@ pub fn router(state: AppState) -> Router {
             auth::require_auth,
         )))
         .layer(cors)
-        .layer(TraceLayer::new_for_http())
+        // Outermost layer: wraps every `require_auth` route layer below (and
+        // `/health`, which has none), so it's `Span::current()` for the whole
+        // request and can see the final response status regardless of which
+        // feature router or middleware produced it. `MatchedPath` is still
+        // available here despite being the outer layer — axum sets it on the
+        // request right after routing selects a `Route`, before dispatching
+        // into that route's (possibly layered) service, so it's already
+        // present by the time this middleware body runs; genuinely unmatched
+        // paths just fall back to the raw URI (see request_log.rs).
+        .layer(middleware::from_fn(request_log::log_request))
         .with_state(state)
 }

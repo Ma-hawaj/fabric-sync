@@ -42,7 +42,12 @@ pub async fn create_stage(
     let name = normalized_name(&input.name)?;
     validate_sort_order(input.sort_order)?;
 
-    Ok(repository::create_stage(state, &name, input.sort_order, input.requires_delivery).await?)
+    let stage =
+        repository::create_stage(state, &name, input.sort_order, input.requires_delivery).await?;
+
+    tracing::info!(stage_id = %stage.id, name = %stage.name, "order stage catalog entry created");
+
+    Ok(stage)
 }
 
 pub async fn update_stage(
@@ -56,7 +61,7 @@ pub async fn update_stage(
         validate_sort_order(sort_order)?;
     }
 
-    repository::update_stage(
+    let stage = repository::update_stage(
         state,
         stage_id,
         name.as_deref(),
@@ -65,7 +70,16 @@ pub async fn update_stage(
         input.is_active,
     )
     .await?
-    .ok_or_else(|| AppError::NotFound(format!("order stage {stage_id} not found")))
+    .ok_or_else(|| AppError::NotFound(format!("order stage {stage_id} not found")))?;
+
+    tracing::info!(
+        stage_id = %stage_id,
+        is_active = ?input.is_active,
+        sort_order = ?input.sort_order,
+        "order stage catalog entry updated"
+    );
+
+    Ok(stage)
 }
 
 #[cfg(test)]

@@ -83,6 +83,16 @@ impl IntoResponse for AppError {
             Self::Template(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
         };
 
+        // Recorded onto the request-wide span (see request_log::log_request)
+        // rather than logged here directly — this is what turns a silent 500
+        // into a field on the one canonical line for the request, instead of
+        // a second, disconnected log line. `status` isn't recorded here:
+        // request_log::log_request already reads it off the final response
+        // for every request, error or not, and tracing-subscriber's default
+        // fmt layer appends rather than overwrites on a second `record()` of
+        // the same field — recording it twice would print it twice.
+        tracing::Span::current().record("error", message.as_str());
+
         (status, message).into_response()
     }
 }

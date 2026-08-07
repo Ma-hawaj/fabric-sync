@@ -3,6 +3,7 @@ mod auth;
 mod config;
 mod error;
 mod features;
+mod request_log;
 mod seed;
 mod state;
 

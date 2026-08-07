@@ -97,6 +97,13 @@ pub async fn create_gift_card(
 
     tx.commit().await?;
 
+    tracing::info!(
+        gift_card_id = %gift_card_id,
+        code = %code,
+        amount = input.amount,
+        "gift card created"
+    );
+
     Ok(repository::get_gift_card(state, gift_card_id)
         .await?
         .expect("gift card was just created"))
@@ -110,6 +117,12 @@ pub async fn update_gift_card(
     repository::update_gift_card(state, gift_card_id, input.is_active)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("gift card {gift_card_id} not found")))?;
+
+    tracing::info!(
+        gift_card_id = %gift_card_id,
+        is_active = ?input.is_active,
+        "gift card updated"
+    );
 
     Ok(repository::get_gift_card(state, gift_card_id)
         .await?
@@ -133,6 +146,8 @@ pub async fn redeem(
     check_redeemable(&card, code, amount, on)?;
 
     repository::decrement_balance(tx, card.id, amount).await?;
+
+    tracing::info!(gift_card_id = %card.id, code = %code, amount, "gift card redeemed");
 
     Ok(card.id)
 }
