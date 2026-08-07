@@ -2,6 +2,8 @@ import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Field, FieldLabel } from '@/components/ui/field'
 import { TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { MeasurementFields } from './components/measurement-fields'
@@ -58,6 +60,26 @@ export function CustomerFormPage() {
         <div className="max-w-3xl space-y-4 rounded-xl border border-border/60 bg-card p-5">
           <TextField form={form} name="name" label="Full Name" />
           <TextField form={form} name="mobileNo" label="Phone" />
+
+          <form.Field name="marketingOptIn">
+            {(field) => (
+              <Field
+                orientation="horizontal"
+                className="flex-row-reverse justify-end gap-2"
+              >
+                <Checkbox
+                  id={field.name}
+                  checked={field.state.value}
+                  onCheckedChange={(checked) =>
+                    field.handleChange(checked === true)
+                  }
+                />
+                <FieldLabel htmlFor={field.name} className="font-normal">
+                  Customer agrees to receive marketing messages on WhatsApp
+                </FieldLabel>
+              </Field>
+            )}
+          </form.Field>
         </div>
 
         <div className="space-y-4 rounded-xl border border-border/60 bg-card p-5">

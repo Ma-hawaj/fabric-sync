@@ -3,6 +3,7 @@ pub mod gift_cards;
 pub mod health;
 pub mod invoices;
 pub mod locations;
+pub mod marketing_messages;
 pub mod materials;
 pub mod order_stages;
 pub mod orders;

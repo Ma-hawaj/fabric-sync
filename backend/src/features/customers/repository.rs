@@ -15,6 +15,7 @@ async fn fetch_customers(
             c.id,
             c.name,
             c.mobile_no,
+            c.marketing_opt_in,
             COALESCE(
                 json_agg(to_jsonb(m) ORDER BY m.measurement_date DESC, m.id DESC)
                     FILTER (WHERE m.id IS NOT NULL),
@@ -23,7 +24,7 @@ async fn fetch_customers(
         FROM customers c
         LEFT JOIN measurements m ON m.customer_id = c.id
         WHERE $1::uuid IS NULL OR c.id = $1
-        GROUP BY c.id, c.name, c.mobile_no
+        GROUP BY c.id, c.name, c.mobile_no, c.marketing_opt_in
         ORDER BY c.id
         "#,
         customer_id,
@@ -37,6 +38,7 @@ async fn fetch_customers(
             id: row.id,
             name: row.name,
             mobile_no: row.mobile_no,
+            marketing_opt_in: row.marketing_opt_in,
             measurements: row.measurements.0,
         })
         .collect())
@@ -174,20 +176,23 @@ pub async fn latest_measurement(
 }
 
 // Tx-scoped so the invoices feature can create new customers as part of an
-// invoice's transaction.
+// invoice's transaction. The invoices flow doesn't collect a marketing
+// preference, so it always passes `false` here — same as the column default.
 pub async fn insert_customer(
     tx: &mut sqlx::PgTransaction<'_>,
     name: &str,
     mobile_no: &str,
+    marketing_opt_in: bool,
 ) -> Result<Uuid, sqlx::Error> {
     sqlx::query_scalar!(
         r#"
-        INSERT INTO customers (name, mobile_no)
-        VALUES ($1, $2)
+        INSERT INTO customers (name, mobile_no, marketing_opt_in)
+        VALUES ($1, $2, $3)
         RETURNING id
         "#,
         name,
         mobile_no,
+        marketing_opt_in,
     )
     .fetch_one(&mut **tx)
     .await
@@ -197,11 +202,12 @@ pub async fn create_customer(
     state: &AppState,
     name: &str,
     mobile_no: &str,
+    marketing_opt_in: bool,
     measurement: Option<&CreateMeasurementInput>,
 ) -> Result<Uuid, sqlx::Error> {
     let mut tx = state.db().begin().await?;
 
-    let customer_id = insert_customer(&mut tx, name, mobile_no).await?;
+    let customer_id = insert_customer(&mut tx, name, mobile_no, marketing_opt_in).await?;
 
     if let Some(measurement) = measurement {
         insert_measurement(&mut tx, customer_id, measurement).await?;
@@ -210,4 +216,25 @@ pub async fn create_customer(
     tx.commit().await?;
 
     Ok(customer_id)
+}
+
+// COALESCE leaves any field the caller omitted untouched, same idiom as
+// order_stages::repository::update_stage.
+pub async fn update_customer(
+    state: &AppState,
+    customer_id: Uuid,
+    marketing_opt_in: Option<bool>,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"
+        UPDATE customers
+        SET marketing_opt_in = COALESCE($2, marketing_opt_in)
+        WHERE id = $1
+        RETURNING id
+        "#,
+        customer_id,
+        marketing_opt_in,
+    )
+    .fetch_optional(state.db())
+    .await
 }

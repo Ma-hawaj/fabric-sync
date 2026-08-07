@@ -26,13 +26,16 @@ INSERT INTO branch (id, name, receives_orders, holds_stock, is_active) VALUES
     ('019a0000-0001-7000-8000-000000000003', 'Central Workshop',   FALSE, TRUE,  TRUE),
     ('019a0000-0001-7000-8000-000000000004', 'Dammam Branch',      TRUE,  TRUE,  FALSE);
 
-INSERT INTO customers (id, name, mobile_no) VALUES
-    ('019a0000-0002-7000-8000-000000000001', 'Abdullah Al-Otaibi', '0501234567'),
-    ('019a0000-0002-7000-8000-000000000002', 'Faisal Al-Harbi',    '0552345678'),
-    ('019a0000-0002-7000-8000-000000000003', 'Mohammed Al-Qahtani','0533456789'),
-    ('019a0000-0002-7000-8000-000000000004', 'Saleh Al-Dossari',   '0564567890'),
-    ('019a0000-0002-7000-8000-000000000005', 'Yousef Al-Shammari', '0595678901'),
-    ('019a0000-0002-7000-8000-000000000006', 'Khalid Al-Zahrani',  '0506789012');
+-- Customers 1-4 have opted in to marketing messages, 5-6 have not — so the
+-- marketing broadcast compose page has real recipients to pre-select and a
+-- visible exclusion case to prove the opt-in filter actually works.
+INSERT INTO customers (id, name, mobile_no, marketing_opt_in) VALUES
+    ('019a0000-0002-7000-8000-000000000001', 'Abdullah Al-Otaibi', '0501234567', TRUE),
+    ('019a0000-0002-7000-8000-000000000002', 'Faisal Al-Harbi',    '0552345678', TRUE),
+    ('019a0000-0002-7000-8000-000000000003', 'Mohammed Al-Qahtani','0533456789', TRUE),
+    ('019a0000-0002-7000-8000-000000000004', 'Saleh Al-Dossari',   '0564567890', TRUE),
+    ('019a0000-0002-7000-8000-000000000005', 'Yousef Al-Shammari', '0595678901', FALSE),
+    ('019a0000-0002-7000-8000-000000000006', 'Khalid Al-Zahrani',  '0506789012', FALSE);
 
 INSERT INTO materials (id, name, sku, unit) VALUES
     ('019a0000-0003-7000-8000-000000000001', 'Japanese Cotton',    'JC-100', 'meters'),

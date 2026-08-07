@@ -48,6 +48,7 @@ pub struct Customer {
     pub id: Uuid,
     pub name: String,
     pub mobile_no: String,
+    pub marketing_opt_in: bool,
     pub measurements: Vec<Measurement>,
 }
 
@@ -89,7 +90,19 @@ pub struct CreateCustomerInput {
     pub name: String,
     pub mobile_no: String,
     #[serde(default)]
+    pub marketing_opt_in: bool,
+    #[serde(default)]
     pub measurement: Option<CreateMeasurementInput>,
+}
+
+/// Only field today is `marketing_opt_in` — the list page's opt-in toggle
+/// action. Kept `Option`-shaped like `order_stages`'s update input so a
+/// future edit form can add more fields as a partial update without a
+/// breaking change.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCustomerInput {
+    pub marketing_opt_in: Option<bool>,
 }
 
 // Two snapshots count as "the same measurement" if every measured field

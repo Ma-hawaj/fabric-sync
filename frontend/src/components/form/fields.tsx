@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 
 // TanStack Form's extended API type has 11 validator generic params beyond
 // the form data itself; pinning them all to `any` collapses several method
@@ -77,6 +78,32 @@ export function NumberField({
               </span>
             )}
           </div>
+          <FieldError errors={field.state.meta.errors} />
+        </Field>
+      )}
+    </form.Field>
+  )
+}
+
+export function TextareaField({
+  form,
+  name,
+  label,
+  rows,
+}: FieldProps & { rows?: number }) {
+  return (
+    <form.Field name={name as never}>
+      {(field: any) => (
+        <Field data-invalid={field.state.meta.errors.length > 0}>
+          <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
+          <Textarea
+            id={field.name}
+            rows={rows}
+            value={field.state.value ?? ''}
+            aria-invalid={field.state.meta.errors.length > 0}
+            onBlur={field.handleBlur}
+            onChange={(e) => field.handleChange(e.target.value)}
+          />
           <FieldError errors={field.state.meta.errors} />
         </Field>
       )}

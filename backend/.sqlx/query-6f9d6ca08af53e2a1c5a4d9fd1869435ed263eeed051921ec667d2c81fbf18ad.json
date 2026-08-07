@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO notification_campaigns (kind, channel, template_name, body, created_by)\n        VALUES ('marketing', 'whatsapp', $1, $2, $3)\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6f9d6ca08af53e2a1c5a4d9fd1869435ed263eeed051921ec667d2c81fbf18ad"
+}

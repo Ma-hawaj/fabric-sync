@@ -11,6 +11,7 @@ const EXISTING_CUSTOMERS: Customer[] = [
     id: 'cust-1',
     name: 'Ahmed Al-Mansoori',
     mobileNo: '+971-50-1234567',
+    marketingOptIn: false,
     measurements: [
       {
         id: 'meas-current',
@@ -32,6 +33,7 @@ const EXISTING_CUSTOMERS: Customer[] = [
     id: 'cust-2',
     name: 'Fatima Al-Farsi',
     mobileNo: '+971-55-9876543',
+    marketingOptIn: false,
     measurements: [],
   },
 ]

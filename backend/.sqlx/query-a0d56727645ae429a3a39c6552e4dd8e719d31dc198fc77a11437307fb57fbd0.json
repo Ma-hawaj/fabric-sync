@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE notification_recipients\n        SET status = 'sent', provider_message_id = $2, sent_at = now()\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a0d56727645ae429a3a39c6552e4dd8e719d31dc198fc77a11437307fb57fbd0"
+}

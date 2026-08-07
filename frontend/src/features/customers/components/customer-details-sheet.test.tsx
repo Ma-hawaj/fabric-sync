@@ -8,6 +8,7 @@ const CUSTOMER: Customer = {
   id: 'cust-1',
   name: 'Ahmed Al-Mansoori',
   mobileNo: '+971-50-1234567',
+  marketingOptIn: false,
   measurements: [
     {
       id: 'meas-1',

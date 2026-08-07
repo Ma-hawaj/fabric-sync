@@ -3,10 +3,12 @@ mod auth;
 mod config;
 mod error;
 mod features;
+mod notifications;
 mod seed;
 mod state;
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use config::Config;
 use sqlx::postgres::PgPoolOptions;
@@ -36,7 +38,14 @@ async fn main() -> Result<(), error::AppError> {
     let token_introspection = auth::TokenIntrospection::discover(&config)
         .await
         .map_err(error::AppError::Auth)?;
-    let app = app::router(AppState::new(config, db, token_introspection));
+    let whatsapp_client: Arc<dyn notifications::WhatsAppClient> =
+        Arc::new(notifications::StubWhatsAppClient);
+    let app = app::router(AppState::new(
+        config,
+        db,
+        token_introspection,
+        whatsapp_client,
+    ));
 
     axum::serve(listener, app).await?;
 
