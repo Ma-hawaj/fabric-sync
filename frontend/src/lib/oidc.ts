@@ -11,6 +11,12 @@ export const oidcUserManager = new UserManager({
     import.meta.env.VITE_OIDC_POST_LOGOUT_REDIRECT_URI ??
     `${window.location.origin}/`,
   scope: import.meta.env.VITE_OIDC_SCOPE ?? 'openid profile email',
+  // oidc-client-ts defaults this to false, so `profile` would otherwise only
+  // reflect whatever claims the IdP chose to embed in the ID token itself
+  // (Zitadel, notably, omits name/email there by default) rather than
+  // calling the standard OIDC userinfo endpoint for the scopes requested
+  // above — which is what actually populates the sidebar's user name.
+  loadUserInfo: true,
   // sessionStorage (not localStorage): token lifetime is tab-scoped, cleared
   // on tab close.
   userStore: new WebStorageStateStore({ store: window.sessionStorage }),

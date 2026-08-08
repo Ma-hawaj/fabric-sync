@@ -18,6 +18,10 @@ pub enum AppError {
     /// template can be replaced at runtime (INVOICE_TEMPLATE_DIR), so this is
     /// the one 500 an operator can cause — and fix — without a deploy.
     Template(String),
+    /// A per-request call to Zitadel's Users API failed (token exchange,
+    /// network error, or an unexpected response shape) — a 500, but distinct
+    /// from `Auth`, which is boot-time OIDC-discovery failure only.
+    Zitadel(String),
 }
 
 impl From<std::io::Error> for AppError {
@@ -81,6 +85,7 @@ impl IntoResponse for AppError {
             Self::Conflict(message) => (StatusCode::CONFLICT, message),
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             Self::Template(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
+            Self::Zitadel(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
         };
 
         (status, message).into_response()
