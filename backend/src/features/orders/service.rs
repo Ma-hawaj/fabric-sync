@@ -387,11 +387,19 @@ pub async fn receive_order(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
 
-    if repository::invoice_fully_received(&mut tx, invoice_id).await? {
+    let invoice_settled = repository::invoice_fully_received(&mut tx, invoice_id).await?;
+    if invoice_settled {
         repository::mark_invoice_paid(&mut tx, invoice_id, final_payment_type).await?;
     }
 
     tx.commit().await?;
+
+    tracing::info!(
+        order_id = %order_id,
+        invoice_id = %invoice_id,
+        invoice_settled,
+        "order received"
+    );
 
     load_order(state, order_id).await
 }
@@ -404,6 +412,12 @@ pub async fn update_order(
     repository::update_order(state, order_id, input.production_location_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
+
+    tracing::info!(
+        order_id = %order_id,
+        production_location_id = ?input.production_location_id,
+        "order production location updated"
+    );
 
     load_order(state, order_id).await
 }
@@ -464,6 +478,14 @@ pub async fn set_stage(
 
     tx.commit().await?;
 
+    tracing::info!(
+        order_id = %order_id,
+        stage_id = %stage_id,
+        stage = %stage.name,
+        status = input.status.as_str(),
+        "order stage updated"
+    );
+
     load_order(state, order_id).await
 }
 
@@ -498,9 +520,23 @@ pub async fn set_assignee(
                 .ok_or_else(|| AppError::BadRequest(format!("unknown user {assignee_id}")))?;
 
             repository::set_assignee(state, order_id, stage_id, &user.id, &user.name).await?;
+
+            tracing::info!(
+                order_id = %order_id,
+                stage_id = %stage_id,
+                assignee_id = %user.id,
+                assignee_name = %user.name,
+                "order stage assignee set"
+            );
         }
         None => {
             repository::clear_assignee(state, order_id, stage_id).await?;
+
+            tracing::info!(
+                order_id = %order_id,
+                stage_id = %stage_id,
+                "order stage assignee cleared"
+            );
         }
     }
 
@@ -527,6 +563,13 @@ pub async fn create_repair(
         input.notes.as_deref(),
     )
     .await?;
+
+    tracing::info!(
+        order_id = %order_id,
+        reason = %reason,
+        charge = input.charge,
+        "order repair opened"
+    );
 
     load_order(state, order_id).await
 }
@@ -564,6 +607,13 @@ pub async fn update_repair(
     )
     .await?
     .ok_or_else(|| AppError::NotFound(format!("repair {repair_id} not found")))?;
+
+    tracing::info!(
+        order_id = %order_id,
+        repair_id = %repair_id,
+        status = ?input.status,
+        "order repair updated"
+    );
 
     load_order(state, order_id).await
 }

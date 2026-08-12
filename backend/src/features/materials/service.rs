@@ -24,6 +24,8 @@ pub async fn create_material(
     )
     .await?;
 
+    tracing::info!(material_id = %material_id, name = %input.name, "material created");
+
     Ok(repository::get_material(state, material_id)
         .await?
         .expect("material was just created"))
@@ -44,6 +46,14 @@ pub async fn add_stock(
     }
 
     repository::add_stock(state, material_id, &input.entries).await?;
+
+    let total_added: f64 = input.entries.iter().map(|entry| entry.quantity).sum();
+    tracing::info!(
+        material_id = %material_id,
+        locations = input.entries.len(),
+        quantity_added = total_added,
+        "material stock added"
+    );
 
     Ok(repository::get_material(state, material_id)
         .await?

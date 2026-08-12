@@ -113,6 +113,13 @@ pub async fn receive_invoice(
 
     tx.commit().await?;
 
+    tracing::info!(
+        invoice_id = %invoice_id,
+        payment_type = payment_type.as_str(),
+        amount_paid = received.amount_paid,
+        "invoice received"
+    );
+
     Ok(received)
 }
 
@@ -709,6 +716,17 @@ pub async fn create_invoice(
     }
 
     tx.commit().await?;
+
+    tracing::info!(
+        invoice_id = %invoice_id,
+        total = totals.total,
+        gift_card_redeemed = totals.redeemed,
+        customers = input.customers.len(),
+        product_lines = input.products.len(),
+        gift_cards_sold = input.gift_cards.len(),
+        gift_cards_redeemed = input.gift_card_redemptions.len(),
+        "invoice created"
+    );
 
     Ok(CreatedInvoice {
         id: invoice_id,

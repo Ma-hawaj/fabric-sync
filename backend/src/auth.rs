@@ -173,6 +173,17 @@ pub async fn require_auth(
         .await
         .map_err(AppError::Unauthorized)?;
 
+    // Attaches to the request-wide span opened by `request_log::log_request`,
+    // which is `Span::current()` here since it's the outermost layer — no
+    // extension plumbing needed to get identity onto the canonical log line.
+    let span = tracing::Span::current();
+    if let Some(subject) = user.subject() {
+        span.record("user_id", subject);
+    }
+    if let Some(client_id) = user.client_id() {
+        span.record("client_id", client_id);
+    }
+
     request.extensions_mut().insert(user);
 
     Ok(next.run(request).await)
