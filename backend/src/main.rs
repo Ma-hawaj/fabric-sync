@@ -21,6 +21,19 @@ async fn main() -> Result<(), error::AppError> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    // None of this runs inside a request, so it's outside request_log's
+    // canonical line entirely — a DB or OIDC-discovery failure here would
+    // otherwise only ever surface as tokio::main's default Debug-print, not
+    // through tracing like every other error in the app.
+    if let Err(error) = run().await {
+        tracing::error!(error = ?error, "server exited with an error");
+        return Err(error);
+    }
+
+    Ok(())
+}
+
+async fn run() -> Result<(), error::AppError> {
     let config = Config::from_env();
     let address = SocketAddr::from(([0, 0, 0, 0], config.port));
     let listener = tokio::net::TcpListener::bind(address).await?;
