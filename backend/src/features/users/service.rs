@@ -9,11 +9,9 @@ fn user(id: &str, name: &str) -> User {
     }
 }
 
-/// Mocked until real auth is wired up, at which point this calls Zitadel's
-/// user directory instead — see the discussion in `app.rs` about
-/// `require_auth` being disabled. Shaped like that eventual response (an
-/// opaque id plus a display name) so callers don't have to change when the
-/// mock is replaced.
+/// Mocked until this calls Zitadel's user directory instead. Shaped like
+/// that eventual response (an opaque id plus a display name) so callers
+/// don't have to change when the mock is replaced.
 ///
 /// `_state` is unused today but kept in the signature: the real
 /// implementation will need it for Zitadel's API URL and credentials.

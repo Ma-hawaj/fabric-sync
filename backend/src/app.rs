@@ -5,7 +5,7 @@ use tower_http::{
 };
 
 use crate::{
-    auth,
+    auth::{self, Role},
     features::{
         customers, gift_cards, health, invoices, locations, materials, order_stages, orders,
         products, users,
@@ -28,52 +28,52 @@ pub fn router(state: AppState) -> Router {
         .merge(
             customers::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(
             materials::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(
             locations::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(
             invoices::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(orders::router().route_layer(middleware::from_fn_with_state(
             state.clone(),
-            auth::require_auth,
+            auth::require_role(Role::Staff),
         )))
         .merge(
             products::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(
             gift_cards::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(
             order_stages::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(users::router().route_layer(middleware::from_fn_with_state(
             state.clone(),
-            auth::require_auth,
+            auth::require_role(Role::Staff),
         )))
         .layer(cors)
         .layer(TraceLayer::new_for_http())

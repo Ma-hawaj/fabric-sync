@@ -7,10 +7,36 @@ import {
 import type { User } from 'oidc-client-ts'
 import { oidcUserManager } from './oidc'
 
+export type Role = 'admin' | 'staff' | 'viewer'
+
+// Low-to-high, so a higher role satisfies a lower role's gate (an `admin`
+// passes a `staff`-or-`viewer` check) — mirrors the hierarchy the backend
+// enforces in `backend/src/auth.rs`'s `Role`.
+const ROLE_ORDER: Role[] = ['viewer', 'staff', 'admin']
+
+const KNOWN_ROLES = new Set<Role>(ROLE_ORDER)
+
+// Zitadel's project-role assertion claim: a map of role key to
+// `{ orgId: orgName }`, present on the ID token profile when the Zitadel
+// project has "Assert Roles on Authentication" enabled.
+const ZITADEL_ROLES_CLAIM = 'urn:zitadel:iam:org:project:roles'
+
+function rolesFromProfile(
+  profile: Record<string, unknown> | undefined,
+): Role[] {
+  const claim = profile?.[ZITADEL_ROLES_CLAIM]
+  if (!claim || typeof claim !== 'object') return []
+
+  return Object.keys(claim).filter((key): key is Role =>
+    KNOWN_ROLES.has(key as Role),
+  )
+}
+
 export type AuthUser = {
   name: string
   email: string
   avatarUrl?: string
+  roles: Role[]
 }
 
 export type AuthState = {
@@ -19,6 +45,13 @@ export type AuthState = {
   user: AuthUser | null
   signIn: (returnTo?: string) => Promise<void>
   signOut: () => void
+}
+
+/** Whether `user` holds `minimum` or a higher role in the hierarchy above. */
+export function hasRole(user: AuthUser | null, minimum: Role): boolean {
+  if (!user) return false
+  const minimumIndex = ROLE_ORDER.indexOf(minimum)
+  return user.roles.some((role) => ROLE_ORDER.indexOf(role) >= minimumIndex)
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -47,6 +80,7 @@ function AuthBridge({ children }: { children: ReactNode }) {
               'Unknown',
             email: profile.email ?? '',
             avatarUrl: profile.picture,
+            roles: rolesFromProfile(profile),
           }
         : null,
       signIn: (returnTo) =>
