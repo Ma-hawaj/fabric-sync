@@ -41,7 +41,7 @@ function firstErrorFor(input: InvoiceFormValues) {
 }
 
 function baseValues(customers: InvoiceCustomerDraft[]): InvoiceFormValues {
-  return values({ customers })
+  return values({ customers, productionBranch: 'loc-1' })
 }
 
 function firstError(customers: InvoiceCustomerDraft[]) {
@@ -172,6 +172,19 @@ describe('invoiceFormSchema', () => {
     const error = firstErrorFor(input)
     expect(error?.message).toMatch(/location these products are sold from/i)
     expect(error?.path).toEqual(['productBranch'])
+  })
+
+  it('requires a made-at location once there are orders', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      orders: [validOrder()],
+    }
+    const input = { ...baseValues([customer]), productionBranch: '' }
+    const error = firstErrorFor(input)
+    expect(error?.message).toMatch(/location these orders are made at/i)
+    expect(error?.path).toEqual(['productionBranch'])
   })
 
   it('rejects a product line with no product picked', () => {

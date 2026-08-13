@@ -5,6 +5,7 @@ use crate::{
     features::{
         customers::{repository as customers_repository, types::measurement_values_equal},
         gift_cards::{repository as gift_cards_repository, service as gift_cards_service},
+        materials::repository as materials_repository,
         products::repository as products_repository,
     },
     state::AppState,
@@ -344,6 +345,7 @@ mod tests {
         serde_json::json!({
             "materialId": "0197fdd2-6a67-7000-8000-000000000001",
             "materialAmount": 2.0,
+            "productionLocationId": "0197fdd2-6a67-7000-8000-000000000005",
             "price": price,
         })
     }
@@ -639,6 +641,30 @@ pub async fn create_invoice(
         };
 
         for order in &customer.orders {
+            // The decrement is guarded in SQL, so `false` means the
+            // production location either never stocked this material or no
+            // longer holds enough of it. Reading the name for the message
+            // costs an extra query only on that path.
+            let decremented = materials_repository::decrement_stock(
+                &mut tx,
+                order.material_id,
+                order.production_location_id,
+                order.material_amount,
+            )
+            .await?;
+
+            if !decremented {
+                let name = materials_repository::material_name(&mut tx, order.material_id)
+                    .await?
+                    .ok_or_else(|| {
+                        AppError::BadRequest(format!("no material with id {}", order.material_id))
+                    })?;
+
+                return Err(AppError::BadRequest(format!(
+                    "not enough {name} in stock at the selected location"
+                )));
+            }
+
             repository::insert_order(&mut tx, invoice_id, measurement_id, order).await?;
         }
     }

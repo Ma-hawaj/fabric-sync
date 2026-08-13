@@ -68,6 +68,11 @@ impl PaymentType {
 pub struct CreateOrderInput {
     pub material_id: Uuid,
     pub material_amount: f64,
+    // Where material_amount comes off — material_stock is per-location, so an
+    // order has to name one, the same way a product line names a branch_id.
+    // Stored directly as orders.production_branch_id, so production location
+    // is known from creation rather than left for staff to assign later.
+    pub production_location_id: Uuid,
     // Entered by staff per order line; materials carry no unit price to derive
     // it from.
     pub price: f64,

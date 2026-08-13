@@ -27,10 +27,13 @@ function blankToNull(value: string): string | null {
   return value === '' ? null : value
 }
 
-function orderPayload(order: InvoiceOrderDraft) {
+// One "made at" location on the form is stamped onto every order, since the
+// backend records it per order as the material stock it comes off.
+function orderPayload(order: InvoiceOrderDraft, productionLocationId: string) {
   return {
     materialId: order.materialId,
     materialAmount: numberOrZero(order.materialAmount),
+    productionLocationId,
     price: numberOrZero(order.price),
     thobeType: blankToNull(order.thobeType),
     fPocket: blankToNull(order.fPocket),
@@ -41,7 +44,10 @@ function orderPayload(order: InvoiceOrderDraft) {
   }
 }
 
-function customerPayload(customer: InvoiceCustomerDraft) {
+function customerPayload(
+  customer: InvoiceCustomerDraft,
+  productionLocationId: string,
+) {
   return {
     existingCustomerId:
       customer.mode === 'existing' ? customer.existingCustomerId : null,
@@ -50,7 +56,9 @@ function customerPayload(customer: InvoiceCustomerDraft) {
         ? { name: customer.name, mobileNo: customer.mobileNo }
         : null,
     measurement: measurementPayload(customer.measurement),
-    orders: customer.orders.map(orderPayload),
+    orders: customer.orders.map((order) =>
+      orderPayload(order, productionLocationId),
+    ),
   }
 }
 
@@ -92,7 +100,9 @@ function invoicePayload(values: InvoiceFormValues) {
     // Only meaningful for a sale with no orders to find a customer through;
     // it is left blank otherwise.
     customerId: values.customerId || null,
-    customers: values.customers.map(customerPayload),
+    customers: values.customers.map((customer) =>
+      customerPayload(customer, values.productionBranch),
+    ),
     products: values.products.map((line) =>
       productPayload(line, values.productBranch),
     ),

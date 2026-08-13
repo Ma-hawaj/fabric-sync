@@ -168,6 +168,7 @@ export const invoiceFormSchema = z
     receivingBranch: z.string(),
     customerId: z.string(),
     productBranch: z.string(),
+    productionBranch: z.string(),
     discount: numberInputSchema,
     discountUnit: z.enum(['amount', 'percent']),
     paymentStatus: z.enum(['unpaid', 'partial', 'paid']),
@@ -204,6 +205,16 @@ export const invoiceFormSchema = z
         code: 'custom',
         message: 'Pick the location these products are sold from.',
         path: ['productBranch'],
+      })
+    }
+
+    // Material stock is held per location too, and comes off automatically
+    // when the invoice is saved, so an order has to name one.
+    if (hasOrders && !value.productionBranch) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick the location these orders are made at.',
+        path: ['productionBranch'],
       })
     }
 

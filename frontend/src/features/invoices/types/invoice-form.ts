@@ -80,6 +80,10 @@ export interface InvoiceFormValues {
   // held per location. Distinct from receivingBranch, which is where a
   // finished order is collected.
   productBranch: string
+  // One "made at" location for every tailoring order, since material stock is
+  // held per location too — mirrors productBranch. Material comes off stock
+  // at this location when the invoice is saved.
+  productionBranch: string
   discount: NumberInput
   discountUnit: DiscountUnit
   paymentStatus: PaymentStatus
@@ -146,6 +150,7 @@ export function createEmptyInvoiceForm(): InvoiceFormValues {
     receivingBranch: '',
     customerId: '',
     productBranch: '',
+    productionBranch: '',
     discount: '',
     discountUnit: 'amount',
     paymentStatus: 'unpaid',

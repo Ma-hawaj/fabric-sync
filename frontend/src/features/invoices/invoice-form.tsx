@@ -4,6 +4,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { FileDownIcon, PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { FieldError } from '@/components/ui/field'
 import { Label } from '@/components/ui/label'
 import {
   Combobox,
@@ -18,6 +19,7 @@ import { useCustomers } from '@/features/customers/hooks/use-customers'
 import { useLocations } from '@/features/locations/hooks/use-locations'
 import {
   orderReceivingLocations,
+  productionLocations,
   stockLocations,
 } from '@/features/locations/lib/location-filters'
 import { useProducts } from '@/features/products/hooks/use-products'
@@ -57,6 +59,12 @@ export function InvoiceFormPage() {
   // a different question from where a finished order is collected.
   const sellFromLocations = React.useMemo(
     () => stockLocations(allLocations),
+    [allLocations],
+  )
+  // Material comes off stock too, so a tailoring order needs a "made at"
+  // location the same way a product line needs a "sold from" one.
+  const madeAtLocations = React.useMemo(
+    () => productionLocations(allLocations),
     [allLocations],
   )
   const { data: allProducts = [] } = useProducts()
@@ -139,6 +147,77 @@ export function InvoiceFormPage() {
         }}
         className="space-y-6"
       >
+        <form.Subscribe
+          selector={(state: any) =>
+            state.values.customers.some(
+              (customer: InvoiceFormValues['customers'][number]) =>
+                customer.orders.length > 0,
+            )
+          }
+        >
+          {(hasOrders: boolean) =>
+            hasOrders && (
+              <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
+                <div>
+                  <h3 className="text-sm font-semibold">Tailoring Orders</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Where the garments below are made. Material comes off stock
+                    at this location when the invoice is saved.
+                  </p>
+                </div>
+
+                <form.Field name={'productionBranch' as never}>
+                  {(field: any) => {
+                    const selected =
+                      madeAtLocations.find(
+                        (location) => location.id === field.state.value,
+                      ) ?? null
+                    return (
+                      <div className="space-y-1 max-w-sm">
+                        <Label htmlFor={field.name}>Made At</Label>
+                        <Combobox
+                          items={madeAtLocations}
+                          itemToStringLabel={(location: Location) =>
+                            location.name
+                          }
+                          isItemEqualToValue={(a: Location, b: Location) =>
+                            a.id === b.id
+                          }
+                          value={selected}
+                          onValueChange={(location: Location | null) =>
+                            field.handleChange(location?.id ?? '')
+                          }
+                        >
+                          <ComboboxInput
+                            id={field.name}
+                            placeholder="Search location..."
+                            className="w-full"
+                            showClear
+                          />
+                          <ComboboxContent>
+                            <ComboboxEmpty>No locations found.</ComboboxEmpty>
+                            <ComboboxList>
+                              {(location: Location) => (
+                                <ComboboxItem
+                                  key={location.id}
+                                  value={location}
+                                >
+                                  {location.name}
+                                </ComboboxItem>
+                              )}
+                            </ComboboxList>
+                          </ComboboxContent>
+                        </Combobox>
+                        <FieldError errors={field.state.meta.errors} />
+                      </div>
+                    )
+                  }}
+                </form.Field>
+              </div>
+            )
+          }
+        </form.Subscribe>
+
         <form.Field name="customers">
           {(customersField) => (
             <div className="space-y-6">
