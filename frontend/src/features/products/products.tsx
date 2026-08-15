@@ -6,19 +6,17 @@ import { useDataTable } from '@/hooks/use-data-table'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
-import { useAllLocations } from '@/features/locations/hooks/use-locations'
-import { useListParams } from '@/hooks/use-list-params'
+import { useLocations } from '@/features/locations/hooks/use-locations'
 import { getProductColumns } from './components/product-columns'
 import { useProducts } from './hooks/use-products'
 import { useUpdateProduct } from './hooks/use-update-product'
 import type { Product } from './types/product'
 
 export function ProductsPage() {
+  const { data: products = [], isLoading } = useProducts()
   // Unfiltered on purpose: this facet lists where stock already sits, so a
-  // since-deactivated location should stay selectable here. It comes from its
-  // own unpaginated query rather than from the rows on screen, which under
-  // server-side paging are only the current page.
-  const { data: locations } = useAllLocations()
+  // since-deactivated location should stay selectable here.
+  const { data: locations = [] } = useLocations()
   const updateProduct = useUpdateProduct()
 
   const toggleActive = React.useCallback(
@@ -46,19 +44,12 @@ export function ProductsPage() {
     [toggleActive, updateProduct.isPending, locations],
   )
 
-  const { searchParams } = useListParams({ columns })
-  const {
-    data: products,
-    pageCount,
-    total,
-    isLoading,
-  } = useProducts(searchParams)
-
   const { table } = useDataTable({
     data: products,
     columns,
-    pageCount,
-    rowCount: total,
+    manualFiltering: false,
+    manualSorting: false,
+    manualPagination: false,
   })
 
   return (

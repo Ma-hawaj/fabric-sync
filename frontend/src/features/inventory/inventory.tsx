@@ -7,15 +7,13 @@ import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getInventoryColumns } from './components/inventory-columns'
 import { InventoryDetailsSheet } from './components/inventory-details-sheet'
-import { useAllLocations } from '@/features/locations/hooks/use-locations'
-import { useListParams } from '@/hooks/use-list-params'
+import { useLocations } from '@/features/locations/hooks/use-locations'
 import { useInventory } from './hooks/use-inventory'
 import type { Material } from './types/inventory'
 
 export function InventoryPage() {
-  // Unfiltered on purpose: this facet lists where stock already sits, so a
-  // since-deactivated location should stay selectable here.
-  const { data: locations } = useAllLocations()
+  const { data: materials = [], isLoading } = useInventory()
+  const { data: locations = [] } = useLocations()
   const [selectedMaterial, setSelectedMaterial] =
     React.useState<Material | null>(null)
 
@@ -24,19 +22,12 @@ export function InventoryPage() {
     [locations],
   )
 
-  const { searchParams } = useListParams({ columns })
-  const {
-    data: materials,
-    pageCount,
-    total,
-    isLoading,
-  } = useInventory(searchParams)
-
   const { table } = useDataTable({
     data: materials,
     columns,
-    pageCount,
-    rowCount: total,
+    manualFiltering: false,
+    manualSorting: false,
+    manualPagination: false,
   })
 
   return (

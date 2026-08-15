@@ -1,27 +1,16 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
-import { apiBaseUrl } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 import type { GiftCard } from '../types/gift-card'
 import type { GiftCardFormValues } from '../types/gift-card-form'
 
 async function createGiftCard(values: GiftCardFormValues): Promise<GiftCard> {
-  const response = await fetch(`${apiBaseUrl}/gift-cards`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      code: values.code,
-      amount: values.amount === '' ? 0 : values.amount,
-      customerId: values.customerId || null,
-      expiresOn: values.expiresOn || null,
-    }),
+  const { data } = await apiClient.post<GiftCard>('/gift-cards', {
+    code: values.code,
+    amount: values.amount === '' ? 0 : values.amount,
+    customerId: values.customerId || null,
+    expiresOn: values.expiresOn || null,
   })
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to create gift card (${response.status})`,
-      response.status,
-    )
-  }
-  return response.json()
+  return data
 }
 
 export function useCreateGiftCard() {
@@ -29,12 +18,12 @@ export function useCreateGiftCard() {
 
   return useMutation({
     mutationFn: createGiftCard,
-    onSuccess: () => {
+    onSuccess: (giftCard) => {
       // Newest first, matching the backend's ORDER BY id DESC.
-      // The cache holds one entry per page-and-filter combination now, and
-      // each holds an envelope rather than a bare array, so there is no
-      // single list to splice into. Prefix matching refreshes them all.
-      void queryClient.invalidateQueries({ queryKey: ['gift-cards'] })
+      queryClient.setQueryData<GiftCard[]>(['gift-cards'], (cards = []) => [
+        giftCard,
+        ...cards,
+      ])
     },
   })
 }

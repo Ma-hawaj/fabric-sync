@@ -1,4 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
+import { EyeIcon, FileDownIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
@@ -34,9 +35,17 @@ const PAYMENT_STATUS_VARIANT: Record<
   paid: 'default',
 }
 
+const ACTION_BUTTON_CLASS =
+  'h-8 w-auto px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20'
+
+const ACTION_ICON_CLASS =
+  'h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20'
+
 export const getInvoiceColumns = (
   materialOptions: { label: string; value: string }[],
   onReceive: (invoice: Invoice) => void,
+  onViewDetails: (invoice: Invoice) => void,
+  onExportPdf: (invoice: Invoice) => void,
 ): ColumnDef<Invoice, any>[] => [
   {
     accessorKey: 'id',
@@ -48,6 +57,10 @@ export const getInvoiceColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) => {
+      const cellValue = row.getValue<string>(columnId)
+      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
+    },
     meta: {
       label: 'Invoice',
       placeholder: 'Filter invoice...',
@@ -75,6 +88,10 @@ export const getInvoiceColumns = (
     cell: ({ row }) => <div>{row.getValue('customerName')}</div>,
     enableSorting: true,
     enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) => {
+      const cellValue = row.getValue<string>(columnId)
+      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
+    },
     meta: {
       label: 'Customer Name',
       placeholder: 'Filter customer...',
@@ -91,6 +108,10 @@ export const getInvoiceColumns = (
     cell: ({ row }) => <div>{row.getValue('customerMobile')}</div>,
     enableSorting: true,
     enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) => {
+      const cellValue = row.getValue<string>(columnId)
+      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
+    },
     meta: {
       label: 'Customer Mobile',
       placeholder: 'Filter mobile...',
@@ -129,6 +150,17 @@ export const getInvoiceColumns = (
     },
     enableSorting: false,
     enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) => {
+      if (
+        !filterValue ||
+        (Array.isArray(filterValue) && filterValue.length === 0)
+      )
+        return true
+      const cellValue = row.getValue<string[]>(columnId)
+      return (filterValue as string[]).some((value) =>
+        cellValue.includes(value),
+      )
+    },
     meta: {
       label: 'Materials',
       placeholder: 'Filter materials...',
@@ -151,6 +183,14 @@ export const getInvoiceColumns = (
     },
     enableSorting: true,
     enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) => {
+      if (
+        !filterValue ||
+        (Array.isArray(filterValue) && filterValue.length === 0)
+      )
+        return true
+      return (filterValue as string[]).includes(row.getValue(columnId))
+    },
     meta: {
       label: 'Payment',
       placeholder: 'Filter payment...',
@@ -188,6 +228,21 @@ export const getInvoiceColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) => {
+      const cellValue = row.getValue<number>(columnId)
+
+      if (!Array.isArray(filterValue)) return true
+
+      const [minVal, maxVal] = filterValue
+      const min =
+        minVal !== undefined && minVal !== null ? Number(minVal) : undefined
+      const max =
+        maxVal !== undefined && maxVal !== null ? Number(maxVal) : undefined
+
+      if (min !== undefined && !isNaN(min) && cellValue < min) return false
+      if (max !== undefined && !isNaN(max) && cellValue > max) return false
+      return true
+    },
     meta: {
       label: 'Total Price',
       variant: 'range',
@@ -202,15 +257,42 @@ export const getInvoiceColumns = (
       const invoice = row.original
       const isPaid = invoice.paymentStatus === 'paid'
       return (
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={isPaid}
-          onClick={() => onReceive(invoice)}
-          className="h-8 w-auto px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
-        >
-          {isPaid ? 'Received' : 'Mark Received'}
-        </Button>
+        <div className="flex items-center gap-1">
+          {/*
+            Icon-only: three labelled buttons overflow the column, and this
+            row already spends its width on "Mark Received", whose state the
+            user has to be able to read at a glance.
+          */}
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="View Details"
+            title="View Details"
+            onClick={() => onViewDetails(invoice)}
+            className={ACTION_ICON_CLASS}
+          >
+            <EyeIcon className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Export PDF"
+            title="Export PDF"
+            onClick={() => onExportPdf(invoice)}
+            className={ACTION_ICON_CLASS}
+          >
+            <FileDownIcon className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={isPaid}
+            onClick={() => onReceive(invoice)}
+            className={ACTION_BUTTON_CLASS}
+          >
+            {isPaid ? 'Received' : 'Mark Received'}
+          </Button>
+        </div>
       )
     },
   },

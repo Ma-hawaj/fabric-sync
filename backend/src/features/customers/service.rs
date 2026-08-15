@@ -28,7 +28,11 @@ pub async fn create_customer(
     )
     .await?;
 
-    Ok(repository::get_customer(state, customer_id)
+    let customer = repository::get_customer(state, customer_id)
         .await?
-        .expect("customer was just created"))
+        .expect("customer was just created");
+
+    tracing::info!(customer_id = %customer.id, "customer created");
+
+    Ok(customer)
 }

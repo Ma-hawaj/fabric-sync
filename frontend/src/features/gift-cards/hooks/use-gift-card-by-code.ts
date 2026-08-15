@@ -1,18 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiBaseUrl } from '@/lib/api'
+import { ApiError, apiClient } from '@/lib/api'
 import type { GiftCard } from '../types/gift-card'
 
 // A miss is a normal answer here — staff mistype codes — so it comes back as
 // `null` data rather than a thrown error the caller has to unpack.
 async function fetchGiftCardByCode(code: string): Promise<GiftCard | null> {
-  const response = await fetch(
-    `${apiBaseUrl}/gift-cards/by-code/${encodeURIComponent(code)}`,
-  )
-  if (response.status === 404) return null
-  if (!response.ok) {
-    throw new Error(`Failed to look up gift card (${response.status})`)
+  try {
+    const { data } = await apiClient.get<GiftCard>(
+      `/gift-cards/by-code/${encodeURIComponent(code)}`,
+    )
+    return data
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null
+    throw error
   }
-  return response.json()
 }
 
 /**

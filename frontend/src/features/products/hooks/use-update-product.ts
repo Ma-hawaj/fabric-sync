@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
-import { apiBaseUrl } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 import type { Product } from '../types/product'
 
 // PATCH accepts any subset of the fields, so this serves both the edit form
@@ -21,35 +20,19 @@ async function updateProduct({
   entries,
   ...changes
 }: UpdateProductInput): Promise<Product> {
-  const response = await fetch(`${apiBaseUrl}/products/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(changes),
-  })
-  if (!response.ok) {
-    throw new ApiError(
-      `Failed to update product (${response.status})`,
-      response.status,
-    )
-  }
-
-  const patched: Product = await response.json()
+  const { data: patched } = await apiClient.patch<Product>(
+    `/products/${id}`,
+    changes,
+  )
   if (!entries?.length) return patched
 
   // Stock is added through its own endpoint, which also returns the full
   // product — so its response is the newer of the two.
-  const stockResponse = await fetch(`${apiBaseUrl}/products/${id}/stock`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ entries }),
-  })
-  if (!stockResponse.ok) {
-    throw new ApiError(
-      `Failed to add stock (${stockResponse.status})`,
-      stockResponse.status,
-    )
-  }
-  return stockResponse.json()
+  const { data: withStock } = await apiClient.post<Product>(
+    `/products/${id}/stock`,
+    { entries },
+  )
+  return withStock
 }
 
 export function useUpdateProduct() {
@@ -57,11 +40,12 @@ export function useUpdateProduct() {
 
   return useMutation({
     mutationFn: updateProduct,
-    onSuccess: () => {
-      // The cache holds one entry per page-and-filter combination now, and
-      // each holds an envelope rather than a bare array, so there is no
-      // single list to splice into. Prefix matching refreshes them all.
-      void queryClient.invalidateQueries({ queryKey: ['products'] })
+    onSuccess: (product) => {
+      queryClient.setQueryData<Product[]>(['products'], (products = []) =>
+        products
+          .map((existing) => (existing.id === product.id ? product : existing))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      )
     },
   })
 }

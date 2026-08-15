@@ -31,6 +31,7 @@ import {
   PackageIcon,
   ScissorsIcon,
   ContactIcon,
+  ListChecksIcon,
   MapPinIcon,
   ShoppingBagIcon,
   GiftIcon,
@@ -44,6 +45,12 @@ const navItems = [
   { to: '/', label: 'Home', icon: HomeIcon, exact: true },
   { to: '/dashboard', label: 'Dashboard', icon: Grid, exact: true },
   { to: '/orders', label: 'Orders', icon: ShoppingCart, exact: false },
+  {
+    to: '/order-stages',
+    label: 'Order Stages',
+    icon: ListChecksIcon,
+    exact: false,
+  },
   { to: '/customers', label: 'Customers', icon: ContactIcon, exact: false },
   { to: '/inventory', label: 'Inventory', icon: PackageIcon, exact: false },
   { to: '/products', label: 'Products', icon: ShoppingBagIcon, exact: false },
@@ -65,9 +72,7 @@ function UserMenu() {
 
   if (!isAuthenticated || !user) {
     return (
-      <SidebarMenuButton
-        render={<Link to="/" search={{ redirect: '/dashboard' }} />}
-      >
+      <SidebarMenuButton render={<Link to="/dashboard" />}>
         <LogInIcon />
         <span>Sign in</span>
       </SidebarMenuButton>

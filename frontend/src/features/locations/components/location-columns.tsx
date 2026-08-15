@@ -9,12 +9,6 @@ import type { Location } from '../types/location'
 export const RECEIVES_ORDERS_LABEL = 'Receives orders'
 export const HOLDS_STOCK_LABEL = 'Holds stock'
 
-// Filtering happens in the database now, so an option's `value` is the token
-// the API matches on while its `label` stays the words staff read. The cell
-// still renders the labels via `locationUses`.
-export const RECEIVES_ORDERS_VALUE = 'receivesOrders'
-export const HOLDS_STOCK_VALUE = 'holdsStock'
-
 export function locationUses(location: Location): string[] {
   const uses: string[] = []
   if (location.receivesOrders) uses.push(RECEIVES_ORDERS_LABEL)
@@ -24,6 +18,15 @@ export function locationUses(location: Location): string[] {
 
 // Shared by the "Used for" and "Status" columns: both filter an array-valued
 // cell against the multiSelect toolbar filter, which hands over a string[].
+function matchesAnySelected(cellValue: string[], filterValue: unknown) {
+  if (
+    !filterValue ||
+    (Array.isArray(filterValue) && filterValue.length === 0)
+  ) {
+    return true
+  }
+  return (filterValue as string[]).some((value) => cellValue.includes(value))
+}
 
 export const getLocationColumns = (
   onToggleActive: (location: Location) => void,
@@ -39,6 +42,10 @@ export const getLocationColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) => {
+      const val = row.getValue<string>(columnId)
+      return val.toLowerCase().includes(String(filterValue).toLowerCase())
+    },
     meta: {
       label: 'Name',
       placeholder: 'Filter name...',
@@ -62,13 +69,15 @@ export const getLocationColumns = (
     ),
     enableSorting: false,
     enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) =>
+      matchesAnySelected(row.getValue<string[]>(columnId), filterValue),
     meta: {
       label: 'Used For',
       placeholder: 'Filter use...',
       variant: 'multiSelect',
       options: [
-        { label: RECEIVES_ORDERS_LABEL, value: RECEIVES_ORDERS_VALUE },
-        { label: HOLDS_STOCK_LABEL, value: HOLDS_STOCK_VALUE },
+        { label: RECEIVES_ORDERS_LABEL, value: RECEIVES_ORDERS_LABEL },
+        { label: HOLDS_STOCK_LABEL, value: HOLDS_STOCK_LABEL },
       ],
     },
   },
@@ -88,13 +97,15 @@ export const getLocationColumns = (
       ),
     enableSorting: false,
     enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) =>
+      matchesAnySelected(row.getValue<string[]>(columnId), filterValue),
     meta: {
       label: 'Status',
       placeholder: 'Filter status...',
       variant: 'multiSelect',
       options: [
-        { label: 'Active', value: 'active' },
-        { label: 'Inactive', value: 'inactive' },
+        { label: 'Active', value: 'Active' },
+        { label: 'Inactive', value: 'Inactive' },
       ],
     },
   },

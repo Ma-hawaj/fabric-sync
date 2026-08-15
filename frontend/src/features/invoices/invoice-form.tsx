@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
-import { PlusIcon } from 'lucide-react'
+import { FileDownIcon, PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -13,14 +13,14 @@ import {
   ComboboxItem,
   ComboboxList,
 } from '@/components/ui/combobox'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
-import { useAllCustomers } from '@/features/customers/hooks/use-customers'
-import { useAllLocations } from '@/features/locations/hooks/use-locations'
+import { ApiError } from '@/lib/api'
+import { useCustomers } from '@/features/customers/hooks/use-customers'
+import { useLocations } from '@/features/locations/hooks/use-locations'
 import {
   orderReceivingLocations,
   stockLocations,
 } from '@/features/locations/lib/location-filters'
-import { useAllProducts } from '@/features/products/hooks/use-products'
+import { useProducts } from '@/features/products/hooks/use-products'
 import { CURRENCY } from '@/lib/currency'
 import { CustomerBlock } from './components/invoice-form/customer-block'
 import { GiftCardBlock } from './components/invoice-form/gift-card-block'
@@ -30,6 +30,7 @@ import { RedemptionBlock } from './components/invoice-form/redemption-block'
 import { useCreateInvoice } from './hooks/use-create-invoice'
 import { useMaterials } from './hooks/use-materials'
 import { invoiceFormSchema } from './lib/invoice-schema'
+import { printInvoiceDocument } from './lib/print-invoice'
 import {
   createEmptyCustomer,
   createEmptyGiftCardLine,
@@ -42,12 +43,12 @@ import type { Location } from '@/features/locations/types/location'
 
 export function InvoiceFormPage() {
   const navigate = useNavigate()
-  const { data: existingCustomers } = useAllCustomers()
-  const { data: materials } = useMaterials()
+  const { data: existingCustomers = [] } = useCustomers()
+  const { data: materials = [] } = useMaterials()
   // "Receiving Branch" is where the customer collects the finished order, so
   // it lists only locations flagged as receiving orders — a store that just
   // holds material stock is not a collection point.
-  const { data: allLocations } = useAllLocations()
+  const { data: allLocations = [] } = useLocations()
   const branches = React.useMemo(
     () => orderReceivingLocations(allLocations),
     [allLocations],
@@ -58,7 +59,7 @@ export function InvoiceFormPage() {
     () => stockLocations(allLocations),
     [allLocations],
   )
-  const { data: allProducts } = useAllProducts()
+  const { data: allProducts = [] } = useProducts()
   const products = React.useMemo(
     () => allProducts.filter((product) => product.isActive),
     [allProducts],
@@ -71,6 +72,9 @@ export function InvoiceFormPage() {
     [allProducts],
   )
   const createInvoice = useCreateInvoice()
+  // Which of the two submit buttons was pressed. A ref rather than state
+  // because it is read once inside onSubmit and must not re-render the form.
+  const exportAfterSave = React.useRef(false)
 
   // A plain type annotation (not `satisfies`) so TFormData widens to
   // InvoiceFormValues' union members (e.g. `discount: number | ''`) rather
@@ -93,11 +97,26 @@ export function InvoiceFormPage() {
             : 'Could not save this invoice. Please try again.',
       })
 
+      let created
       try {
-        await pending
+        created = await pending
       } catch {
         return
       }
+
+      // The old Print button here printed the form itself — inputs, sidebar
+      // and all — because before this there was no invoice document to print.
+      // There is now, but only once the invoice has an id, which is why this
+      // saves first rather than being a button of its own.
+      if (exportAfterSave.current) {
+        exportAfterSave.current = false
+        try {
+          await printInvoiceDocument(created.id)
+        } catch {
+          toast.error('The invoice was saved, but the PDF could not be opened.')
+        }
+      }
+
       await navigate({ to: '/invoices' })
     },
   })
@@ -351,11 +370,15 @@ export function InvoiceFormPage() {
 
         <div className="flex justify-end gap-2">
           <Button
-            type="button"
+            type="submit"
             variant="outline"
-            onClick={() => window.print()}
+            disabled={createInvoice.isPending}
+            onClick={() => {
+              exportAfterSave.current = true
+            }}
           >
-            Print
+            <FileDownIcon className="h-4 w-4" />
+            Save & Export PDF
           </Button>
           <Button type="submit" disabled={createInvoice.isPending}>
             Save

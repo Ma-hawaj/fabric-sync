@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 
-import { apiBaseUrl } from '@/lib/api'
+import { apiClient } from '@/lib/api'
 
 /** The envelope every list endpoint returns. */
 export interface ListResponse<T> {
@@ -42,15 +42,12 @@ export function useListQuery<T, TResult = T>({
     // combination is cached separately rather than overwriting the last.
     queryKey: [queryKey, search],
     queryFn: async (): Promise<ListResponse<T>> => {
-      const response = await fetch(`${apiBaseUrl}${endpoint}?${search}`)
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to load ${queryKey.replace(/-/g, ' ')} (${response.status})`,
-        )
-      }
-
-      return response.json()
+      // `apiClient`'s interceptors attach the bearer token and normalize any
+      // non-2xx response to `ApiError` — nothing per-hook to do for either.
+      const { data } = await apiClient.get<ListResponse<T>>(
+        `${endpoint}?${search}`,
+      )
+      return data
     },
     // Without this, every page or filter change drops back to the loading state
     // and the table flashes empty between requests.

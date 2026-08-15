@@ -2,7 +2,6 @@ import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { useDataTable } from '@/hooks/use-data-table'
-import { useListParams } from '@/hooks/use-list-params'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
@@ -12,6 +11,7 @@ import { useCustomers } from './hooks/use-customers'
 import type { Customer } from './types/customers'
 
 export function CustomersPage() {
+  const { data: customers = [], isLoading } = useCustomers()
   const [selectedCustomer, setSelectedCustomer] =
     React.useState<Customer | null>(null)
 
@@ -20,19 +20,12 @@ export function CustomersPage() {
     [],
   )
 
-  const { searchParams } = useListParams({ columns })
-  const {
-    data: customers,
-    pageCount,
-    total,
-    isLoading,
-  } = useCustomers(searchParams)
-
   const { table } = useDataTable({
     data: customers,
     columns,
-    pageCount,
-    rowCount: total,
+    manualFiltering: false,
+    manualSorting: false,
+    manualPagination: false,
   })
 
   return (

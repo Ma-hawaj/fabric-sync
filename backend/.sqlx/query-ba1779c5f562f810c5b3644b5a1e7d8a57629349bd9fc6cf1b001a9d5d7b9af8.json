@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE order_repairs\n        SET reason = COALESCE($2, reason),\n            charge = COALESCE($3::float8, charge),\n            status = COALESCE($4, status),\n            notes = COALESCE($5, notes),\n            completed_at = CASE WHEN $4::text IS NULL THEN completed_at ELSE $6 END\n        WHERE id = $1\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Float8",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ba1779c5f562f810c5b3644b5a1e7d8a57629349bd9fc6cf1b001a9d5d7b9af8"
+}

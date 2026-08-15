@@ -24,10 +24,10 @@ import { TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { StockEntryRow } from './components/stock-entry-row'
 import { UNITS } from './data/inventory-options'
-import { useAllLocations } from '@/features/locations/hooks/use-locations'
+import { useLocations } from '@/features/locations/hooks/use-locations'
 import { stockLocations } from '@/features/locations/lib/location-filters'
 import { useAddStock } from './hooks/use-add-stock'
-import { useAllInventory } from './hooks/use-inventory'
+import { useInventory } from './hooks/use-inventory'
 import { inventoryFormSchema } from './lib/inventory-schema'
 import {
   createEmptyInventoryForm,
@@ -42,10 +42,10 @@ function materialOptionLabel(material: Material) {
 
 export function InventoryFormPage() {
   const navigate = useNavigate()
-  const { data: materials } = useAllInventory()
+  const { data: materials = [] } = useInventory()
   // Stock can only be booked into locations that hold it — a branch that only
   // hands finished orders to customers is not a stock location.
-  const { data: allLocations } = useAllLocations()
+  const { data: allLocations = [] } = useLocations()
   const locations = React.useMemo(
     () => stockLocations(allLocations),
     [allLocations],

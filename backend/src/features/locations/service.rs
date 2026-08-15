@@ -49,7 +49,12 @@ pub async fn create_location(
     let name = normalized_name(&input.name)?;
     validate_capabilities(input.receives_orders, input.holds_stock)?;
 
-    Ok(repository::create_location(state, &name, input.receives_orders, input.holds_stock).await?)
+    let location =
+        repository::create_location(state, &name, input.receives_orders, input.holds_stock).await?;
+
+    tracing::info!(location_id = %location.id, name = %location.name, "location created");
+
+    Ok(location)
 }
 
 pub async fn update_location(
@@ -65,7 +70,7 @@ pub async fn update_location(
         validate_capabilities(receives_orders, holds_stock)?;
     }
 
-    repository::update_location(
+    let location = repository::update_location(
         state,
         location_id,
         name.as_deref(),
@@ -74,7 +79,17 @@ pub async fn update_location(
         input.is_active,
     )
     .await?
-    .ok_or_else(|| AppError::NotFound(format!("location {location_id} not found")))
+    .ok_or_else(|| AppError::NotFound(format!("location {location_id} not found")))?;
+
+    tracing::info!(
+        location_id = %location_id,
+        is_active = ?input.is_active,
+        receives_orders = ?input.receives_orders,
+        holds_stock = ?input.holds_stock,
+        "location updated"
+    );
+
+    Ok(location)
 }
 
 #[cfg(test)]

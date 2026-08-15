@@ -3,7 +3,6 @@ import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { useDataTable } from '@/hooks/use-data-table'
-import { useListParams } from '@/hooks/use-list-params'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
@@ -13,6 +12,7 @@ import { useUpdateLocation } from './hooks/use-update-location'
 import type { Location } from './types/location'
 
 export function LocationsPage() {
+  const { data: locations = [], isLoading } = useLocations()
   const updateLocation = useUpdateLocation()
 
   const toggleActive = React.useCallback(
@@ -40,19 +40,12 @@ export function LocationsPage() {
     [toggleActive, updateLocation.isPending],
   )
 
-  const { searchParams } = useListParams({ columns })
-  const {
-    data: locations,
-    pageCount,
-    total,
-    isLoading,
-  } = useLocations(searchParams)
-
   const { table } = useDataTable({
     data: locations,
     columns,
-    pageCount,
-    rowCount: total,
+    manualFiltering: false,
+    manualSorting: false,
+    manualPagination: false,
   })
 
   return (

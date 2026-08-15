@@ -7,9 +7,228 @@ use crate::{
 };
 
 use super::types::{
-    CreateInvoiceInput, CreateOrderInput, CreateProductLineInput, InvoiceListItem, PaymentType,
-    ReceivedInvoice,
+    CreateInvoiceInput, CreateOrderInput, CreateProductLineInput, InvoiceDetailLine,
+    InvoiceLineKind, InvoiceListItem, InvoiceParty, InvoiceRecord, InvoiceRedemptionLine,
+    PaymentType, ReceivedInvoice,
 };
+
+/// Everything `GET /invoices/:id` reads, before the totals are worked out.
+pub struct InvoiceDetailRows {
+    pub invoice: InvoiceRecord,
+    pub lines: Vec<InvoiceDetailLine>,
+    pub redemptions: Vec<InvoiceRedemptionLine>,
+}
+
+/// The made-to-measure specification, as one line of prose. Every field is
+/// optional and most orders set only some, so the blanks are dropped rather
+/// than printed as empty labels.
+fn order_specification(
+    thobe_type: Option<String>,
+    f_pocket: Option<String>,
+    collar: Option<String>,
+    sleeve: Option<String>,
+    patti: Option<String>,
+    more_details: Option<String>,
+) -> Option<String> {
+    let parts: Vec<String> = [
+        ("Thobe", thobe_type),
+        ("Pocket", f_pocket),
+        ("Collar", collar),
+        ("Sleeve", sleeve),
+        ("Patti", patti),
+        ("Note", more_details),
+    ]
+    .into_iter()
+    .filter_map(|(label, value)| {
+        value
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("{label}: {value}"))
+    })
+    .collect();
+
+    (!parts.is_empty()).then(|| parts.join(" · "))
+}
+
+pub async fn fetch_invoice_detail(
+    state: &AppState,
+    invoice_id: Uuid,
+) -> Result<Option<InvoiceDetailRows>, sqlx::Error> {
+    let Some(invoice) = sqlx::query!(
+        r#"
+        SELECT
+            i.id,
+            i.invoice_number,
+            i.invoice_date,
+            i.created_at,
+            i.discount::float8 AS "discount!",
+            i.discount_unit,
+            i.payment_status,
+            i.total_price::float8 AS "total_price!",
+            i.amount_paid::float8 AS "amount_paid!",
+            i.advance_amount::float8 AS "advance_amount!",
+            i.advance_payment_type,
+            i.final_payment_type,
+            i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
+            -- The `?` suffixes are for sqlx: it reads nullability off the
+            -- column definition, which says NOT NULL, and can't see that a
+            -- LEFT JOIN may not match.
+            b.name AS "branch_name?",
+            c.name AS "buyer_name?",
+            c.mobile_no AS "buyer_mobile_no?"
+        FROM invoices i
+        LEFT JOIN branch b ON b.id = i.branch_id
+        LEFT JOIN customers c ON c.id = i.customer_id
+        WHERE i.id = $1
+        "#,
+        invoice_id,
+    )
+    .fetch_optional(state.db())
+    .await?
+    else {
+        return Ok(None);
+    };
+
+    // Tailoring lines. Ordered by id, which is uuidv7, so lines print in the
+    // order they were entered on the form.
+    let orders = sqlx::query!(
+        r#"
+        SELECT
+            o.id AS order_id,
+            c.name AS customer_name,
+            c.mobile_no AS customer_mobile_no,
+            mat.name AS material_name,
+            mat.unit AS material_unit,
+            o.material_amount::float8 AS "material_amount!",
+            o.price::float8 AS "price!",
+            o.thobe_type,
+            o.f_pocket,
+            o.collar,
+            o.sleeve,
+            o.patti,
+            o.more_details
+        FROM orders o
+        JOIN measurements m ON m.id = o.measurement_id
+        JOIN customers c ON c.id = m.customer_id
+        JOIN materials mat ON mat.id = o.material_id
+        WHERE o.invoice_id = $1
+        ORDER BY o.id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(state.db())
+    .await?;
+
+    let items = sqlx::query!(
+        r#"
+        SELECT
+            kind,
+            description,
+            quantity::float8 AS "quantity!",
+            unit_price::float8 AS "unit_price!",
+            line_total::float8 AS "line_total!"
+        FROM invoice_items
+        WHERE invoice_id = $1
+        ORDER BY id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(state.db())
+    .await?;
+
+    let redemptions = sqlx::query!(
+        r#"
+        SELECT g.code, r.amount::float8 AS "amount!"
+        FROM gift_card_redemptions r
+        JOIN gift_cards g ON g.id = r.gift_card_id
+        WHERE r.invoice_id = $1
+        ORDER BY r.id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(state.db())
+    .await?;
+
+    let mut lines: Vec<InvoiceDetailLine> = orders
+        .into_iter()
+        .map(|row| InvoiceDetailLine {
+            kind: InvoiceLineKind::Order,
+            order_id: Some(row.order_id),
+            description: row.material_name,
+            detail: order_specification(
+                row.thobe_type,
+                row.f_pocket,
+                row.collar,
+                row.sleeve,
+                row.patti,
+                row.more_details,
+            ),
+            customer: Some(InvoiceParty {
+                name: row.customer_name,
+                mobile_no: row.customer_mobile_no,
+            }),
+            quantity: row.material_amount,
+            unit: Some(row.material_unit),
+            // An order is priced as a whole line, not per metre, so there is
+            // no per-unit figure to print: the material amount is what was
+            // consumed, not what was charged for.
+            unit_price: row.price,
+            line_total: row.price,
+            taxable: true,
+        })
+        .collect();
+
+    lines.extend(items.into_iter().map(|row| {
+        let is_gift_card = row.kind == "gift_card";
+        InvoiceDetailLine {
+            kind: if is_gift_card {
+                InvoiceLineKind::GiftCard
+            } else {
+                InvoiceLineKind::Product
+            },
+            order_id: None,
+            description: row.description,
+            detail: None,
+            customer: None,
+            quantity: row.quantity,
+            unit: None,
+            unit_price: row.unit_price,
+            line_total: row.line_total,
+            taxable: !is_gift_card,
+        }
+    }));
+
+    Ok(Some(InvoiceDetailRows {
+        invoice: InvoiceRecord {
+            id: invoice.id,
+            invoice_number: invoice.invoice_number,
+            date: invoice.invoice_date,
+            created_at: invoice.created_at,
+            branch_name: invoice.branch_name,
+            buyer: invoice
+                .buyer_name
+                .zip(invoice.buyer_mobile_no)
+                .map(|(name, mobile_no)| InvoiceParty { name, mobile_no }),
+            discount: invoice.discount,
+            discount_unit: invoice.discount_unit,
+            payment_status: invoice.payment_status,
+            total_price: invoice.total_price,
+            amount_paid: invoice.amount_paid,
+            advance_amount: invoice.advance_amount,
+            advance_payment_type: invoice.advance_payment_type,
+            final_payment_type: invoice.final_payment_type,
+            gift_card_redeemed: invoice.gift_card_redeemed,
+        },
+        lines,
+        redemptions: redemptions
+            .into_iter()
+            .map(|row| InvoiceRedemptionLine {
+                code: row.code,
+                amount: row.amount,
+            })
+            .collect(),
+    }))
+}
 
 // The laterals already produce one row per invoice, so the shared wrapper's
 // `LIMIT` counts invoices. Alongside the JSON the page renders, each aggregate

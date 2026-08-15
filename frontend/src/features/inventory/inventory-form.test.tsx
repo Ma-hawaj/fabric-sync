@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { allRowsKey, listResponse } from '@/lib/list-fixtures'
 import { InventoryFormPage } from './inventory-form'
 import type { Material } from './types/inventory'
 
@@ -29,10 +28,10 @@ const MATERIALS: Material[] = [
 
 function renderPage() {
   const client = new QueryClient()
-  // Seed the cache so the unpaginated hooks serve data without fetching (their
+  // Seed the cache so useInventory serves data without fetching (its
   // staleTime keeps the seeded data fresh for the whole test).
-  client.setQueryData(allRowsKey('materials'), listResponse(MATERIALS))
-  client.setQueryData(allRowsKey('locations'), listResponse([]))
+  client.setQueryData(['materials'], MATERIALS)
+  client.setQueryData(['locations'], [])
   return render(
     <QueryClientProvider client={client}>
       <InventoryFormPage />

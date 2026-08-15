@@ -1,10 +1,16 @@
-import { useListQuery } from '@/hooks/use-list-query'
+import { useQuery } from '@tanstack/react-query'
+import { apiClient } from '@/lib/api'
 import type { GiftCard } from '../types/gift-card'
 
-export function useGiftCards(searchParams: URLSearchParams) {
-  return useListQuery<GiftCard>({
-    endpoint: '/gift-cards',
-    queryKey: 'gift-cards',
-    searchParams,
+async function fetchGiftCards(): Promise<GiftCard[]> {
+  const { data } = await apiClient.get<GiftCard[]>('/gift-cards')
+  return data
+}
+
+export function useGiftCards() {
+  return useQuery({
+    queryKey: ['gift-cards'],
+    queryFn: fetchGiftCards,
+    staleTime: 1000 * 60 * 5, // 5 minutes
   })
 }

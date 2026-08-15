@@ -17,7 +17,8 @@ use super::{
     repository,
     types::{
         CreateInvoiceInput, CreateProductLineInput, CreatedInvoice, DiscountUnit,
-        InvoiceCustomerInput, InvoiceListItem, PaymentType, ReceivedInvoice,
+        InvoiceCustomerInput, InvoiceDetail, InvoiceListItem, InvoiceTotalsBreakdown, PaymentType,
+        ReceivedInvoice,
     },
 };
 
@@ -26,6 +27,77 @@ pub async fn list_invoices(
     params: &ListParams,
 ) -> Result<list::Page<InvoiceListItem>, AppError> {
     repository::list_invoices(state, params).await
+}
+
+/// Reads one invoice with its lines and the arithmetic behind its total.
+pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDetail, AppError> {
+    let rows = repository::fetch_invoice_detail(state, invoice_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
+
+    let invoice = rows.invoice;
+
+    // The stored row keeps only the total, the discount and its unit, so the
+    // figures in between are rebuilt from the lines. Splitting them by
+    // `taxable` is what keeps gift card sales out of the VAT base, exactly as
+    // compute_totals does on the way in.
+    let taxable_subtotal: f64 = rows
+        .lines
+        .iter()
+        .filter(|line| line.taxable)
+        .map(|line| line.line_total)
+        .sum();
+    let gift_card_sales: f64 = rows
+        .lines
+        .iter()
+        .filter(|line| !line.taxable)
+        .map(|line| line.line_total)
+        .sum();
+
+    let discount_unit = match invoice.discount_unit.as_str() {
+        "percent" => DiscountUnit::Percent,
+        _ => DiscountUnit::Amount,
+    };
+    let totals = breakdown(
+        taxable_subtotal,
+        gift_card_sales,
+        invoice.discount,
+        discount_unit,
+    );
+
+    Ok(InvoiceDetail {
+        id: invoice.id,
+        invoice_number: invoice.invoice_number,
+        date: invoice.date,
+        created_at: invoice.created_at,
+        branch_name: invoice.branch_name,
+        buyer: invoice.buyer,
+        payment_status: invoice.payment_status,
+        advance_amount: invoice.advance_amount,
+        advance_payment_type: invoice.advance_payment_type,
+        final_payment_type: invoice.final_payment_type,
+        lines: rows.lines,
+        redemptions: rows.redemptions,
+        totals: InvoiceTotalsBreakdown {
+            subtotal: totals.subtotal,
+            discount: invoice.discount,
+            discount_unit: invoice.discount_unit,
+            discount_amount: totals.discount_amount,
+            taxable: totals.taxable,
+            vat_rate: VAT_RATE,
+            vat: totals.vat,
+            gift_card_sales: totals.gift_card_sales,
+            // The recomputed total and the stored one agree by construction —
+            // same function, same inputs — but the stored figure is what was
+            // actually charged, so it is the one that gets printed.
+            total: invoice.total_price,
+            gift_card_redeemed: invoice.gift_card_redeemed,
+            amount_paid: invoice.amount_paid,
+            balance_due: round2(
+                (invoice.total_price - invoice.gift_card_redeemed - invoice.amount_paid).max(0.0),
+            ),
+        },
+    })
 }
 
 /// Marks every order on the invoice received and settles the remaining
@@ -44,6 +116,13 @@ pub async fn receive_invoice(
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
 
     tx.commit().await?;
+
+    tracing::info!(
+        invoice_id = %invoice_id,
+        payment_type = payment_type.as_str(),
+        amount_paid = received.amount_paid,
+        "invoice received"
+    );
 
     Ok(received)
 }
@@ -65,6 +144,57 @@ fn product_line_total(line: &CreateProductLineInput) -> f64 {
     round2(line.quantity * line.unit_price)
 }
 
+/// Every figure between the line items and the total. Shared by the create
+/// path, which stores `total`, and the read path behind `GET /invoices/:id`,
+/// which has to rebuild the rest from the lines in order to print it — a
+/// printed invoice has to show its VAT, and the invoices table never stored
+/// it. One function so the two can't disagree.
+pub struct Breakdown {
+    pub subtotal: f64,
+    pub discount_amount: f64,
+    pub taxable: f64,
+    pub vat: f64,
+    pub gift_card_sales: f64,
+    pub total: f64,
+}
+
+/// `taxable_subtotal` is everything VAT applies to; `gift_card_sales` is the
+/// face value of any cards sold, which is neither discounted nor taxed.
+///
+/// Each component is rounded to the currency's smallest unit before the total
+/// is summed, rather than the total being rounded once at the end. That is
+/// what makes the printed document add up: a reader checking subtotal −
+/// discount + VAT against the total gets the number that is actually printed
+/// beside it.
+fn breakdown(
+    taxable_subtotal: f64,
+    gift_card_sales: f64,
+    discount: f64,
+    discount_unit: DiscountUnit,
+) -> Breakdown {
+    let subtotal = round2(taxable_subtotal);
+
+    let discount_amount = round2(match discount_unit {
+        DiscountUnit::Amount => discount,
+        DiscountUnit::Percent => taxable_subtotal * discount / 100.0,
+    })
+    // A discount bigger than the sale doesn't turn into a refund.
+    .min(subtotal);
+
+    let taxable = round2(subtotal - discount_amount);
+    let vat = round2(taxable * VAT_RATE);
+    let gift_card_sales = round2(gift_card_sales);
+
+    Breakdown {
+        subtotal,
+        discount_amount,
+        taxable,
+        vat,
+        gift_card_sales,
+        total: round2(taxable + vat + gift_card_sales),
+    }
+}
+
 /// What an invoice comes to. `total` is the gross amount charged with VAT
 /// included; `redeemed` is gift card tender applied against it, kept separate
 /// so `total_price` keeps meaning "what this sale was worth" regardless of how
@@ -83,22 +213,21 @@ fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
         .sum();
 
     let product_subtotal: f64 = input.products.iter().map(product_line_total).sum();
-    let taxable_subtotal = order_subtotal + product_subtotal;
-
-    let discount_amount = match input.discount_unit {
-        DiscountUnit::Amount => input.discount,
-        DiscountUnit::Percent => taxable_subtotal * input.discount / 100.0,
-    };
-
-    let taxable = (taxable_subtotal - discount_amount).max(0.0);
 
     // Selling stored value is not a taxable supply — VAT is charged when the
     // card is spent — so a gift card's face value is neither discounted nor
     // taxed. It is simply added to what the customer owes.
     let gift_card_sales: f64 = input.gift_cards.iter().map(|card| card.amount).sum();
 
+    let totals = breakdown(
+        order_subtotal + product_subtotal,
+        gift_card_sales,
+        input.discount,
+        input.discount_unit,
+    );
+
     InvoiceTotals {
-        total: round2(taxable * (1.0 + VAT_RATE) + gift_card_sales),
+        total: totals.total,
         redeemed: round2(
             input
                 .gift_card_redemptions
@@ -365,6 +494,39 @@ mod tests {
         assert_eq!(totals.redeemed, 50.0);
     }
 
+    // The breakdown is what the printed document shows, so what matters is
+    // that its parts add up to the total printed beside them.
+    #[test]
+    fn the_breakdown_components_add_up_to_the_total() {
+        let totals = breakdown(133.33, 0.0, 7.5, DiscountUnit::Percent);
+        assert_eq!(totals.subtotal, 133.33);
+        assert_eq!(totals.discount_amount, 10.0);
+        assert_eq!(totals.taxable, 123.33);
+        assert_eq!(totals.vat, 12.33);
+        assert_eq!(
+            totals.taxable + totals.vat + totals.gift_card_sales,
+            totals.total
+        );
+    }
+
+    #[test]
+    fn the_breakdown_reports_the_discount_it_actually_applied() {
+        // Asking for 500 off a 100 sale discounts 100, not 500 — otherwise the
+        // document would print a discount line that overshoots the subtotal.
+        let totals = breakdown(100.0, 0.0, 500.0, DiscountUnit::Amount);
+        assert_eq!(totals.discount_amount, 100.0);
+        assert_eq!(totals.taxable, 0.0);
+        assert_eq!(totals.total, 0.0);
+    }
+
+    #[test]
+    fn gift_card_sales_stay_out_of_the_vat_base_but_inside_the_total() {
+        let totals = breakdown(100.0, 200.0, 0.0, DiscountUnit::Amount);
+        assert_eq!(totals.vat, 10.0);
+        assert_eq!(totals.gift_card_sales, 200.0);
+        assert_eq!(totals.total, 310.0);
+    }
+
     #[test]
     fn rejects_customer_with_both_existing_id_and_new_customer() {
         let mut invoice = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
@@ -558,6 +720,17 @@ pub async fn create_invoice(
     }
 
     tx.commit().await?;
+
+    tracing::info!(
+        invoice_id = %invoice_id,
+        total = totals.total,
+        gift_card_redeemed = totals.redeemed,
+        customers = input.customers.len(),
+        product_lines = input.products.len(),
+        gift_cards_sold = input.gift_cards.len(),
+        gift_cards_redeemed = input.gift_card_redemptions.len(),
+        "invoice created"
+    );
 
     Ok(CreatedInvoice {
         id: invoice_id,

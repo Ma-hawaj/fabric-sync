@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            o.id AS order_id,\n            c.name AS customer_name,\n            c.mobile_no AS customer_mobile_no,\n            mat.name AS material_name,\n            mat.unit AS material_unit,\n            o.material_amount::float8 AS \"material_amount!\",\n            o.price::float8 AS \"price!\",\n            o.thobe_type,\n            o.f_pocket,\n            o.collar,\n            o.sleeve,\n            o.patti,\n            o.more_details\n        FROM orders o\n        JOIN measurements m ON m.id = o.measurement_id\n        JOIN customers c ON c.id = m.customer_id\n        JOIN materials mat ON mat.id = o.material_id\n        WHERE o.invoice_id = $1\n        ORDER BY o.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "order_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "customer_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "customer_mobile_no",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "material_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "material_unit",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "material_amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "price!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "thobe_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "f_pocket",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "collar",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "sleeve",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "patti",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "more_details",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "bf208217d5be9e435ffbc39f2d598ef06ea2a424856c43a6f2db19350730663f"
+}

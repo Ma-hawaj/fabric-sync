@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
+import { ApiError } from '@/lib/api'
 import { useCreateLocation } from './hooks/use-create-location'
-import { useAllLocations } from './hooks/use-locations'
+import { useLocations } from './hooks/use-locations'
 import { useUpdateLocation } from './hooks/use-update-location'
 import { locationFormSchema } from './lib/location-schema'
 import {
@@ -33,7 +33,7 @@ function usageLabel(
 }
 
 export function LocationFormPage({ locationId }: { locationId?: string }) {
-  const { data: locations, isLoading } = useAllLocations()
+  const { data: locations = [], isLoading } = useLocations()
   const existing = locationId
     ? locations.find((location) => location.id === locationId)
     : undefined

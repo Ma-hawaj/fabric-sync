@@ -7,13 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { NumberField, TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
-import { ApiError } from '@/features/customers/hooks/use-create-customer'
+import { ApiError } from '@/lib/api'
 import { StockEntryRow } from '@/features/inventory/components/stock-entry-row'
-import { useAllLocations } from '@/features/locations/hooks/use-locations'
+import { useLocations } from '@/features/locations/hooks/use-locations'
 import { stockLocations } from '@/features/locations/lib/location-filters'
 import { CURRENCY } from '@/lib/currency'
 import { useCreateProduct } from './hooks/use-create-product'
-import { useAllProducts } from './hooks/use-products'
+import { useProducts } from './hooks/use-products'
 import { useUpdateProduct } from './hooks/use-update-product'
 import { stockEntriesPayload } from './lib/product-payload'
 import { productFormSchema } from './lib/product-schema'
@@ -25,7 +25,7 @@ import {
 import type { Product } from './types/product'
 
 export function ProductFormPage({ productId }: { productId?: string }) {
-  const { data: products, isLoading } = useAllProducts()
+  const { data: products = [], isLoading } = useProducts()
   const existing = productId
     ? products.find((product) => product.id === productId)
     : undefined
@@ -59,7 +59,7 @@ function ProductForm({ existing }: { existing?: Product }) {
 
   // Stock can only be booked into locations that hold it — a branch that only
   // hands finished orders to customers is not a stock location.
-  const { data: allLocations } = useAllLocations()
+  const { data: allLocations = [] } = useLocations()
   const locations = React.useMemo(
     () => stockLocations(allLocations),
     [allLocations],

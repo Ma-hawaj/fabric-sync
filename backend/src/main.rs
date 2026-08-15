@@ -4,6 +4,8 @@ mod config;
 mod error;
 mod features;
 mod list;
+mod request_log;
+mod seed;
 mod state;
 
 use std::net::SocketAddr;
@@ -20,6 +22,19 @@ async fn main() -> Result<(), error::AppError> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    // None of this runs inside a request, so it's outside request_log's
+    // canonical line entirely — a DB or OIDC-discovery failure here would
+    // otherwise only ever surface as tokio::main's default Debug-print, not
+    // through tracing like every other error in the app.
+    if let Err(error) = run().await {
+        tracing::error!(error = ?error, "server exited with an error");
+        return Err(error);
+    }
+
+    Ok(())
+}
+
+async fn run() -> Result<(), error::AppError> {
     let config = Config::from_env();
     let address = SocketAddr::from(([0, 0, 0, 0], config.port));
     let listener = tokio::net::TcpListener::bind(address).await?;
@@ -28,6 +43,11 @@ async fn main() -> Result<(), error::AppError> {
         .connect(&config.database_url)
         .await?;
     sqlx::migrate!().run(&db).await?;
+
+    if config.seed_dev_data {
+        seed::run(&db).await?;
+    }
+
     let token_introspection = auth::TokenIntrospection::discover(&config)
         .await
         .map_err(error::AppError::Auth)?;

@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -208,6 +208,130 @@ pub struct ReceivedInvoice {
     pub payment_status: String,
     pub amount_paid: f64,
     pub final_payment_type: Option<String>,
+}
+
+/// A person named on the invoice — the buyer, or the customer a tailoring
+/// line was measured for.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceParty {
+    pub name: String,
+    pub mobile_no: String,
+}
+
+/// What kind of line this is. Tailoring orders and `invoice_items` rows are
+/// two different tables with two different shapes, but a printed invoice lists
+/// them in one table, so they are flattened into a single line type here and
+/// keep only this tag to distinguish them.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InvoiceLineKind {
+    Order,
+    Product,
+    GiftCard,
+}
+
+/// One printed line. `quantity` is metres of material for an order and a unit
+/// count for a product; `unit` says which.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceDetailLine {
+    pub kind: InvoiceLineKind,
+    /// Only set for an `Order` line — lets the frontend link straight to that
+    /// order's tracking. `None` for a product or gift card line, which has no
+    /// corresponding `orders` row.
+    pub order_id: Option<Uuid>,
+    pub description: String,
+    /// The made-to-measure specification (thobe type, collar, sleeve…),
+    /// already joined into one human-readable string. `None` for retail lines.
+    pub detail: Option<String>,
+    /// Who the garment is for. An invoice can carry orders for several
+    /// customers, so the line names its own rather than relying on a header.
+    pub customer: Option<InvoiceParty>,
+    pub quantity: f64,
+    pub unit: Option<String>,
+    pub unit_price: f64,
+    pub line_total: f64,
+    /// False only for gift card sales — selling stored value is not a taxable
+    /// supply, so the document has to be able to mark the line as excluded.
+    pub taxable: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceRedemptionLine {
+    pub code: String,
+    pub amount: f64,
+}
+
+/// The arithmetic behind `invoices.total_price`, spelled out. The table stores
+/// only the final total, the discount and its unit, so everything between the
+/// line items and the total has to be derived — see service::breakdown, which
+/// is shared with the create path so the printed figures and the stored total
+/// can't drift apart.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceTotalsBreakdown {
+    pub subtotal: f64,
+    pub discount: f64,
+    pub discount_unit: String,
+    pub discount_amount: f64,
+    pub taxable: f64,
+    pub vat_rate: f64,
+    pub vat: f64,
+    pub gift_card_sales: f64,
+    pub total: f64,
+    pub gift_card_redeemed: f64,
+    pub amount_paid: f64,
+    /// What the customer still owes: the total less everything already
+    /// settled, whether in cash or in gift card tender.
+    pub balance_due: f64,
+}
+
+/// The invoice row itself, before the lines and totals are assembled onto it.
+/// Internal to the read path — the repository returns this, the service turns
+/// it into an `InvoiceDetail`.
+#[derive(Clone, Debug)]
+pub struct InvoiceRecord {
+    pub id: Uuid,
+    pub invoice_number: i64,
+    pub date: NaiveDate,
+    pub created_at: DateTime<Utc>,
+    pub branch_name: Option<String>,
+    pub buyer: Option<InvoiceParty>,
+    pub discount: f64,
+    pub discount_unit: String,
+    pub payment_status: String,
+    pub total_price: f64,
+    pub amount_paid: f64,
+    pub advance_amount: f64,
+    pub advance_payment_type: Option<String>,
+    pub final_payment_type: Option<String>,
+    pub gift_card_redeemed: f64,
+}
+
+/// Shape of `GET /invoices/:id`, and the context the invoice document template
+/// renders from.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceDetail {
+    pub id: Uuid,
+    /// Sequential and human-readable, unlike `id`. Formatted for display by
+    /// the consumer, which is why it stays a number here.
+    pub invoice_number: i64,
+    pub date: NaiveDate,
+    pub created_at: DateTime<Utc>,
+    pub branch_name: Option<String>,
+    /// Named directly on a retail sale. A tailoring invoice leaves this unset
+    /// and finds its customers through the lines instead.
+    pub buyer: Option<InvoiceParty>,
+    pub payment_status: String,
+    pub advance_amount: f64,
+    pub advance_payment_type: Option<String>,
+    pub final_payment_type: Option<String>,
+    pub lines: Vec<InvoiceDetailLine>,
+    pub redemptions: Vec<InvoiceRedemptionLine>,
+    pub totals: InvoiceTotalsBreakdown,
 }
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]

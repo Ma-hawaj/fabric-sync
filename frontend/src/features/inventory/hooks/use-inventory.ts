@@ -1,28 +1,16 @@
-import { useListQuery } from '@/hooks/use-list-query'
+import { useQuery } from '@tanstack/react-query'
+import { apiClient } from '@/lib/api'
 import type { Material } from '../types/inventory'
 
-const ENDPOINT = '/materials'
-const QUERY_KEY = 'materials'
-const ALL = new URLSearchParams()
-
-export function useInventory(searchParams: URLSearchParams) {
-  return useListQuery<Material>({
-    endpoint: ENDPOINT,
-    queryKey: QUERY_KEY,
-    searchParams,
-  })
+async function fetchMaterials(): Promise<Material[]> {
+  const { data } = await apiClient.get<Material[]>('/materials')
+  return data
 }
 
-/**
- * The whole list, unpaginated — the form pickers need every row to populate a
- * combobox. An empty request omits `perPage`, which is what tells the API not to
- * page. The key shares the `materials` prefix with the paginated hook, so one
- * invalidation refreshes both.
- */
-export function useAllInventory() {
-  return useListQuery<Material>({
-    endpoint: ENDPOINT,
-    queryKey: QUERY_KEY,
-    searchParams: ALL,
+export function useInventory() {
+  return useQuery({
+    queryKey: ['materials'],
+    queryFn: fetchMaterials,
+    staleTime: 1000 * 60 * 5, // 5 minutes
   })
 }

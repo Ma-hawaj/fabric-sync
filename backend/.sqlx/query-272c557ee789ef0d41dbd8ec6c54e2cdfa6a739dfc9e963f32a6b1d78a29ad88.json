@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, name, sort_order, requires_delivery, is_active\n        FROM order_stages\n        ORDER BY sort_order, name\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "sort_order",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "requires_delivery",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_active",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "272c557ee789ef0d41dbd8ec6c54e2cdfa6a739dfc9e963f32a6b1d78a29ad88"
+}

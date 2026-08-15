@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE order_stages\n        SET name = COALESCE($2, name),\n            sort_order = COALESCE($3, sort_order),\n            requires_delivery = COALESCE($4, requires_delivery),\n            is_active = COALESCE($5, is_active)\n        WHERE id = $1\n        RETURNING id, name, sort_order, requires_delivery, is_active\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "sort_order",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "requires_delivery",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_active",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0888d3909c8b7275ffb5e7bea5ad8051ba8ab3bd50bca995c0c2f71f1bcc2f97"
+}

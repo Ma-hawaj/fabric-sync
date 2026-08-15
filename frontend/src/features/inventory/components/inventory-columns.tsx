@@ -24,6 +24,10 @@ export const getInventoryColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) => {
+      const cellValue = row.getValue<string>(columnId)
+      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
+    },
     meta: {
       label: 'Name',
       placeholder: 'Filter name...',
@@ -42,6 +46,10 @@ export const getInventoryColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) => {
+      const cellValue = row.getValue<string | null>(columnId) ?? ''
+      return cellValue.toLowerCase().includes(String(filterValue).toLowerCase())
+    },
     meta: {
       label: 'SKU',
       placeholder: 'Filter SKU...',
@@ -65,6 +73,17 @@ export const getInventoryColumns = (
     ),
     enableSorting: false,
     enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) => {
+      if (
+        !filterValue ||
+        (Array.isArray(filterValue) && filterValue.length === 0)
+      )
+        return true
+      const cellValue = row.getValue<string[]>(columnId)
+      return (filterValue as string[]).some((value) =>
+        cellValue.includes(value),
+      )
+    },
     meta: {
       label: 'Locations',
       placeholder: 'Filter locations...',

@@ -82,6 +82,8 @@ pub async fn create_product(
     )
     .await?;
 
+    tracing::info!(product_id = %product_id, name = %name, unit_price = input.unit_price, "product created");
+
     Ok(repository::get_product(state, product_id)
         .await?
         .expect("product was just created"))
@@ -110,6 +112,13 @@ pub async fn update_product(
     .await?
     .ok_or_else(|| AppError::NotFound(format!("product {product_id} not found")))?;
 
+    tracing::info!(
+        product_id = %product_id,
+        is_active = ?input.is_active,
+        unit_price = ?input.unit_price,
+        "product updated"
+    );
+
     Ok(repository::get_product(state, product_id)
         .await?
         .expect("product was just updated"))
@@ -129,6 +138,14 @@ pub async fn add_stock(
     validate_entries(&input.entries)?;
 
     repository::add_stock(state, product_id, &input.entries).await?;
+
+    let total_added: f64 = input.entries.iter().map(|entry| entry.quantity).sum();
+    tracing::info!(
+        product_id = %product_id,
+        locations = input.entries.len(),
+        quantity_added = total_added,
+        "product stock added"
+    );
 
     Ok(repository::get_product(state, product_id)
         .await?
