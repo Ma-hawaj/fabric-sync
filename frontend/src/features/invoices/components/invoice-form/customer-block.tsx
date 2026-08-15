@@ -16,6 +16,7 @@ import {
   MeasurementFields,
 } from '@/features/customers/components/measurement-fields'
 import type { Customer } from '@/features/customers/types/customers'
+import type { Location } from '@/features/locations/types/location'
 import { createEmptyOrder } from '../../types/invoice-form'
 import type { CustomerMode, InvoiceFormApi } from '../../types/invoice-form'
 import type { Material } from '../../types/materials'
@@ -31,6 +32,7 @@ interface CustomerBlockProps {
   customerNumber: number
   existingCustomers: Customer[]
   materials: Material[]
+  productionLocations: Location[]
   onRemove: () => void
   removable: boolean
 }
@@ -41,6 +43,7 @@ export function CustomerBlock({
   customerNumber,
   existingCustomers,
   materials,
+  productionLocations,
   onRemove,
   removable,
 }: CustomerBlockProps) {
@@ -198,6 +201,7 @@ export function CustomerBlock({
                 orderIndex={orderIndex}
                 orderNumber={orderIndex + 1}
                 materials={materials}
+                productionLocations={productionLocations}
                 removable={ordersField.state.value.length > 1}
                 onRemove={() => ordersField.removeValue(orderIndex)}
               />

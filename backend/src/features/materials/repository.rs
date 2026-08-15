@@ -128,3 +128,54 @@ pub async fn add_stock(
 
     Ok(())
 }
+
+// Tx-scoped so invoice creation can consume material inside its own
+// transaction, the way products_repository::decrement_stock is shared with
+// invoices.
+//
+// The guard is in the WHERE clause rather than a read-then-write, which makes
+// the check and the decrement one atomic, row-locked statement: concurrent
+// orders against the last few units of a material can't both succeed.
+// `false` means the material has no stock row at that location, or not
+// enough of it.
+pub async fn decrement_stock(
+    tx: &mut sqlx::PgTransaction<'_>,
+    material_id: Uuid,
+    branch_id: Uuid,
+    amount: f64,
+) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query!(
+        r#"
+        UPDATE material_stock
+        SET quantity = quantity - $3::float8
+        WHERE material_id = $1
+          AND branch_id = $2
+          AND quantity >= $3::float8
+        "#,
+        material_id,
+        branch_id,
+        amount,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+// Only used to name a material in an out-of-stock message, so it runs on the
+// failure path rather than being joined into the consumption itself.
+pub async fn material_name(
+    tx: &mut sqlx::PgTransaction<'_>,
+    material_id: Uuid,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"
+        SELECT name
+        FROM materials
+        WHERE id = $1
+        "#,
+        material_id,
+    )
+    .fetch_optional(&mut **tx)
+    .await
+}

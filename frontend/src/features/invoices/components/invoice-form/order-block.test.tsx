@@ -4,6 +4,7 @@ import { useForm } from '@tanstack/react-form'
 import { OrderBlock } from './order-block'
 import { createEmptyCustomer } from '../../types/invoice-form'
 import type { Material } from '../../types/materials'
+import type { Location } from '@/features/locations/types/location'
 import { CURRENCY } from '@/lib/currency'
 
 const MATERIALS: Material[] = [
@@ -26,6 +27,16 @@ const MATERIALS: Material[] = [
   },
 ]
 
+const PRODUCTION_LOCATIONS: Location[] = [
+  {
+    id: 'loc-1',
+    name: 'Main Warehouse',
+    receivesOrders: false,
+    holdsStock: true,
+    isActive: true,
+  },
+]
+
 function Harness() {
   const form = useForm({
     defaultValues: { customers: [createEmptyCustomer()] },
@@ -37,6 +48,7 @@ function Harness() {
       orderIndex={0}
       orderNumber={1}
       materials={MATERIALS}
+      productionLocations={PRODUCTION_LOCATIONS}
       removable={false}
       onRemove={() => {}}
     />

@@ -18,6 +18,7 @@ function validOrder() {
     ...createEmptyOrder(),
     materialId: 'mat-1',
     materialAmount: 2,
+    productionLocationId: 'loc-1',
     price: 150,
   }
 }
@@ -138,7 +139,12 @@ describe('invoiceFormSchema', () => {
       mode: 'existing' as const,
       existingCustomerId: 'cust-1',
       orders: [
-        { ...createEmptyOrder(), materialId: 'mat-1', materialAmount: 2 },
+        {
+          ...createEmptyOrder(),
+          materialId: 'mat-1',
+          materialAmount: 2,
+          productionLocationId: 'loc-1',
+        },
       ],
     }
     const error = firstError([customer])
@@ -172,6 +178,41 @@ describe('invoiceFormSchema', () => {
     const error = firstErrorFor(input)
     expect(error?.message).toMatch(/location these products are sold from/i)
     expect(error?.path).toEqual(['productBranch'])
+  })
+
+  it('requires a made-at location for each order', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      orders: [{ ...validOrder(), productionLocationId: '' }],
+    }
+    const error = firstError([customer])
+    expect(error?.message).toMatch(/pick where this order is made/i)
+    expect(error?.path).toEqual([
+      'customers',
+      0,
+      'orders',
+      0,
+      'productionLocationId',
+    ])
+  })
+
+  it('reports a made-at error independently per order', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      orders: [validOrder(), { ...validOrder(), productionLocationId: '' }],
+    }
+    const error = firstError([customer])
+    expect(error?.path).toEqual([
+      'customers',
+      0,
+      'orders',
+      1,
+      'productionLocationId',
+    ])
   })
 
   it('rejects a product line with no product picked', () => {
