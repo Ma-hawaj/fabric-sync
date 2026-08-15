@@ -334,13 +334,16 @@ pub struct InvoiceDetail {
     pub totals: InvoiceTotalsBreakdown,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceListItem {
     pub id: Uuid,
+    #[sqlx(rename = "invoice_date")]
     pub date: NaiveDate,
+    #[sqlx(json)]
     pub customers: Vec<InvoiceListCustomer>,
     pub item_count: i64,
+    #[sqlx(json)]
     pub materials: Vec<String>,
     pub total_price: f64,
     pub payment_status: String,

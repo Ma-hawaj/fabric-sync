@@ -7,6 +7,7 @@ use crate::{
         gift_cards::{repository as gift_cards_repository, service as gift_cards_service},
         products::repository as products_repository,
     },
+    list::{self, ListParams},
     state::AppState,
 };
 
@@ -21,8 +22,11 @@ use super::{
     },
 };
 
-pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, AppError> {
-    Ok(repository::list_invoices(state).await?)
+pub async fn list_invoices(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<InvoiceListItem>, AppError> {
+    repository::list_invoices(state, params).await
 }
 
 /// Reads one invoice with its lines and the arithmetic behind its total.

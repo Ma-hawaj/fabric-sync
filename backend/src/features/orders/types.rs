@@ -94,8 +94,11 @@ pub struct RepairRow {
 }
 
 /// An order as the list query returns it, before the checklist and repairs are
-/// assembled onto it.
-#[derive(Clone, Debug)]
+/// assembled onto it. Decodes straight off a paginated row — `balance_due`,
+/// `payment_method` and `current_stage` exist only in the SQL (see
+/// `repository::SPEC`), to be sorted or filtered on; `FromRow` ignores a
+/// selected column with no matching field, so they need no counterpart here.
+#[derive(Clone, Debug, sqlx::FromRow)]
 pub struct OrderRow {
     pub id: Uuid,
     pub invoice_id: Uuid,

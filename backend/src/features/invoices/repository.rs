@@ -1,12 +1,15 @@
-use sqlx::types::Json;
 use uuid::Uuid;
 
-use crate::state::AppState;
+use crate::{
+    error::AppError,
+    list::{self, ColumnDef, ColumnKind, ListParams, ListSpec},
+    state::AppState,
+};
 
 use super::types::{
     CreateInvoiceInput, CreateOrderInput, CreateProductLineInput, InvoiceDetailLine,
-    InvoiceLineKind, InvoiceListCustomer, InvoiceListItem, InvoiceParty, InvoiceRecord,
-    InvoiceRedemptionLine, PaymentType, ReceivedInvoice,
+    InvoiceLineKind, InvoiceListItem, InvoiceParty, InvoiceRecord, InvoiceRedemptionLine,
+    PaymentType, ReceivedInvoice,
 };
 
 /// Everything `GET /invoices/:id` reads, before the totals are worked out.
@@ -227,20 +230,25 @@ pub async fn fetch_invoice_detail(
     }))
 }
 
-pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sqlx::Error> {
-    let rows = sqlx::query!(
-        r#"
+// The laterals already produce one row per invoice, so the shared wrapper's
+// `LIMIT` counts invoices. Alongside the JSON the page renders, each aggregate
+// also emits a flat form — `customer_names` as text, `material_names` as
+// `text[]` — because a JSON array cannot be filtered or sorted on directly and
+// those are exactly the columns the invoices table offers a filter for.
+const SPEC: ListSpec = ListSpec {
+    base_sql: r#"
         SELECT
             i.id,
             i.invoice_date,
             i.payment_status,
-            i.total_price::float8 AS "total_price!",
-            i.amount_paid::float8 AS "amount_paid!",
-            i.advance_amount::float8 AS "advance_amount!",
+            i.total_price::float8 AS total_price,
+            i.amount_paid::float8 AS amount_paid,
+            i.advance_amount::float8 AS advance_amount,
             i.advance_payment_type,
             i.final_payment_type,
-            i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
-            COALESCE(agg.item_count, 0) + COALESCE(items.item_count, 0) AS "item_count!",
+            i.gift_card_redeemed::float8 AS gift_card_redeemed,
+            COALESCE(i.final_payment_type, i.advance_payment_type) AS payment_method,
+            COALESCE(agg.item_count, 0) + COALESCE(items.item_count, 0) AS item_count,
             COALESCE(
                 agg.customers,
                 CASE
@@ -250,8 +258,19 @@ pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sql
                     ))
                 END,
                 '[]'
-            ) AS "customers!: Json<Vec<InvoiceListCustomer>>",
-            COALESCE(agg.materials, '[]') AS "materials!: Json<Vec<String>>"
+            ) AS customers,
+            COALESCE(agg.materials, '[]') AS materials,
+            COALESCE(
+                agg.customer_names,
+                CASE WHEN ic.id IS NOT NULL THEN ic.name END,
+                ''
+            ) AS customer_names,
+            COALESCE(
+                agg.customer_mobiles,
+                CASE WHEN ic.id IS NOT NULL THEN ic.mobile_no END,
+                ''
+            ) AS customer_mobiles,
+            COALESCE(agg.material_names, ARRAY[]::text[]) AS material_names
         FROM invoices i
         LEFT JOIN LATERAL (
             SELECT
@@ -260,7 +279,10 @@ pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sql
                     'name', c.name,
                     'mobileNo', c.mobile_no
                 )) AS customers,
-                json_agg(DISTINCT mat.name) AS materials
+                json_agg(DISTINCT mat.name) AS materials,
+                string_agg(DISTINCT c.name, ', ') AS customer_names,
+                string_agg(DISTINCT c.mobile_no, ', ') AS customer_mobiles,
+                array_agg(DISTINCT mat.name) AS material_names
             FROM orders o
             JOIN measurements m ON m.id = o.measurement_id
             JOIN customers c ON c.id = m.customer_id
@@ -277,29 +299,51 @@ pub async fn list_invoices(state: &AppState) -> Result<Vec<InvoiceListItem>, sql
         -- Falls back to the invoice's own customer when there are no orders to
         -- derive one from, which is the case for a pure retail sale.
         LEFT JOIN customers ic ON ic.id = i.customer_id
-        ORDER BY i.id DESC
-        "#,
-    )
-    .fetch_all(state.db())
-    .await?;
+    "#,
+    columns: &[
+        ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        ("date", ColumnDef::new("invoice_date", ColumnKind::Date)),
+        (
+            "customerName",
+            ColumnDef::new("customer_names", ColumnKind::Text),
+        ),
+        (
+            "customerMobile",
+            ColumnDef::new("customer_mobiles", ColumnKind::Text),
+        ),
+        (
+            "materials",
+            ColumnDef::new("material_names", ColumnKind::TextArray),
+        ),
+        (
+            "itemCount",
+            ColumnDef::new("item_count", ColumnKind::Number),
+        ),
+        (
+            "totalPrice",
+            ColumnDef::new("total_price", ColumnKind::Number),
+        ),
+        (
+            "amountPaid",
+            ColumnDef::new("amount_paid", ColumnKind::Number),
+        ),
+        (
+            "paymentStatus",
+            ColumnDef::new("payment_status", ColumnKind::Text),
+        ),
+        (
+            "paymentMethod",
+            ColumnDef::new("payment_method", ColumnKind::Text),
+        ),
+    ],
+    default_order: "id DESC",
+};
 
-    Ok(rows
-        .into_iter()
-        .map(|row| InvoiceListItem {
-            id: row.id,
-            date: row.invoice_date,
-            customers: row.customers.0,
-            item_count: row.item_count,
-            materials: row.materials.0,
-            total_price: row.total_price,
-            payment_status: row.payment_status,
-            amount_paid: row.amount_paid,
-            advance_amount: row.advance_amount,
-            advance_payment_type: row.advance_payment_type,
-            final_payment_type: row.final_payment_type,
-            gift_card_redeemed: row.gift_card_redeemed,
-        })
-        .collect())
+pub async fn list_invoices(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<InvoiceListItem>, AppError> {
+    list::fetch_page(state.db(), &SPEC, params).await
 }
 
 pub async fn insert_invoice(

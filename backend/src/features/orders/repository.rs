@@ -1,17 +1,34 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::state::AppState;
+use crate::{
+    error::AppError,
+    list::{self, ColumnDef, ColumnKind, ListParams, ListSpec},
+    state::AppState,
+};
 
 use super::types::{AssignmentRow, OrderRow, PaymentType, ProgressRow, RepairRow, StageRow};
 
-async fn fetch_orders(
-    state: &AppState,
-    order_id: Option<Uuid>,
-) -> Result<Vec<OrderRow>, sqlx::Error> {
-    sqlx::query_as!(
-        OrderRow,
-        r#"
+// `balance_due` and `payment_method` are shown as columns on the orders page
+// and so have to be sortable and filterable; they are derived here rather
+// than in the browser, which is the only place that can page over them.
+//
+// `current_stage` mirrors `stage_applies`/`assemble_stages`/
+// `current_stage_name`, and the precedence of `currentStageLabel` in
+// `frontend/src/features/orders/lib/order-tracking.ts`, so the Stage filter
+// can run in the database instead of over every row in the browser: no
+// applicable pending stage at all is 'Completed' (checked first, same as the
+// frontend); otherwise no progress recorded yet is 'Not started'; otherwise
+// the next stage's name. It intentionally computes its own effective
+// production location (explicit `production_branch_id`, falling back to the
+// single-stock-location inference) via a lateral subquery scoped to this
+// expression alone — the plain `production_location_id`/`production_location`
+// columns below stay the raw explicit-only join, unchanged, because
+// `service::effective_production` still needs to tell an explicit assignment
+// apart from an inferred one for display (`productionLocationInferred`). The
+// two must not be conflated.
+const SPEC: ListSpec = ListSpec {
+    base_sql: r#"
         SELECT
             o.id,
             o.invoice_id,
@@ -21,22 +38,28 @@ async fn fetch_orders(
             c.mobile_no AS customer_mobile,
             mat.name AS material,
             o.material_id,
-            o.material_amount::float8 AS "material_amount!",
-            o.price::float8 AS "price!",
+            o.material_amount::float8 AS material_amount,
+            o.price::float8 AS price,
             o.status,
             o.production_branch_id AS production_location_id,
-            -- Both branch joins are LEFT joins, but sqlx reads `branch.name`'s
-            -- NOT NULL straight off the schema, so the nullability has to be
-            -- overridden by hand here and on the delivery location below.
-            prod.name AS "production_location?",
+            prod.name AS production_location,
             i.branch_id AS receiving_location_id,
-            recv.name AS "receiving_location?",
-            i.total_price::float8 AS "invoice_total_price!",
-            i.amount_paid::float8 AS "invoice_amount_paid!",
+            recv.name AS receiving_location,
+            i.total_price::float8 AS invoice_total_price,
+            i.amount_paid::float8 AS invoice_amount_paid,
             i.payment_status AS invoice_payment_status,
-            i.advance_amount::float8 AS "invoice_advance_amount!",
+            i.advance_amount::float8 AS invoice_advance_amount,
             i.advance_payment_type AS invoice_advance_payment_type,
-            i.final_payment_type AS invoice_final_payment_type
+            i.final_payment_type AS invoice_final_payment_type,
+            GREATEST(i.total_price - i.amount_paid, 0)::float8 AS balance_due,
+            COALESCE(i.final_payment_type, i.advance_payment_type) AS payment_method,
+            CASE
+                WHEN next_stage.name IS NULL THEN 'Completed'
+                WHEN NOT EXISTS (
+                    SELECT 1 FROM order_stage_progress p WHERE p.order_id = o.id
+                ) THEN 'Not started'
+                ELSE next_stage.name
+            END AS current_stage
         FROM orders o
         JOIN invoices i ON i.id = o.invoice_id
         JOIN measurements m ON m.id = o.measurement_id
@@ -44,21 +67,90 @@ async fn fetch_orders(
         JOIN materials mat ON mat.id = o.material_id
         LEFT JOIN branch prod ON prod.id = o.production_branch_id
         LEFT JOIN branch recv ON recv.id = i.branch_id
-        WHERE $1::uuid IS NULL OR o.id = $1
-        ORDER BY o.id DESC
-        "#,
-        order_id,
-    )
-    .fetch_all(state.db())
-    .await
+        -- Single-stock-location inference, scoped to this order's material,
+        -- for the `current_stage` expression only — mirrors
+        -- `single_stock_locations`/`effective_production` in Rust.
+        LEFT JOIN LATERAL (
+            SELECT (array_agg(ms.branch_id))[1] AS branch_id
+            FROM material_stock ms
+            JOIN branch b ON b.id = ms.branch_id
+            WHERE ms.material_id = o.material_id
+              AND ms.quantity > 0
+              AND b.is_active
+              AND b.holds_stock
+            GROUP BY ms.material_id
+            HAVING COUNT(DISTINCT ms.branch_id) = 1
+        ) inferred ON true
+        -- The first active, applicable, not-yet-recorded stage — computed
+        -- once here rather than repeated in the CASE above.
+        LEFT JOIN LATERAL (
+            SELECT s.name
+            FROM order_stages s
+            WHERE s.is_active
+              AND NOT EXISTS (
+                  SELECT 1 FROM order_stage_progress p2
+                  WHERE p2.order_id = o.id AND p2.stage_id = s.id
+              )
+              AND (
+                  NOT s.requires_delivery
+                  OR (
+                      COALESCE(o.production_branch_id, inferred.branch_id) IS NOT NULL
+                      AND i.branch_id IS NOT NULL
+                      AND COALESCE(o.production_branch_id, inferred.branch_id) <> i.branch_id
+                  )
+              )
+            ORDER BY s.sort_order, s.name
+            LIMIT 1
+        ) next_stage ON true
+    "#,
+    columns: &[
+        ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        ("invoiceId", ColumnDef::new("invoice_id", ColumnKind::Uuid)),
+        (
+            "invoiceDate",
+            ColumnDef::new("invoice_date", ColumnKind::Date),
+        ),
+        (
+            "customerName",
+            ColumnDef::new("customer_name", ColumnKind::Text),
+        ),
+        (
+            "customerMobile",
+            ColumnDef::new("customer_mobile", ColumnKind::Text),
+        ),
+        ("material", ColumnDef::new("material", ColumnKind::Text)),
+        (
+            "materialAmount",
+            ColumnDef::new("material_amount", ColumnKind::Number),
+        ),
+        ("price", ColumnDef::new("price", ColumnKind::Number)),
+        ("status", ColumnDef::new("status", ColumnKind::Text)),
+        (
+            "invoicePaymentStatus",
+            ColumnDef::new("invoice_payment_status", ColumnKind::Text),
+        ),
+        (
+            "balanceDue",
+            ColumnDef::new("balance_due", ColumnKind::Number),
+        ),
+        (
+            "paymentMethod",
+            ColumnDef::new("payment_method", ColumnKind::Text),
+        ),
+        ("stage", ColumnDef::new("current_stage", ColumnKind::Text)),
+    ],
+    default_order: "id DESC",
+};
+
+pub async fn list_orders(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<OrderRow>, AppError> {
+    list::fetch_page(state.db(), &SPEC, params).await
 }
 
-pub async fn list_orders(state: &AppState) -> Result<Vec<OrderRow>, sqlx::Error> {
-    fetch_orders(state, None).await
-}
-
-pub async fn get_order(state: &AppState, order_id: Uuid) -> Result<Option<OrderRow>, sqlx::Error> {
-    Ok(fetch_orders(state, Some(order_id)).await?.pop())
+pub async fn get_order(state: &AppState, order_id: Uuid) -> Result<Option<OrderRow>, AppError> {
+    list::fetch_by_id(state.db(), &SPEC, order_id).await
 }
 
 /// Materials stocked at exactly one location that's actually usable (active,

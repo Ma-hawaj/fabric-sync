@@ -1,6 +1,10 @@
 use uuid::Uuid;
 
-use crate::{error::AppError, state::AppState};
+use crate::{
+    error::AppError,
+    list::{self, ListParams},
+    state::AppState,
+};
 
 use super::{
     repository,
@@ -53,8 +57,11 @@ fn validate_entries(entries: &[StockEntryInput]) -> Result<(), AppError> {
     Ok(())
 }
 
-pub async fn list_products(state: &AppState) -> Result<Vec<Product>, AppError> {
-    Ok(repository::list_products(state).await?)
+pub async fn list_products(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<Product>, AppError> {
+    repository::list_products(state, params).await
 }
 
 pub async fn create_product(

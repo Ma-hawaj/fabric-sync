@@ -1,7 +1,11 @@
 use chrono::NaiveDate;
 use uuid::Uuid;
 
-use crate::{error::AppError, state::AppState};
+use crate::{
+    error::AppError,
+    list::{self, ListParams},
+    state::AppState,
+};
 
 use super::{
     repository,
@@ -63,8 +67,11 @@ fn check_redeemable(
     Ok(())
 }
 
-pub async fn list_gift_cards(state: &AppState) -> Result<Vec<GiftCard>, AppError> {
-    Ok(repository::list_gift_cards(state).await?)
+pub async fn list_gift_cards(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<GiftCard>, AppError> {
+    repository::list_gift_cards(state, params).await
 }
 
 /// Resolves the code staff typed at the till. The code is normalized the same

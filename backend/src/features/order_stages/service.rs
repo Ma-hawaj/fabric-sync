@@ -1,6 +1,10 @@
 use uuid::Uuid;
 
-use crate::{error::AppError, state::AppState};
+use crate::{
+    error::AppError,
+    list::{self, ListParams},
+    state::AppState,
+};
 
 use super::{
     repository,
@@ -31,8 +35,11 @@ fn validate_sort_order(sort_order: i32) -> Result<(), AppError> {
     Ok(())
 }
 
-pub async fn list_stages(state: &AppState) -> Result<Vec<OrderStage>, AppError> {
-    Ok(repository::list_stages(state).await?)
+pub async fn list_stages(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<OrderStage>, AppError> {
+    repository::list_stages(state, params).await
 }
 
 pub async fn create_stage(

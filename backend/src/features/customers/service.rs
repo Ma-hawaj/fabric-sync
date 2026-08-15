@@ -1,12 +1,19 @@
-use crate::{error::AppError, state::AppState};
+use crate::{
+    error::AppError,
+    list::{self, ListParams},
+    state::AppState,
+};
 
 use super::{
     repository,
     types::{CreateCustomerInput, Customer},
 };
 
-pub async fn list_customers(state: &AppState) -> Result<Vec<Customer>, AppError> {
-    Ok(repository::list_customers(state).await?)
+pub async fn list_customers(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<Customer>, AppError> {
+    repository::list_customers(state, params).await
 }
 
 pub async fn create_customer(

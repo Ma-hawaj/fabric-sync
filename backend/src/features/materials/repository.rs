@@ -1,21 +1,28 @@
-use sqlx::types::Json;
 use uuid::Uuid;
 
-use crate::state::AppState;
+use crate::{
+    error::AppError,
+    list::{self, ColumnDef, ColumnKind, ListParams, ListSpec},
+    state::AppState,
+};
 
-use super::types::{Material, MaterialLocationStock, StockEntryInput};
+use super::types::{Material, StockEntryInput};
 
-async fn fetch_materials(
-    state: &AppState,
-    material_id: Option<Uuid>,
-) -> Result<Vec<Material>, sqlx::Error> {
-    let rows = sqlx::query!(
-        r#"
+// `total_quantity` and `location_names` mirror what the inventory table derives
+// per row in the browser. They are computed by the same `GROUP BY` that builds
+// the JSON, so filtering and sorting on them costs nothing extra.
+const SPEC: ListSpec = ListSpec {
+    base_sql: r#"
         SELECT
             m.id,
             m.name,
             m.sku,
             m.unit,
+            COALESCE(sum(ms.quantity), 0)::float8 AS total_quantity,
+            COALESCE(
+                array_agg(b.name ORDER BY b.name) FILTER (WHERE ms.id IS NOT NULL),
+                ARRAY[]::text[]
+            ) AS location_names,
             COALESCE(
                 json_agg(
                     json_build_object(
@@ -26,40 +33,41 @@ async fn fetch_materials(
                     ORDER BY b.name
                 ) FILTER (WHERE ms.id IS NOT NULL),
                 '[]'
-            ) AS "locations!: Json<Vec<MaterialLocationStock>>"
+            ) AS locations
         FROM materials m
         LEFT JOIN material_stock ms ON ms.material_id = m.id
         LEFT JOIN branch b ON b.id = ms.branch_id
-        WHERE $1::uuid IS NULL OR m.id = $1
         GROUP BY m.id, m.name, m.sku, m.unit
-        ORDER BY m.id
-        "#,
-        material_id,
-    )
-    .fetch_all(state.db())
-    .await?;
+    "#,
+    columns: &[
+        ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        ("name", ColumnDef::new("name", ColumnKind::Text)),
+        ("sku", ColumnDef::new("sku", ColumnKind::Text)),
+        ("unit", ColumnDef::new("unit", ColumnKind::Text)),
+        (
+            "totalQuantity",
+            ColumnDef::new("total_quantity", ColumnKind::Number),
+        ),
+        (
+            "locations",
+            ColumnDef::new("location_names", ColumnKind::TextArray),
+        ),
+    ],
+    default_order: "id ASC",
+};
 
-    Ok(rows
-        .into_iter()
-        .map(|row| Material {
-            id: row.id,
-            name: row.name,
-            sku: row.sku,
-            unit: row.unit,
-            locations: row.locations.0,
-        })
-        .collect())
-}
-
-pub async fn list_materials(state: &AppState) -> Result<Vec<Material>, sqlx::Error> {
-    fetch_materials(state, None).await
+pub async fn list_materials(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<Material>, AppError> {
+    list::fetch_page(state.db(), &SPEC, params).await
 }
 
 pub async fn get_material(
     state: &AppState,
     material_id: Uuid,
-) -> Result<Option<Material>, sqlx::Error> {
-    Ok(fetch_materials(state, Some(material_id)).await?.pop())
+) -> Result<Option<Material>, AppError> {
+    list::fetch_by_id(state.db(), &SPEC, material_id).await
 }
 
 async fn upsert_stock(

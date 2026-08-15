@@ -1,56 +1,61 @@
-use sqlx::types::Json;
 use uuid::Uuid;
 
-use crate::state::AppState;
+use crate::{
+    error::AppError,
+    list::{self, ColumnDef, ColumnKind, ListParams, ListSpec},
+    state::AppState,
+};
 
-use super::types::{CreateMeasurementInput, Customer, Measurement};
+use super::types::{CreateMeasurementInput, Customer};
 
-async fn fetch_customers(
-    state: &AppState,
-    customer_id: Option<Uuid>,
-) -> Result<Vec<Customer>, sqlx::Error> {
-    let rows = sqlx::query!(
-        r#"
+// The `GROUP BY` is on the customer's primary key, so the wrapper's `LIMIT`
+// counts customers rather than measurement rows. `last_measured_on` is exposed
+// so the list can be sorted by recency without unpacking the JSON.
+const SPEC: ListSpec = ListSpec {
+    base_sql: r#"
         SELECT
             c.id,
             c.name,
             c.mobile_no,
+            max(m.measurement_date) AS last_measured_on,
+            count(m.id) AS measurement_count,
             COALESCE(
                 json_agg(to_jsonb(m) ORDER BY m.measurement_date DESC, m.id DESC)
                     FILTER (WHERE m.id IS NOT NULL),
                 '[]'
-            ) AS "measurements!: Json<Vec<Measurement>>"
+            ) AS measurements
         FROM customers c
         LEFT JOIN measurements m ON m.customer_id = c.id
-        WHERE $1::uuid IS NULL OR c.id = $1
         GROUP BY c.id, c.name, c.mobile_no
-        ORDER BY c.id
-        "#,
-        customer_id,
-    )
-    .fetch_all(state.db())
-    .await?;
+    "#,
+    columns: &[
+        ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        ("name", ColumnDef::new("name", ColumnKind::Text)),
+        ("mobileNo", ColumnDef::new("mobile_no", ColumnKind::Text)),
+        (
+            "lastMeasuredOn",
+            ColumnDef::new("last_measured_on", ColumnKind::Date),
+        ),
+        (
+            "measurementCount",
+            ColumnDef::new("measurement_count", ColumnKind::Number),
+        ),
+    ],
+    default_order: "id ASC",
+};
 
-    Ok(rows
-        .into_iter()
-        .map(|row| Customer {
-            id: row.id,
-            name: row.name,
-            mobile_no: row.mobile_no,
-            measurements: row.measurements.0,
-        })
-        .collect())
-}
-
-pub async fn list_customers(state: &AppState) -> Result<Vec<Customer>, sqlx::Error> {
-    fetch_customers(state, None).await
+pub async fn list_customers(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<Customer>, AppError> {
+    list::fetch_page(state.db(), &SPEC, params).await
 }
 
 pub async fn get_customer(
     state: &AppState,
     customer_id: Uuid,
-) -> Result<Option<Customer>, sqlx::Error> {
-    Ok(fetch_customers(state, Some(customer_id)).await?.pop())
+) -> Result<Option<Customer>, AppError> {
+    list::fetch_by_id(state.db(), &SPEC, customer_id).await
 }
 
 // Also used by the invoices feature, which records a measurement snapshot per
