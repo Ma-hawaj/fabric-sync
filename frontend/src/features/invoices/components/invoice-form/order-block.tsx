@@ -21,6 +21,7 @@ import {
   SLEEVES,
   THOBE_TYPES,
 } from '../../data/invoice-form-options'
+import type { Location } from '@/features/locations/types/location'
 import { materialTotalStock } from '../../types/materials'
 import type { Material } from '../../types/materials'
 import type { InvoiceFormApi } from '../../types/invoice-form'
@@ -35,6 +36,7 @@ interface OrderBlockProps {
   orderIndex: number
   orderNumber: number
   materials: Material[]
+  productionLocations: Location[]
   onRemove: () => void
   removable: boolean
 }
@@ -45,6 +47,7 @@ export function OrderBlock({
   orderIndex,
   orderNumber,
   materials,
+  productionLocations,
   onRemove,
   removable,
 }: OrderBlockProps) {
@@ -147,7 +150,7 @@ export function OrderBlock({
 
       <div className="space-y-3">
         <h4 className="text-sm font-semibold">Material</h4>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <form.Field name={`${base}.materialId` as never}>
             {(field: any) => {
               const selected = materials.find((m) => m.id === field.state.value)
@@ -197,6 +200,51 @@ export function OrderBlock({
                           .join(', ')}`}
                     </p>
                   )}
+                </Field>
+              )
+            }}
+          </form.Field>
+
+          {/* Material stock is per-location, and this order's material comes
+              off stock at this location when the invoice is saved — so it is
+              picked per order, the same way a product line names a branch. */}
+          <form.Field name={`${base}.productionLocationId` as never}>
+            {(field: any) => {
+              const selected = productionLocations.find(
+                (location) => location.id === field.state.value,
+              )
+              return (
+                <Field data-invalid={field.state.meta.errors.length > 0}>
+                  <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
+                  <Combobox
+                    items={productionLocations}
+                    itemToStringLabel={(location: Location) => location.name}
+                    isItemEqualToValue={(a: Location, b: Location) =>
+                      a.id === b.id
+                    }
+                    value={selected ?? null}
+                    onValueChange={(location: Location | null) =>
+                      field.handleChange(location?.id ?? '')
+                    }
+                  >
+                    <ComboboxInput
+                      id={field.name}
+                      placeholder="Search location..."
+                      className="w-full"
+                      showClear
+                    />
+                    <ComboboxContent>
+                      <ComboboxEmpty>No locations found.</ComboboxEmpty>
+                      <ComboboxList>
+                        {(location: Location) => (
+                          <ComboboxItem key={location.id} value={location}>
+                            {location.name}
+                          </ComboboxItem>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
+                  <FieldError errors={field.state.meta.errors} />
                 </Field>
               )
             }}

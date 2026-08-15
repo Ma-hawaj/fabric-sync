@@ -22,6 +22,7 @@ const orderDraftSchema = z
     moreDetails: z.string(),
     materialId: z.string(),
     materialAmount: numberInputSchema,
+    productionLocationId: z.string(),
     price: numberInputSchema,
   })
   .superRefine((order, ctx) => {
@@ -30,6 +31,15 @@ const orderDraftSchema = z
         code: 'custom',
         message: 'Pick a material and quantity.',
         path: ['materialId'],
+      })
+    }
+    // Material stock is held per location, and comes off automatically when
+    // the invoice is saved, so each order has to name one.
+    if (!order.productionLocationId) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick where this order is made.',
+        path: ['productionLocationId'],
       })
     }
     if (order.price === '') {
@@ -168,7 +178,6 @@ export const invoiceFormSchema = z
     receivingBranch: z.string(),
     customerId: z.string(),
     productBranch: z.string(),
-    productionBranch: z.string(),
     discount: numberInputSchema,
     discountUnit: z.enum(['amount', 'percent']),
     paymentStatus: z.enum(['unpaid', 'partial', 'paid']),
@@ -205,16 +214,6 @@ export const invoiceFormSchema = z
         code: 'custom',
         message: 'Pick the location these products are sold from.',
         path: ['productBranch'],
-      })
-    }
-
-    // Material stock is held per location too, and comes off automatically
-    // when the invoice is saved, so an order has to name one.
-    if (hasOrders && !value.productionBranch) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Pick the location these orders are made at.',
-        path: ['productionBranch'],
       })
     }
 

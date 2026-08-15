@@ -47,6 +47,7 @@ function Harness({ customer }: { customer: InvoiceCustomerDraft }) {
       customerNumber={1}
       existingCustomers={EXISTING_CUSTOMERS}
       materials={[]}
+      productionLocations={[]}
       removable={false}
       onRemove={() => {}}
     />

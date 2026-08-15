@@ -24,6 +24,12 @@ export interface InvoiceOrderDraft {
 
   materialId: string
   materialAmount: NumberInput
+  // Where materialAmount comes off — material stock is held per location, and
+  // different orders on the same invoice can use materials stocked at
+  // different locations, so this has to be per order rather than one
+  // invoice-wide field (unlike productBranch, where every product line
+  // sells from the same register).
+  productionLocationId: string
   // Entered by staff per order line — materials carry no unit price to derive
   // it from.
   price: NumberInput
@@ -80,10 +86,6 @@ export interface InvoiceFormValues {
   // held per location. Distinct from receivingBranch, which is where a
   // finished order is collected.
   productBranch: string
-  // One "made at" location for every tailoring order, since material stock is
-  // held per location too — mirrors productBranch. Material comes off stock
-  // at this location when the invoice is saved.
-  productionBranch: string
   discount: NumberInput
   discountUnit: DiscountUnit
   paymentStatus: PaymentStatus
@@ -126,6 +128,7 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     moreDetails: '',
     materialId: '',
     materialAmount: '',
+    productionLocationId: '',
     price: '',
   }
 }
@@ -150,7 +153,6 @@ export function createEmptyInvoiceForm(): InvoiceFormValues {
     receivingBranch: '',
     customerId: '',
     productBranch: '',
-    productionBranch: '',
     discount: '',
     discountUnit: 'amount',
     paymentStatus: 'unpaid',
