@@ -26,6 +26,7 @@ import {
   HomeIcon,
   UsersIcon,
   Grid,
+  ChartColumnIcon,
   ShoppingCart,
   ReceiptText,
   PackageIcon,
@@ -44,6 +45,12 @@ import {
 const navItems = [
   { to: '/', label: 'Home', icon: HomeIcon, exact: true },
   { to: '/dashboard', label: 'Dashboard', icon: Grid, exact: true },
+  {
+    to: '/analytics',
+    label: 'Analytics',
+    icon: ChartColumnIcon,
+    exact: false,
+  },
   { to: '/orders', label: 'Orders', icon: ShoppingCart, exact: false },
   {
     to: '/order-stages',

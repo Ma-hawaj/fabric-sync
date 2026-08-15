@@ -197,6 +197,16 @@ A location is a `branch` row, and it carries two **independent** flags rather th
 
 `PATCH /locations/:id` accepts any subset of the fields (`COALESCE` per column in the repository), so the list page's activate/deactivate action is one statement and doesn't need to round-trip the whole row.
 
+## Analytics and charts
+
+`/analytics` (`features/analytics/`) has **no backend endpoint of its own**. It reads the three queries the Orders, Invoices and Inventory pages already hold — `useOrders`, `useInvoices`, `useInventory`, sharing their `['orders']` / `['invoices']` / `['materials']` cache keys — and derives every figure client-side in `lib/analytics.ts`. Adding an endpoint would mean a second definition of numbers the frontend already computes; the pure functions there (and the bucket arithmetic in `lib/period.ts`) are the testable seam, mirroring how the backend keeps its logic in pure `fn`s.
+
+Two money scales live on that page and must never be summed together: **invoice totals** (billed, VAT and retail lines included) drive the headline financials, while **order prices** (the tailoring line, which is what carries a material and a location) drive anything cut by material, branch or stage. The card descriptions say which is which — keep that when adding a cut.
+
+The page's single filter is a period (`?period=30d|90d|12m|all`, via `nuqs` like every other list filter). It scopes everything below it; there are no per-card controls. Bucket width follows the period — daily, weekly, then monthly — and empty buckets are kept so a trend line doesn't misstate a quiet stretch. All bucketing is UTC, because invoice and order dates arrive as `YYYY-MM-DD` and parse to UTC midnight.
+
+Charts are shadcn's `components/ui/chart.tsx` (recharts under it), added with `pnpm exec shadcn add chart`. That file is kept as the CLI emits it, so `eslint.config.js` turns off three type-driven rules for it alone — its optional chains guard shapes recharts types more optimistically than they behave. Series colours come from `--chart-1 … --chart-8` in `styles.css`: eight fixed slots, assigned in order and never cycled, with a separate dark set stepped for the dark card surface. The two sets were checked for colour-vision separation against the surfaces charts actually render on — re-check before changing a value, and note slots 3–5 sit below 3:1 contrast in light mode, so anything drawn in them needs a visible label rather than colour alone. `--chart-positive`/`--chart-negative` are for a delta's direction only, never a series.
+
 ## Tests
 
 **Backend** — inline `#[cfg(test)] mod tests` blocks for pure logic only: invoice totals (`invoices/service.rs`), measurement comparison (`customers/types.rs`), location validation (`locations/service.rs`), stage-name/position validation (`order_stages/service.rs`), and the tracking derivation (`orders/service.rs` — delivery applicability, checklist assembly, current stage, repair validation, production-location inference, stage timing). `serde_json` is the only dev-dependency, so there is no DB or HTTP integration harness; the testable seam for a new feature is a pure `fn` in `service.rs`. Tests build input DTOs with `serde_json::from_value(json!({...}))`.
