@@ -5,7 +5,7 @@ import {
   useAuth as useOidcAuth,
 } from 'react-oidc-context'
 import type { User } from 'oidc-client-ts'
-import { oidcUserManager } from './oidc'
+import { oidcConfigError, oidcUserManager } from './oidc'
 
 export type AuthUser = {
   name: string
@@ -17,6 +17,7 @@ export type AuthState = {
   isAuthenticated: boolean
   isLoading: boolean
   user: AuthUser | null
+  error: Error | null
   signIn: (returnTo?: string) => Promise<void>
   signOut: () => void
 }
@@ -31,13 +32,14 @@ function onSigninCallback(user: User | undefined) {
 
 function AuthBridge({ children }: { children: ReactNode }) {
   const oidc = useOidcAuth()
+  const configError = oidcConfigError()
 
   const value = useMemo<AuthState>(() => {
     const profile = oidc.user?.profile
 
     return {
       isAuthenticated: oidc.isAuthenticated,
-      isLoading: oidc.isLoading,
+      isLoading: configError ? false : oidc.isLoading,
       user: profile
         ? {
             name:
@@ -49,10 +51,22 @@ function AuthBridge({ children }: { children: ReactNode }) {
             avatarUrl: profile.picture,
           }
         : null,
-      signIn: (returnTo) =>
-        oidc.signinRedirect({
+      error: configError ? new Error(configError) : (oidc.error ?? null),
+      signIn: async (returnTo) => {
+        if (configError) {
+          throw new Error(configError)
+        }
+        // react-oidc-context swallows a signinRedirect() failure internally
+        // (it records it on `oidc.error` and resolves with null instead of
+        // rejecting) — rethrow so callers can treat this like any other
+        // rejected promise instead of silently doing nothing.
+        const result = (await oidc.signinRedirect({
           state: { returnTo: returnTo ?? window.location.href },
-        }),
+        })) as unknown
+        if (result === null) {
+          throw oidc.error ?? new Error('Sign-in redirect failed to start.')
+        }
+      },
       // RP-initiated logout: also ends the IdP's hosted-login session, not
       // just the local token. Without this, signing out locally and hitting
       // a protected route again would silently re-auth via the IdP's still-
@@ -61,7 +75,7 @@ function AuthBridge({ children }: { children: ReactNode }) {
         void oidc.signoutRedirect()
       },
     }
-  }, [oidc.isAuthenticated, oidc.isLoading, oidc.user])
+  }, [oidc.isAuthenticated, oidc.isLoading, oidc.user, oidc.error, configError])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
