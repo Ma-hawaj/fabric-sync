@@ -23,7 +23,7 @@ describe('ThobDiagram', () => {
 
     expect(screen.queryByTestId('callout-waist')).toBeTruthy()
     expect(screen.queryByTestId('callout-chest')).toBeNull()
-    expect(screen.queryByText('Waist · 96 cm')).toBeTruthy()
+    expect(screen.queryByText('Waist · 96 inch')).toBeTruthy()
   })
 
   it('labels a non-numeric field without a unit', () => {

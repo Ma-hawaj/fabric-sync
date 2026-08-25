@@ -59,6 +59,8 @@ export interface MeasurementField {
   marker: DiagramMarker
 }
 
+export const MEASUREMENT_UNIT = 'inch'
+
 export const MEASUREMENT_GROUPS: {
   id: MeasurementGroupId
   title: string
