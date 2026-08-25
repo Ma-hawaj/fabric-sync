@@ -16,6 +16,11 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<(), error::AppError> {
+    if let Err(e) = dotenvy::dotenv() {
+        eprintln!("Warning: Could not load .env file: {}", e);
+        eprintln!("Falling back to system environment variables.");
+    }
+
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(tracing_subscriber::fmt::layer())
@@ -60,6 +65,7 @@ async fn run() -> Result<(), error::AppError> {
         zitadel_users,
     ));
 
+    tracing::info!("Listening on: {}", address);
     axum::serve(listener, app).await?;
 
     Ok(())

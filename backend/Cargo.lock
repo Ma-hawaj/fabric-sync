@@ -545,6 +545,7 @@ dependencies = [
  "axum",
  "base64 0.23.0",
  "chrono",
+ "dotenvy",
  "minijinja",
  "oauth2",
  "openidconnect",
