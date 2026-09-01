@@ -36,7 +36,6 @@ interface OrderBlockProps {
   orderIndex: number
   orderNumber: number
   materials: Material[]
-  productionLocations: Location[]
   onRemove: () => void
   removable: boolean
 }
@@ -47,7 +46,6 @@ export function OrderBlock({
   orderIndex,
   orderNumber,
   materials,
-  productionLocations,
   onRemove,
   removable,
 }: OrderBlockProps) {
@@ -167,9 +165,15 @@ export function OrderBlock({
                       a.id === b.id
                     }
                     value={selected ?? null}
-                    onValueChange={(material: Material | null) =>
+                    onValueChange={(material: Material | null) => {
                       field.handleChange(material?.id ?? '')
-                    }
+                      // "Made At" only lists this material's stock locations —
+                      // drop a previously chosen one that may not stock it.
+                      form.setFieldValue(
+                        `${base}.productionLocationId` as never,
+                        '' as never,
+                      )
+                    }}
                   >
                     <ComboboxInput
                       id={field.name}
@@ -205,50 +209,81 @@ export function OrderBlock({
             }}
           </form.Field>
 
-          {/* Material stock is per-location, and this order's material comes
-              off stock at this location when the invoice is saved — so it is
-              picked per order, the same way a product line names a branch. */}
-          <form.Field name={`${base}.productionLocationId` as never}>
-            {(field: any) => {
-              const selected = productionLocations.find(
-                (location) => location.id === field.state.value,
-              )
+          {/* A material can only be made at a location where it is in
+              stock — so this picker lists the selected material's stock
+              locations rather than every stock-holding branch. */}
+          <form.Subscribe
+            selector={(state: any) =>
+              state.values.customers[customerIndex]?.orders[orderIndex]
+                ?.materialId
+            }
+          >
+            {(materialId: string) => {
+              const material = materials.find((m) => m.id === materialId)
+              const availableLocations: Location[] =
+                material?.locations
+                  .filter((stock) => stock.quantity > 0)
+                  .map((stock) => ({
+                    id: stock.locationId,
+                    name: stock.location,
+                    receivesOrders: false,
+                    holdsStock: true,
+                    isActive: true,
+                  })) ?? []
               return (
-                <Field data-invalid={field.state.meta.errors.length > 0}>
-                  <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
-                  <Combobox
-                    items={productionLocations}
-                    itemToStringLabel={(location: Location) => location.name}
-                    isItemEqualToValue={(a: Location, b: Location) =>
-                      a.id === b.id
-                    }
-                    value={selected ?? null}
-                    onValueChange={(location: Location | null) =>
-                      field.handleChange(location?.id ?? '')
-                    }
-                  >
-                    <ComboboxInput
-                      id={field.name}
-                      placeholder="Search location..."
-                      className="w-full"
-                      showClear
-                    />
-                    <ComboboxContent>
-                      <ComboboxEmpty>No locations found.</ComboboxEmpty>
-                      <ComboboxList>
-                        {(location: Location) => (
-                          <ComboboxItem key={location.id} value={location}>
-                            {location.name}
-                          </ComboboxItem>
-                        )}
-                      </ComboboxList>
-                    </ComboboxContent>
-                  </Combobox>
-                  <FieldError errors={field.state.meta.errors} />
-                </Field>
+                <form.Field name={`${base}.productionLocationId` as never}>
+                  {(field: any) => {
+                    const selected = availableLocations.find(
+                      (location) => location.id === field.state.value,
+                    )
+                    return (
+                      <Field data-invalid={field.state.meta.errors.length > 0}>
+                        <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
+                        <Combobox
+                          items={availableLocations}
+                          itemToStringLabel={(location: Location) =>
+                            location.name
+                          }
+                          isItemEqualToValue={(a: Location, b: Location) =>
+                            a.id === b.id
+                          }
+                          value={selected ?? null}
+                          onValueChange={(location: Location | null) => {
+                            field.handleChange(location?.id ?? '')
+                          }}
+                        >
+                          <ComboboxInput
+                            id={field.name}
+                            placeholder="Search location..."
+                            className="w-full"
+                            showClear
+                          />
+                          <ComboboxContent>
+                            <ComboboxEmpty>
+                              {material
+                                ? 'This material has no stock available.'
+                                : 'Pick a material first.'}
+                            </ComboboxEmpty>
+                            <ComboboxList>
+                              {(location: Location) => (
+                                <ComboboxItem
+                                  key={location.id}
+                                  value={location}
+                                >
+                                  {location.name}
+                                </ComboboxItem>
+                              )}
+                            </ComboboxList>
+                          </ComboboxContent>
+                        </Combobox>
+                        <FieldError errors={field.state.meta.errors} />
+                      </Field>
+                    )
+                  }}
+                </form.Field>
               )
             }}
-          </form.Field>
+          </form.Subscribe>
 
           <NumberField
             form={form}

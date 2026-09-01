@@ -18,7 +18,6 @@ import { useCustomers } from '@/features/customers/hooks/use-customers'
 import { useLocations } from '@/features/locations/hooks/use-locations'
 import {
   orderReceivingLocations,
-  productionLocations,
   stockLocations,
 } from '@/features/locations/lib/location-filters'
 import { useProducts } from '@/features/products/hooks/use-products'
@@ -60,12 +59,9 @@ export function InvoiceFormPage() {
     () => stockLocations(allLocations),
     [allLocations],
   )
-  // Material comes off stock too, so a tailoring order needs a "made at"
-  // location the same way a product line needs a "sold from" one.
-  const madeAtLocations = React.useMemo(
-    () => productionLocations(allLocations),
-    [allLocations],
-  )
+  // A tailoring order's "made at" picker is fed from the selected material's
+  // own stock locations in order-block.tsx, so no location list is derived
+  // here.
   const { data: allProducts = [] } = useProducts()
   const products = React.useMemo(
     () => allProducts.filter((product) => product.isActive),
@@ -157,7 +153,6 @@ export function InvoiceFormPage() {
                   customerNumber={index + 1}
                   existingCustomers={existingCustomers}
                   materials={materials}
-                  productionLocations={madeAtLocations}
                   // Removable down to none: an invoice may consist only of
                   // products or gift cards.
                   removable

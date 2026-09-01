@@ -4,7 +4,6 @@ import { useForm } from '@tanstack/react-form'
 import { OrderBlock } from './order-block'
 import { createEmptyCustomer } from '../../types/invoice-form'
 import type { Material } from '../../types/materials'
-import type { Location } from '@/features/locations/types/location'
 import { CURRENCY } from '@/lib/currency'
 
 const MATERIALS: Material[] = [
@@ -27,16 +26,6 @@ const MATERIALS: Material[] = [
   },
 ]
 
-const PRODUCTION_LOCATIONS: Location[] = [
-  {
-    id: 'loc-1',
-    name: 'Main Warehouse',
-    receivesOrders: false,
-    holdsStock: true,
-    isActive: true,
-  },
-]
-
 function Harness() {
   const form = useForm({
     defaultValues: { customers: [createEmptyCustomer()] },
@@ -48,7 +37,6 @@ function Harness() {
       orderIndex={0}
       orderNumber={1}
       materials={MATERIALS}
-      productionLocations={PRODUCTION_LOCATIONS}
       removable={false}
       onRemove={() => {}}
     />
@@ -65,6 +53,17 @@ function searchInput() {
 // pointer/mouse events; fireEvent.click alone looks synthetic and is ignored.
 function openMaterialSearch() {
   const input = searchInput()
+  fireEvent.pointerDown(input)
+  fireEvent.mouseDown(input)
+  fireEvent.click(input)
+}
+
+function locationSearchInput() {
+  return screen.getByPlaceholderText<HTMLInputElement>('Search location...')
+}
+
+function openLocationSearch() {
+  const input = locationSearchInput()
   fireEvent.pointerDown(input)
   fireEvent.mouseDown(input)
   fireEvent.click(input)
@@ -116,6 +115,31 @@ describe('OrderBlock', () => {
       await screen.findByText(
         'Available: 120 meters — Main Warehouse: 100, Downtown Branch: 20',
       ),
+    ).toBeTruthy()
+  })
+
+  it("limits the Made At picker to the selected material's stock locations", async () => {
+    render(<Harness />)
+
+    await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')
+    openLocationSearch()
+
+    expect(
+      await screen.findByRole('option', { name: 'Main Warehouse' }),
+    ).toBeTruthy()
+    expect(
+      await screen.findByRole('option', { name: 'Downtown Branch' }),
+    ).toBeTruthy()
+  })
+
+  it('hints when the selected material has no stock anywhere', async () => {
+    render(<Harness />)
+
+    await pickMaterial('Wool Blend — Grey')
+    openLocationSearch()
+
+    expect(
+      await screen.findByText('This material has no stock available.'),
     ).toBeTruthy()
   })
 
