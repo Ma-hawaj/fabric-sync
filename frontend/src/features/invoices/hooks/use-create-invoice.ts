@@ -31,6 +31,7 @@ function orderPayload(order: InvoiceOrderDraft) {
   return {
     materialId: order.materialId,
     materialAmount: numberOrZero(order.materialAmount),
+    productionLocationId: order.productionLocationId,
     price: numberOrZero(order.price),
     thobeType: blankToNull(order.thobeType),
     fPocket: blankToNull(order.fPocket),

@@ -1,5 +1,5 @@
 mod handlers;
-mod repository;
+pub mod repository;
 mod routes;
 mod service;
 mod types;

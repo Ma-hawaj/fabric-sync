@@ -59,6 +59,9 @@ export function InvoiceFormPage() {
     () => stockLocations(allLocations),
     [allLocations],
   )
+  // A tailoring order's "made at" picker is fed from the selected material's
+  // own stock locations in order-block.tsx, so no location list is derived
+  // here.
   const { data: allProducts = [] } = useProducts()
   const products = React.useMemo(
     () => allProducts.filter((product) => product.isActive),
