@@ -30,6 +30,15 @@ function materialOptionLabel(material: Material) {
   return material.sku ? `${material.name} (${material.sku})` : material.name
 }
 
+interface StockLocationOption extends Location {
+  quantity: number
+  unit: string
+}
+
+function stockOptionLabel(option: StockLocationOption) {
+  return `${option.name} (${option.quantity} ${option.unit})`
+}
+
 interface OrderBlockProps {
   form: InvoiceFormApi
   customerIndex: number
@@ -220,7 +229,7 @@ export function OrderBlock({
           >
             {(materialId: string) => {
               const material = materials.find((m) => m.id === materialId)
-              const availableLocations: Location[] =
+              const stockOptions: StockLocationOption[] =
                 material?.locations
                   .filter((stock) => stock.quantity > 0)
                   .map((stock) => ({
@@ -229,21 +238,21 @@ export function OrderBlock({
                     receivesOrders: false,
                     holdsStock: true,
                     isActive: true,
+                    quantity: stock.quantity,
+                    unit: material.unit,
                   })) ?? []
               return (
                 <form.Field name={`${base}.productionLocationId` as never}>
                   {(field: any) => {
-                    const selected = availableLocations.find(
+                    const selected = stockOptions.find(
                       (location) => location.id === field.state.value,
                     )
                     return (
                       <Field data-invalid={field.state.meta.errors.length > 0}>
                         <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
                         <Combobox
-                          items={availableLocations}
-                          itemToStringLabel={(location: Location) =>
-                            location.name
-                          }
+                          items={stockOptions}
+                          itemToStringLabel={stockOptionLabel}
                           isItemEqualToValue={(a: Location, b: Location) =>
                             a.id === b.id
                           }
@@ -265,12 +274,12 @@ export function OrderBlock({
                                 : 'Pick a material first.'}
                             </ComboboxEmpty>
                             <ComboboxList>
-                              {(location: Location) => (
+                              {(location: StockLocationOption) => (
                                 <ComboboxItem
                                   key={location.id}
                                   value={location}
                                 >
-                                  {location.name}
+                                  {stockOptionLabel(location)}
                                 </ComboboxItem>
                               )}
                             </ComboboxList>

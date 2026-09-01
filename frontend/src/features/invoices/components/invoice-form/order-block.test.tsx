@@ -125,10 +125,14 @@ describe('OrderBlock', () => {
     openLocationSearch()
 
     expect(
-      await screen.findByRole('option', { name: 'Main Warehouse' }),
+      await screen.findByRole('option', {
+        name: 'Main Warehouse (100 meters)',
+      }),
     ).toBeTruthy()
     expect(
-      await screen.findByRole('option', { name: 'Downtown Branch' }),
+      await screen.findByRole('option', {
+        name: 'Downtown Branch (20 meters)',
+      }),
     ).toBeTruthy()
   })
 
