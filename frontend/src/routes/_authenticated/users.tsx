@@ -32,7 +32,7 @@ function Users() {
 
       {isLoading ? (
         <div className="text-center text-sm text-muted-foreground">
-          Loading orders...
+          Loading users...
         </div>
       ) : (
         <DataTable table={table}>
