@@ -18,6 +18,24 @@ const config = defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/vitest-setup.ts'],
   },
+  server: {
+    allowedHosts: ['mahawaj.cow-carat.ts.net'],
+    proxy: {
+      // Advanced configuration with path rewriting
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      '/zitadel': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        secure: false,
+        // rewrite: (path) => path.replace(/^\/zitadel/, ''),
+      },
+    },
+  },
 })
 
 export default config
