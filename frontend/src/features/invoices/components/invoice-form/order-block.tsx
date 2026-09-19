@@ -1,6 +1,6 @@
 import { XIcon } from 'lucide-react'
 import { NumberField } from '@/components/form/fields'
-import { SegmentedOptions } from '@/components/form/segmented-options'
+import { DesignOptionGrid } from '@/components/form/design-option-grid'
 import { Button } from '@/components/ui/button'
 import {
   Combobox,
@@ -15,12 +15,12 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { CURRENCY } from '@/lib/currency'
 import {
-  COLLARS,
-  FRONT_POCKETS,
-  PATTIS,
-  SLEEVES,
-  THOBE_TYPES,
-} from '../../data/invoice-form-options'
+  FRONT_POCKET,
+  NECK,
+  PATTI,
+  SLEEVE,
+  THOB_TYPE,
+} from '../../data/design-catalog'
 import type { Location } from '@/features/locations/types/location'
 import { materialTotalStock } from '../../types/materials'
 import type { Material } from '../../types/materials'
@@ -77,8 +77,8 @@ export function OrderBlock({
           {(field: any) => (
             <div className="space-y-1.5">
               <Label>Thob Type</Label>
-              <SegmentedOptions
-                options={THOBE_TYPES}
+              <DesignOptionGrid
+                options={THOB_TYPE}
                 value={field.state.value}
                 onChange={field.handleChange}
               />
@@ -90,10 +90,11 @@ export function OrderBlock({
           {(field: any) => (
             <div className="space-y-1.5">
               <Label>Front Pocket</Label>
-              <SegmentedOptions
-                options={FRONT_POCKETS}
+              <DesignOptionGrid
+                options={FRONT_POCKET}
                 value={field.state.value}
                 onChange={field.handleChange}
+                columns={2}
               />
             </div>
           )}
@@ -103,11 +104,10 @@ export function OrderBlock({
           {(field: any) => (
             <div className="space-y-1.5">
               <Label>Collar</Label>
-              <SegmentedOptions
-                options={COLLARS}
+              <DesignOptionGrid
+                options={NECK}
                 value={field.state.value}
                 onChange={field.handleChange}
-                columns={2}
               />
             </div>
           )}
@@ -117,8 +117,8 @@ export function OrderBlock({
           {(field: any) => (
             <div className="space-y-1.5">
               <Label>Sleeve</Label>
-              <SegmentedOptions
-                options={SLEEVES}
+              <DesignOptionGrid
+                options={SLEEVE}
                 value={field.state.value}
                 onChange={field.handleChange}
               />
@@ -130,10 +130,11 @@ export function OrderBlock({
           {(field: any) => (
             <div className="space-y-1.5">
               <Label>Patti (Front Strip)</Label>
-              <SegmentedOptions
-                options={PATTIS}
+              <DesignOptionGrid
+                options={PATTI}
                 value={field.state.value}
                 onChange={field.handleChange}
+                columns={2}
               />
             </div>
           )}
