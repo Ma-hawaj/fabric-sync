@@ -9,9 +9,11 @@ import {
 } from '@/components/ui/breadcrumb'
 
 export function Breadcrumbs() {
+  const matches = useMatches()
   const crumbs = useMatches().filter((m) => m.staticData.title)
 
-  console.log(JSON.stringify(crumbs, undefined, 2))
+  console.log(JSON.stringify({ matches }, undefined, 2))
+  console.log(JSON.stringify({ crumbs }, undefined, 2))
 
   return (
     <Breadcrumb>
