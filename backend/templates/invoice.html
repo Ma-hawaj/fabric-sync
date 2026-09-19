@@ -17,9 +17,14 @@
     amounts    — every money figure, pre-formatted; keyed as documented below
     vat_percent— the VAT rate as a whole number, e.g. "10"
     qr_svg     — the TLV QR code, as inline SVG markup
-    line_designs — per line (same order as invoice.lines), the design chips:
-                   each has titleAr/titleEn, label and an optional image (a
-                   data: URI) — see document.rs line_designs
+    line_designs — per line (same order as invoice.lines), the design options
+                   for that line's made-to-measure garment: each has
+                   titleAr/titleEn, the catalog label, and an optional image (a
+                   data: URI); a stored value that matches no catalog asset has
+                   no image — see document.rs line_designs. The block below
+                   renders them as one bordered "Design" panel of cells, one
+                   per slot (Thobe / Collar / Sleeve / Pocket / Patti in that
+                   order)
     line_notes — per line, the free-text more-details note, or empty
 
   Amount keys: subtotal, discountAmount, taxable, vat, giftCardSales, total,
@@ -257,29 +262,50 @@
         font-size: 9.5px;
       }
 
-      /* One design choice per chip: a small raster when the catalog has one,
-         always a label. Chips wrap rather than stretch, so a long run of
-         designs on one order just takes another row. */
-      .line-designs {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-        margin-top: 3px;
+      /* One bordered "Design" panel per line: a heading and then a grid of
+         cells, one per slot (Thobe / Collar / Sleeve / Pocket / Patti). A
+         catalog match fills its cell with a raster; a legacy value that
+         matches nothing fills the label only, so every line reads the same
+         shape. The panel never splits across pages. */
+      .design-panel {
+        margin-top: 5px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 5px 6px 6px;
+        background: var(--tint);
+        break-inside: avoid;
       }
 
-      .design-chip {
-        display: inline-flex;
-        align-items: center;
+      .design-heading {
+        margin: 0 0 4px;
+        font-size: 8.5px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        color: var(--muted);
+      }
+
+      .design-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
         gap: 4px;
-        padding: 2px 5px 2px 3px;
+      }
+
+      .design-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        padding: 3px 2px;
         border: 1px solid var(--rule);
         border-radius: 4px;
-        background: var(--tint);
+        background: #fff;
+        text-align: center;
       }
 
-      .design-chip img {
-        width: 36px;
-        height: 26px;
+      .design-cell img,
+      .design-cell-empty {
+        width: 100%;
+        height: 52px;
         object-fit: contain;
       }
 
@@ -295,9 +321,9 @@
       }
 
       .design-name {
-        font-size: 9px;
+        font-size: 8.5px;
         font-weight: 600;
-        text-align: left;
+        text-align: center;
       }
 
       .exempt {
@@ -514,21 +540,29 @@
                 <span class="line-note">{{ line.customer.name }}</span>
               {% endif %}
               {% if line_designs[loop.index0] %}
-                <span class="line-designs">
-                  {% for chip in line_designs[loop.index0] %}
-                    <span class="design-chip">
-                      {% if chip.image %}
-                        <img src="{{ chip.image }}" alt="{{ chip.label }}" loading="lazy" decode="async" width="44" height="32" />
-                      {% endif %}
-                      <span class="design-copy">
-                        <span class="design-title"
-                          >{{ chip.titleAr }}<span class="en">{{ chip.titleEn }}</span></span
-                        >
-                        <span class="design-name" dir="ltr">{{ chip.label }}</span>
-                      </span>
-                    </span>
-                  {% endfor %}
-                </span>
+                <div class="design-panel">
+                  <p class="design-heading">
+                    تصميم <span class="en">Design</span>
+                  </p>
+                  <div class="design-grid">
+                    {% for chip in line_designs[loop.index0] %}
+                      <div class="design-cell">
+                        {% if chip.image %}
+                          <img src="{{ chip.image }}" alt="{{ chip.label }}" />
+                        {% else %}
+                          <span class="design-cell-empty"></span>
+                        {% endif %}
+                        <span class="design-copy">
+                          <span class="design-title"
+                            >{{ chip.titleAr
+                            }}<span class="en">{{ chip.titleEn }}</span></span
+                          >
+                          <span class="design-name" dir="ltr">{{ chip.label }}</span>
+                        </span>
+                      </div>
+                    {% endfor %}
+                  </div>
+                </div>
               {% endif %}
               {% if line_notes[loop.index0] %}
                 <span class="line-note">{{ line_notes[loop.index0] }}</span>
