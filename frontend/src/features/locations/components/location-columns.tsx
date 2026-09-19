@@ -2,8 +2,8 @@ import { Link } from '@tanstack/react-router'
 import { PencilIcon, PowerIcon } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
+import { RowActions } from '@/components/data-table/row-actions'
 import type { Location } from '../types/location'
 
 export const RECEIVES_ORDERS_LABEL = 'Receives orders'
@@ -112,34 +112,31 @@ export const getLocationColumns = (
   {
     id: 'actions',
     header: 'Actions',
-    cell: ({ row }) => (
-      <div className="flex items-center gap-1">
-        <Button
-          nativeButton={false}
-          variant="ghost"
-          size="sm"
-          className="h-8 w-auto px-2"
-          render={
-            <Link
-              to="/locations/$locationId/edit"
-              params={{ locationId: row.original.id }}
-            />
-          }
-        >
-          <PencilIcon className="mr-1.5 h-4 w-4" />
-          Edit
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={isToggling}
-          onClick={() => onToggleActive(row.original)}
-          className="h-8 w-auto px-2"
-        >
-          <PowerIcon className="mr-1.5 h-4 w-4" />
-          {row.original.isActive ? 'Deactivate' : 'Activate'}
-        </Button>
-      </div>
-    ),
+    enablePinning: true,
+    cell: ({ row }) => {
+      const location = row.original
+      return (
+        <RowActions
+          items={[
+            {
+              label: 'Edit',
+              icon: PencilIcon,
+              render: (
+                <Link
+                  to="/locations/$locationId/edit"
+                  params={{ locationId: location.id }}
+                />
+              ),
+            },
+            {
+              label: location.isActive ? 'Deactivate' : 'Activate',
+              icon: PowerIcon,
+              disabled: isToggling,
+              onClick: () => onToggleActive(location),
+            },
+          ]}
+        />
+      )
+    },
   },
 ]

@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-table'
 import type {
   ColumnFiltersState,
+  ColumnPinningState,
   PaginationState,
   RowSelectionState,
   SortingState,
@@ -239,6 +240,17 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   const [columnFilters, setColumnFilters] =
     React.useState<ColumnFiltersState>(initialColumnFilters)
 
+  const hasActionsColumn = React.useMemo(
+    () => columns.some((column) => column.id === 'actions'),
+    [columns],
+  )
+
+  const [columnPinning, setColumnPinning] = React.useState<ColumnPinningState>(
+    hasActionsColumn
+      ? { ...(initialState?.columnPinning ?? {}), right: ['actions'] }
+      : (initialState?.columnPinning ?? {}),
+  )
+
   const onColumnFiltersChange = React.useCallback(
     (updaterOrValue: Updater<ColumnFiltersState>) => {
       if (enableAdvancedFilter) return
@@ -282,17 +294,20 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       columnVisibility,
       rowSelection,
       columnFilters,
+      columnPinning,
     },
     defaultColumn: {
       ...tableProps.defaultColumn,
       enableColumnFilter: false,
     },
     enableRowSelection: true,
+    enableColumnPinning: true,
     onRowSelectionChange: setRowSelection,
     onPaginationChange,
     onSortingChange,
     onColumnFiltersChange,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnPinningChange: setColumnPinning,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),

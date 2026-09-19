@@ -1,8 +1,8 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { EyeIcon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
+import { RowActions } from '@/components/data-table/row-actions'
 import type { Location } from '@/features/locations/types/location'
 import type { Material } from '../types/inventory'
 
@@ -113,16 +113,17 @@ export const getInventoryColumns = (
   {
     id: 'actions',
     header: 'Actions',
+    enablePinning: true,
     cell: ({ row }) => (
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => onViewStock(row.original)}
-        className="h-8 w-auto px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
-      >
-        <EyeIcon className="mr-1.5 h-4 w-4" />
-        View Stock
-      </Button>
+      <RowActions
+        items={[
+          {
+            label: 'View Stock',
+            icon: EyeIcon,
+            onClick: () => onViewStock(row.original),
+          },
+        ]}
+      />
     ),
   },
 ]
