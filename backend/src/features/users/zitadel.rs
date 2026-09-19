@@ -1,15 +1,10 @@
-use oauth2::{
-    basic::BasicClient, reqwest, ClientId, ClientSecret, EndpointNotSet, EndpointSet, Scope,
-    TokenResponse, TokenUrl,
-};
+use base64::Engine;
+use reqwest;
 use serde::{Deserialize, Serialize};
 
 use crate::{config::Config, error::AppError};
 
 use super::types::User;
-
-type ClientCredentialsClient =
-    BasicClient<EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointSet>;
 
 /// Backs `list_users` with Zitadel's own v2 Users API — not part of the OIDC
 /// standard, so unlike `auth::TokenIntrospection` this is unapologetically
@@ -20,9 +15,16 @@ type ClientCredentialsClient =
 /// org-level `ORG_USER_MANAGER` role granted to it in the Zitadel console —
 /// there is no way to check that from here, so a missing grant surfaces as
 /// a 500 from `list_users` (Zitadel's API returns a permission error).
+///
+/// Token exchange is done via raw reqwest rather than the `oauth2` crate's
+/// `exchange_client_credentials()` because Zitadel returns `expires_in` as a
+/// string (`"3600"`) rather than a number, which causes the crate's strict
+/// serde deserialization to fail.
 #[derive(Clone, Debug)]
 pub struct ZitadelUserDirectory {
-    client: ClientCredentialsClient,
+    client_id: String,
+    client_secret: String,
+    token_url: String,
     api_base: String,
     http_client: reqwest::Client,
 }
@@ -61,6 +63,11 @@ struct ZitadelProfile {
     display_name: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct TokenResponse {
+    access_token: String,
+}
+
 /// Machine users (service accounts) have no `human` profile and are filtered
 /// out — they aren't people who can be assigned an order stage.
 fn assignable_user(user: ZitadelUser) -> Option<User> {
@@ -86,12 +93,7 @@ impl ZitadelUserDirectory {
             .clone()
             .ok_or_else(|| "ZITADEL_USERS_CLIENT_SECRET is not set".to_string())?;
 
-        let token_url = TokenUrl::new(format!("{}/oauth/v2/token", config.oauth_issuer_url))
-            .map_err(|error| format!("invalid Zitadel token URL: {error}"))?;
-
-        let client = BasicClient::new(ClientId::new(client_id))
-            .set_client_secret(ClientSecret::new(client_secret))
-            .set_token_uri(token_url);
+        let token_url = format!("{}/oauth/v2/token", config.oauth_issuer_url);
 
         let http_client = reqwest::ClientBuilder::new()
             .redirect(reqwest::redirect::Policy::none())
@@ -99,32 +101,46 @@ impl ZitadelUserDirectory {
             .map_err(|error| format!("failed to build Zitadel HTTP client: {error}"))?;
 
         Ok(Self {
-            client,
+            client_id,
+            client_secret,
+            token_url,
             api_base: config.oauth_issuer_url.clone(),
             http_client,
         })
     }
 
-    pub async fn list_users(&self) -> Result<Vec<User>, AppError> {
-        let token = self
-            .client
-            .exchange_client_credentials()
-            .add_scope(Scope::new("openid".to_string()))
-            .add_scope(Scope::new(
-                "urn:zitadel:iam:org:project:id:zitadel:aud".to_string(),
-            ))
-            .request_async(&self.http_client)
+    async fn exchange_client_credentials(&self) -> Result<String, AppError> {
+        let credentials = base64::engine::general_purpose::STANDARD
+            .encode(format!("{}:{}", self.client_id, self.client_secret));
+
+        let response = self
+            .http_client
+            .post(&self.token_url)
+            .header("Authorization", format!("Basic {credentials}"))
+            .form(&[
+                ("grant_type", "client_credentials"),
+                ("scope", "openid"),
+                ("scope", "urn:zitadel:iam:org:project:id:zitadel:aud"),
+            ])
+            .send()
             .await
-            .map_err(|error| {
-                AppError::Zitadel(format!(
-                    "Zitadel client credentials request failed: {error}"
-                ))
-            })?;
+            .and_then(reqwest::Response::error_for_status)
+            .map_err(|error| AppError::Zitadel(format!("Zitadel token request failed: {error}")))?;
+
+        let token_response: TokenResponse = response.json().await.map_err(|error| {
+            AppError::Zitadel(format!("failed to parse Zitadel token response: {error}"))
+        })?;
+
+        Ok(token_response.access_token)
+    }
+
+    pub async fn list_users(&self) -> Result<Vec<User>, AppError> {
+        let access_token = self.exchange_client_credentials().await?;
 
         let response = self
             .http_client
             .post(format!("{}/v2/users", self.api_base))
-            .bearer_auth(token.access_token().secret())
+            .bearer_auth(&access_token)
             .json(&SearchUsersRequest {
                 query: SearchUsersQuery { limit: 200 },
             })
