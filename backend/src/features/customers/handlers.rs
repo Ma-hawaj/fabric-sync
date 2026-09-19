@@ -14,6 +14,7 @@ pub async fn list_customers(
     let _subject = user.subject();
     let _client_id = user.client_id();
     let _scopes = user.scopes();
+    let _roles = user.roles();
 
     Ok(Json(service::list_customers(&state).await?))
 }
