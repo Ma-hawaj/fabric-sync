@@ -4,17 +4,23 @@
 Reads `catalog.json` plus the rasters in `source/` (both produced by
 `extract.py`) and emits:
 
-  frontend/public/designs/<section>/<NN>-<slug>.webp   served to the order form
+  frontend/public/designs/<section>/<NN>-<slug>.webp   the single canonical
+                                                       WebP tree, served to
+                                                       the order form as
+                                                       /designs/...
   frontend/src/features/invoices/data/design-catalog.ts generated options module
-  backend/assets/designs/<section>/<NN>-<slug>.webp    embedded copies for the
-                                                       printed invoice
   backend/src/features/invoices/designs.rs             generated list of
-                                                       embedded assets + lookup
+                                                       assets + lookup
 
 The invoice document must stay self-contained (printed from a no-origin
-iframe), so the backend gets its own WebP copies embedded in the binary via
-include_bytes!, never fetched at render time. The frontend serves the same
-bytes from /designs for the on-screen picker.
+iframe), so `designs.rs` embeds the same WebP files with
+`include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../frontend/public/designs/...")))`
+— there is exactly one copy of the bytes in the repo, and the backend build
+compiles the frontend tree into the binary. The frontend serves those same
+files from /designs for the on-screen picker (they arrive via the browser,
+not a backend render). The backend workflow's path filter lists
+`frontend/public/designs/**` for exactly this reason: a new asset changes the
+binary even though it lives under frontend/.
 
 WebP with a 512px cap keeps the binary footprint small (line art compresses
 well) while staying crisp at chip sizes. Regeneration replaces every output.
@@ -41,7 +47,6 @@ SOURCE = HERE / "source"
 
 FRONTEND_DESIGNS = ROOT / "frontend" / "public" / "designs"
 FRONTEND_MODULE = ROOT / "frontend" / "src" / "features" / "invoices" / "data" / "design-catalog.ts"
-BACKEND_DESIGNS = ROOT / "backend" / "assets" / "designs"
 BACKEND_MODULE = ROOT / "backend" / "src" / "features" / "invoices" / "designs.rs"
 
 # Cap the long edge so the assets stay small; chip display is never bigger
@@ -70,8 +75,6 @@ def main() -> int:
     # Regeneration is additive-free for every generated output.
     for stale in FRONTEND_DESIGNS.rglob("*.webp"):
         stale.unlink()
-    for stale in BACKEND_DESIGNS.rglob("*.webp"):
-        stale.unlink()
 
     frontend_options: dict[str, list[dict]] = {}
     # section, slug, label, rel path
@@ -84,11 +87,8 @@ def main() -> int:
             src = SOURCE / opt["file"]
             rel = f"{section}/{opt['file'].rsplit('/', 1)[1]}".replace(".png", ".webp")
             fd = FRONTEND_DESIGNS / rel
-            bd = BACKEND_DESIGNS / rel
             fd.parent.mkdir(parents=True, exist_ok=True)
-            bd.parent.mkdir(parents=True, exist_ok=True)
             make_webp(src, fd)
-            bd.write_bytes(fd.read_bytes())
             rows.append(
                 {
                     "id": opt["slug"],
@@ -102,7 +102,7 @@ def main() -> int:
 
     _write_frontend_module(frontend_options)
     _write_backend_module(embedded)
-    print(f"built {total} webp assets -> {FRONTEND_DESIGNS} (+ {BACKEND_DESIGNS})")
+    print(f"built {total} webp assets -> {FRONTEND_DESIGNS}")
     print(f"  frontend module: {FRONTEND_MODULE}")
     print(f"  backend module:  {BACKEND_MODULE}")
     return 0
@@ -151,7 +151,8 @@ def _write_backend_module(embedded: list[tuple[str, str, str, str]]) -> None:
     entries = [
         f"    DesignAsset {{ section: {json.dumps(section)}, "
         f"slug: {json.dumps(slug)}, label: {json.dumps(label)}, "
-        f"bytes: include_bytes!({json.dumps('../../../assets/designs/' + rel)}) }},"
+        f'bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), '
+        f'{json.dumps("/../frontend/public/designs/" + rel)})) }},'
         for section, slug, label, rel in embedded
     ]
     module = f"""//! Thob design catalog embedded for the printed invoice.
@@ -159,9 +160,13 @@ def _write_backend_module(embedded: list[tuple[str, str, str, str]]) -> None:
 //!
 //! The invoice document must stay self-contained, so the raster for every
 //! option is compiled into the binary as a WebP and looked up by section +
-//! slug at render time. Re-run the generator from the repo root after any
+//! slug at render time. There is a single copy of each WebP in the repo,
+//! under frontend/public/designs/, and it is embedded here via include_bytes!
+//! — so the backend build depends on those files being present in the
+//! checkout (the backend workflow's path filter lists frontend/public/designs/**
+//! for that reason). Re-run the generator from the repo root after any
 //! extraction change:
-//!   python3 scripts/fabric-designs/extract.py && python3 scripts/fabric-designs/assets.py
+//!   python3 scripts/fabric-designs/assets.py
 
 pub struct DesignAsset {{
     pub section: &'static str,
