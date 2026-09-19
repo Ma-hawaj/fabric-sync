@@ -3,8 +3,11 @@
 //   neck = collar, sleeve = sleeve, front_pocket = fPocket,
 //   patti = patti, thob_type = thobeType.
 //
-// Re-run the generator from the repo root after any extraction change:
-//   python3 scripts/fabric-designs/extract.py && python3 scripts/fabric-designs/assets.py
+// Re-run the generator from the repo root after any extraction change, then
+// normalize the formatting (the `pnpm run check` gate enforces it):
+//   python3 scripts/fabric-designs/extract.py
+//   python3 scripts/fabric-designs/assets.py
+//   (cd frontend && pnpm exec prettier --write src/features/invoices/data/design-catalog.ts)
 
 export interface ThobDesignOption {
   id: string
