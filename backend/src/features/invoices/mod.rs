@@ -1,3 +1,4 @@
+mod designs;
 mod document;
 mod handlers;
 mod repository;

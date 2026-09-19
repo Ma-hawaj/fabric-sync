@@ -17,6 +17,10 @@
     amounts    — every money figure, pre-formatted; keyed as documented below
     vat_percent— the VAT rate as a whole number, e.g. "10"
     qr_svg     — the TLV QR code, as inline SVG markup
+    line_designs — per line (same order as invoice.lines), the design chips:
+                   each has titleAr/titleEn, label and an optional image (a
+                   data: URI) — see document.rs line_designs
+    line_notes — per line, the free-text more-details note, or empty
 
   Amount keys: subtotal, discountAmount, taxable, vat, giftCardSales, total,
   giftCardRedeemed, amountPaid, balanceDue, line<N>UnitPrice, line<N>Total,
@@ -253,6 +257,49 @@
         font-size: 9.5px;
       }
 
+      /* One design choice per chip: a small raster when the catalog has one,
+         always a label. Chips wrap rather than stretch, so a long run of
+         designs on one order just takes another row. */
+      .line-designs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 3px;
+      }
+
+      .design-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 5px 2px 3px;
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        background: var(--tint);
+      }
+
+      .design-chip img {
+        width: 36px;
+        height: 26px;
+        object-fit: contain;
+      }
+
+      .design-copy {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.15;
+      }
+
+      .design-title {
+        font-size: 7.5px;
+        color: var(--muted);
+      }
+
+      .design-name {
+        font-size: 9px;
+        font-weight: 600;
+        text-align: left;
+      }
+
       .exempt {
         display: inline-block;
         margin-top: 2px;
@@ -466,8 +513,25 @@
               {% if line.customer %}
                 <span class="line-note">{{ line.customer.name }}</span>
               {% endif %}
-              {% if line.detail %}
-                <span class="line-note">{{ line.detail }}</span>
+              {% if line_designs[loop.index0] %}
+                <span class="line-designs">
+                  {% for chip in line_designs[loop.index0] %}
+                    <span class="design-chip">
+                      {% if chip.image %}
+                        <img src="{{ chip.image }}" alt="{{ chip.label }}" loading="lazy" decode="async" width="44" height="32" />
+                      {% endif %}
+                      <span class="design-copy">
+                        <span class="design-title"
+                          >{{ chip.titleAr }}<span class="en">{{ chip.titleEn }}</span></span
+                        >
+                        <span class="design-name" dir="ltr">{{ chip.label }}</span>
+                      </span>
+                    </span>
+                  {% endfor %}
+                </span>
+              {% endif %}
+              {% if line_notes[loop.index0] %}
+                <span class="line-note">{{ line_notes[loop.index0] }}</span>
               {% endif %}
               {% if not line.taxable %}
                 <span class="exempt">
