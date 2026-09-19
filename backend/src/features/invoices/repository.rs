@@ -393,9 +393,10 @@ pub async fn insert_order(
         r#"
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
-            thobe_type, f_pocket, collar, sleeve, patti, more_details
+            thobe_type, f_pocket, collar, sleeve, patti, more_details,
+            production_branch_id
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12)
         "#,
         measurement_id,
         order.material_id,
@@ -408,6 +409,7 @@ pub async fn insert_order(
         order.sleeve,
         order.patti,
         order.more_details,
+        order.production_location_id,
     )
     .execute(&mut **tx)
     .await?;

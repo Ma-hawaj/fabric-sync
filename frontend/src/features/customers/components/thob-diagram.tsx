@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils'
 import {
   MEASUREMENT_FIELDS,
+  MEASUREMENT_UNIT,
   RESTING_MARKER_FIELDS,
   measurementField,
 } from '../data/measurement-fields'
@@ -76,7 +77,7 @@ export function calloutText(
   value: string | number | null | undefined,
 ) {
   if (value === undefined || value === null || value === '') return field.label
-  const suffix = field.input.kind === 'number' ? ' cm' : ''
+  const suffix = field.input.kind === 'number' ? ` ${MEASUREMENT_UNIT}` : ''
   return `${field.label} · ${value}${suffix}`
 }
 

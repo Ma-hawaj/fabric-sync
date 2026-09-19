@@ -21,12 +21,22 @@ import {
   SLEEVES,
   THOBE_TYPES,
 } from '../../data/invoice-form-options'
+import type { Location } from '@/features/locations/types/location'
 import { materialTotalStock } from '../../types/materials'
 import type { Material } from '../../types/materials'
 import type { InvoiceFormApi } from '../../types/invoice-form'
 
 function materialOptionLabel(material: Material) {
   return material.sku ? `${material.name} (${material.sku})` : material.name
+}
+
+interface StockLocationOption extends Location {
+  quantity: number
+  unit: string
+}
+
+function stockOptionLabel(option: StockLocationOption) {
+  return `${option.name} (${option.quantity} ${option.unit})`
 }
 
 interface OrderBlockProps {
@@ -147,7 +157,7 @@ export function OrderBlock({
 
       <div className="space-y-3">
         <h4 className="text-sm font-semibold">Material</h4>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <form.Field name={`${base}.materialId` as never}>
             {(field: any) => {
               const selected = materials.find((m) => m.id === field.state.value)
@@ -164,9 +174,15 @@ export function OrderBlock({
                       a.id === b.id
                     }
                     value={selected ?? null}
-                    onValueChange={(material: Material | null) =>
+                    onValueChange={(material: Material | null) => {
                       field.handleChange(material?.id ?? '')
-                    }
+                      // "Made At" only lists this material's stock locations —
+                      // drop a previously chosen one that may not stock it.
+                      form.setFieldValue(
+                        `${base}.productionLocationId` as never,
+                        '' as never,
+                      )
+                    }}
                   >
                     <ComboboxInput
                       id={field.name}
@@ -201,6 +217,82 @@ export function OrderBlock({
               )
             }}
           </form.Field>
+
+          {/* A material can only be made at a location where it is in
+              stock — so this picker lists the selected material's stock
+              locations rather than every stock-holding branch. */}
+          <form.Subscribe
+            selector={(state: any) =>
+              state.values.customers[customerIndex]?.orders[orderIndex]
+                ?.materialId
+            }
+          >
+            {(materialId: string) => {
+              const material = materials.find((m) => m.id === materialId)
+              const stockOptions: StockLocationOption[] =
+                material?.locations
+                  .filter((stock) => stock.quantity > 0)
+                  .map((stock) => ({
+                    id: stock.locationId,
+                    name: stock.location,
+                    receivesOrders: false,
+                    holdsStock: true,
+                    isActive: true,
+                    quantity: stock.quantity,
+                    unit: material.unit,
+                  })) ?? []
+              return (
+                <form.Field name={`${base}.productionLocationId` as never}>
+                  {(field: any) => {
+                    const selected = stockOptions.find(
+                      (location) => location.id === field.state.value,
+                    )
+                    return (
+                      <Field data-invalid={field.state.meta.errors.length > 0}>
+                        <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
+                        <Combobox
+                          items={stockOptions}
+                          itemToStringLabel={stockOptionLabel}
+                          isItemEqualToValue={(a: Location, b: Location) =>
+                            a.id === b.id
+                          }
+                          value={selected ?? null}
+                          onValueChange={(location: Location | null) => {
+                            field.handleChange(location?.id ?? '')
+                          }}
+                        >
+                          <ComboboxInput
+                            id={field.name}
+                            placeholder="Search location..."
+                            className="w-full"
+                            showClear
+                          />
+                          <ComboboxContent>
+                            <ComboboxEmpty>
+                              {material
+                                ? 'This material has no stock available.'
+                                : 'Pick a material first.'}
+                            </ComboboxEmpty>
+                            <ComboboxList>
+                              {(location: StockLocationOption) => (
+                                <ComboboxItem
+                                  key={location.id}
+                                  value={location}
+                                >
+                                  {stockOptionLabel(location)}
+                                </ComboboxItem>
+                              )}
+                            </ComboboxList>
+                          </ComboboxContent>
+                        </Combobox>
+                        <FieldError errors={field.state.meta.errors} />
+                      </Field>
+                    )
+                  }}
+                </form.Field>
+              )
+            }}
+          </form.Subscribe>
 
           <NumberField
             form={form}

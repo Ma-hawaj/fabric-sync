@@ -24,6 +24,12 @@ export interface InvoiceOrderDraft {
 
   materialId: string
   materialAmount: NumberInput
+  // Where materialAmount comes off — material stock is held per location, and
+  // different orders on the same invoice can use materials stocked at
+  // different locations, so this has to be per order rather than one
+  // invoice-wide field (unlike productBranch, where every product line
+  // sells from the same register).
+  productionLocationId: string
   // Entered by staff per order line — materials carry no unit price to derive
   // it from.
   price: NumberInput
@@ -122,6 +128,7 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     moreDetails: '',
     materialId: '',
     materialAmount: '',
+    productionLocationId: '',
     price: '',
   }
 }

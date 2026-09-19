@@ -5,6 +5,7 @@ use crate::{
     features::{
         customers::{repository as customers_repository, types::measurement_values_equal},
         gift_cards::{repository as gift_cards_repository, service as gift_cards_service},
+        materials::repository as materials_repository,
         products::repository as products_repository,
     },
     state::AppState,
@@ -112,6 +113,13 @@ pub async fn receive_invoice(
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
 
     tx.commit().await?;
+
+    tracing::info!(
+        invoice_id = %invoice_id,
+        payment_type = payment_type.as_str(),
+        amount_paid = received.amount_paid,
+        "invoice received"
+    );
 
     Ok(received)
 }
@@ -337,6 +345,7 @@ mod tests {
         serde_json::json!({
             "materialId": "0197fdd2-6a67-7000-8000-000000000001",
             "materialAmount": 2.0,
+            "productionLocationId": "0197fdd2-6a67-7000-8000-000000000005",
             "price": price,
         })
     }
@@ -632,6 +641,30 @@ pub async fn create_invoice(
         };
 
         for order in &customer.orders {
+            // The decrement is guarded in SQL, so `false` means the
+            // production location either never stocked this material or no
+            // longer holds enough of it. Reading the name for the message
+            // costs an extra query only on that path.
+            let decremented = materials_repository::decrement_stock(
+                &mut tx,
+                order.material_id,
+                order.production_location_id,
+                order.material_amount,
+            )
+            .await?;
+
+            if !decremented {
+                let name = materials_repository::material_name(&mut tx, order.material_id)
+                    .await?
+                    .ok_or_else(|| {
+                        AppError::BadRequest(format!("no material with id {}", order.material_id))
+                    })?;
+
+                return Err(AppError::BadRequest(format!(
+                    "not enough {name} in stock at the selected location"
+                )));
+            }
+
             repository::insert_order(&mut tx, invoice_id, measurement_id, order).await?;
         }
     }
@@ -709,6 +742,17 @@ pub async fn create_invoice(
     }
 
     tx.commit().await?;
+
+    tracing::info!(
+        invoice_id = %invoice_id,
+        total = totals.total,
+        gift_card_redeemed = totals.redeemed,
+        customers = input.customers.len(),
+        product_lines = input.products.len(),
+        gift_cards_sold = input.gift_cards.len(),
+        gift_cards_redeemed = input.gift_card_redemptions.len(),
+        "invoice created"
+    );
 
     Ok(CreatedInvoice {
         id: invoice_id,
