@@ -53,6 +53,28 @@ pub async fn get_customer(
     Ok(fetch_customers(state, Some(customer_id)).await?.pop())
 }
 
+/// The measurement record that backs an order — the snapshot captured when its
+/// invoice was created. The orders feature reads it to show the exact
+/// measurements a garment was cut to.
+pub async fn get_measurement(
+    state: &AppState,
+    measurement_id: Uuid,
+) -> Result<Option<Measurement>, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        SELECT
+            to_jsonb(m) AS "measurement!: Json<Measurement>"
+        FROM measurements m
+        WHERE m.id = $1
+        "#,
+        measurement_id,
+    )
+    .fetch_optional(state.db())
+    .await?;
+
+    Ok(row.map(|row| row.measurement.0))
+}
+
 // Also used by the invoices feature, which records a measurement snapshot per
 // customer inside its own transaction and needs the new row's id for orders.
 pub async fn insert_measurement(

@@ -15,6 +15,7 @@ async fn fetch_orders(
         SELECT
             o.id,
             o.invoice_id,
+            i.invoice_number,
             i.invoice_date,
             o.measurement_id,
             c.name AS customer_name,

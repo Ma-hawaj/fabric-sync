@@ -2,6 +2,8 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::features::customers::types::Measurement;
+
 pub use crate::features::invoices::types::PaymentType;
 
 /// What a checklist entry can be set to. `Pending` is not a stored value — it
@@ -99,6 +101,7 @@ pub struct RepairRow {
 pub struct OrderRow {
     pub id: Uuid,
     pub invoice_id: Uuid,
+    pub invoice_number: i64,
     pub invoice_date: NaiveDate,
     pub measurement_id: Uuid,
     pub customer_name: String,
@@ -204,6 +207,18 @@ pub struct OrderListItem {
     pub invoice_advance_amount: f64,
     pub invoice_advance_payment_type: Option<String>,
     pub invoice_final_payment_type: Option<String>,
+}
+
+/// One order, everything the list row carries plus the details a standalone
+/// page and a printed order document need: the human-readable invoice number
+/// and the measurement snapshot the garment was cut to.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderDetail {
+    #[serde(flatten)]
+    pub order: OrderListItem,
+    pub invoice_number: i64,
+    pub measurement: Measurement,
 }
 
 /// Body for `POST /orders/:id/receive` — the payment method used for the

@@ -13,7 +13,12 @@
 use base64::Engine;
 use minijinja::{context, Environment};
 
-use crate::{config::InvoiceBranding, error::AppError, state::AppState};
+use crate::{
+    config::InvoiceBranding,
+    document::{format_amount, format_quantity, CURRENCY},
+    error::AppError,
+    state::AppState,
+};
 
 use super::{
     service,
@@ -26,26 +31,8 @@ const DEFAULT_TEMPLATE: &str = include_str!("../../../templates/invoice.html");
 
 const TEMPLATE_NAME: &str = "invoice.html";
 
-/// Currency of the printed amounts. Single-valued by design, matching
-/// `CURRENCY` in the frontend's `src/lib/currency.ts`.
-const CURRENCY: &str = "BHD";
-
-/// Fils, not cents: BHD is a three-decimal currency. Amounts are still stored
-/// and computed to two places (`NUMERIC(10, 2)`), so this only affects how
-/// they are written out.
-const CURRENCY_DECIMALS: usize = 3;
-
 fn environment(branding: &InvoiceBranding) -> Result<Environment<'static>, AppError> {
-    let mut env = Environment::new();
-
-    match &branding.template_dir {
-        // Loading from disk means the document can be restyled and the change
-        // seen on the next request, with no rebuild and no redeploy.
-        Some(dir) => env.set_loader(minijinja::path_loader(dir)),
-        None => env.add_template(TEMPLATE_NAME, DEFAULT_TEMPLATE)?,
-    }
-
-    Ok(env)
+    crate::document::template_environment(branding, TEMPLATE_NAME, DEFAULT_TEMPLATE)
 }
 
 /// Encodes one TLV field: a tag byte, a length byte, then the value's UTF-8
@@ -87,19 +74,6 @@ fn qr_payload(detail: &InvoiceDetail, branding: &InvoiceBranding) -> String {
     tlv_field(5, &format_amount(detail.totals.vat), &mut tlv);
 
     base64::engine::general_purpose::STANDARD.encode(tlv)
-}
-
-fn format_amount(value: f64) -> String {
-    format!("{value:.CURRENCY_DECIMALS$}")
-}
-
-/// Quantities are not money: 3 metres is "3", not "3.000", but 3.25 metres
-/// still has to keep its fraction. Trailing zeros are trimmed rather than a
-/// fixed precision applied.
-fn format_quantity(value: f64) -> String {
-    let text = format!("{value:.2}");
-    let text = text.trim_end_matches('0').trim_end_matches('.');
-    text.to_string()
 }
 
 /// Renders the payload as an inline SVG, so the page needs no image request

@@ -1,0 +1,693 @@
+{#
+  The order document. Edit this file to change how a printed order looks.
+
+  Set INVOICE_TEMPLATE_DIR to the templates directory and the changes show up
+  on the next request, with no rebuild. Unset, the copy compiled into the
+  binary is used instead (see src/features/orders/document.rs).
+
+  Everything must stay self-contained — inline styles, an `data:` logo URI.
+  The page is printed from an iframe with no origin of its own to resolve
+  relative URLs against, and will later be rendered by a headless browser that
+  may have no network access.
+
+  Available:
+    order     — GET /orders/:id (see types.rs OrderDetail — the measurement
+                snapshot the garment was cut to rides along on `order.measurement`)
+    company   — COMPANY_* env vars (see config.rs InvoiceBranding)
+    currency  — currency code, e.g. "BHD"
+    amounts   — every money/quantity figure, pre-formatted; keys: materialAmount,
+                price, total, advanceAmount, amountPaid, balanceDue, repair<N>
+                (where <N> is the zero-based index in order.repairs)
+#}
+{%- set order_status_labels = {
+  "pending": ("قيد التصنيع", "Pending"),
+  "received": ("تم التسليم", "Received")
+} -%}
+{%- set payment_labels = {
+  "benefit": ("بنفت", "Benefit"),
+  "cash": ("نقداً", "Cash"),
+  "card": ("بطاقة", "Card")
+} -%}
+{%- set payment_status_labels = {
+  "paid": ("مدفوعة", "Paid"),
+  "partial": ("مدفوعة جزئياً", "Partially paid"),
+  "unpaid": ("غير مدفوعة", "Unpaid")
+} -%}
+{%- set stage_status_labels = {
+  "pending": ("قيد الانتظار", "Pending"),
+  "done": ("مكتملة", "Done"),
+  "skipped": ("مُتجاوزة", "Skipped")
+} -%}
+{%- set repair_status_labels = {
+  "open": ("مفتوحة", "Open"),
+  "in_progress": ("قيد الإصلاح", "In progress"),
+  "completed": ("مكتملة", "Completed"),
+  "cancelled": ("ملغاة", "Cancelled")
+} -%}
+{%- set measurement_labels = {
+  "lengthFl": ("الطول (أمام)", "Length (Front)"),
+  "lengthBl": ("الطول (خلف)", "Length (Back)"),
+  "shoulder": ("الكتف", "Shoulder"),
+  "chest": ("الصدر", "Chest"),
+  "chestUp": ("الصدر (علوي)", "Chest (Upper)"),
+  "waist": ("الخصر", "Waist"),
+  "hips": ("الأوراك", "Hips"),
+  "sleeveLength": ("طول الكم", "Sleeve Length"),
+  "neck": ("الرقبة", "Neck"),
+  "neckWidth": ("عرض الرقبة", "Neck Width"),
+  "openHand": ("فتحة اليد", "Open Hand"),
+  "cuffling": ("الأسوارة", "Cuffling"),
+  "cuffWidth": ("عرض الأسوارة", "Cuff Width"),
+  "aramHole": ("فتحة الإبط", "Armhole"),
+  "fullBody": ("الصدر (كامل)", "Full Body"),
+  "openFold": ("فتحة الطية", "Open Fold"),
+  "sleeveHaffButton": ("زر الكم", "Sleeve Button"),
+  "buttonFold": ("طية الزر", "Button Fold"),
+  "fo": ("فو", "FO"),
+  "foWidth": ("عرض الفو", "FO Width"),
+  "frantPocketLength": ("طول الجيب الأمامي", "Front Pocket Length"),
+  "farntPocketLengthByWidth": ("الجيب الأمامي بالعرض", "Front Pocket By Width"),
+  "sidePocket": ("الجيب الجانبي", "Side Pocket"),
+  "mobilePocketLengthByWidth": ("جيب الجوال بالعرض", "Mobile Pocket By Width")
+} -%}
+{%- set body_measurements = ["lengthFl", "lengthBl", "shoulder", "chest", "chestUp", "waist", "hips", "sleeveLength", "neck", "neckWidth", "openHand", "cuffling", "cuffWidth", "aramHole", "fullBody", "openFold"] -%}
+{%- set pocket_measurements = ["frantPocketLength", "farntPocketLengthByWidth", "sidePocket", "mobilePocketLengthByWidth"] -%}
+{%- set style_measurements = ["sleeveHaffButton", "buttonFold", "fo", "foWidth"] -%}
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Order INV-{{ order.invoiceNumber }}</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
+
+      :root {
+        --ink: #10151c;
+        --muted: #6b7280;
+        --rule: #d8dee7;
+        --tint: #f4f6f9;
+        --accent: #1d4ed8;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 12mm;
+        font-family: 'Noto Sans Arabic', 'IBM Plex Sans Arabic', 'Segoe UI',
+          Tahoma, Arial, sans-serif;
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--ink);
+        background: #fff;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      @media print {
+        body {
+          padding: 0;
+        }
+      }
+
+      /* Every label is bilingual: Arabic on top, English beneath it. */
+      .en {
+        display: block;
+        font-size: 0.82em;
+        color: var(--muted);
+        font-weight: 400;
+        direction: ltr;
+        text-align: right;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid var(--ink);
+      }
+
+      .logo {
+        max-height: 68px;
+        max-width: 190px;
+        object-fit: contain;
+      }
+
+      .company-name {
+        margin: 0;
+        font-size: 19px;
+        font-weight: 700;
+        line-height: 1.25;
+      }
+
+      .company-name .en {
+        font-size: 13px;
+        color: var(--ink);
+      }
+
+      .company-meta {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .company-meta div + div {
+        margin-top: 1px;
+      }
+
+      .doc-title {
+        text-align: left;
+        flex-shrink: 0;
+      }
+
+      .doc-title h2 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .doc-title .en {
+        text-align: left;
+        font-size: 11px;
+      }
+
+      .doc-number {
+        margin-top: 6px;
+        font-family: 'SFMono-Regular', Consolas, monospace;
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--accent);
+        direction: ltr;
+        text-align: left;
+      }
+
+      .doc-number .ord {
+        display: block;
+        font-size: 10px;
+        color: var(--muted);
+      }
+
+      h2.section-title {
+        margin: 16px 0 6px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .panels {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .panel {
+        flex: 1;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: var(--tint);
+      }
+
+      .panel h3 {
+        margin: 0 0 5px;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .row + .row {
+        margin-top: 2px;
+      }
+
+      .row dt {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .row dd {
+        margin: 0;
+        font-weight: 600;
+        text-align: left;
+      }
+
+      dl {
+        margin: 0;
+      }
+
+      table {
+        width: 100%;
+        margin-top: 10px;
+        border-collapse: collapse;
+        font-size: 10.5px;
+      }
+
+      thead th {
+        background: var(--ink);
+        color: #fff;
+        font-size: 9.5px;
+        font-weight: 600;
+        text-align: right;
+        padding: 6px 8px;
+      }
+
+      thead {
+        display: table-header-group;
+      }
+
+      tbody tr {
+        break-inside: avoid;
+      }
+
+      tbody td {
+        padding: 5px 8px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+
+      .num {
+        text-align: left;
+        direction: ltr;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+
+      .note {
+        display: block;
+        margin-top: 1px;
+        color: var(--muted);
+        font-size: 9.5px;
+      }
+
+      .measurements {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .measurement-group {
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: var(--tint);
+      }
+
+      .measurement-group h3 {
+        margin: 0 0 5px;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .measurement-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 12px;
+      }
+
+      .measurement-group .m {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        border-bottom: 1px dotted var(--rule);
+        padding-bottom: 2px;
+      }
+
+      .measurement-group .m span:first-child {
+        color: var(--muted);
+        font-size: 9.5px;
+      }
+
+      .measurement-group .m span:last-child {
+        font-weight: 600;
+      }
+
+      .closing {
+        break-inside: avoid;
+        margin-top: 10px;
+      }
+
+      .summary {
+        display: flex;
+        justify-content: flex-end;
+        gap: 16px;
+      }
+
+      .totals {
+        width: 56%;
+        border-collapse: collapse;
+        margin: 0;
+        font-size: 11px;
+      }
+
+      .totals td {
+        padding: 2px 8px;
+        border: none;
+      }
+
+      .totals tr + tr td {
+        border-top: 1px solid var(--rule);
+      }
+
+      .totals .label {
+        color: var(--muted);
+      }
+
+      .totals .due td {
+        border-top: 1px solid var(--rule);
+        font-weight: 700;
+        color: var(--accent);
+      }
+
+      footer {
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px solid var(--rule);
+        text-align: center;
+        color: var(--muted);
+        font-size: 9.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        {% if company.logoDataUrl %}
+          <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
+        {% endif %}
+        <h1 class="company-name">
+          {{ company.nameAr }}
+          <span class="en">{{ company.nameEn }}</span>
+        </h1>
+        <div class="company-meta">
+          {% if company.addressAr %}<div>{{ company.addressAr }}</div>{% endif %}
+          {% if company.addressEn %}<div dir="ltr">{{ company.addressEn }}</div>{% endif %}
+          {% if company.phone %}<div dir="ltr">{{ company.phone }}</div>{% endif %}
+          {% if company.email %}<div dir="ltr">{{ company.email }}</div>{% endif %}
+          {% if company.crNumber %}
+            <div>س.ت / CR: <span dir="ltr">{{ company.crNumber }}</span></div>
+          {% endif %}
+          {% if company.vatNumber %}
+            <div>
+              الرقم الضريبي / VAT:
+              <span dir="ltr">{{ company.vatNumber }}</span>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="doc-title">
+        <h2>
+          أمر تصنيع
+          <span class="en">Production Order</span>
+        </h2>
+        <div class="doc-number">
+          INV-{{ order.invoiceNumber }}
+          <span class="ord" dir="ltr">ORD-{{ order.id[:8] }}</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="panels">
+      <div class="panel">
+        <h3>بيانات الطلب · Order details</h3>
+        <dl>
+          <div class="row">
+            <dt>تاريخ الفاتورة<span class="en">Invoice date</span></dt>
+            <dd dir="ltr">{{ order.invoiceDate }}</dd>
+          </div>
+          <div class="row">
+            <dt>العميل<span class="en">Customer</span></dt>
+            <dd>{{ order.customerName }}</dd>
+          </div>
+          <div class="row">
+            <dt>الجوال<span class="en">Mobile</span></dt>
+            <dd dir="ltr">{{ order.customerMobile }}</dd>
+          </div>
+          <div class="row">
+            <dt>الحالة<span class="en">Order status</span></dt>
+            <dd>
+              {%- set status = order_status_labels[order.status] -%}
+              {% if status %}
+                {{ status[0] }} <span class="en">{{ status[1] }}</span>
+              {% else %}
+                {{ order.status }}
+              {% endif %}
+            </dd>
+          </div>
+          <div class="row">
+            <dt>المرحلة الحالية<span class="en">Current stage</span></dt>
+            <dd>
+              {% if order.currentStage %}
+                {{ order.currentStage }}
+              {% else %}
+                مكتمل <span class="en">Completed</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      <div class="panel">
+        <h3>الخامة والمقاسات · Material</h3>
+        <dl>
+          <div class="row">
+            <dt>الخامة<span class="en">Material</span></dt>
+            <dd>{{ order.material }}</dd>
+          </div>
+          <div class="row">
+            <dt>الكمية<span class="en">Quantity</span></dt>
+            <dd class="num">{{ amounts.materialAmount }}</dd>
+          </div>
+          <div class="row">
+            <dt>السعر<span class="en">Price</span></dt>
+            <dd class="num">{{ currency }} {{ amounts.price }}</dd>
+          </div>
+          <div class="row">
+            <dt>مكان التصنيع<span class="en">Made at</span></dt>
+            <dd>
+              {% if order.productionLocation %}
+                {{ order.productionLocation }}
+                {% if order.productionLocationInferred %}<span class="note">مستنتج من المخزون</span>{% endif %}
+              {% else %}
+                غير محدد <span class="en">Not assigned</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div class="row">
+            <dt>مكان الاستلام<span class="en">Collection</span></dt>
+            <dd>
+              {% if order.receivingLocation %}
+                {{ order.receivingLocation }}
+              {% else %}
+                غير محدد <span class="en">Not assigned</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <h2 class="section-title">المقاسات المسجلة · Measurements</h2>
+    {# One snapshot per order — the measurements the garment was cut to. #}
+    <div class="measurements">
+      <div class="measurement-group">
+        <h3>مقاسات الجسم · Body dimensions</h3>
+        <div class="measurement-grid">
+          {% for field in body_measurements %}
+            {% set m = order.measurement[field] %}
+            {% if m is defined and m is not none and m != '' %}
+              <div class="m">
+                <span>{{ measurement_labels[field][0] }}</span>
+                <span class="num">{{ m }}</span>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      <div class="measurement-group">
+        <h3>الجيوب · Pockets</h3>
+        <div class="measurement-grid">
+          {% for field in pocket_measurements %}
+            {% set m = order.measurement[field] %}
+            {% if m is defined and m is not none and m != '' %}
+              <div class="m">
+                <span>{{ measurement_labels[field][0] }}</span>
+                <span class="num">{{ m }}</span>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      <div class="measurement-group">
+        <h3>التفاصيل والإكسسوارات · Style & finishing</h3>
+        <div class="measurement-grid">
+          {% for field in style_measurements %}
+            {% set m = order.measurement[field] %}
+            {% if m is defined and m is not none and m != '' %}
+              <div class="m">
+                <span>{{ measurement_labels[field][0] }}</span>
+                <span class="num">{{ m }}</span>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      <div class="measurement-group">
+        <h3>المقايسة · Recorded</h3>
+        <div class="measurement-grid">
+          <div class="m">
+            <span>تاريخ المقايسة<span class="en">Measured on</span></span>
+            <span class="num" dir="ltr">{{ order.measurement.date }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title">مراحل الإنتاج · Production checklist</h2>
+    {% if order.stages | length == 0 %}
+      <p class="note">لا توجد مراحل مضافة · No stages are configured.</p>
+    {% else %}
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 4%">#</th>
+            <th>المرحلة <span class="en">Stage</span></th>
+            <th style="width: 18%">الحالة <span class="en">Status</span></th>
+            <th>تفاصيل <span class="en">Details</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for stage in order.stages %}
+            <tr>
+              <td class="num">{{ loop.index }}</td>
+              <td>{{ stage.name }}</td>
+              <td>
+                {% if not stage.applicable %}
+                  غير مطلوبة <span class="en">Not needed</span>
+                {% else %}
+                  {%- set status = stage_status_labels[stage.status] -%}
+                  {% if status %}
+                    {{ status[0] }} <span class="en">{{ status[1] }}</span>
+                  {% else %}
+                    {{ stage.status }}
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td>
+                {% if stage.location %}
+                  <span class="note">التسليم إلى {{ stage.location }}.</span>
+                {% endif %}
+                {% if stage.assigneeName %}
+                  <span class="note">المسؤول: {{ stage.assigneeName }}</span>
+                {% endif %}
+                {% if stage.startedAt %}
+                  <span class="note" dir="ltr">Start: {{ stage.startedAt }}</span>
+                {% endif %}
+                {% if stage.completedAt %}
+                  <span class="note" dir="ltr">End: {{ stage.completedAt }}</span>
+                {% endif %}
+                {% if stage.notes %}
+                  <span class="note">{{ stage.notes }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    {% if order.repairs | length > 0 %}
+      <h2 class="section-title">الإصلاحات · Repairs</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 4%">#</th>
+            <th>السبب <span class="en">Reason</span></th>
+            <th style="width: 14%">التاريخ <span class="en">Reported</span></th>
+            <th class="num" style="width: 14%">الرسوم <span class="en">Charge</span></th>
+            <th style="width: 14%">الحالة <span class="en">Status</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for repair in order.repairs %}
+            <tr>
+              <td class="num">{{ loop.index }}</td>
+              <td>
+                {{ repair.reason }}
+                {% if repair.notes %}
+                  <span class="note">{{ repair.notes }}</span>
+                {% endif %}
+              </td>
+              <td class="num">{{ repair.reportedOn }}</td>
+              <td class="num">
+                {% if repair.charge > 0 %}
+                  {{ currency }} {{ amounts["repair" ~ loop.index0] }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                {%- set status = repair_status_labels[repair.status] -%}
+                {% if status %}
+                  {{ status[0] }} <span class="en">{{ status[1] }}</span>
+                {% else %}
+                  {{ repair.status }}
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    <div class="closing">
+      <section class="summary">
+        <table class="totals">
+          <tr>
+            <td class="label">الإجمالي <span class="en">Total</span></td>
+            <td class="num">{{ currency }} {{ amounts.total }}</td>
+          </tr>
+          <tr>
+            <td class="label">المقدم <span class="en">Advance paid</span></td>
+            <td class="num">{{ currency }} {{ amounts.advanceAmount }}</td>
+          </tr>
+          <tr>
+            <td class="label">المدفوع <span class="en">Paid</span></td>
+            <td class="num">− {{ currency }} {{ amounts.amountPaid }}</td>
+          </tr>
+          <tr class="due">
+            <td>المبلغ المستحق <span class="en">Balance due</span></td>
+            <td class="num">{{ currency }} {{ amounts.balanceDue }}</td>
+          </tr>
+        </table>
+      </section>
+
+      <footer>
+        شكراً لتعاملكم معنا · Thank you for your business
+        <div dir="ltr">ORD-{{ order.id[:8] }} · {{ order.invoiceDate }}</div>
+      </footer>
+    </div>
+  </body>
+</html>
