@@ -10,7 +10,7 @@ Reads `Desion.pdf` from the repository root (it is intentionally NOT committed
   review.html                        a self-contained contact sheet of every
                                      option (raster thumbnails + labels) for a
                                      human to confirm the pairing before the
-                                     traced SVGs ship
+                                     traced assets ship
 
 Sections and the orders column they map to:
   Neck (collar), Sleeve (sleeve), Front Pocket (f_pocket), Patti (patti),
