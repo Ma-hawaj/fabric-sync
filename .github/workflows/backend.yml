@@ -6,11 +6,19 @@ on:
     paths:
       - "backend/**"
       - ".github/workflows/backend.yml"
+      # The printed-invoice catalog lives in the frontend tree and is
+      # embedded into the backend binary (include_bytes! in
+      # backend/src/features/invoices/designs.rs) — asset or generator changes
+      # rebuild it.
+      - "frontend/public/designs/**"
+      - "scripts/fabric-designs/**"
   pull_request:
     branches: [main]
     paths:
       - "backend/**"
       - ".github/workflows/backend.yml"
+      - "frontend/public/designs/**"
+      - "scripts/fabric-designs/**"
 
 concurrency:
   group: backend-${{ github.ref }}

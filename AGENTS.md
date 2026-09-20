@@ -191,6 +191,23 @@ Path params use axum 0.7's `:id` syntax (0.8 switched to `{id}` — don't copy t
 
 On the frontend, `features/invoices/lib/print-invoice.ts` fetches that HTML and writes it into a hidden iframe via `srcdoc`, then prints the frame. Two reasons it isn't a `<iframe src>` or a print route: the app shell (`__root.tsx` wraps *every* route in the sidebar) never reaches the print output, and an ordinary `fetch` can carry an `Authorization` header once one exists. Reached from three places — the invoices table row action, the details sheet, and the invoice form's `Save & Export PDF`.
 
+## Thob design catalog
+
+The rotatable garment choices on an order (thobe type, collar, sleeve, front pocket, patti) are a **catalog of 92 options with illustrations**, extracted from `scripts/fabric-designs/Desion.pdf` — which is **not committed**; the PDF sits untracked at the repo root and is read only by the extraction script:
+
+```bash
+python3 scripts/fabric-designs/extract.py   # Desion.pdf -> source/, catalog.json, review.html
+python3 scripts/fabric-designs/assets.py    # catalog -> webp + generated catalog modules
+cd frontend && pnpm exec prettier --write src/features/invoices/data/design-catalog.ts
+```
+
+- `extract.py` pairs each illustration with the label printed beside it (reading order: images in x∈[51,273], labels right of x≈274, section headers above y=100) and writes rasters to `source/<section>/<NN>-<slug>.png` plus `catalog.json`, along with a self-contained `review.html` contact sheet for a human to confirm the label pairing. Option numbers are row-sorted per page because the PDF reuses image xrefs across rows.
+- `assets.py` caps every raster at 512px and encodes it as WebP, then writes **one file tree plus two generated modules** — the tree is the single copy of the bytes in the repo; the backend embeds it rather than duplicating:
+  - `frontend/public/designs/<section>/<NN>-<slug>.webp` served as picker thumbnails, surfaced through the **generated** `frontend/src/features/invoices/data/design-catalog.ts` (`NECK`, `SLEEVE`, `FRONT_POCKET`, `PATTI`, `THOB_TYPE` exports of `{ id, label, image }`).
+  - the **generated** `backend/src/features/invoices/designs.rs` (`DesignAsset { section, slug, label, bytes }` inside one `DESIGNS` static) embeds the *same* WebP files with `include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../frontend/public/designs/..."))` — so a no-network print renderer can inline them as `data:image/webp;base64,` URIs. There are no assets under `backend/assets/`; the backend build depends on the frontend tree being present in the checkout, which the backend workflow's path filter (`frontend/public/designs/**`, `scripts/fabric-designs/**`) mirrors.
+- The order form's five design pickers use `src/components/form/design-option-grid.tsx` (an image-per-choice radiogroup) and **store the catalog slug in the existing `orders.<column>`** — no DB migration. Legacy seed values ("Saudi", "Round", …) simply don't match any slug.
+- The printed invoice shows each choice in a Design panel: `document.rs::line_designs` walks the five slots in fixed order (Thobe / Collar / Sleeve / Pocket / Patti), looks the stored value up against `DESIGNS`, and renders one cell per slot — an image cell at ~52px when it matches, a label-only cell otherwise, so every line reads the same shape. The per-slot values reach it via `InvoiceDetailLine.design_values` (`#[serde(skip)]`, so the REST payload keeps the pre-joined `detail` string and no base64 bloat). The free-text note prints separately from `line_notes`.
+
 ## Locations and capability flags
 
 A location is a `branch` row, and it carries two **independent** flags rather than one type column: `receives_orders` (customers collect finished orders there — a branch) and `holds_stock` (material stock lives there — a store). A location can be either or both; "neither" is rejected in `locations/service.rs` and in `location-schema.ts`. `is_active` retires a location without disturbing the `material_stock` rows and invoices that still reference it.

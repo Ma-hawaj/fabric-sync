@@ -39,33 +39,51 @@ describe('generateMeasurementsHtml', () => {
     expect(html).toContain('26 Aug 2026')
   })
 
-  it('includes every measurement group heading', () => {
+  it('includes bilingual measurement group headings', () => {
     const html = generateMeasurementsHtml(customer, measurement)
 
-    expect(html).toContain('Body Dimensions')
-    expect(html).toContain('Pockets')
-    expect(html).toContain('Style &amp; Finishing')
+    expect(html).toContain('مقاسات الجسم · Body dimensions')
+    expect(html).toContain('الجيوب · Pockets')
+    expect(html).toContain('التفاصيل والإكسسوارات · Style &amp; finishing')
+    expect(html).toContain('المقايسة · Recorded')
   })
 
-  it('renders numeric measurements with the unit', () => {
+  it('renders numeric measurements as value + label captions', () => {
     const html = generateMeasurementsHtml(customer, measurement)
 
-    expect(html).toContain('48 inch')
-    expect(html).toContain('42 inch')
+    expect(html).toContain('48 inch · Front Length')
+    expect(html).toContain('18 inch · Shoulder')
+    expect(html).toContain('42 inch · Chest')
+    expect(html).toContain('25 inch · Sleeve')
+    expect(html).toContain('3 inch · Fo Width')
   })
 
   it('renders text/select measurements without the unit', () => {
     const html = generateMeasurementsHtml(customer, measurement)
 
-    expect(html).toContain('12×8')
-    expect(html).toContain('Both')
+    expect(html).toContain('12×8 · Pocket L×W')
+    expect(html).toContain('Both · Side Pocket')
   })
 
-  it('contains an inline SVG with the thob sketch', () => {
+  it('splits the diagrams into front and back thob panels', () => {
     const html = generateMeasurementsHtml(customer, measurement)
 
-    expect(html).toContain('<svg viewBox="0 0 480 500"')
-    expect(html).toContain('Thob sketch with all measurements')
+    expect((html.match(/viewBox="0 0 480 500"/g) ?? []).length).toBe(2)
+    expect(html).toContain('واجهة الثوب · Front of Thob')
+    expect(html).toContain('خلف الثوب · Back of Thob')
+    expect(html).toContain('aria-label="Front view measurement chart"')
+    expect(html).toContain('aria-label="Back view measurement chart"')
+  })
+
+  it('labels the grid rows in Arabic, like the order document', () => {
+    const html = generateMeasurementsHtml(customer, measurement)
+
+    expect(html).toContain('الطول (أمام)')
+    expect(html).toContain('الكتف')
+    expect(html).toContain('الصدر')
+    expect(html).toContain('طول الكم')
+    expect(html).toContain('الجيب الجانبي')
+    expect(html).toContain('عرض الفو')
   })
 })
 
