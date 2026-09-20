@@ -128,7 +128,7 @@ Columns drive their own filter UI through `meta`: set `label`, `placeholder`, an
 
 `backend/migrations/20260712000000_create_tables.sql` — the only migration — defines `branch`, `customers`, `materials`, `material_stock`, `invoices`, `measurements`, `orders`, `order_stages`, `order_repairs`, `order_stage_progress`. All primary keys are `UUID DEFAULT uuidv7()` — time-ordered (sortable/monotonic by creation, unlike `gen_random_uuid()`'s v4), which is why Postgres 18+ is required (see above).
 
-`measurements` is one flat row per visit (`measurement_date` plus 24 measurement columns) — repeat visits are repeat rows, which is exactly what the `json_agg (... ORDER BY m.measurement_date DESC)` aggregation below depends on. `material_stock` holds a quantity per material/location pair (`UNIQUE (material_id, branch_id)`) because a material can be stocked at more than one location.
+`measurements` is one flat row per visit (`measurement_date` plus 18 measurement columns) — repeat visits are repeat rows, which is exactly what the `json_agg (... ORDER BY m.measurement_date DESC)` aggregation below depends on. `material_stock` holds a quantity per material/location pair (`UNIQUE (material_id, branch_id)`) because a material can be stocked at more than one location.
 
 ## Order tracking and repairs
 

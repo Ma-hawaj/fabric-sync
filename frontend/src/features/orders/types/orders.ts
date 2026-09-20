@@ -1,3 +1,5 @@
+import type { Measurement } from '@/features/customers/types/customers'
+
 export type OrderStatus = 'pending' | 'received'
 export type InvoicePaymentStatus = 'unpaid' | 'partial' | 'paid'
 export type PaymentType = 'benefit' | 'cash' | 'card'
@@ -93,4 +95,21 @@ export interface Order {
   invoiceAdvanceAmount: number
   invoiceAdvancePaymentType: PaymentType | null
   invoiceFinalPaymentType: PaymentType | null
+}
+
+// Shape of GET /orders/:id — the whole order row plus the human-readable
+// invoice number the order's document is titled with, and the single
+// measurement snapshot the garment was cut to (the one the invoice's order
+// links to, not the customer's full history).
+export interface OrderDetail extends Order {
+  /**
+   * The invoice's human-readable identity (`INV-###`) — a tax invoice needs a
+   * number you can hand someone, and the uuidv7 order id gives neither.
+   */
+  invoiceNumber: number
+  /**
+   * The exact measurements taken for this garment. A repeat order cuts to a
+   * fresh snapshot, so this is one Measurement, not a list.
+   */
+  measurement: Measurement
 }

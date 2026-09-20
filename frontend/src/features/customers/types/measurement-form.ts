@@ -17,17 +17,10 @@ export interface MeasurementDraft {
   sleeveLength: NumberInput
   neck: NumberInput
   openHand: NumberInput
-  cuffling: string
-
-  fullBody: string
   chestUp: NumberInput
-  openFold: string
   cuffWidth: NumberInput
   neckWidth: NumberInput
   aramHole: NumberInput
-  sleeveHaffButton: string
-  buttonFold: string
-  fo: string
   foWidth: NumberInput
   frantPocketLength: NumberInput
   farntPocketLengthByWidth: string
@@ -48,16 +41,10 @@ export function createEmptyMeasurement(): MeasurementDraft {
     sleeveLength: '',
     neck: '',
     openHand: '',
-    cuffling: '',
-    fullBody: '',
     chestUp: '',
-    openFold: '',
     cuffWidth: '',
     neckWidth: '',
     aramHole: '',
-    sleeveHaffButton: '',
-    buttonFold: '',
-    fo: '',
     foWidth: '',
     frantPocketLength: '',
     farntPocketLengthByWidth: '',

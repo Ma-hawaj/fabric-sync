@@ -11,13 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
 import { CURRENCY } from '@/lib/currency'
 import { useLocations } from '@/features/locations/hooks/use-locations'
 import {
@@ -35,7 +28,12 @@ import { useSetAssignee } from '../hooks/use-set-assignee'
 import { useSetOrderStage } from '../hooks/use-set-order-stage'
 import { useUpdateOrder } from '../hooks/use-update-order'
 import { useUpdateRepair } from '../hooks/use-update-repair'
-import type { Order, OrderRepair, OrderStageEntry } from '../types/orders'
+import type {
+  Order,
+  OrderDetail,
+  OrderRepair,
+  OrderStageEntry,
+} from '../types/orders'
 
 // Base UI's Select reserves the empty string, so "nobody assigned" needs a
 // real sentinel value rather than ''.
@@ -46,46 +44,32 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: CURRENCY,
 })
 
-interface OrderTrackingSheetProps {
-  order: Order | null
-  onOpenChange: (open: boolean) => void
+interface OrderTrackingPanelProps {
+  order: OrderDetail
   onLogRepair: (order: Order) => void
 }
 
-export function OrderTrackingSheet({
+/**
+ * The working end of the order page — where the production people act on the
+ * order. Was once a drawer off the Orders list; on its own page it is plain
+ * sections, so the checklist, the assignees, the destination pickers and the
+ * repairs live (and refetch) right where the order is being managed.
+ */
+export function OrderTrackingPanel({
   order,
-  onOpenChange,
   onLogRepair,
-}: OrderTrackingSheetProps) {
+}: OrderTrackingPanelProps) {
   return (
-    <Sheet
-      open={order !== null}
-      onOpenChange={(open) => !open && onOpenChange(false)}
-    >
-      <SheetContent className="data-[side=right]:w-full data-[side=right]:sm:w-3/4 data-[side=right]:sm:max-w-[42vw] overflow-y-auto">
-        {order && (
-          <>
-            <SheetHeader>
-              <SheetTitle>Track Order</SheetTitle>
-              <SheetDescription>
-                {order.customerName} — {order.material}
-              </SheetDescription>
-            </SheetHeader>
-
-            <div className="space-y-6 px-6 pb-6">
-              <ProductionLocationPicker order={order} />
-              <Separator />
-              <section className="space-y-3">
-                <h3 className="text-sm font-semibold">Production</h3>
-                <StageChecklist order={order} stages={order.stages} />
-              </section>
-              <Separator />
-              <RepairsSection order={order} onLogRepair={onLogRepair} />
-            </div>
-          </>
-        )}
-      </SheetContent>
-    </Sheet>
+    <div className="space-y-6">
+      <ProductionLocationPicker order={order} />
+      <Separator />
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold">Production</h3>
+        <StageChecklist order={order} stages={order.stages} />
+      </section>
+      <Separator />
+      <RepairsSection order={order} onLogRepair={onLogRepair} />
+    </div>
   )
 }
 
@@ -126,7 +110,9 @@ function ProductionLocationPicker({ order }: { order: Order }) {
       <Select
         items={options}
         value={order.productionLocationId ?? ''}
-        onValueChange={(value: string) => void handleChange(value)}
+        onValueChange={(value) => {
+          if (value !== null) void handleChange(value)
+        }}
       >
         <SelectTrigger id="production-location" className="w-full">
           <SelectValue placeholder="Not assigned yet..." />
@@ -304,7 +290,9 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
           <Select
             items={destinationOptions}
             value={destination}
-            onValueChange={(value: string) => setDestination(value)}
+            onValueChange={(value) => {
+              if (value !== null) setDestination(value)
+            }}
           >
             <SelectTrigger
               id={`destination-${stage.stageId}`}
@@ -366,7 +354,7 @@ function AssigneePicker({
     <Select
       items={[{ value: UNASSIGNED, label: 'Unassigned' }, ...options]}
       value={stage.assigneeId ?? UNASSIGNED}
-      onValueChange={(value: string) => void handleChange(value)}
+      onValueChange={(value) => void handleChange(value ?? UNASSIGNED)}
     >
       <SelectTrigger
         id={`assignee-${stage.stageId}`}

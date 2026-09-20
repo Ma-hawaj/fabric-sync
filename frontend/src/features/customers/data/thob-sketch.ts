@@ -18,6 +18,9 @@ export const THOB_VIEW_BOX = `0 0 ${THOB_WIDTH} ${THOB_HEIGHT}`
 
 export const THOB_CENTER_X = 240
 
+/** Which silhouette a measurement is drawn against. */
+export type ThobView = 'front' | 'back'
+
 /** Outline: neck -> right shoulder -> right sleeve -> hem -> left sleeve -> neck. */
 export const THOB_OUTLINE =
   'M 258 46 C 272 47 286 50 300 60 L 354 252 L 324 268 L 290 146 L 314 430 ' +
@@ -46,6 +49,9 @@ export const THOB_MOBILE_POCKET = 'M 260 200 L 288 200 L 288 246 L 260 246 Z'
 
 /** Slash openings on both side seams. */
 export const THOB_SIDE_POCKETS = 'M 182 240 L 178 290 M 298 240 L 302 290'
+
+/** The stitch lines of the centre-back seam, on a back-of-thob view. */
+export const THOB_CENTER_BACK_SEAM = 'M 240 46 L 240 430'
 
 /** Cuff bands, one per sleeve. */
 export const THOB_CUFFS = 'M 133 227 L 163 243 M 347 227 L 317 243'

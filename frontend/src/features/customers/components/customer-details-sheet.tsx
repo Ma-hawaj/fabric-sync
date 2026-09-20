@@ -178,7 +178,9 @@ export function CustomerDetailsSheet({
                             }))
                             .filter(
                               ({ value }) =>
-                                value !== undefined && value !== '',
+                                value !== undefined &&
+                                value !== null &&
+                                value !== '',
                             )
                           if (recorded.length === 0) return null
 
@@ -188,7 +190,7 @@ export function CustomerDetailsSheet({
                                 <MetricItem
                                   key={field.name}
                                   label={field.label}
-                                  value={value}
+                                  value={value ?? undefined}
                                   onHover={() => setHoveredField(field.name)}
                                   onLeave={() => setHoveredField(null)}
                                 />

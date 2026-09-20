@@ -1,28 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { InvoiceDetailsSheet } from './invoice-details-sheet'
-import type { Invoice } from '../types/invoices'
-import type { InvoiceDetail } from '../types/invoice-detail'
+import { InvoiceDetailPage } from './invoice-detail'
+import type { InvoiceDetail } from './types/invoice-detail'
 
 const navigateMock = vi.fn()
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigateMock,
+  Link: ({
+    children,
+    to,
+    className,
+  }: {
+    children: React.ReactNode
+    to: string
+    className?: string
+  }) => (
+    <a href={to} className={className}>
+      {children}
+    </a>
+  ),
 }))
-
-const INVOICE: Invoice = {
-  id: 'inv-1',
-  date: '2026-07-28',
-  customers: [{ name: 'Ahmed Al-Mansoori', mobileNo: '+973-3311-2233' }],
-  itemCount: 3,
-  materials: ['Japanese Toray Cotton'],
-  totalPrice: 310,
-  paymentStatus: 'partial',
-  amountPaid: 60,
-  advanceAmount: 60,
-  advancePaymentType: 'benefit',
-  finalPaymentType: null,
-}
 
 const DETAIL: InvoiceDetail = {
   id: 'inv-1',
@@ -78,31 +76,32 @@ const DETAIL: InvoiceDetail = {
   },
 }
 
-function renderSheet(detail: InvoiceDetail | null) {
+function renderPage(detail: InvoiceDetail | null) {
   const client = new QueryClient()
   if (detail) {
-    client.setQueryData(['invoices', INVOICE.id], detail)
+    client.setQueryData(['invoices', detail.id], detail)
   }
   return render(
     <QueryClientProvider client={client}>
-      <InvoiceDetailsSheet invoice={INVOICE} onOpenChange={() => {}} />
+      <InvoiceDetailPage invoiceId="inv-1" />
     </QueryClientProvider>,
   )
 }
 
-describe('InvoiceDetailsSheet', () => {
+describe('InvoiceDetailPage', () => {
   beforeEach(() => {
     navigateMock.mockClear()
   })
 
-  it('titles the sheet with the human-readable invoice number', () => {
-    renderSheet(DETAIL)
+  it('titles the page with the human-readable invoice number', () => {
+    renderPage(DETAIL)
 
     expect(screen.queryByText('Invoice INV-42')).toBeTruthy()
+    expect(screen.queryByText(/Manama Main Branch/)).toBeTruthy()
   })
 
   it('lists every line with its specification and type', () => {
-    renderSheet(DETAIL)
+    renderPage(DETAIL)
 
     expect(screen.queryByText('Japanese Toray Cotton')).toBeTruthy()
     expect(screen.queryByText('Thobe: Saudi · Collar: Classic')).toBeTruthy()
@@ -112,7 +111,7 @@ describe('InvoiceDetailsSheet', () => {
   })
 
   it('shows the VAT rate and the balance still owed', () => {
-    renderSheet(DETAIL)
+    renderPage(DETAIL)
 
     expect(screen.queryByText('VAT (10%)')).toBeTruthy()
     expect(screen.queryByText('Gift cards sold')).toBeTruthy()
@@ -120,27 +119,25 @@ describe('InvoiceDetailsSheet', () => {
   })
 
   it('waits for the line items rather than rendering an empty invoice', () => {
-    // The list row that opens the sheet carries no lines, so until the detail
-    // query resolves there is nothing to show but the header.
-    renderSheet(null)
+    renderPage(null)
 
     expect(screen.queryByText('Loading invoice details...')).toBeTruthy()
     expect(screen.queryByText('Balance due')).toBeNull()
   })
 
-  it("sends a tailoring line to that order's tracking sheet on the Orders page", () => {
-    renderSheet(DETAIL)
+  it("sends a tailoring line to that order's detail page", () => {
+    renderPage(DETAIL)
 
     fireEvent.click(screen.getByText('Japanese Toray Cotton'))
 
     expect(navigateMock).toHaveBeenCalledWith({
-      to: '/orders',
-      search: { trackOrderId: 'order-1' },
+      to: '/orders/$orderId',
+      params: { orderId: 'order-1' },
     })
   })
 
   it('does not wire up a click for a gift card line, which has no order', () => {
-    renderSheet(DETAIL)
+    renderPage(DETAIL)
 
     fireEvent.click(screen.getByText('Gift card GC-2026-A1'))
 

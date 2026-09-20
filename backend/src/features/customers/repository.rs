@@ -53,6 +53,28 @@ pub async fn get_customer(
     Ok(fetch_customers(state, Some(customer_id)).await?.pop())
 }
 
+/// The measurement record that backs an order — the snapshot captured when its
+/// invoice was created. The orders feature reads it to show the exact
+/// measurements a garment was cut to.
+pub async fn get_measurement(
+    state: &AppState,
+    measurement_id: Uuid,
+) -> Result<Option<Measurement>, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        SELECT
+            to_jsonb(m) AS "measurement!: Json<Measurement>"
+        FROM measurements m
+        WHERE m.id = $1
+        "#,
+        measurement_id,
+    )
+    .fetch_optional(state.db())
+    .await?;
+
+    Ok(row.map(|row| row.measurement.0))
+}
+
 // Also used by the invoices feature, which records a measurement snapshot per
 // customer inside its own transaction and needs the new row's id for orders.
 pub async fn insert_measurement(
@@ -65,18 +87,16 @@ pub async fn insert_measurement(
         INSERT INTO measurements (
             customer_id, measurement_date,
             length_fl, length_bl, chest, waist, hips, shoulder, sleeve_length,
-            neck, open_hand, cuffling,
-            full_body, chest_up, open_fold, cuff_width, neck_width, aram_hole,
-            sleeve_haff_button, button_fold, fo, fo_width, frant_pocket_length,
+            neck, open_hand, chest_up, cuff_width, neck_width, aram_hole,
+            fo_width, frant_pocket_length,
             farnt_pocket_length_by_width, side_pocket, mobile_pocket_length_by_width
         )
         VALUES (
             $1, $2,
             $3::float8, $4::float8, $5::float8, $6::float8, $7::float8, $8::float8, $9::float8,
-            $10::float8, $11::float8, $12,
-            $13, $14::float8, $15, $16::float8, $17::float8, $18::float8,
-            $19, $20, $21, $22::float8, $23::float8,
-            $24, $25, $26
+            $10::float8, $11::float8, $12::float8, $13::float8, $14::float8, $15::float8,
+            $16::float8, $17::float8,
+            $18, $19, $20
         )
         RETURNING id
         "#,
@@ -91,16 +111,10 @@ pub async fn insert_measurement(
         measurement.sleeve_length,
         measurement.neck,
         measurement.open_hand,
-        measurement.cuffling,
-        measurement.full_body,
         measurement.chest_up,
-        measurement.open_fold,
         measurement.cuff_width,
         measurement.neck_width,
         measurement.aram_hole,
-        measurement.sleeve_haff_button,
-        measurement.button_fold,
-        measurement.fo,
         measurement.fo_width,
         measurement.frant_pocket_length,
         measurement.farnt_pocket_length_by_width,
@@ -123,11 +137,9 @@ pub async fn latest_measurement(
             id, measurement_date,
             length_fl::float8, length_bl::float8, chest::float8, waist::float8,
             hips::float8, shoulder::float8, sleeve_length::float8,
-            neck::float8, open_hand::float8, cuffling,
-            full_body, chest_up::float8, open_fold, cuff_width::float8,
-            neck_width::float8, aram_hole::float8,
-            sleeve_haff_button, button_fold, fo, fo_width::float8,
-            frant_pocket_length::float8,
+            neck::float8, open_hand::float8, chest_up::float8,
+            cuff_width::float8, neck_width::float8, aram_hole::float8,
+            fo_width::float8, frant_pocket_length::float8,
             farnt_pocket_length_by_width, side_pocket, mobile_pocket_length_by_width
         FROM measurements
         WHERE customer_id = $1
@@ -153,16 +165,10 @@ pub async fn latest_measurement(
                 sleeve_length: row.sleeve_length,
                 neck: row.neck,
                 open_hand: row.open_hand,
-                cuffling: row.cuffling,
-                full_body: row.full_body,
                 chest_up: row.chest_up,
-                open_fold: row.open_fold,
                 cuff_width: row.cuff_width,
                 neck_width: row.neck_width,
                 aram_hole: row.aram_hole,
-                sleeve_haff_button: row.sleeve_haff_button,
-                button_fold: row.button_fold,
-                fo: row.fo,
                 fo_width: row.fo_width,
                 frant_pocket_length: row.frant_pocket_length,
                 farnt_pocket_length_by_width: row.farnt_pocket_length_by_width,

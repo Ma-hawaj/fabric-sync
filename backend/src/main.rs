@@ -1,6 +1,7 @@
 mod app;
 mod auth;
 mod config;
+mod document;
 mod error;
 mod features;
 mod request_log;

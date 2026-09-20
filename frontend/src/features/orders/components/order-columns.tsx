@@ -45,7 +45,7 @@ export function getOrderColumns(
   materialOptions: { label: string; value: string }[],
   stageOptions: { label: string; value: string }[],
   onReceive: (order: Order) => void,
-  onTrack: (order: Order) => void,
+  onOpen: (order: Order) => void,
 ): ColumnDef<Order, any>[] {
   return [
     {
@@ -374,10 +374,10 @@ export function getOrderColumns(
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onTrack(order)}
+              onClick={() => onOpen(order)}
               className="h-8 w-auto px-2"
             >
-              Track
+              Details
             </Button>
             <Button
               variant="ghost"

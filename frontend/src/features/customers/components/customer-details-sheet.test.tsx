@@ -15,7 +15,7 @@ const CUSTOMER: Customer = {
       date: new Date('2026-07-01'),
       chest: 108,
       sleeveLength: 62,
-      cuffling: 'Cufflink',
+      foWidth: 8,
     },
   ],
 }
@@ -46,7 +46,9 @@ describe('CustomerDetailsSheet', () => {
     renderSheet(CUSTOMER)
 
     expect(
-      screen.queryByLabelText('Thob sketch with measurement guides'),
+      screen.queryByLabelText(
+        'Thob sketch, front view, with measurement guides',
+      ),
     ).toBeTruthy()
   })
 })
