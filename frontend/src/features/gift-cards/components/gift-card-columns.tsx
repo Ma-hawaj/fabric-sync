@@ -1,8 +1,8 @@
 import { BanIcon, RotateCcwIcon } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
+import { RowActions } from '@/components/data-table/row-actions'
 import { CURRENCY } from '@/lib/currency'
 import { giftCardStatus } from '../lib/gift-card-status'
 import type { GiftCard } from '../types/gift-card'
@@ -168,21 +168,22 @@ export const getGiftCardColumns = (
   {
     id: 'actions',
     header: 'Actions',
-    cell: ({ row }) => (
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={isToggling}
-        onClick={() => onToggleActive(row.original)}
-        className="h-8 w-auto px-2"
-      >
-        {row.original.isActive ? (
-          <BanIcon className="mr-1.5 h-4 w-4" />
-        ) : (
-          <RotateCcwIcon className="mr-1.5 h-4 w-4" />
-        )}
-        {row.original.isActive ? 'Void' : 'Restore'}
-      </Button>
-    ),
+    enablePinning: true,
+    cell: ({ row }) => {
+      const card = row.original
+      return (
+        <RowActions
+          items={[
+            {
+              label: card.isActive ? 'Void' : 'Restore',
+              icon: card.isActive ? BanIcon : RotateCcwIcon,
+              disabled: isToggling,
+              destructive: card.isActive,
+              onClick: () => onToggleActive(card),
+            },
+          ]}
+        />
+      )
+    },
   },
 ]

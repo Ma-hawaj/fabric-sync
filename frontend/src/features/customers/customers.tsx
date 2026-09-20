@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { useDataTable } from '@/hooks/use-data-table'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
@@ -8,6 +9,7 @@ import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getCustomerColumns } from './components/customer-columns'
 import { CustomerDetailsSheet } from './components/customer-details-sheet'
 import { useCustomers } from './hooks/use-customers'
+import { printMeasurements } from './lib/print-measurements'
 import type { Customer } from './types/customers'
 
 export function CustomersPage() {
@@ -15,9 +17,20 @@ export function CustomersPage() {
   const [selectedCustomer, setSelectedCustomer] =
     React.useState<Customer | null>(null)
 
+  const printCustomer = React.useCallback((customer: Customer) => {
+    const measurement = customer.measurements[0]
+    const pending = printMeasurements(customer, measurement)
+    toast.promise(pending, {
+      loading: 'Preparing measurements...',
+      success: 'Print dialog opened.',
+      error: 'Failed to generate measurement document.',
+    })
+    void pending
+  }, [])
+
   const columns = React.useMemo(
-    () => getCustomerColumns(setSelectedCustomer),
-    [],
+    () => getCustomerColumns(setSelectedCustomer, printCustomer),
+    [printCustomer],
   )
 
   const { table } = useDataTable({
