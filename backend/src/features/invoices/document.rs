@@ -32,15 +32,6 @@ const DEFAULT_TEMPLATE: &str = include_str!("../../../templates/invoice.html");
 
 const TEMPLATE_NAME: &str = "invoice.html";
 
-/// Currency of the printed amounts. Single-valued by design, matching
-/// `CURRENCY` in the frontend's `src/lib/currency.ts`.
-const CURRENCY: &str = "BHD";
-
-/// Fils, not cents: BHD is a three-decimal currency. Amounts are still stored
-/// and computed to two places (`NUMERIC(10, 2)`), so this only affects how
-/// they are written out.
-const CURRENCY_DECIMALS: usize = 3;
-
 /// The order design slots, in the order they render on the document. The value
 /// in each column is looked up against the catalog; a stored value that
 /// matches nothing (older orders predate the catalog) prints as a text-only
