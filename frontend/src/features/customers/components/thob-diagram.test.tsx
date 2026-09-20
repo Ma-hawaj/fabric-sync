@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { ThobDiagram } from './thob-diagram'
+import { ThobDiagram, layoutCaptions } from './thob-diagram'
 import {
   MEASUREMENT_FIELDS,
   RESTING_MARKER_FIELDS,
+  fieldsInView,
 } from '../data/measurement-fields'
 import { THOB_HEIGHT, THOB_WIDTH } from '../data/thob-sketch'
 import { createEmptyMeasurement } from '../types/measurement-form'
@@ -28,10 +29,10 @@ describe('ThobDiagram', () => {
 
   it('labels a non-numeric field without a unit', () => {
     render(
-      <ThobDiagram activeField="cuffling" values={{ cuffling: 'Cufflink' }} />,
+      <ThobDiagram activeField="sidePocket" values={{ sidePocket: 'Both' }} />,
     )
 
-    expect(screen.queryByText('Cuffling · Cufflink')).toBeTruthy()
+    expect(screen.queryByText('Side Pocket · Both')).toBeTruthy()
   })
 
   it('falls back to the label alone when the value is blank', () => {
@@ -69,6 +70,59 @@ describe('ThobDiagram', () => {
     expect(x).toBeGreaterThanOrEqual(0)
     expect(x + width).toBeLessThanOrEqual(THOB_WIDTH)
   })
+
+  it('draws every front view callout in template mode', () => {
+    render(<ThobDiagram view="front" showRecorded />)
+
+    for (const field of fieldsInView('front')) {
+      expect(screen.queryByTestId(`callout-${field.name}`)).toBeTruthy()
+    }
+    expect(screen.queryByTestId('callout-lengthBl')).toBeNull()
+  })
+
+  it('draws every back view callout in template mode', () => {
+    render(<ThobDiagram view="back" showRecorded />)
+
+    for (const field of fieldsInView('back')) {
+      expect(screen.queryByTestId(`callout-${field.name}`)).toBeTruthy()
+    }
+    expect(screen.queryByTestId('callout-frantPocketLength')).toBeNull()
+  })
+
+  it('labels template callouts with the recorded value', () => {
+    render(
+      <ThobDiagram
+        view="front"
+        showRecorded
+        values={{ lengthFl: 120, frantPocketLength: 9 }}
+      />,
+    )
+    expect(screen.queryByText('120 inch · Front Length')).toBeTruthy()
+    expect(screen.queryByText('9 inch · Front Pocket')).toBeTruthy()
+  })
+
+  it('keeps every template caption box from overlapping on both views', () => {
+    const values = { lengthFl: 120, waist: 96, chest: 50 }
+    for (const view of ['front', 'back'] as const) {
+      const captions = layoutCaptions(fieldsInView(view), values)
+      const rects = [...captions.values()]
+      for (const rect of rects) {
+        expect(rect.x).toBeGreaterThanOrEqual(0)
+        expect(rect.y).toBeGreaterThanOrEqual(0)
+        expect(rect.x + rect.w).toBeLessThanOrEqual(THOB_WIDTH)
+        expect(rect.y + 20).toBeLessThanOrEqual(THOB_HEIGHT)
+      }
+      for (let i = 0; i < rects.length; i++) {
+        for (let j = i + 1; j < rects.length; j++) {
+          const a = rects[i]
+          const b = rects[j]
+          const clearsX = a.x + a.w <= b.x || b.x + b.w <= a.x
+          const clearsY = a.y + 20 <= b.y || b.y + 20 <= a.y
+          expect(clearsX || clearsY).toBe(true)
+        }
+      }
+    }
+  })
 })
 
 describe('measurement field data', () => {
@@ -80,6 +134,14 @@ describe('measurement field data', () => {
     expect(MEASUREMENT_FIELDS.map((field) => field.name).sort()).toEqual(
       drafted.sort(),
     )
+  })
+
+  it('assigns every field to a silhouette view, with both populated', () => {
+    for (const field of MEASUREMENT_FIELDS) {
+      expect(['front', 'back']).toContain(field.view)
+    }
+    expect(fieldsInView('front')).not.toHaveLength(0)
+    expect(fieldsInView('back')).not.toHaveLength(0)
   })
 
   it('anchors every callout inside the sketch', () => {

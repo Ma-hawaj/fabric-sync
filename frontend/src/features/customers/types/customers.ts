@@ -13,18 +13,12 @@ export interface Measurement {
   sleeveLength?: number
   neck?: number
   openHand?: number
-  cuffling?: string
 
   // Extra Details
-  fullBody?: string
   chestUp?: number
-  openFold?: string
   cuffWidth?: number
   neckWidth?: number
   aramHole?: number
-  sleeveHaffButton?: string
-  buttonFold?: string
-  fo?: string
   foWidth?: number
   frantPocketLength?: number
   farntPocketLengthByWidth?: string

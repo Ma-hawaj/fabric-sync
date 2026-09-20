@@ -8,7 +8,7 @@ function makeSnapshot(overrides: Partial<Measurement> = {}): Measurement {
     customerId: 'c1',
     date: new Date('2026-07-01'),
     chest: 108,
-    cuffling: 'Double Cuff',
+    farntPocketLengthByWidth: '16x14',
     ...overrides,
   }
 }
@@ -19,7 +19,7 @@ describe('measurementFromSnapshot', () => {
     const draft = measurementFromSnapshot(snapshot)
     expect(draft.loadedFromId).toBe('m1')
     expect(draft.chest).toBe(108)
-    expect(draft.cuffling).toBe('Double Cuff')
+    expect(draft.farntPocketLengthByWidth).toBe('16x14')
   })
 
   it("dates the draft today, not the snapshot's original date", () => {
@@ -29,10 +29,13 @@ describe('measurementFromSnapshot', () => {
   })
 
   it('fills unset numeric/string fields with blanks, not undefined or 0', () => {
-    const snapshot = makeSnapshot({ chest: undefined, cuffling: undefined })
+    const snapshot = makeSnapshot({
+      chest: undefined,
+      farntPocketLengthByWidth: undefined,
+    })
     const draft = measurementFromSnapshot(snapshot)
     expect(draft.chest).toBe('')
-    expect(draft.cuffling).toBe('')
+    expect(draft.farntPocketLengthByWidth).toBe('')
   })
 
   it('returns a blank draft with no loadedFromId when given null', () => {

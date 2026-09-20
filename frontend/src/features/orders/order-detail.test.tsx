@@ -115,6 +115,11 @@ describe('OrderDetailPage', () => {
     expect(screen.queryByText('120')).toBeTruthy()
     expect(screen.queryByText('Chest')).toBeTruthy()
     expect(screen.queryByText('50')).toBeTruthy()
+
+    // The measurement template draws the thob from both silhouettes.
+    expect(screen.queryByText('Front of Thob')).toBeTruthy()
+    expect(screen.queryByText('Back of Thob')).toBeTruthy()
+    expect(screen.queryByText('120 inch · Front Length')).toBeTruthy()
   })
 
   it('renders the production checklist with its stages', () => {

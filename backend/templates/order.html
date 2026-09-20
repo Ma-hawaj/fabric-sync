@@ -18,6 +18,22 @@
     amounts   — every money/quantity figure, pre-formatted; keys: materialAmount,
                 price, total, advanceAmount, amountPaid, balanceDue, repair<N>
                 (where <N> is the zero-based index in order.repairs)
+    thob_garment — the base thob drawing envelopes: outline, collar, placket,
+                chestPocket, mobilePocket, sidePockets, cuffs, centerBackSeam,
+                buttons and sleeveButtons. Every caller (the two views, and the
+                callout shapes) reads from here — edit it once, both panels move.
+    thob_markers — per-measurement geometry, keyed by field name: dims
+                (double-headed arrows), guides (leader lines), shapes (garment
+                parts re-drawn in the accent colour), dots, and label (where the
+                caption is anchored).
+    thob_front_fields / thob_back_fields — the 15 front / 9 back field names, in
+                diagram order; loop over these to call out every marker.
+    thob_front_captions / thob_back_captions — per-field laid-out caption boxes,
+                keyed by field name: x, y, w and the finished text. Positions
+                come from the Rust layout (mirroring thob-diagram.tsx), so the
+                printed labels never overlap and their text is always the same
+                as the screen's: "120 inch · Front Length", or just the short
+                label when a field wasn't recorded.
 #}
 {%- set order_status_labels = {
   "pending": ("قيد التصنيع", "Pending"),
@@ -56,23 +72,52 @@
   "neck": ("الرقبة", "Neck"),
   "neckWidth": ("عرض الرقبة", "Neck Width"),
   "openHand": ("فتحة اليد", "Open Hand"),
-  "cuffling": ("الأسوارة", "Cuffling"),
   "cuffWidth": ("عرض الأسوارة", "Cuff Width"),
   "aramHole": ("فتحة الإبط", "Armhole"),
-  "fullBody": ("الصدر (كامل)", "Full Body"),
-  "openFold": ("فتحة الطية", "Open Fold"),
-  "sleeveHaffButton": ("زر الكم", "Sleeve Button"),
-  "buttonFold": ("طية الزر", "Button Fold"),
-  "fo": ("فو", "FO"),
   "foWidth": ("عرض الفو", "FO Width"),
   "frantPocketLength": ("طول الجيب الأمامي", "Front Pocket Length"),
   "farntPocketLengthByWidth": ("الجيب الأمامي بالعرض", "Front Pocket By Width"),
   "sidePocket": ("الجيب الجانبي", "Side Pocket"),
   "mobilePocketLengthByWidth": ("جيب الجوال بالعرض", "Mobile Pocket By Width")
 } -%}
-{%- set body_measurements = ["lengthFl", "lengthBl", "shoulder", "chest", "chestUp", "waist", "hips", "sleeveLength", "neck", "neckWidth", "openHand", "cuffling", "cuffWidth", "aramHole", "fullBody", "openFold"] -%}
+{%- set body_measurements = ["lengthFl", "lengthBl", "shoulder", "chest", "chestUp", "waist", "hips", "sleeveLength", "neck", "neckWidth", "openHand", "cuffWidth", "aramHole"] -%}
 {%- set pocket_measurements = ["frantPocketLength", "farntPocketLengthByWidth", "sidePocket", "mobilePocketLengthByWidth"] -%}
-{%- set style_measurements = ["sleeveHaffButton", "buttonFold", "fo", "foWidth"] -%}
+{%- set style_measurements = ["foWidth"] -%}
+
+{# The thob template: the garment is drawn from the front and the back, so no
+   single silhouette carries all 18 callouts. All the drawing logic lives in
+   document.rs and arrives here as data (thob_garment, thob_markers, the view
+   field lists and the laid-out captions) — the template has nothing to
+   compute, it only renders. See the context description at the top of this
+   file for the shapes of each bundle. #}
+{%- macro thob_callout(marker, caption, arrow_id) -%}
+  <g class="thob-callout">
+    {%- if marker.shapes -%}
+      {%- for shape in marker.shapes -%}
+        <path class="thob-shape" d="{{ shape }}" />
+      {%- endfor -%}
+    {%- endif -%}
+    {%- if marker.dots -%}
+      {%- for dot in marker.dots -%}
+        <circle class="thob-dot" cx="{{ dot.cx }}" cy="{{ dot.cy }}" r="2.5" />
+      {%- endfor -%}
+    {%- endif -%}
+    {%- if marker.guides -%}
+      {%- for guide in marker.guides -%}
+        <line class="thob-guide" x1="{{ guide.x1 }}" y1="{{ guide.y1 }}" x2="{{ guide.x2 }}" y2="{{ guide.y2 }}" />
+      {%- endfor -%}
+    {%- endif -%}
+    {%- if marker.dims -%}
+      {%- for dim in marker.dims -%}
+        <line class="thob-dim" x1="{{ dim.x1 }}" y1="{{ dim.y1 }}" x2="{{ dim.x2 }}" y2="{{ dim.y2 }}" marker-start="url(#{{ arrow_id }})" marker-end="url(#{{ arrow_id }})" />
+      {%- endfor -%}
+    {%- endif -%}
+    <g class="thob-caption">
+      <rect x="{{ caption.x }}" y="{{ caption.y }}" width="{{ caption.w }}" height="20" rx="4" />
+      <text x="{{ caption.x + caption.w / 2 }}" y="{{ caption.y + 14 }}" class="thob-caption-text">{{ caption.text }}</text>
+    </g>
+  </g>
+{%- endmacro -%}
 <!doctype html>
 <html lang="ar" dir="rtl">
   <head>
@@ -343,6 +388,103 @@
         font-weight: 600;
       }
 
+      .thob-sheet {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .thob-panel {
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: var(--tint);
+      }
+
+      .thob-panel h3 {
+        margin: 0 0 2px;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .thob-svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .thob-outline {
+        fill: #fff;
+        stroke: var(--ink);
+        stroke-width: 1.5;
+        stroke-linejoin: round;
+      }
+
+      .thob-detail {
+        fill: none;
+        stroke: var(--muted);
+        stroke-width: 1;
+        stroke-linejoin: round;
+      }
+
+      .thob-seam {
+        fill: none;
+        stroke: var(--muted);
+        stroke-width: 0.8;
+        stroke-dasharray: 4 3;
+        stroke-linejoin: round;
+      }
+
+      .thob-button {
+        fill: var(--ink);
+      }
+
+      /* Only the active callout's copy of a garment feature lights up in the
+         accent colour; the base drawing above stays muted. */
+      .thob-guide {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 0.8;
+        stroke-linecap: round;
+      }
+
+      .thob-dim {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 1.1;
+      }
+
+      .thob-shape {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 1.1;
+        stroke-linejoin: round;
+      }
+
+      .thob-dot {
+        fill: var(--accent);
+      }
+
+      .thob-caption rect {
+        fill: #fff;
+        stroke: var(--rule);
+      }
+
+      .thob-caption text {
+        font-family: inherit;
+        text-anchor: middle;
+      }
+
+      .thob-caption-text {
+        font-size: 8.5px;
+        font-weight: 600;
+        fill: var(--ink);
+      }
+
       .closing {
         break-inside: avoid;
         margin-top: 10px;
@@ -511,6 +653,58 @@
 
     <h2 class="section-title">المقاسات المسجلة · Measurements</h2>
     {# One snapshot per order — the measurements the garment was cut to. #}
+    <div class="thob-sheet">
+      <div class="thob-panel">
+        <h3>واجهة الثوب · Front of Thob</h3>
+        <svg class="thob-svg" viewBox="0 0 480 500" role="img" aria-label="Front view measurement chart">
+          <defs>
+            <marker id="thob-arrow-f" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M 0 0 L 8 4 L 0 8 Z" fill="#1d4ed8" />
+            </marker>
+          </defs>
+          <g>
+            <path class="thob-outline" d="{{ thob_garment.outline }}" />
+            <path class="thob-detail" d="{{ thob_garment.collar }}" />
+            <path class="thob-detail" d="{{ thob_garment.placket }}" />
+            <path class="thob-seam" d="{{ thob_garment.mobilePocket }}" />
+            <path class="thob-detail" d="{{ thob_garment.chestPocket }}" />
+            <path class="thob-detail" d="{{ thob_garment.sidePockets }}" />
+            <path class="thob-detail" d="{{ thob_garment.cuffs }}" />
+            {%- for button in thob_garment.buttons %}
+              <circle class="thob-button" cx="{{ button.cx }}" cy="{{ button.cy }}" r="2.5" />
+            {%- endfor %}
+            {%- for button in thob_garment.sleeveButtons %}
+              <circle class="thob-button" cx="{{ button.cx }}" cy="{{ button.cy }}" r="2.5" />
+            {%- endfor %}
+          </g>
+          {%- for field in thob_front_fields %}
+            {{ thob_callout(thob_markers[field], thob_front_captions[field], "thob-arrow-f") }}
+          {%- endfor %}
+        </svg>
+      </div>
+      <div class="thob-panel">
+        <h3>خلف الثوب · Back of Thob</h3>
+        <svg class="thob-svg" viewBox="0 0 480 500" role="img" aria-label="Back view measurement chart">
+          <defs>
+            <marker id="thob-arrow-b" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M 0 0 L 8 4 L 0 8 Z" fill="#1d4ed8" />
+            </marker>
+          </defs>
+          <g>
+            <path class="thob-outline" d="{{ thob_garment.outline }}" />
+            <path class="thob-detail" d="{{ thob_garment.collar }}" />
+            <path class="thob-detail" d="{{ thob_garment.cuffs }}" />
+            <path class="thob-seam" d="{{ thob_garment.centerBackSeam }}" />
+            {%- for button in thob_garment.sleeveButtons %}
+              <circle class="thob-button" cx="{{ button.cx }}" cy="{{ button.cy }}" r="2.5" />
+            {%- endfor %}
+          </g>
+          {%- for field in thob_back_fields %}
+            {{ thob_callout(thob_markers[field], thob_back_captions[field], "thob-arrow-b") }}
+          {%- endfor %}
+        </svg>
+      </div>
+    </div>
     <div class="measurements">
       <div class="measurement-group">
         <h3>مقاسات الجسم · Body dimensions</h3>
