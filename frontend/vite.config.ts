@@ -28,12 +28,6 @@ const config = defineConfig({
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
-      '/zitadel': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-        secure: false,
-        // rewrite: (path) => path.replace(/^\/zitadel/, ''),
-      },
     },
   },
 })
