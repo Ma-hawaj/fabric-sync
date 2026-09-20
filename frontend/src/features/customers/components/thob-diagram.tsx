@@ -72,9 +72,10 @@ function clamp(value: number, min: number, max: number) {
 }
 
 /**
- * The compact caption used on read-only templates, where every field of a
- * silhouette is drawn at once. One value + a short label, so boxes stay small
- * enough to fit beside each other; the entry form still uses `calloutText`.
+ * The compact caption used on read-only templates. One value + a short label,
+ * so boxes stay small enough to fit beside each other; the entry form still
+ * uses `calloutText`. Only recorded values reach it — `layoutCaptions` skips
+ * fields the snapshot didn't capture.
  */
 export function diagramCaption(
   field: MeasurementField,
@@ -85,6 +86,11 @@ export function diagramCaption(
   }
   const unit = field.input.kind === 'number' ? ` ${MEASUREMENT_UNIT}` : ''
   return `${value}${unit} · ${field.diagramLabel}`
+}
+
+/** `true` when the snapshot actually captured a value for this field. */
+function isRecorded(value: string | number | null | undefined) {
+  return value !== undefined && value !== null && value !== ''
 }
 
 /**
@@ -110,19 +116,23 @@ function rectsOverlap(
 }
 
 /**
- * Places one compact caption per field for `view`, nudging boxes up or down
- * until none overlaps another (all boxes stay inside the frame). Deterministic:
- * fields are placed in the order they read top-to-bottom on the sketch.
+ * Places one compact caption per recorded field for `view`, nudging boxes up
+ * or down until none overlaps another (all boxes stay inside the frame).
+ * Fields the snapshot didn't capture are skipped entirely, matching the Rust
+ * layout in `backend/features/orders/document.rs`. Deterministic: fields are
+ * placed in the order they read top-to-bottom on the sketch.
  */
 export function layoutCaptions(
   fields: MeasurementField[],
   values: MeasurementValues | undefined,
 ): Map<MeasurementFieldName, DiagramCaption> {
-  const byVertical = [...fields].sort(
-    (a, b) =>
-      a.marker.label.y - b.marker.label.y ||
-      a.marker.label.x - b.marker.label.x,
-  )
+  const byVertical = [...fields]
+    .filter((field) => isRecorded(values?.[field.name]))
+    .sort(
+      (a, b) =>
+        a.marker.label.y - b.marker.label.y ||
+        a.marker.label.x - b.marker.label.x,
+    )
   const placed: { x: number; y: number; w: number; h: number }[] = []
   const captions = new Map<MeasurementFieldName, DiagramCaption>()
 
@@ -325,7 +335,7 @@ export function ThobDiagram({
   const isBack = view === 'back'
   const active = activeField ? measurementField(activeField) : undefined
   const shown = showRecorded
-    ? fieldsInView(view)
+    ? fieldsInView(view).filter((field) => isRecorded(values?.[field.name]))
     : active
       ? [active]
       : MEASUREMENT_FIELDS.filter((field) =>
@@ -402,7 +412,10 @@ export function ThobDiagram({
             />
           </>
         )}
-        {[...THOB_BUTTONS, ...THOB_SLEEVE_BUTTONS].map((button) => (
+        {(isBack
+          ? THOB_SLEEVE_BUTTONS
+          : [...THOB_BUTTONS, ...THOB_SLEEVE_BUTTONS]
+        ).map((button) => (
           <circle
             key={`${button.cx}-${button.cy}`}
             cx={button.cx}

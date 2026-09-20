@@ -4,26 +4,26 @@ export interface Measurement {
   date: Date
 
   // Body Dimensions
-  lengthFl?: number
-  lengthBl?: number
-  chest?: number
-  waist?: number
-  hips?: number
-  shoulder?: number
-  sleeveLength?: number
-  neck?: number
-  openHand?: number
+  lengthFl?: number | null
+  lengthBl?: number | null
+  chest?: number | null
+  waist?: number | null
+  hips?: number | null
+  shoulder?: number | null
+  sleeveLength?: number | null
+  neck?: number | null
+  openHand?: number | null
 
   // Extra Details
-  chestUp?: number
-  cuffWidth?: number
-  neckWidth?: number
-  aramHole?: number
-  foWidth?: number
-  frantPocketLength?: number
-  farntPocketLengthByWidth?: string
-  sidePocket?: string
-  mobilePocketLengthByWidth?: string
+  chestUp?: number | null
+  cuffWidth?: number | null
+  neckWidth?: number | null
+  aramHole?: number | null
+  foWidth?: number | null
+  frantPocketLength?: number | null
+  farntPocketLengthByWidth?: string | null
+  sidePocket?: string | null
+  mobilePocketLengthByWidth?: string | null
 }
 
 export interface Customer {

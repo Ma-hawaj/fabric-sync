@@ -10,13 +10,23 @@ import { THOB_HEIGHT, THOB_WIDTH } from '../data/thob-sketch'
 import { createEmptyMeasurement } from '../types/measurement-form'
 
 describe('ThobDiagram', () => {
-  it('shows the resting callouts when no field is active', () => {
+  it('shows only the resting callouts when no field is active', () => {
     render(<ThobDiagram />)
 
     for (const name of RESTING_MARKER_FIELDS) {
       expect(screen.queryByTestId(`callout-${name}`)).toBeTruthy()
     }
     expect(screen.queryByTestId('callout-waist')).toBeNull()
+  })
+
+  it('hides the front placket buttons on the back view', () => {
+    const { container } = render(<ThobDiagram view="front" />)
+    expect(container.querySelectorAll('circle')).toHaveLength(6)
+  })
+
+  it('keeps sleeve buttons but no placket buttons on the back view', () => {
+    const { container } = render(<ThobDiagram view="back" />)
+    expect(container.querySelectorAll('circle')).toHaveLength(2)
   })
 
   it('shows only the active field, labelled with its value', () => {
@@ -71,22 +81,46 @@ describe('ThobDiagram', () => {
     expect(x + width).toBeLessThanOrEqual(THOB_WIDTH)
   })
 
-  it('draws every front view callout in template mode', () => {
+  it('draws no callouts in template mode when nothing is recorded', () => {
     render(<ThobDiagram view="front" showRecorded />)
 
     for (const field of fieldsInView('front')) {
-      expect(screen.queryByTestId(`callout-${field.name}`)).toBeTruthy()
+      expect(screen.queryByTestId(`callout-${field.name}`)).toBeNull()
     }
     expect(screen.queryByTestId('callout-lengthBl')).toBeNull()
   })
 
-  it('draws every back view callout in template mode', () => {
-    render(<ThobDiagram view="back" showRecorded />)
+  it('draws template callouts only for recorded fields', () => {
+    render(
+      <ThobDiagram
+        view="front"
+        showRecorded
+        values={{ lengthFl: 120, waist: 96 }}
+      />,
+    )
 
-    for (const field of fieldsInView('back')) {
-      expect(screen.queryByTestId(`callout-${field.name}`)).toBeTruthy()
-    }
+    expect(screen.queryByTestId('callout-lengthFl')).toBeTruthy()
+    expect(screen.queryByTestId('callout-waist')).toBeTruthy()
+    // Front-view fields the snapshot didn't capture stay off the silhouette.
+    expect(screen.queryByTestId('callout-chest')).toBeNull()
     expect(screen.queryByTestId('callout-frantPocketLength')).toBeNull()
+    // And no field from the other view renders on the front.
+    expect(screen.queryByTestId('callout-lengthBl')).toBeNull()
+  })
+
+  it('draws back view template callouts from recorded values', () => {
+    render(
+      <ThobDiagram
+        view="back"
+        showRecorded
+        values={{ lengthBl: 124, sleeveLength: 60 }}
+      />,
+    )
+
+    expect(screen.queryByTestId('callout-lengthBl')).toBeTruthy()
+    expect(screen.queryByTestId('callout-sleeveLength')).toBeTruthy()
+    expect(screen.queryByTestId('callout-neck')).toBeNull()
+    expect(screen.queryByTestId('callout-lengthFl')).toBeNull()
   })
 
   it('labels template callouts with the recorded value', () => {
@@ -102,7 +136,7 @@ describe('ThobDiagram', () => {
   })
 
   it('keeps every template caption box from overlapping on both views', () => {
-    const values = { lengthFl: 120, waist: 96, chest: 50 }
+    const values = { lengthFl: 120, waist: 96, chest: 50, lengthBl: 120 }
     for (const view of ['front', 'back'] as const) {
       const captions = layoutCaptions(fieldsInView(view), values)
       const rects = [...captions.values()]

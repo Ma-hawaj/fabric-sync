@@ -56,8 +56,8 @@ pub async fn render_order_document(
         // can't change how a measurement is written out or overlap two labels.
         thob_garment => minijinja::Value::from_serialize(thob_garment()),
         thob_markers => minijinja::Value::from_serialize(thob_markers_map(&fields)),
-        thob_front_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Front)),
-        thob_back_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Back)),
+        thob_front_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Front, &measurement)),
+        thob_back_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Back, &measurement)),
         thob_front_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Front, &measurement)),
         thob_back_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Back, &measurement)),
     })?)
@@ -436,10 +436,14 @@ fn thob_markers_map(fields: &[FieldDef]) -> BTreeMap<&'static str, ThobMarker> {
     fields.iter().map(|f| (f.name, f.marker.clone())).collect()
 }
 
-fn thob_field_names(fields: &[FieldDef], view: ThobView) -> Vec<&'static str> {
+fn thob_field_names(
+    fields: &[FieldDef],
+    view: ThobView,
+    values: &BTreeMap<String, String>,
+) -> Vec<&'static str> {
     fields
         .iter()
-        .filter(|f| f.view == view)
+        .filter(|f| f.view == view && values.contains_key(f.name))
         .map(|f| f.name)
         .collect()
 }
@@ -462,8 +466,10 @@ fn rects_touch(a: (f64, f64, f64, f64), b: (f64, f64, f64, f64)) -> bool {
 }
 
 /// The caption a field gets on the diagram: a recorded value rides the short
-/// label, a numeric one carries the unit; unrecorded fields are labelled only.
-/// Same rule as `diagramCaption` in `thob-diagram.tsx`.
+/// label, a numeric one carries the unit. `thob_captions` only lays out
+/// recorded fields, so `def.diagram_label` alone never reaches the paper —
+/// an unrecorded measurement contributes nothing to the silhouette. Same rule
+/// as `diagramCaption` in `thob-diagram.tsx`.
 fn caption_text(def: &FieldDef, values: &BTreeMap<String, String>) -> String {
     if let Some(value) = values.get(def.name) {
         if def.numeric {
@@ -476,15 +482,21 @@ fn caption_text(def: &FieldDef, values: &BTreeMap<String, String>) -> String {
     }
 }
 
-/// Places every caption for one view without overlap, nudging each box
-/// vertically. Mirrors `layoutCaptions` in `thob-diagram.tsx` exactly, so the
-/// printed and on-screen diagrams agree.
+/// Places one caption per recorded field for a view, nudging each box
+/// vertically until none overlaps another. Fields the measurement snapshot
+/// didn't capture are skipped entirely — only what was recorded is drawn on
+/// the silhouette, so an unpopulated field never gets a box or an arrow.
+/// Mirrors `layoutCaptions` in `thob-diagram.tsx` exactly, so the printed and
+/// on-screen diagrams agree.
 fn thob_captions(
     fields: &[FieldDef],
     view: ThobView,
     values: &BTreeMap<String, String>,
 ) -> BTreeMap<String, ThobCaption> {
-    let mut sorted: Vec<&FieldDef> = fields.iter().filter(|f| f.view == view).collect();
+    let mut sorted: Vec<&FieldDef> = fields
+        .iter()
+        .filter(|f| f.view == view && values.contains_key(f.name))
+        .collect();
     sorted.sort_by_key(|f| {
         (
             (f.marker.label.cy * 1000.0) as i64,
@@ -627,8 +639,8 @@ mod tests {
                 amounts => minijinja::Value::from_serialize(formatted_amounts(&detail)),
                 thob_garment => minijinja::Value::from_serialize(thob_garment()),
                 thob_markers => minijinja::Value::from_serialize(thob_markers_map(&fields)),
-                thob_front_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Front)),
-                thob_back_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Back)),
+                thob_front_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Front, &measurement)),
+                thob_back_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Back, &measurement)),
                 thob_front_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Front, &measurement)),
                 thob_back_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Back, &measurement)),
             })
@@ -647,9 +659,14 @@ mod tests {
         // Text and select values are already self-describing — no "inch".
         assert!(html.contains("Both · Side Pocket"));
         assert!(!html.contains("No inch"));
-        // Unrecorded fields still get a labelled caption point.
-        assert!(html.contains(">Front Pocket<"));
-        assert!(html.contains(">Fo Width<"));
+        // Unrecorded fields are omitted from the diagram: no caption box, no
+        // arrow, no stray label on the silhouette.
+        assert!(!html.contains("Front Pocket"));
+        assert!(!html.contains("Fo Width"));
+        // Exactly the seven recorded fields are called out: 5 on the front
+        // view (lengthFl, chest, waist, farntPocketLengthByWidth, sidePocket)
+        // and 2 on the back (lengthBl, sleeveLength).
+        assert_eq!(html.matches("thob-callout").count(), 7);
     }
 
     #[test]

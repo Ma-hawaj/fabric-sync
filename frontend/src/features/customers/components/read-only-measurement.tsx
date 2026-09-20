@@ -28,7 +28,9 @@ export function ReadOnlyMeasurement({
   const groups = MEASUREMENT_GROUPS.map((group) => {
     const recorded = fieldsInGroup(group.id)
       .map((field) => ({ field, value: measurement[field.name] }))
-      .filter(({ value }) => value !== undefined && value !== '')
+      .filter(
+        ({ value }) => value !== undefined && value !== null && value !== '',
+      )
     return { group, recorded }
   }).filter(({ recorded }) => recorded.length > 0)
 

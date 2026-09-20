@@ -14,10 +14,9 @@
     order     — GET /orders/:id (see types.rs OrderDetail — the measurement
                 snapshot the garment was cut to rides along on `order.measurement`)
     company   — COMPANY_* env vars (see config.rs InvoiceBranding)
-    currency  — currency code, e.g. "BHD"
-    amounts   — every money/quantity figure, pre-formatted; keys: materialAmount,
-                price, total, advanceAmount, amountPaid, balanceDue, repair<N>
-                (where <N> is the zero-based index in order.repairs)
+    amounts   — quantities only: the order sheet is an internal production
+                document, so no money figures are printed; the sole key the
+                template reads is `materialAmount`.
     thob_garment — the base thob drawing envelopes: outline, collar, placket,
                 chestPocket, mobilePocket, sidePockets, cuffs, centerBackSeam,
                 buttons and sleeveButtons. Every caller (the two views, and the
@@ -26,14 +25,15 @@
                 (double-headed arrows), guides (leader lines), shapes (garment
                 parts re-drawn in the accent colour), dots, and label (where the
                 caption is anchored).
-    thob_front_fields / thob_back_fields — the 15 front / 9 back field names, in
-                diagram order; loop over these to call out every marker.
+    thob_front_fields / thob_back_fields — the field names for the view whose
+                values the measurement snapshot actually recorded, in diagram
+                order; loop over these to call out every marker.
     thob_front_captions / thob_back_captions — per-field laid-out caption boxes,
                 keyed by field name: x, y, w and the finished text. Positions
                 come from the Rust layout (mirroring thob-diagram.tsx), so the
-                printed labels never overlap and their text is always the same
-                as the screen's: "120 inch · Front Length", or just the short
-                label when a field wasn't recorded.
+                printed labels never overlap. Only recorded fields appear —
+                an unmeasured field gets no box and no arrow, on the paper or
+                on screen ("120 inch · Front Length").
 #}
 {%- set order_status_labels = {
   "pending": ("قيد التصنيع", "Pending"),
@@ -48,17 +48,6 @@
   "paid": ("مدفوعة", "Paid"),
   "partial": ("مدفوعة جزئياً", "Partially paid"),
   "unpaid": ("غير مدفوعة", "Unpaid")
-} -%}
-{%- set stage_status_labels = {
-  "pending": ("قيد الانتظار", "Pending"),
-  "done": ("مكتملة", "Done"),
-  "skipped": ("مُتجاوزة", "Skipped")
-} -%}
-{%- set repair_status_labels = {
-  "open": ("مفتوحة", "Open"),
-  "in_progress": ("قيد الإصلاح", "In progress"),
-  "completed": ("مكتملة", "Completed"),
-  "cancelled": ("ملغاة", "Cancelled")
 } -%}
 {%- set measurement_labels = {
   "lengthFl": ("الطول (أمام)", "Length (Front)"),
@@ -490,38 +479,6 @@
         margin-top: 10px;
       }
 
-      .summary {
-        display: flex;
-        justify-content: flex-end;
-        gap: 16px;
-      }
-
-      .totals {
-        width: 56%;
-        border-collapse: collapse;
-        margin: 0;
-        font-size: 11px;
-      }
-
-      .totals td {
-        padding: 2px 8px;
-        border: none;
-      }
-
-      .totals tr + tr td {
-        border-top: 1px solid var(--rule);
-      }
-
-      .totals .label {
-        color: var(--muted);
-      }
-
-      .totals .due td {
-        border-top: 1px solid var(--rule);
-        font-weight: 700;
-        color: var(--accent);
-      }
-
       footer {
         margin-top: 10px;
         padding-top: 8px;
@@ -543,19 +500,8 @@
           <span class="en">{{ company.nameEn }}</span>
         </h1>
         <div class="company-meta">
-          {% if company.addressAr %}<div>{{ company.addressAr }}</div>{% endif %}
-          {% if company.addressEn %}<div dir="ltr">{{ company.addressEn }}</div>{% endif %}
           {% if company.phone %}<div dir="ltr">{{ company.phone }}</div>{% endif %}
           {% if company.email %}<div dir="ltr">{{ company.email }}</div>{% endif %}
-          {% if company.crNumber %}
-            <div>س.ت / CR: <span dir="ltr">{{ company.crNumber }}</span></div>
-          {% endif %}
-          {% if company.vatNumber %}
-            <div>
-              الرقم الضريبي / VAT:
-              <span dir="ltr">{{ company.vatNumber }}</span>
-            </div>
-          {% endif %}
         </div>
       </div>
 
@@ -598,16 +544,6 @@
               {% endif %}
             </dd>
           </div>
-          <div class="row">
-            <dt>المرحلة الحالية<span class="en">Current stage</span></dt>
-            <dd>
-              {% if order.currentStage %}
-                {{ order.currentStage }}
-              {% else %}
-                مكتمل <span class="en">Completed</span>
-              {% endif %}
-            </dd>
-          </div>
         </dl>
       </div>
 
@@ -621,10 +557,6 @@
           <div class="row">
             <dt>الكمية<span class="en">Quantity</span></dt>
             <dd class="num">{{ amounts.materialAmount }}</dd>
-          </div>
-          <div class="row">
-            <dt>السعر<span class="en">Price</span></dt>
-            <dd class="num">{{ currency }} {{ amounts.price }}</dd>
           </div>
           <div class="row">
             <dt>مكان التصنيع<span class="en">Made at</span></dt>
@@ -759,125 +691,7 @@
       </div>
     </div>
 
-    <h2 class="section-title">مراحل الإنتاج · Production checklist</h2>
-    {% if order.stages | length == 0 %}
-      <p class="note">لا توجد مراحل مضافة · No stages are configured.</p>
-    {% else %}
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 4%">#</th>
-            <th>المرحلة <span class="en">Stage</span></th>
-            <th style="width: 18%">الحالة <span class="en">Status</span></th>
-            <th>تفاصيل <span class="en">Details</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for stage in order.stages %}
-            <tr>
-              <td class="num">{{ loop.index }}</td>
-              <td>{{ stage.name }}</td>
-              <td>
-                {% if not stage.applicable %}
-                  غير مطلوبة <span class="en">Not needed</span>
-                {% else %}
-                  {%- set status = stage_status_labels[stage.status] -%}
-                  {% if status %}
-                    {{ status[0] }} <span class="en">{{ status[1] }}</span>
-                  {% else %}
-                    {{ stage.status }}
-                  {% endif %}
-                {% endif %}
-              </td>
-              <td>
-                {% if stage.location %}
-                  <span class="note">التسليم إلى {{ stage.location }}.</span>
-                {% endif %}
-                {% if stage.assigneeName %}
-                  <span class="note">المسؤول: {{ stage.assigneeName }}</span>
-                {% endif %}
-                {% if stage.startedAt %}
-                  <span class="note" dir="ltr">Start: {{ stage.startedAt }}</span>
-                {% endif %}
-                {% if stage.completedAt %}
-                  <span class="note" dir="ltr">End: {{ stage.completedAt }}</span>
-                {% endif %}
-                {% if stage.notes %}
-                  <span class="note">{{ stage.notes }}</span>
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endif %}
-
-    {% if order.repairs | length > 0 %}
-      <h2 class="section-title">الإصلاحات · Repairs</h2>
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 4%">#</th>
-            <th>السبب <span class="en">Reason</span></th>
-            <th style="width: 14%">التاريخ <span class="en">Reported</span></th>
-            <th class="num" style="width: 14%">الرسوم <span class="en">Charge</span></th>
-            <th style="width: 14%">الحالة <span class="en">Status</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for repair in order.repairs %}
-            <tr>
-              <td class="num">{{ loop.index }}</td>
-              <td>
-                {{ repair.reason }}
-                {% if repair.notes %}
-                  <span class="note">{{ repair.notes }}</span>
-                {% endif %}
-              </td>
-              <td class="num">{{ repair.reportedOn }}</td>
-              <td class="num">
-                {% if repair.charge > 0 %}
-                  {{ currency }} {{ amounts["repair" ~ loop.index0] }}
-                {% else %}
-                  —
-                {% endif %}
-              </td>
-              <td>
-                {%- set status = repair_status_labels[repair.status] -%}
-                {% if status %}
-                  {{ status[0] }} <span class="en">{{ status[1] }}</span>
-                {% else %}
-                  {{ repair.status }}
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endif %}
-
     <div class="closing">
-      <section class="summary">
-        <table class="totals">
-          <tr>
-            <td class="label">الإجمالي <span class="en">Total</span></td>
-            <td class="num">{{ currency }} {{ amounts.total }}</td>
-          </tr>
-          <tr>
-            <td class="label">المقدم <span class="en">Advance paid</span></td>
-            <td class="num">{{ currency }} {{ amounts.advanceAmount }}</td>
-          </tr>
-          <tr>
-            <td class="label">المدفوع <span class="en">Paid</span></td>
-            <td class="num">− {{ currency }} {{ amounts.amountPaid }}</td>
-          </tr>
-          <tr class="due">
-            <td>المبلغ المستحق <span class="en">Balance due</span></td>
-            <td class="num">{{ currency }} {{ amounts.balanceDue }}</td>
-          </tr>
-        </table>
-      </section>
-
       <footer>
         شكراً لتعاملكم معنا · Thank you for your business
         <div dir="ltr">ORD-{{ order.id[:8] }} · {{ order.invoiceDate }}</div>
