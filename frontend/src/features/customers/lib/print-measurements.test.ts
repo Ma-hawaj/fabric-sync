@@ -20,7 +20,8 @@ const measurement: Measurement = {
   shoulder: 18,
   chest: 42,
   sleeveLength: 25,
-  cuffling: 'Button',
+  foWidth: 3,
+  farntPocketLengthByWidth: '12×8',
   sidePocket: 'Both',
 }
 
@@ -56,7 +57,7 @@ describe('generateMeasurementsHtml', () => {
   it('renders text/select measurements without the unit', () => {
     const html = generateMeasurementsHtml(customer, measurement)
 
-    expect(html).toContain('Button')
+    expect(html).toContain('12×8')
     expect(html).toContain('Both')
   })
 
