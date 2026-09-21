@@ -68,6 +68,11 @@ impl PaymentType {
 pub struct CreateOrderInput {
     pub material_id: Uuid,
     pub material_amount: f64,
+    // Where material_amount comes off — material_stock is per-location, so an
+    // order has to name one, the same way a product line names a branch_id.
+    // Stored directly as orders.production_branch_id, so production location
+    // is known from creation rather than left for staff to assign later.
+    pub production_location_id: Uuid,
     // Entered by staff per order line; materials carry no unit price to derive
     // it from.
     pub price: f64,
@@ -255,6 +260,28 @@ pub struct InvoiceDetailLine {
     /// False only for gift card sales — selling stored value is not a taxable
     /// supply, so the document has to be able to mark the line as excluded.
     pub taxable: bool,
+    /// The raw design choices the order line was created with, so the printed
+    /// document can render one chip per slot. Skipped from the REST payload —
+    /// the app UI reads `detail`; only the HTML document wants the values
+    /// broken out per slot. `None` for a retail line, which has none.
+    #[serde(skip)]
+    pub design_values: Option<OrderDesignValues>,
+}
+
+/// One order line's per-slot design values as stored in `orders`. Kept
+/// separate from `detail` (one pre-joined string for the REST payload) because
+/// the printed invoice shows each choice as its own chip, and nothing the
+/// document needs should be re-derived from a string.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderDesignValues {
+    pub thobe_type: Option<String>,
+    pub collar: Option<String>,
+    pub sleeve: Option<String>,
+    pub f_pocket: Option<String>,
+    pub patti: Option<String>,
+    /// The free-text line note. Not a design slot; printed beneath the chips.
+    pub more_details: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]

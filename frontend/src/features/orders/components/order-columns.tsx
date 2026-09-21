@@ -1,7 +1,8 @@
 import type { ColumnDef } from '@tanstack/react-table'
+import { ListChecksIcon, CheckIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
+import { RowActions } from '@/components/data-table/row-actions'
 import { CURRENCY } from '@/lib/currency'
 import {
   COMPLETED,
@@ -45,7 +46,7 @@ export function getOrderColumns(
   materialOptions: { label: string; value: string }[],
   stageOptions: { label: string; value: string }[],
   onReceive: (order: Order) => void,
-  onTrack: (order: Order) => void,
+  onOpen: (order: Order) => void,
 ): ColumnDef<Order, any>[] {
   return [
     {
@@ -367,28 +368,27 @@ export function getOrderColumns(
     {
       id: 'actions',
       header: 'Actions',
+      enablePinning: true,
       cell: ({ row }) => {
         const order = row.original
         return (
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onTrack(order)}
-              className="h-8 w-auto px-2"
-            >
-              Track
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={order.status === 'received'}
-              onClick={() => onReceive(order)}
-              className="h-8 w-auto px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
-            >
-              {order.status === 'received' ? 'Received' : 'Mark Received'}
-            </Button>
-          </div>
+          <RowActions
+            items={[
+              {
+                label: 'Details',
+                icon: ListChecksIcon,
+                onClick: () => onOpen(order),
+              },
+              {
+                label:
+                  order.status === 'received' ? 'Received' : 'Mark Received',
+                icon: CheckIcon,
+                disabled: order.status === 'received',
+                onClick: () => onReceive(order),
+                separatorBefore: true,
+              },
+            ]}
+          />
         )
       },
     },

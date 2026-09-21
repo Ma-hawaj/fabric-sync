@@ -1,8 +1,8 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { EyeIcon, FileDownIcon } from 'lucide-react'
+import { EyeIcon, FileDownIcon, CheckIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
+import { RowActions } from '@/components/data-table/row-actions'
 import { CURRENCY } from '@/lib/currency'
 import type { Invoice, PaymentStatus } from '../types/invoices'
 
@@ -34,12 +34,6 @@ const PAYMENT_STATUS_VARIANT: Record<
   partial: 'secondary',
   paid: 'default',
 }
-
-const ACTION_BUTTON_CLASS =
-  'h-8 w-auto px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20'
-
-const ACTION_ICON_CLASS =
-  'h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20'
 
 export const getInvoiceColumns = (
   materialOptions: { label: string; value: string }[],
@@ -253,46 +247,32 @@ export const getInvoiceColumns = (
   {
     id: 'actions',
     header: 'Actions',
+    enablePinning: true,
     cell: ({ row }) => {
       const invoice = row.original
       const isPaid = invoice.paymentStatus === 'paid'
       return (
-        <div className="flex items-center gap-1">
-          {/*
-            Icon-only: three labelled buttons overflow the column, and this
-            row already spends its width on "Mark Received", whose state the
-            user has to be able to read at a glance.
-          */}
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label="View Details"
-            title="View Details"
-            onClick={() => onViewDetails(invoice)}
-            className={ACTION_ICON_CLASS}
-          >
-            <EyeIcon className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label="Export PDF"
-            title="Export PDF"
-            onClick={() => onExportPdf(invoice)}
-            className={ACTION_ICON_CLASS}
-          >
-            <FileDownIcon className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={isPaid}
-            onClick={() => onReceive(invoice)}
-            className={ACTION_BUTTON_CLASS}
-          >
-            {isPaid ? 'Received' : 'Mark Received'}
-          </Button>
-        </div>
+        <RowActions
+          items={[
+            {
+              label: 'View Details',
+              icon: EyeIcon,
+              onClick: () => onViewDetails(invoice),
+            },
+            {
+              label: 'Export PDF',
+              icon: FileDownIcon,
+              onClick: () => onExportPdf(invoice),
+            },
+            {
+              label: isPaid ? 'Received' : 'Mark Received',
+              icon: CheckIcon,
+              disabled: isPaid,
+              onClick: () => onReceive(invoice),
+              separatorBefore: true,
+            },
+          ]}
+        />
       )
     },
   },

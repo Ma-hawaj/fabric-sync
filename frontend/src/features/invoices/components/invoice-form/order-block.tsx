@@ -1,6 +1,6 @@
 import { XIcon } from 'lucide-react'
 import { NumberField } from '@/components/form/fields'
-import { SegmentedOptions } from '@/components/form/segmented-options'
+import { DesignOptionGrid } from '@/components/form/design-option-grid'
 import { Button } from '@/components/ui/button'
 import {
   Combobox,
@@ -15,18 +15,28 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { CURRENCY } from '@/lib/currency'
 import {
-  COLLARS,
-  FRONT_POCKETS,
-  PATTIS,
-  SLEEVES,
-  THOBE_TYPES,
-} from '../../data/invoice-form-options'
+  FRONT_POCKET,
+  NECK,
+  PATTI,
+  SLEEVE,
+  THOB_TYPE,
+} from '../../data/design-catalog'
+import type { Location } from '@/features/locations/types/location'
 import { materialTotalStock } from '../../types/materials'
 import type { Material } from '../../types/materials'
 import type { InvoiceFormApi } from '../../types/invoice-form'
 
 function materialOptionLabel(material: Material) {
   return material.sku ? `${material.name} (${material.sku})` : material.name
+}
+
+interface StockLocationOption extends Location {
+  quantity: number
+  unit: string
+}
+
+function stockOptionLabel(option: StockLocationOption) {
+  return `${option.name} (${option.quantity} ${option.unit})`
 }
 
 interface OrderBlockProps {
@@ -67,8 +77,8 @@ export function OrderBlock({
           {(field: any) => (
             <div className="space-y-1.5">
               <Label>Thob Type</Label>
-              <SegmentedOptions
-                options={THOBE_TYPES}
+              <DesignOptionGrid
+                options={THOB_TYPE}
                 value={field.state.value}
                 onChange={field.handleChange}
               />
@@ -80,10 +90,11 @@ export function OrderBlock({
           {(field: any) => (
             <div className="space-y-1.5">
               <Label>Front Pocket</Label>
-              <SegmentedOptions
-                options={FRONT_POCKETS}
+              <DesignOptionGrid
+                options={FRONT_POCKET}
                 value={field.state.value}
                 onChange={field.handleChange}
+                columns={2}
               />
             </div>
           )}
@@ -93,11 +104,10 @@ export function OrderBlock({
           {(field: any) => (
             <div className="space-y-1.5">
               <Label>Collar</Label>
-              <SegmentedOptions
-                options={COLLARS}
+              <DesignOptionGrid
+                options={NECK}
                 value={field.state.value}
                 onChange={field.handleChange}
-                columns={2}
               />
             </div>
           )}
@@ -107,8 +117,8 @@ export function OrderBlock({
           {(field: any) => (
             <div className="space-y-1.5">
               <Label>Sleeve</Label>
-              <SegmentedOptions
-                options={SLEEVES}
+              <DesignOptionGrid
+                options={SLEEVE}
                 value={field.state.value}
                 onChange={field.handleChange}
               />
@@ -120,10 +130,11 @@ export function OrderBlock({
           {(field: any) => (
             <div className="space-y-1.5">
               <Label>Patti (Front Strip)</Label>
-              <SegmentedOptions
-                options={PATTIS}
+              <DesignOptionGrid
+                options={PATTI}
                 value={field.state.value}
                 onChange={field.handleChange}
+                columns={2}
               />
             </div>
           )}
@@ -147,7 +158,7 @@ export function OrderBlock({
 
       <div className="space-y-3">
         <h4 className="text-sm font-semibold">Material</h4>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <form.Field name={`${base}.materialId` as never}>
             {(field: any) => {
               const selected = materials.find((m) => m.id === field.state.value)
@@ -164,9 +175,15 @@ export function OrderBlock({
                       a.id === b.id
                     }
                     value={selected ?? null}
-                    onValueChange={(material: Material | null) =>
+                    onValueChange={(material: Material | null) => {
                       field.handleChange(material?.id ?? '')
-                    }
+                      // "Made At" only lists this material's stock locations —
+                      // drop a previously chosen one that may not stock it.
+                      form.setFieldValue(
+                        `${base}.productionLocationId` as never,
+                        '' as never,
+                      )
+                    }}
                   >
                     <ComboboxInput
                       id={field.name}
@@ -201,6 +218,82 @@ export function OrderBlock({
               )
             }}
           </form.Field>
+
+          {/* A material can only be made at a location where it is in
+              stock — so this picker lists the selected material's stock
+              locations rather than every stock-holding branch. */}
+          <form.Subscribe
+            selector={(state: any) =>
+              state.values.customers[customerIndex]?.orders[orderIndex]
+                ?.materialId
+            }
+          >
+            {(materialId: string) => {
+              const material = materials.find((m) => m.id === materialId)
+              const stockOptions: StockLocationOption[] =
+                material?.locations
+                  .filter((stock) => stock.quantity > 0)
+                  .map((stock) => ({
+                    id: stock.locationId,
+                    name: stock.location,
+                    receivesOrders: false,
+                    holdsStock: true,
+                    isActive: true,
+                    quantity: stock.quantity,
+                    unit: material.unit,
+                  })) ?? []
+              return (
+                <form.Field name={`${base}.productionLocationId` as never}>
+                  {(field: any) => {
+                    const selected = stockOptions.find(
+                      (location) => location.id === field.state.value,
+                    )
+                    return (
+                      <Field data-invalid={field.state.meta.errors.length > 0}>
+                        <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
+                        <Combobox
+                          items={stockOptions}
+                          itemToStringLabel={stockOptionLabel}
+                          isItemEqualToValue={(a: Location, b: Location) =>
+                            a.id === b.id
+                          }
+                          value={selected ?? null}
+                          onValueChange={(location: Location | null) => {
+                            field.handleChange(location?.id ?? '')
+                          }}
+                        >
+                          <ComboboxInput
+                            id={field.name}
+                            placeholder="Search location..."
+                            className="w-full"
+                            showClear
+                          />
+                          <ComboboxContent>
+                            <ComboboxEmpty>
+                              {material
+                                ? 'This material has no stock available.'
+                                : 'Pick a material first.'}
+                            </ComboboxEmpty>
+                            <ComboboxList>
+                              {(location: StockLocationOption) => (
+                                <ComboboxItem
+                                  key={location.id}
+                                  value={location}
+                                >
+                                  {stockOptionLabel(location)}
+                                </ComboboxItem>
+                              )}
+                            </ComboboxList>
+                          </ComboboxContent>
+                        </Combobox>
+                        <FieldError errors={field.state.meta.errors} />
+                      </Field>
+                    )
+                  }}
+                </form.Field>
+              )
+            }}
+          </form.Subscribe>
 
           <NumberField
             form={form}

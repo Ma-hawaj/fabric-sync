@@ -2,8 +2,8 @@ import { Link } from '@tanstack/react-router'
 import { PencilIcon, PowerIcon } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
+import { RowActions } from '@/components/data-table/row-actions'
 import type { OrderStage } from '../types/order-stage'
 
 export const DELIVERIES_ONLY_LABEL = 'Deliveries only'
@@ -115,34 +115,31 @@ export const getOrderStageColumns = (
   {
     id: 'actions',
     header: 'Actions',
-    cell: ({ row }) => (
-      <div className="flex items-center gap-1">
-        <Button
-          nativeButton={false}
-          variant="ghost"
-          size="sm"
-          className="h-8 w-auto px-2"
-          render={
-            <Link
-              to="/order-stages/$stageId/edit"
-              params={{ stageId: row.original.id }}
-            />
-          }
-        >
-          <PencilIcon className="mr-1.5 h-4 w-4" />
-          Edit
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={isToggling}
-          onClick={() => onToggleActive(row.original)}
-          className="h-8 w-auto px-2"
-        >
-          <PowerIcon className="mr-1.5 h-4 w-4" />
-          {row.original.isActive ? 'Retire' : 'Restore'}
-        </Button>
-      </div>
-    ),
+    enablePinning: true,
+    cell: ({ row }) => {
+      const stage = row.original
+      return (
+        <RowActions
+          items={[
+            {
+              label: 'Edit',
+              icon: PencilIcon,
+              render: (
+                <Link
+                  to="/order-stages/$stageId/edit"
+                  params={{ stageId: stage.id }}
+                />
+              ),
+            },
+            {
+              label: stage.isActive ? 'Retire' : 'Restore',
+              icon: PowerIcon,
+              disabled: isToggling,
+              onClick: () => onToggleActive(stage),
+            },
+          ]}
+        />
+      )
+    },
   },
 ]

@@ -3,12 +3,9 @@ import {
   THOB_COLLAR,
   THOB_CUFFS,
   THOB_MOBILE_POCKET,
-  THOB_OUTLINE,
-  THOB_PLACKET,
   THOB_SIDE_POCKETS,
-  THOB_BUTTONS,
-  THOB_SLEEVE_BUTTONS,
 } from './thob-sketch'
+import type { ThobView } from './thob-sketch'
 import type { MeasurementDraft } from '../types/measurement-form'
 
 /** Every measurement a form can capture — the bookkeeping fields aside. */
@@ -54,10 +51,25 @@ export type MeasurementGroupId = 'body' | 'pockets' | 'style'
 export interface MeasurementField {
   name: MeasurementFieldName
   label: string
+  /**
+   * Short caption used on read-only diagram templates, where every field of a
+   * silhouette is shown at once and a full label would crowd its neighbours.
+   * The entry form keeps the long `label` for its single active callout.
+   */
+  diagramLabel: string
   group: MeasurementGroupId
   input: MeasurementInput
+  /**
+   * Which thob silhouette the marker is drawn against. The garment is shown
+   * from the front and the back so no single sketch carries all 18 callouts:
+   * lengths, circumferences, pockets and the placket live on the front; the
+   * back length, the collar, and the whole sleeve cluster on the back.
+   */
+  view: ThobView
   marker: DiagramMarker
 }
+
+export const MEASUREMENT_UNIT = 'inch'
 
 export const MEASUREMENT_GROUPS: {
   id: MeasurementGroupId
@@ -70,12 +82,13 @@ export const MEASUREMENT_GROUPS: {
 
 const NUMBER: MeasurementInput = { kind: 'number' }
 const TEXT: MeasurementInput = { kind: 'text' }
-const YES_NO: MeasurementInput = { kind: 'select', options: ['Yes', 'No'] }
 
 export const MEASUREMENT_FIELDS: MeasurementField[] = [
   {
     name: 'lengthFl',
+    view: 'front',
     label: 'Length (Front)',
+    diagramLabel: 'Front Length',
     group: 'body',
     input: NUMBER,
     marker: {
@@ -89,7 +102,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'lengthBl',
+    view: 'back',
     label: 'Length (Back)',
+    diagramLabel: 'Back Length',
     group: 'body',
     input: NUMBER,
     marker: {
@@ -103,7 +118,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'shoulder',
+    view: 'front',
     label: 'Shoulder',
+    diagramLabel: 'Shoulder',
     group: 'body',
     input: NUMBER,
     marker: {
@@ -117,7 +134,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'chest',
+    view: 'front',
     label: 'Chest',
+    diagramLabel: 'Chest',
     group: 'body',
     input: NUMBER,
     marker: {
@@ -127,7 +146,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'chestUp',
+    view: 'front',
     label: 'Chest (Upper)',
+    diagramLabel: 'Chest Up',
     group: 'body',
     input: NUMBER,
     marker: {
@@ -137,7 +158,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'waist',
+    view: 'front',
     label: 'Waist',
+    diagramLabel: 'Waist',
     group: 'body',
     input: NUMBER,
     marker: {
@@ -147,7 +170,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'hips',
+    view: 'front',
     label: 'Hips',
+    diagramLabel: 'Hips',
     group: 'body',
     input: NUMBER,
     marker: {
@@ -157,7 +182,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'neck',
+    view: 'back',
     label: 'Neck',
+    diagramLabel: 'Neck',
     group: 'body',
     input: NUMBER,
     marker: {
@@ -168,7 +195,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'neckWidth',
+    view: 'back',
     label: 'Neck Width',
+    diagramLabel: 'Neck W',
     group: 'body',
     input: NUMBER,
     marker: {
@@ -182,7 +211,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'aramHole',
+    view: 'back',
     label: 'Armhole',
+    diagramLabel: 'Armhole',
     group: 'body',
     input: NUMBER,
     marker: {
@@ -192,7 +223,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'sleeveLength',
+    view: 'back',
     label: 'Sleeve Length',
+    diagramLabel: 'Sleeve',
     group: 'body',
     input: NUMBER,
     marker: {
@@ -202,7 +235,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'openHand',
+    view: 'back',
     label: 'Open Hand',
+    diagramLabel: 'Open Hand',
     group: 'body',
     input: NUMBER,
     marker: {
@@ -213,7 +248,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'cuffWidth',
+    view: 'back',
     label: 'Cuff Width',
+    diagramLabel: 'Cuff W',
     group: 'body',
     input: NUMBER,
     marker: {
@@ -224,7 +261,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
 
   {
     name: 'frantPocketLength',
+    view: 'front',
     label: 'Front Pocket Length',
+    diagramLabel: 'Front Pocket',
     group: 'pockets',
     input: NUMBER,
     marker: {
@@ -240,7 +279,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'farntPocketLengthByWidth',
+    view: 'front',
     label: 'Front Pocket L×W',
+    diagramLabel: 'Pocket L×W',
     group: 'pockets',
     input: TEXT,
     marker: {
@@ -251,7 +292,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'sidePocket',
+    view: 'front',
     label: 'Side Pocket',
+    diagramLabel: 'Side Pocket',
     group: 'pockets',
     input: { kind: 'select', options: ['None', 'Left', 'Right', 'Both'] },
     marker: {
@@ -262,7 +305,9 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   {
     name: 'mobilePocketLengthByWidth',
+    view: 'front',
     label: 'Mobile Pocket L×W',
+    diagramLabel: 'Mobile Pocket',
     group: 'pockets',
     input: TEXT,
     marker: {
@@ -273,80 +318,16 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
 
   {
-    name: 'cuffling',
-    label: 'Cuffling',
-    group: 'style',
-    input: { kind: 'select', options: ['Button', 'No Button', 'Cufflink'] },
-    marker: {
-      shapes: [THOB_CUFFS],
-      guides: [{ x1: 148, y1: 235, x2: 112, y2: 258 }],
-      label: { x: 100, y: 268 },
-    },
-  },
-  {
-    name: 'sleeveHaffButton',
-    label: 'Sleeve Half Button',
-    group: 'style',
-    input: YES_NO,
-    marker: {
-      dots: THOB_SLEEVE_BUTTONS,
-      guides: [{ x1: 153, y1: 253, x2: 112, y2: 196 }],
-      label: { x: 82, y: 190 },
-    },
-  },
-  {
-    name: 'openFold',
-    label: 'Open / Fold',
-    group: 'style',
-    input: { kind: 'select', options: ['Open', 'Fold'] },
-    marker: {
-      shapes: [THOB_PLACKET],
-      guides: [{ x1: 234, y1: 110, x2: 186, y2: 94 }],
-      label: { x: 148, y: 88 },
-    },
-  },
-  {
-    name: 'buttonFold',
-    label: 'Button Fold',
-    group: 'style',
-    input: YES_NO,
-    marker: {
-      shapes: [THOB_PLACKET],
-      dots: THOB_BUTTONS,
-      guides: [{ x1: 246, y1: 186, x2: 296, y2: 200 }],
-      label: { x: 336, y: 204 },
-    },
-  },
-  {
-    name: 'fo',
-    label: 'Fo',
-    group: 'style',
-    input: YES_NO,
-    marker: {
-      shapes: [THOB_PLACKET],
-      guides: [{ x1: 240, y1: 204, x2: 202, y2: 226 }],
-      label: { x: 176, y: 234 },
-    },
-  },
-  {
     name: 'foWidth',
+    view: 'front',
     label: 'Fo Width',
+    diagramLabel: 'Fo Width',
     group: 'style',
     input: NUMBER,
     marker: {
       dims: [{ x1: 234, y1: 192, x2: 246, y2: 192 }],
       guides: [{ x1: 240, y1: 196, x2: 166, y2: 224 }],
       label: { x: 130, y: 230 },
-    },
-  },
-  {
-    name: 'fullBody',
-    label: 'Full Body Measurement',
-    group: 'style',
-    input: YES_NO,
-    marker: {
-      shapes: [THOB_OUTLINE],
-      label: { x: 240, y: 466 },
     },
   },
 ]
@@ -372,3 +353,9 @@ export function measurementField(name: string): MeasurementField | undefined {
 export function fieldsInGroup(group: MeasurementGroupId): MeasurementField[] {
   return MEASUREMENT_FIELDS.filter((field) => field.group === group)
 }
+
+export function fieldsInView(view: ThobView): MeasurementField[] {
+  return MEASUREMENT_FIELDS.filter((field) => field.view === view)
+}
+
+export const THOB_VIEWS: ThobView[] = ['front', 'back']

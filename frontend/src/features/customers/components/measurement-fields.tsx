@@ -14,6 +14,7 @@ import type { MeasurementValues } from './thob-diagram'
 import {
   MEASUREMENT_FIELDS,
   MEASUREMENT_GROUPS,
+  MEASUREMENT_UNIT,
   fieldsInGroup,
 } from '../data/measurement-fields'
 import type { MeasurementField } from '../data/measurement-fields'
@@ -74,7 +75,14 @@ function FieldInput({
   const name = `${base}.${field.name}`
 
   if (field.input.kind === 'number') {
-    return <NumberField form={form} name={name} label={field.label} unit="cm" />
+    return (
+      <NumberField
+        form={form}
+        name={name}
+        label={field.label}
+        unit={MEASUREMENT_UNIT}
+      />
+    )
   }
   if (field.input.kind === 'select') {
     return (

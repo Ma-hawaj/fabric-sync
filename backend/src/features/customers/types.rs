@@ -24,17 +24,10 @@ pub struct Measurement {
     pub sleeve_length: Option<f64>,
     pub neck: Option<f64>,
     pub open_hand: Option<f64>,
-    pub cuffling: Option<String>,
-
-    pub full_body: Option<String>,
     pub chest_up: Option<f64>,
-    pub open_fold: Option<String>,
     pub cuff_width: Option<f64>,
     pub neck_width: Option<f64>,
     pub aram_hole: Option<f64>,
-    pub sleeve_haff_button: Option<String>,
-    pub button_fold: Option<String>,
-    pub fo: Option<String>,
     pub fo_width: Option<f64>,
     pub frant_pocket_length: Option<f64>,
     pub farnt_pocket_length_by_width: Option<String>,
@@ -68,17 +61,10 @@ pub struct CreateMeasurementInput {
     pub sleeve_length: Option<f64>,
     pub neck: Option<f64>,
     pub open_hand: Option<f64>,
-    pub cuffling: Option<String>,
-
-    pub full_body: Option<String>,
     pub chest_up: Option<f64>,
-    pub open_fold: Option<String>,
     pub cuff_width: Option<f64>,
     pub neck_width: Option<f64>,
     pub aram_hole: Option<f64>,
-    pub sleeve_haff_button: Option<String>,
-    pub button_fold: Option<String>,
-    pub fo: Option<String>,
     pub fo_width: Option<f64>,
     pub frant_pocket_length: Option<f64>,
     pub farnt_pocket_length_by_width: Option<String>,
@@ -110,7 +96,7 @@ pub fn measurement_values_equal(a: &CreateMeasurementInput, b: &CreateMeasuremen
 mod tests {
     use super::*;
 
-    fn measurement(chest: Option<f64>, cuffling: Option<&str>) -> CreateMeasurementInput {
+    fn measurement(chest: Option<f64>, pocket: Option<&str>) -> CreateMeasurementInput {
         CreateMeasurementInput {
             date: NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
             length_fl: None,
@@ -122,19 +108,13 @@ mod tests {
             sleeve_length: None,
             neck: None,
             open_hand: None,
-            cuffling: cuffling.map(str::to_string),
-            full_body: None,
             chest_up: None,
-            open_fold: None,
             cuff_width: None,
             neck_width: None,
             aram_hole: None,
-            sleeve_haff_button: None,
-            button_fold: None,
-            fo: None,
             fo_width: None,
             frant_pocket_length: None,
-            farnt_pocket_length_by_width: None,
+            farnt_pocket_length_by_width: pocket.map(str::to_string),
             side_pocket: None,
             mobile_pocket_length_by_width: None,
         }
@@ -142,7 +122,7 @@ mod tests {
 
     #[test]
     fn measurement_values_equal_ignores_date() {
-        let mut a = measurement(Some(108.0), Some("Double Cuff"));
+        let mut a = measurement(Some(108.0), Some("16x14"));
         let mut b = a.clone();
         a.date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
         b.date = NaiveDate::from_ymd_opt(2026, 7, 1).unwrap();
@@ -152,15 +132,15 @@ mod tests {
 
     #[test]
     fn measurement_values_equal_detects_a_changed_field() {
-        let a = measurement(Some(108.0), Some("Double Cuff"));
-        let b = measurement(Some(110.0), Some("Double Cuff"));
+        let a = measurement(Some(108.0), Some("16x14"));
+        let b = measurement(Some(110.0), Some("16x14"));
 
         assert!(!measurement_values_equal(&a, &b));
     }
 
     #[test]
     fn measurement_values_equal_detects_a_field_becoming_blank() {
-        let a = measurement(Some(108.0), Some("Double Cuff"));
+        let a = measurement(Some(108.0), Some("16x14"));
         let b = measurement(Some(108.0), None);
 
         assert!(!measurement_values_equal(&a, &b));
@@ -178,17 +158,20 @@ mod tests {
             "measurement_date": "2026-07-01",
             "length_fl": 152.5, "length_bl": null, "chest": 108.0, "waist": null,
             "hips": null, "shoulder": null, "sleeve_length": null, "neck": null,
-            "open_hand": null, "cuffling": "Double Cuff",
-            "full_body": null, "chest_up": null, "open_fold": null,
+            "open_hand": null, "chest_up": null,
             "cuff_width": null, "neck_width": null, "aram_hole": null,
-            "sleeve_haff_button": null, "button_fold": null, "fo": null,
             "fo_width": null, "frant_pocket_length": null,
-            "farnt_pocket_length_by_width": null, "side_pocket": null,
-            "mobile_pocket_length_by_width": null
+            "farnt_pocket_length_by_width": "16x14", "side_pocket": null,
+            "mobile_pocket_length_by_width": null,
+            "cuffling": null, "full_body": null, "open_fold": null,
+            "sleeve_haff_button": null, "button_fold": null, "fo": null
         }"#;
 
         let measurement: Measurement = serde_json::from_str(postgres_json).unwrap();
-        assert_eq!(measurement.cuffling.as_deref(), Some("Double Cuff"));
+        assert_eq!(
+            measurement.farnt_pocket_length_by_width.as_deref(),
+            Some("16x14")
+        );
         assert_eq!(measurement.length_fl, Some(152.5));
 
         let api_json = serde_json::to_value(&measurement).unwrap();

@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { Button } from '@/components/ui/button'
 import {
   Sheet,
   SheetContent,
@@ -15,6 +16,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
+import { printMeasurements } from '../lib/print-measurements'
 import {
   Ruler,
   ShieldAlert,
@@ -22,6 +25,7 @@ import {
   User,
   Calendar,
   Receipt,
+  PrinterIcon,
 } from 'lucide-react'
 import { useOrders } from '@/features/orders/hooks/use-orders'
 import { ThobDiagram } from './thob-diagram'
@@ -60,6 +64,20 @@ export function CustomerDetailsSheet({
     )
   }, [customer, activeMeasurementId])
 
+  const [isPrinting, setIsPrinting] = React.useState(false)
+
+  const handlePrint = React.useCallback(() => {
+    if (!customer || !activeMeasurement) return
+    setIsPrinting(true)
+    const pending = printMeasurements(customer, activeMeasurement)
+    toast.promise(pending, {
+      loading: 'Preparing measurements...',
+      success: 'Print dialog opened.',
+      error: 'Failed to generate measurement document.',
+    })
+    void pending.finally(() => setIsPrinting(false))
+  }, [customer, activeMeasurement])
+
   return (
     <Sheet
       open={customer !== null}
@@ -73,7 +91,7 @@ export function CustomerDetailsSheet({
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400">
                   <User className="h-5 w-5" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <SheetTitle className="text-xl font-bold tracking-tight">
                     {customer.name}
                   </SheetTitle>
@@ -81,6 +99,18 @@ export function CustomerDetailsSheet({
                     Phone: {customer.mobileNo}
                   </SheetDescription>
                 </div>
+                {customer.measurements.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePrint}
+                    disabled={isPrinting}
+                    className="shrink-0"
+                  >
+                    <PrinterIcon className="mr-1.5 h-4 w-4" />
+                    Print
+                  </Button>
+                )}
               </div>
             </SheetHeader>
 
@@ -178,7 +208,9 @@ export function CustomerDetailsSheet({
                             }))
                             .filter(
                               ({ value }) =>
-                                value !== undefined && value !== '',
+                                value !== undefined &&
+                                value !== null &&
+                                value !== '',
                             )
                           if (recorded.length === 0) return null
 
@@ -188,7 +220,7 @@ export function CustomerDetailsSheet({
                                 <MetricItem
                                   key={field.name}
                                   label={field.label}
-                                  value={value}
+                                  value={value ?? undefined}
                                   onHover={() => setHoveredField(field.name)}
                                   onLeave={() => setHoveredField(null)}
                                 />

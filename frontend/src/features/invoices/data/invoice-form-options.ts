@@ -1,5 +1,0 @@
-export const THOBE_TYPES = ['Saudi', 'Emirati', 'Kuwaiti', 'Qatari']
-export const FRONT_POCKETS = ['None', 'Single', 'Double']
-export const COLLARS = ['Mandarin', 'Classic Round', 'Banded', 'Spread']
-export const SLEEVES = ['Long Straight', 'Tapered', '3/4 Length']
-export const PATTIS = ['Plain', 'Stitched', 'Embroidered']

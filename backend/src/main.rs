@@ -1,6 +1,7 @@
 mod app;
 mod auth;
 mod config;
+mod document;
 mod error;
 mod features;
 mod list;
@@ -17,6 +18,11 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<(), error::AppError> {
+    if let Err(e) = dotenvy::dotenv() {
+        eprintln!("Warning: Could not load .env file: {}", e);
+        eprintln!("Falling back to system environment variables.");
+    }
+
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(tracing_subscriber::fmt::layer())
@@ -51,8 +57,17 @@ async fn run() -> Result<(), error::AppError> {
     let token_introspection = auth::TokenIntrospection::discover(&config)
         .await
         .map_err(error::AppError::Auth)?;
-    let app = app::router(AppState::new(config, db, token_introspection));
+    let zitadel_users = features::users::zitadel::ZitadelUserDirectory::discover(&config)
+        .await
+        .map_err(error::AppError::Auth)?;
+    let app = app::router(AppState::new(
+        config,
+        db,
+        token_introspection,
+        zitadel_users,
+    ));
 
+    tracing::info!("Listening on: {}", address);
     axum::serve(listener, app).await?;
 
     Ok(())

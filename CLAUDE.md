@@ -142,7 +142,7 @@ Two things that follow from the server doing the work: an option list must be _d
 
 `backend/migrations/20260712000000_create_tables.sql` — the only migration — defines `branch`, `customers`, `materials`, `material_stock`, `invoices`, `measurements`, `orders`, `order_stages`, `order_repairs`, `order_stage_progress`. All primary keys are `UUID DEFAULT uuidv7()` — time-ordered (sortable/monotonic by creation, unlike `gen_random_uuid()`'s v4), which is why Postgres 18+ is required (see above).
 
-`measurements` is one flat row per visit (`measurement_date` plus 24 measurement columns) — repeat visits are repeat rows, which is exactly what the `json_agg (... ORDER BY m.measurement_date DESC)` aggregation below depends on. `material_stock` holds a quantity per material/location pair (`UNIQUE (material_id, branch_id)`) because a material can be stocked at more than one location.
+`measurements` is one flat row per visit (`measurement_date` plus 18 measurement columns) — repeat visits are repeat rows, which is exactly what the `json_agg (... ORDER BY m.measurement_date DESC)` aggregation below depends on. `material_stock` holds a quantity per material/location pair (`UNIQUE (material_id, branch_id)`) because a material can be stocked at more than one location.
 
 ## Order tracking and repairs
 
@@ -186,7 +186,9 @@ Every `GET` list route above is served by the shared list layer and returns `{da
 
 Path params use axum 0.7's `:id` syntax (0.8 switched to `{id}` — don't copy that from newer axum docs).
 
-**`users` is mocked.** `features/users/service.rs::list_users` returns four hardcoded `User { id, name }` values — there's no table, no `repository.rs`, and the handler's `AppState` parameter is currently unused. The plan is to back it with Zitadel's user directory once real auth is wired up (`require_auth` is disabled — see above); `id` is a plain `String` rather than a `Uuid` because it's meant to eventually hold a Zitadel subject, not an id this app generates. It's `pub(crate)` (see `users/mod.rs`) so `orders/service.rs::set_assignee` can resolve an assignee's display name against it directly — the same cross-feature-call pattern `invoices` already uses against `customers`/`products`.
+**`users` is backed by Zitadel's real user directory**, not a table — `features/users/service.rs::list_users` delegates to `features/users/zitadel.rs::ZitadelUserDirectory`, so there's still no `repository.rs`. `id` is a plain `String` rather than a `Uuid` because it holds a Zitadel subject (`userId`), not an id this app generates. It's `pub(crate)` (see `users/mod.rs`) so `orders/service.rs::set_assignee` can resolve an assignee's display name against it directly — the same cross-feature-call pattern `invoices` already uses against `customers`/`products`.
+
+`ZitadelUserDirectory` calls Zitadel's own v2 Users API (`POST {issuer}/v2/users`) — not part of the OIDC standard, so unlike `auth::TokenIntrospection` it is unapologetically Zitadel-specific. It authenticates via the OAuth2 client-credentials grant as a **dedicated Zitadel machine user** (`ZITADEL_USERS_CLIENT_ID`/`ZITADEL_USERS_CLIENT_SECRET`), deliberately separate from `OAUTH_CLIENT_ID`/`OAUTH_CLIENT_SECRET`: the latter authenticates an API resource-server credential used only to introspect end-user tokens, which has no grantable directory-read permission of its own in Zitadel. The machine user needs the org-level `ORG_USER_MANAGER` role granted to it in the Zitadel console (see `.env.example`) — there's no way to check that from code, so a missing grant surfaces as a 500 from `GET /users` (Zitadel's API rejects the call). `ZitadelUserDirectory::discover` runs at boot next to `TokenIntrospection::discover` in `main.rs` and fails startup the same way (`AppError::Auth`) if the credentials are missing or the token endpoint is unreachable; a per-request failure (token exchange or the users call itself) is `AppError::Zitadel` instead, kept distinct from `Auth` because `Auth` is documented as boot-time-only. Every `GET /users` call does its own client-credentials token exchange — no token caching — since this only backs one low-traffic, admin-facing picker.
 
 **Invoice totals apply 10% VAT after the discount, floored at zero.** The rate is written twice — `VAT_RATE` in `backend/src/features/invoices/service.rs` (authoritative; the stored total) and again in `frontend/src/features/invoices/components/invoice-form/invoice-summary.tsx` (the on-screen running total). Change one and you must change the other. Note `frontend/.../lib/invoice-pricing.ts` only computes per-line totals — it has no VAT in it. Currency is single-valued by design: `CURRENCY = 'BHD'` in `src/lib/currency.ts`, and `CURRENCY`/`CURRENCY_DECIMALS` in `invoices/document.rs` for the printed document (BHD is a three-decimal currency, so amounts print as fils even though they are stored `NUMERIC(10, 2)`).
 
@@ -206,6 +208,23 @@ Path params use axum 0.7's `:id` syntax (0.8 switched to `{id}` — don't copy t
 - `invoices.invoice_number` (identity) and `created_at` exist for this: a tax invoice needs a human-readable number and an issue time, and the uuidv7 key and bare `invoice_date` gave neither.
 
 On the frontend, `features/invoices/lib/print-invoice.ts` fetches that HTML and writes it into a hidden iframe via `srcdoc`, then prints the frame. Two reasons it isn't a `<iframe src>` or a print route: the app shell (`__root.tsx` wraps _every_ route in the sidebar) never reaches the print output, and an ordinary `fetch` can carry an `Authorization` header once one exists. Reached from three places — the invoices table row action, the details sheet, and the invoice form's `Save & Export PDF`.
+
+## Thob design catalog
+
+The rotatable garment choices on an order (thobe type, collar, sleeve, front pocket, patti) are a **catalog of 92 options with illustrations**, extracted from `scripts/fabric-designs/Desion.pdf` — which is **not committed**; the PDF sits untracked at the repo root and is read only by the extraction script:
+
+```bash
+python3 scripts/fabric-designs/extract.py   # Desion.pdf -> source/, catalog.json, review.html
+python3 scripts/fabric-designs/assets.py    # catalog -> webp + generated catalog modules
+cd frontend && pnpm exec prettier --write src/features/invoices/data/design-catalog.ts
+```
+
+- `extract.py` pairs each illustration with the label printed beside it (reading order: images in x∈[51,273], labels right of x≈274, section headers above y=100) and writes rasters to `source/<section>/<NN>-<slug>.png` plus `catalog.json`, along with a self-contained `review.html` contact sheet for a human to confirm the label pairing. Option numbers are row-sorted per page because the PDF reuses image xrefs across rows.
+- `assets.py` caps every raster at 512px and encodes it as WebP, then writes **one file tree plus two generated modules** — the tree is the single copy of the bytes in the repo; the backend embeds it rather than duplicating:
+  - `frontend/public/designs/<section>/<NN>-<slug>.webp` served as picker thumbnails, surfaced through the **generated** `frontend/src/features/invoices/data/design-catalog.ts` (`NECK`, `SLEEVE`, `FRONT_POCKET`, `PATTI`, `THOB_TYPE` exports of `{ id, label, image }`).
+  - the **generated** `backend/src/features/invoices/designs.rs` (`DesignAsset { section, slug, label, bytes }` inside one `DESIGNS` static) embeds the *same* WebP files with `include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../frontend/public/designs/..."))` — so a no-network print renderer can inline them as `data:image/webp;base64,` URIs. There are no assets under `backend/assets/`; the backend build depends on the frontend tree being present in the checkout, which the backend workflow's path filter (`frontend/public/designs/**`, `scripts/fabric-designs/**`) mirrors.
+- The order form's five design pickers use `src/components/form/design-option-grid.tsx` (an image-per-choice radiogroup) and **store the catalog slug in the existing `orders.<column>`** — no DB migration. Legacy seed values ("Saudi", "Round", …) simply don't match any slug.
+- The printed invoice shows each choice in a Design panel: `document.rs::line_designs` walks the five slots in fixed order (Thobe / Collar / Sleeve / Pocket / Patti), looks the stored value up against `DESIGNS`, and renders one cell per slot — an image cell at ~52px when it matches, a label-only cell otherwise, so every line reads the same shape. The per-slot values reach it via `InvoiceDetailLine.design_values` (`#[serde(skip)]`, so the REST payload keeps the pre-joined `detail` string and no base64 bloat). The free-text note prints separately from `line_notes`.
 
 ## Locations and capability flags
 

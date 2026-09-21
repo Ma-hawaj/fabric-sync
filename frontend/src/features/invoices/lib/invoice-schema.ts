@@ -22,6 +22,7 @@ const orderDraftSchema = z
     moreDetails: z.string(),
     materialId: z.string(),
     materialAmount: numberInputSchema,
+    productionLocationId: z.string(),
     price: numberInputSchema,
   })
   .superRefine((order, ctx) => {
@@ -30,6 +31,15 @@ const orderDraftSchema = z
         code: 'custom',
         message: 'Pick a material and quantity.',
         path: ['materialId'],
+      })
+    }
+    // Material stock is held per location, and comes off automatically when
+    // the invoice is saved, so each order has to name one.
+    if (!order.productionLocationId) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick where this order is made.',
+        path: ['productionLocationId'],
       })
     }
     if (order.price === '') {

@@ -131,7 +131,7 @@ export function AppSidebar() {
   const { pathname } = useLocation()
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon" variant="inset">
       <SidebarContent>
         <SidebarHeader className="px-2">
           <Link

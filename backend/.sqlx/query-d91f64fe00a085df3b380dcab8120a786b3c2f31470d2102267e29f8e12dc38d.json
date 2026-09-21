@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO measurements (\n            customer_id, measurement_date,\n            length_fl, length_bl, chest, waist, hips, shoulder, sleeve_length,\n            neck, open_hand, chest_up, cuff_width, neck_width, aram_hole,\n            fo_width, frant_pocket_length,\n            farnt_pocket_length_by_width, side_pocket, mobile_pocket_length_by_width\n        )\n        VALUES (\n            $1, $2,\n            $3::float8, $4::float8, $5::float8, $6::float8, $7::float8, $8::float8, $9::float8,\n            $10::float8, $11::float8, $12::float8, $13::float8, $14::float8, $15::float8,\n            $16::float8, $17::float8,\n            $18, $19, $20\n        )\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d91f64fe00a085df3b380dcab8120a786b3c2f31470d2102267e29f8e12dc38d"
+}

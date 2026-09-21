@@ -4,5 +4,6 @@ mod routes;
 // name against this list rather than trusting whatever a client sends.
 pub(crate) mod service;
 pub(crate) mod types;
+pub(crate) mod zitadel;
 
 pub use routes::router;

@@ -18,7 +18,21 @@ type RouterContext = {
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootComponent,
+  errorComponent: RootErrorComponent,
 })
+
+function RootErrorComponent({ error }: { error: Error }) {
+  return (
+    <div className="flex min-h-svh items-center justify-center p-6">
+      <div className="max-w-md space-y-2 text-center">
+        <h1 className="text-lg font-semibold text-destructive">
+          Something went wrong
+        </h1>
+        <p className="text-muted-foreground text-sm">{error.message}</p>
+      </div>
+    </div>
+  )
+}
 
 function Header() {
   return (

@@ -8,8 +8,8 @@ use crate::{
 
 use super::types::{
     CreateInvoiceInput, CreateOrderInput, CreateProductLineInput, InvoiceDetailLine,
-    InvoiceLineKind, InvoiceListItem, InvoiceParty, InvoiceRecord, InvoiceRedemptionLine,
-    PaymentType, ReceivedInvoice,
+    InvoiceLineKind, InvoiceListCustomer, InvoiceListItem, InvoiceParty, InvoiceRecord,
+    InvoiceRedemptionLine, OrderDesignValues, PaymentType, ReceivedInvoice,
 };
 
 /// Everything `GET /invoices/:id` reads, before the totals are worked out.
@@ -151,30 +151,44 @@ pub async fn fetch_invoice_detail(
 
     let mut lines: Vec<InvoiceDetailLine> = orders
         .into_iter()
-        .map(|row| InvoiceDetailLine {
-            kind: InvoiceLineKind::Order,
-            order_id: Some(row.order_id),
-            description: row.material_name,
-            detail: order_specification(
-                row.thobe_type,
-                row.f_pocket,
-                row.collar,
-                row.sleeve,
-                row.patti,
-                row.more_details,
-            ),
-            customer: Some(InvoiceParty {
-                name: row.customer_name,
-                mobile_no: row.customer_mobile_no,
-            }),
-            quantity: row.material_amount,
-            unit: Some(row.material_unit),
-            // An order is priced as a whole line, not per metre, so there is
-            // no per-unit figure to print: the material amount is what was
-            // consumed, not what was charged for.
-            unit_price: row.price,
-            line_total: row.price,
-            taxable: true,
+        .map(|row| {
+            // The document needs the per-slot values to render chips and the
+            // REST payload a single joined string (order_specification), so
+            // build both from one source of truth rather than copying.
+            let design_values = OrderDesignValues {
+                thobe_type: row.thobe_type,
+                collar: row.collar,
+                sleeve: row.sleeve,
+                f_pocket: row.f_pocket,
+                patti: row.patti,
+                more_details: row.more_details,
+            };
+            InvoiceDetailLine {
+                kind: InvoiceLineKind::Order,
+                order_id: Some(row.order_id),
+                description: row.material_name,
+                detail: order_specification(
+                    design_values.thobe_type.clone(),
+                    design_values.f_pocket.clone(),
+                    design_values.collar.clone(),
+                    design_values.sleeve.clone(),
+                    design_values.patti.clone(),
+                    design_values.more_details.clone(),
+                ),
+                customer: Some(InvoiceParty {
+                    name: row.customer_name,
+                    mobile_no: row.customer_mobile_no,
+                }),
+                quantity: row.material_amount,
+                unit: Some(row.material_unit),
+                // An order is priced as a whole line, not per metre, so there is
+                // no per-unit figure to print: the material amount is what was
+                // consumed, not what was charged for.
+                unit_price: row.price,
+                line_total: row.price,
+                taxable: true,
+                design_values: Some(design_values),
+            }
         })
         .collect();
 
@@ -195,6 +209,7 @@ pub async fn fetch_invoice_detail(
             unit_price: row.unit_price,
             line_total: row.line_total,
             taxable: !is_gift_card,
+            design_values: None,
         }
     }));
 
@@ -437,9 +452,10 @@ pub async fn insert_order(
         r#"
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
-            thobe_type, f_pocket, collar, sleeve, patti, more_details
+            thobe_type, f_pocket, collar, sleeve, patti, more_details,
+            production_branch_id
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12)
         "#,
         measurement_id,
         order.material_id,
@@ -452,6 +468,7 @@ pub async fn insert_order(
         order.sleeve,
         order.patti,
         order.more_details,
+        order.production_location_id,
     )
     .execute(&mut **tx)
     .await?;

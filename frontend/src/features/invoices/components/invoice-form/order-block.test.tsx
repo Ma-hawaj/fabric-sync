@@ -58,6 +58,17 @@ function openMaterialSearch() {
   fireEvent.click(input)
 }
 
+function locationSearchInput() {
+  return screen.getByPlaceholderText<HTMLInputElement>('Search location...')
+}
+
+function openLocationSearch() {
+  const input = locationSearchInput()
+  fireEvent.pointerDown(input)
+  fireEvent.mouseDown(input)
+  fireEvent.click(input)
+}
+
 async function pickMaterial(name: RegExp | string) {
   openMaterialSearch()
   const option = await screen.findByRole('option', { name })
@@ -104,6 +115,35 @@ describe('OrderBlock', () => {
       await screen.findByText(
         'Available: 120 meters — Main Warehouse: 100, Downtown Branch: 20',
       ),
+    ).toBeTruthy()
+  })
+
+  it("limits the Made At picker to the selected material's stock locations", async () => {
+    render(<Harness />)
+
+    await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')
+    openLocationSearch()
+
+    expect(
+      await screen.findByRole('option', {
+        name: 'Main Warehouse (100 meters)',
+      }),
+    ).toBeTruthy()
+    expect(
+      await screen.findByRole('option', {
+        name: 'Downtown Branch (20 meters)',
+      }),
+    ).toBeTruthy()
+  })
+
+  it('hints when the selected material has no stock anywhere', async () => {
+    render(<Harness />)
+
+    await pickMaterial('Wool Blend — Grey')
+    openLocationSearch()
+
+    expect(
+      await screen.findByText('This material has no stock available.'),
     ).toBeTruthy()
   })
 

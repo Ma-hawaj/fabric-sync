@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use chrono::{DateTime, NaiveDate, Utc};
 use uuid::Uuid;
 
+use crate::features::customers;
+use crate::features::users;
 use crate::{
     error::AppError,
     list::{self, ListParams},
@@ -12,12 +14,11 @@ use crate::{
 use super::{
     repository,
     types::{
-        AssignStageInput, AssignmentRow, CreateRepairInput, OrderListItem, OrderRepair, OrderRow,
-        OrderStageEntry, PaymentType, ProgressRow, RepairRow, RepairStatus, SetStageInput,
-        StageRow, StageStatus, UpdateOrderInput, UpdateRepairInput,
+        AssignStageInput, AssignmentRow, CreateRepairInput, OrderDetail, OrderListItem,
+        OrderRepair, OrderRow, OrderStageEntry, PaymentType, ProgressRow, RepairRow, RepairStatus,
+        SetStageInput, StageRow, StageStatus, UpdateOrderInput, UpdateRepairInput,
     },
 };
-use crate::features::users;
 
 // A delivery stage only matters when the garment actually has to move. Produced
 // at the branch the customer collects from — or with no production location
@@ -384,6 +385,32 @@ pub async fn list_orders(
         per_page: page.per_page,
         total: page.total,
         page_count: page.page_count,
+    })
+}
+
+/// One order with everything a standalone detail page needs — the list row's
+/// full assembly plus the human-readable invoice number and the measurement
+/// snapshot the garment was cut to.
+pub(crate) async fn get_order(state: &AppState, order_id: Uuid) -> Result<OrderDetail, AppError> {
+    let row = repository::get_order(state, order_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
+
+    let order = assemble(state, vec![row.clone()])
+        .await?
+        .pop()
+        .expect("one row in, one row out");
+
+    let measurement = customers::repository::get_measurement(state, row.measurement_id)
+        .await?
+        .ok_or_else(|| {
+            AppError::NotFound(format!("measurement {} not found", row.measurement_id))
+        })?;
+
+    Ok(OrderDetail {
+        order,
+        invoice_number: row.invoice_number,
+        measurement,
     })
 }
 

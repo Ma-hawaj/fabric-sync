@@ -1,0 +1,564 @@
+{
+  "neck": [
+    {
+      "number": 1,
+      "label": "1",
+      "slug": "1",
+      "file": "neck/01-1.png"
+    },
+    {
+      "number": 2,
+      "label": "1 - N.1.B",
+      "slug": "1-n-1-b",
+      "file": "neck/02-1-n-1-b.png"
+    },
+    {
+      "number": 3,
+      "label": "1 - N.1.T",
+      "slug": "1-n-1-t",
+      "file": "neck/03-1-n-1-t.png"
+    },
+    {
+      "number": 4,
+      "label": "2",
+      "slug": "2",
+      "file": "neck/04-2.png"
+    },
+    {
+      "number": 5,
+      "label": "3",
+      "slug": "3",
+      "file": "neck/05-3.png"
+    },
+    {
+      "number": 6,
+      "label": "3 - N.2.B",
+      "slug": "3-n-2-b",
+      "file": "neck/06-3-n-2-b.png"
+    },
+    {
+      "number": 7,
+      "label": "3 - N.2.T",
+      "slug": "3-n-2-t",
+      "file": "neck/07-3-n-2-t.png"
+    },
+    {
+      "number": 8,
+      "label": "4",
+      "slug": "4",
+      "file": "neck/08-4.png"
+    },
+    {
+      "number": 9,
+      "label": "4 - N.1.B",
+      "slug": "4-n-1-b",
+      "file": "neck/09-4-n-1-b.png"
+    },
+    {
+      "number": 10,
+      "label": "4 - N.1.H",
+      "slug": "4-n-1-h",
+      "file": "neck/10-4-n-1-h.png"
+    },
+    {
+      "number": 11,
+      "label": "5",
+      "slug": "5",
+      "file": "neck/11-5.png"
+    },
+    {
+      "number": 12,
+      "label": "5 N.2.B",
+      "slug": "5-n-2-b",
+      "file": "neck/12-5-n-2-b.png"
+    },
+    {
+      "number": 13,
+      "label": "5 - N.2.H",
+      "slug": "5-n-2-h",
+      "file": "neck/13-5-n-2-h.png"
+    },
+    {
+      "number": 14,
+      "label": "5 - N.2.T",
+      "slug": "5-n-2-t",
+      "file": "neck/14-5-n-2-t.png"
+    },
+    {
+      "number": 15,
+      "label": "6",
+      "slug": "6",
+      "file": "neck/15-6.png"
+    },
+    {
+      "number": 16,
+      "label": "6 - N.2.B",
+      "slug": "6-n-2-b",
+      "file": "neck/16-6-n-2-b.png"
+    },
+    {
+      "number": 17,
+      "label": "6 - N.2.H",
+      "slug": "6-n-2-h",
+      "file": "neck/17-6-n-2-h.png"
+    },
+    {
+      "number": 18,
+      "label": "7",
+      "slug": "7",
+      "file": "neck/18-7.png"
+    },
+    {
+      "number": 19,
+      "label": "7 - N.1.H",
+      "slug": "7-n-1-h",
+      "file": "neck/19-7-n-1-h.png"
+    },
+    {
+      "number": 20,
+      "label": "7 - N.1.B",
+      "slug": "7-n-1-b",
+      "file": "neck/20-7-n-1-b.png"
+    },
+    {
+      "number": 21,
+      "label": "7 - N.2.B",
+      "slug": "7-n-2-b",
+      "file": "neck/21-7-n-2-b.png"
+    },
+    {
+      "number": 22,
+      "label": "7 - N.1.T",
+      "slug": "7-n-1-t",
+      "file": "neck/22-7-n-1-t.png"
+    },
+    {
+      "number": 23,
+      "label": "8",
+      "slug": "8",
+      "file": "neck/23-8.png"
+    },
+    {
+      "number": 24,
+      "label": "9",
+      "slug": "9",
+      "file": "neck/24-9.png"
+    },
+    {
+      "number": 25,
+      "label": "9 - N.2.B",
+      "slug": "9-n-2-b",
+      "file": "neck/25-9-n-2-b.png"
+    },
+    {
+      "number": 26,
+      "label": "10",
+      "slug": "10",
+      "file": "neck/26-10.png"
+    },
+    {
+      "number": 27,
+      "label": "11",
+      "slug": "11",
+      "file": "neck/27-11.png"
+    },
+    {
+      "number": 28,
+      "label": "12",
+      "slug": "12",
+      "file": "neck/28-12.png"
+    },
+    {
+      "number": 29,
+      "label": "CHINA",
+      "slug": "china",
+      "file": "neck/29-china.png"
+    },
+    {
+      "number": 30,
+      "label": "NEW SHIRT COLLOR",
+      "slug": "new-shirt-collor",
+      "file": "neck/30-new-shirt-collor.png"
+    },
+    {
+      "number": 31,
+      "label": "NORMAL",
+      "slug": "normal",
+      "file": "neck/31-normal.png"
+    }
+  ],
+  "sleeve": [
+    {
+      "number": 1,
+      "label": "1",
+      "slug": "1",
+      "file": "sleeve/01-1.png"
+    },
+    {
+      "number": 2,
+      "label": "2",
+      "slug": "2",
+      "file": "sleeve/02-2.png"
+    },
+    {
+      "number": 3,
+      "label": "2 THOBX",
+      "slug": "2-thobx",
+      "file": "sleeve/03-2-thobx.png"
+    },
+    {
+      "number": 4,
+      "label": "3",
+      "slug": "3",
+      "file": "sleeve/04-3.png"
+    },
+    {
+      "number": 5,
+      "label": "4",
+      "slug": "4",
+      "file": "sleeve/05-4.png"
+    },
+    {
+      "number": 6,
+      "label": "5",
+      "slug": "5",
+      "file": "sleeve/06-5.png"
+    },
+    {
+      "number": 7,
+      "label": "5 Thobx",
+      "slug": "5-thobx",
+      "file": "sleeve/07-5-thobx.png"
+    },
+    {
+      "number": 8,
+      "label": "6",
+      "slug": "6",
+      "file": "sleeve/08-6.png"
+    },
+    {
+      "number": 9,
+      "label": "6 THOBX",
+      "slug": "6-thobx",
+      "file": "sleeve/09-6-thobx.png"
+    },
+    {
+      "number": 10,
+      "label": "Double Cuff",
+      "slug": "double-cuff",
+      "file": "sleeve/10-double-cuff.png"
+    },
+    {
+      "number": 11,
+      "label": "Double Cuff Thobx",
+      "slug": "double-cuff-thobx",
+      "file": "sleeve/11-double-cuff-thobx.png"
+    },
+    {
+      "number": 12,
+      "label": "Open",
+      "slug": "open",
+      "file": "sleeve/12-open.png"
+    },
+    {
+      "number": 13,
+      "label": "Cuff",
+      "slug": "cuff",
+      "file": "sleeve/13-cuff.png"
+    }
+  ],
+  "front_pocket": [
+    {
+      "number": 1,
+      "label": "Cross Inside",
+      "slug": "cross-inside",
+      "file": "front_pocket/01-cross-inside.png"
+    },
+    {
+      "number": 2,
+      "label": "Cross Clip",
+      "slug": "cross-clip",
+      "file": "front_pocket/02-cross-clip.png"
+    },
+    {
+      "number": 3,
+      "label": "Round",
+      "slug": "round",
+      "file": "front_pocket/03-round.png"
+    },
+    {
+      "number": 4,
+      "label": "Round Clip",
+      "slug": "round-clip",
+      "file": "front_pocket/04-round-clip.png"
+    },
+    {
+      "number": 5,
+      "label": "Straight",
+      "slug": "straight",
+      "file": "front_pocket/05-straight.png"
+    },
+    {
+      "number": 6,
+      "label": "Straight Clip",
+      "slug": "straight-clip",
+      "file": "front_pocket/06-straight-clip.png"
+    },
+    {
+      "number": 7,
+      "label": "v",
+      "slug": "v",
+      "file": "front_pocket/07-v.png"
+    },
+    {
+      "number": 8,
+      "label": "V Clip",
+      "slug": "v-clip",
+      "file": "front_pocket/08-v-clip.png"
+    },
+    {
+      "number": 9,
+      "label": "Volut",
+      "slug": "volut",
+      "file": "front_pocket/09-volut.png"
+    },
+    {
+      "number": 10,
+      "label": "M",
+      "slug": "m",
+      "file": "front_pocket/10-m.png"
+    },
+    {
+      "number": 11,
+      "label": "N",
+      "slug": "n",
+      "file": "front_pocket/11-n.png"
+    },
+    {
+      "number": 12,
+      "label": "Normal",
+      "slug": "normal",
+      "file": "front_pocket/12-normal.png"
+    },
+    {
+      "number": 13,
+      "label": "Cross No Canvas",
+      "slug": "cross-no-canvas",
+      "file": "front_pocket/13-cross-no-canvas.png"
+    },
+    {
+      "number": 14,
+      "label": "Round No Canvas",
+      "slug": "round-no-canvas",
+      "file": "front_pocket/14-round-no-canvas.png"
+    },
+    {
+      "number": 15,
+      "label": "NO",
+      "slug": "no",
+      "file": "front_pocket/15-no.png"
+    }
+  ],
+  "patti": [
+    {
+      "number": 1,
+      "label": "Zip",
+      "slug": "zip",
+      "file": "patti/01-zip.png"
+    },
+    {
+      "number": 2,
+      "label": "Down Stiching = Zip",
+      "slug": "down-stiching-zip",
+      "file": "patti/02-down-stiching-zip.png"
+    },
+    {
+      "number": 3,
+      "label": "No Canvas = Zip",
+      "slug": "no-canvas-zip",
+      "file": "patti/03-no-canvas-zip.png"
+    },
+    {
+      "number": 4,
+      "label": "Zip + Show",
+      "slug": "zip-show",
+      "file": "patti/04-zip-show.png"
+    },
+    {
+      "number": 5,
+      "label": "Down Stiching = Zip + Show",
+      "slug": "down-stiching-zip-show",
+      "file": "patti/05-down-stiching-zip-show.png"
+    },
+    {
+      "number": 6,
+      "label": "No Canvas = Zip + Show",
+      "slug": "no-canvas-zip-show",
+      "file": "patti/06-no-canvas-zip-show.png"
+    },
+    {
+      "number": 7,
+      "label": "Saudi Patti - No Canvas = Zip",
+      "slug": "saudi-patti-no-canvas-zip",
+      "file": "patti/07-saudi-patti-no-canvas-zip.png"
+    },
+    {
+      "number": 8,
+      "label": "Inside Button",
+      "slug": "inside-button",
+      "file": "patti/08-inside-button.png"
+    },
+    {
+      "number": 9,
+      "label": "Down Sticing = Inside Button",
+      "slug": "down-sticing-inside-button",
+      "file": "patti/09-down-sticing-inside-button.png"
+    },
+    {
+      "number": 10,
+      "label": "No Canvas = Inside Button",
+      "slug": "no-canvas-inside-button",
+      "file": "patti/10-no-canvas-inside-button.png"
+    },
+    {
+      "number": 11,
+      "label": "Saudi Patti - No Canvas = Inside Button",
+      "slug": "saudi-patti-no-canvas-inside-button",
+      "file": "patti/11-saudi-patti-no-canvas-inside-button.png"
+    },
+    {
+      "number": 12,
+      "label": "Show Button",
+      "slug": "show-button",
+      "file": "patti/12-show-button.png"
+    },
+    {
+      "number": 13,
+      "label": "Down Sticing = Show Button",
+      "slug": "down-sticing-show-button",
+      "file": "patti/13-down-sticing-show-button.png"
+    },
+    {
+      "number": 14,
+      "label": "No Canvas = Show Button",
+      "slug": "no-canvas-show-button",
+      "file": "patti/14-no-canvas-show-button.png"
+    },
+    {
+      "number": 15,
+      "label": "Normal",
+      "slug": "normal",
+      "file": "patti/15-normal.png"
+    },
+    {
+      "number": 16,
+      "label": "3 - Show Button",
+      "slug": "3-show-button",
+      "file": "patti/16-3-show-button.png"
+    },
+    {
+      "number": 17,
+      "label": "3 - Zip + Show",
+      "slug": "3-zip-show",
+      "file": "patti/17-3-zip-show.png"
+    },
+    {
+      "number": 18,
+      "label": "Zip + Thobx Steel",
+      "slug": "zip-thobx-steel",
+      "file": "patti/18-zip-thobx-steel.png"
+    },
+    {
+      "number": 19,
+      "label": "Zip Street",
+      "slug": "zip-street",
+      "file": "patti/19-zip-street.png"
+    },
+    {
+      "number": 20,
+      "label": "No Canvas , No Stitching = Show Button",
+      "slug": "no-canvas-no-stitching-show-button",
+      "file": "patti/20-no-canvas-no-stitching-show-button.png"
+    }
+  ],
+  "thob_type": [
+    {
+      "number": 1,
+      "label": "9 Model",
+      "slug": "9-model",
+      "file": "thob_type/01-9-model.png"
+    },
+    {
+      "number": 2,
+      "label": "Upline",
+      "slug": "upline",
+      "file": "thob_type/02-upline.png"
+    },
+    {
+      "number": 3,
+      "label": "S.C.F.P",
+      "slug": "s-c-f-p",
+      "file": "thob_type/03-s-c-f-p.png"
+    },
+    {
+      "number": 4,
+      "label": "Back Chepsa",
+      "slug": "back-chepsa",
+      "file": "thob_type/04-back-chepsa.png"
+    },
+    {
+      "number": 5,
+      "label": "Front Chepsa",
+      "slug": "front-chepsa",
+      "file": "thob_type/05-front-chepsa.png"
+    },
+    {
+      "number": 6,
+      "label": "Front & Back = Chepsa",
+      "slug": "front-back-chepsa",
+      "file": "thob_type/06-front-back-chepsa.png"
+    },
+    {
+      "number": 7,
+      "label": "9 mode + Front & Back = Chepsa",
+      "slug": "9-mode-front-back-chepsa",
+      "file": "thob_type/07-9-mode-front-back-chepsa.png"
+    },
+    {
+      "number": 8,
+      "label": "9 mode + Front Chepsa",
+      "slug": "9-mode-front-chepsa",
+      "file": "thob_type/08-9-mode-front-chepsa.png"
+    },
+    {
+      "number": 9,
+      "label": "Tatriz",
+      "slug": "tatriz",
+      "file": "thob_type/09-tatriz.png"
+    },
+    {
+      "number": 10,
+      "label": "Normal",
+      "slug": "normal",
+      "file": "thob_type/10-normal.png"
+    },
+    {
+      "number": 11,
+      "label": "B.H.T.V",
+      "slug": "b-h-t-v",
+      "file": "thob_type/11-b-h-t-v.png"
+    },
+    {
+      "number": 12,
+      "label": "Hezazi",
+      "slug": "hezazi",
+      "file": "thob_type/12-hezazi.png"
+    },
+    {
+      "number": 13,
+      "label": "Thobx",
+      "slug": "thobx",
+      "file": "thob_type/13-thobx.png"
+    }
+  ]
+}

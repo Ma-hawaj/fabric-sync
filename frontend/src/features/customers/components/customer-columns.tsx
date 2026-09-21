@@ -1,11 +1,12 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
+import { RowActions } from '@/components/data-table/row-actions'
 import type { Customer } from '../types/customers'
-import { EyeIcon } from 'lucide-react'
+import { EyeIcon, PrinterIcon } from 'lucide-react'
 
 export const getCustomerColumns = (
   onViewDetails: (customer: Customer) => void,
+  onPrint: (customer: Customer) => void,
 ): ColumnDef<Customer, any>[] => [
   {
     accessorKey: 'id',
@@ -70,16 +71,29 @@ export const getCustomerColumns = (
   {
     id: 'actions',
     header: 'Actions',
-    cell: ({ row }) => (
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => onViewDetails(row.original)}
-        className="h-8 w-auto px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
-      >
-        <EyeIcon className="mr-1.5 h-4 w-4" />
-        View Details
-      </Button>
-    ),
+    enablePinning: true,
+    cell: ({ row }) => {
+      const customer = row.original
+      return (
+        <RowActions
+          items={[
+            {
+              label: 'View Details',
+              icon: EyeIcon,
+              onClick: () => onViewDetails(customer),
+            },
+            ...(customer.measurements.length > 0
+              ? [
+                  {
+                    label: 'Print Measurements',
+                    icon: PrinterIcon,
+                    onClick: () => onPrint(customer),
+                  },
+                ]
+              : []),
+          ]}
+        />
+      )
+    },
   },
 ]
