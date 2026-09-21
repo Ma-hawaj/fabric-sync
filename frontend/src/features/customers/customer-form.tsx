@@ -2,7 +2,7 @@ import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { TextField } from '@/components/form/fields'
+import { TextField, PhoneField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { MeasurementFields } from './components/measurement-fields'
 import { useCreateCustomer } from './hooks/use-create-customer'
@@ -57,7 +57,7 @@ export function CustomerFormPage() {
       >
         <div className="max-w-3xl space-y-4 rounded-xl border border-border/60 bg-card p-5">
           <TextField form={form} name="name" label="Full Name" />
-          <TextField form={form} name="mobileNo" label="Phone" />
+          <PhoneField form={form} name="mobileNo" label="Phone" />
         </div>
 
         <div className="space-y-4 rounded-xl border border-border/60 bg-card p-5">

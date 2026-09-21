@@ -1,12 +1,14 @@
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  NumberField,
+  NumberFieldGroup,
+  NumberFieldInput,
+  NumberFieldIncrement,
+  NumberFieldDecrement,
+} from '@/components/reui/number-field'
+import { PhoneInput } from '@/components/reui/phone-input'
+import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 
 // TanStack Form's extended API type has 11 validator generic params beyond
 // the form data itself; pinning them all to `any` collapses several method
@@ -57,26 +59,22 @@ export function NumberField({
       {(field: any) => (
         <Field data-invalid={field.state.meta.errors.length > 0}>
           <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
-          <div className="relative">
-            <Input
-              id={field.name}
-              type="number"
-              inputMode="decimal"
-              value={field.state.value ?? ''}
-              aria-invalid={field.state.meta.errors.length > 0}
-              onBlur={field.handleBlur}
-              onChange={(e) => {
-                const raw = e.target.value
-                field.handleChange(raw === '' ? '' : Number(raw))
-              }}
-              className={unit ? 'pe-10' : undefined}
-            />
-            {unit && (
-              <span className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                {unit}
-              </span>
-            )}
-          </div>
+          <NumberField
+            value={field.state.value ?? ''}
+            onValueChange={(value) => field.handleChange(value ?? 0)}
+          >
+            <NumberFieldGroup>
+              <NumberFieldInput
+                id={field.name}
+                aria-invalid={field.state.meta.errors.length > 0}
+                onBlur={field.handleBlur}
+                onChange={(e) => {
+                  const raw = e.currentTarget.value
+                  field.handleChange(raw === '' ? '' : Number(raw))
+                }}
+              />
+            </NumberFieldGroup>
+          </NumberField>
           <FieldError errors={field.state.meta.errors} />
         </Field>
       )}
