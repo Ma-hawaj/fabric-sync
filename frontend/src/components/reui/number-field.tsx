@@ -181,7 +181,7 @@ function NumberFieldInput({
   className,
   size: sizeProp,
   ...props
-}: NumberFieldPrimitive.Input.Props &
+}: Omit<NumberFieldPrimitive.Input.Props, 'size'> &
   Partial<VariantProps<typeof numberFieldInputVariants>>) {
   const context = useContext(NumberFieldContext)
   if (!context) {

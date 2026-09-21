@@ -162,6 +162,7 @@ function CountrySelect({
         )}
       >
         <ComboboxInput
+          aria-label="Search countries"
           placeholder="e.g. United States"
           value={searchValue}
           onChange={(e) => setSearchValue(e.target.value)}
