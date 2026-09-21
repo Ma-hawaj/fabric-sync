@@ -64,6 +64,7 @@ export function PhoneField({ form, name, label }: FieldProps) {
             aria-invalid={field.state.meta.errors.length > 0}
             onBlur={field.handleBlur}
             onChange={(value) => field.handleChange(value)}
+            defaultCountry={'BH'}
           />
           <FieldError errors={field.state.meta.errors} />
         </Field>
