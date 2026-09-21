@@ -1,3 +1,9 @@
+import {
+  NumberField as NumberFieldRoot,
+  NumberFieldGroup,
+  NumberFieldInput,
+} from '@/components/reui/number-field'
+import { PhoneInput } from '@/components/reui/phone-input'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
@@ -46,6 +52,27 @@ export function TextField({ form, name, label }: FieldProps) {
   )
 }
 
+export function PhoneField({ form, name, label }: FieldProps) {
+  return (
+    <form.Field name={name as never}>
+      {(field: any) => (
+        <Field data-invalid={field.state.meta.errors.length > 0}>
+          <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
+          <PhoneInput
+            id={field.name}
+            value={field.state.value ?? ''}
+            aria-invalid={field.state.meta.errors.length > 0}
+            onBlur={field.handleBlur}
+            onChange={(value) => field.handleChange(value)}
+            defaultCountry={'BH'}
+          />
+          <FieldError errors={field.state.meta.errors} />
+        </Field>
+      )}
+    </form.Field>
+  )
+}
+
 export function NumberField({
   form,
   name,
@@ -57,26 +84,32 @@ export function NumberField({
       {(field: any) => (
         <Field data-invalid={field.state.meta.errors.length > 0}>
           <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
-          <div className="relative">
-            <Input
-              id={field.name}
-              type="number"
-              inputMode="decimal"
-              value={field.state.value ?? ''}
-              aria-invalid={field.state.meta.errors.length > 0}
-              onBlur={field.handleBlur}
-              onChange={(e) => {
-                const raw = e.target.value
-                field.handleChange(raw === '' ? '' : Number(raw))
-              }}
-              className={unit ? 'pe-10' : undefined}
-            />
-            {unit && (
-              <span className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                {unit}
-              </span>
-            )}
-          </div>
+          <NumberFieldRoot
+            value={
+              field.state.value === '' || field.state.value == null
+                ? null
+                : field.state.value
+            }
+            onValueChange={(value) => field.handleChange(value ?? '')}
+          >
+            <NumberFieldGroup>
+              <NumberFieldInput
+                id={field.name}
+                aria-invalid={field.state.meta.errors.length > 0}
+                onBlur={field.handleBlur}
+                onChange={(e) => {
+                  const raw = e.currentTarget.value
+                  field.handleChange(raw === '' ? '' : Number(raw))
+                }}
+                className={unit ? 'pe-10' : undefined}
+              />
+              {unit && (
+                <span className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  {unit}
+                </span>
+              )}
+            </NumberFieldGroup>
+          </NumberFieldRoot>
           <FieldError errors={field.state.meta.errors} />
         </Field>
       )}

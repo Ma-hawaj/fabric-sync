@@ -9,7 +9,7 @@ import {
   ComboboxItem,
   ComboboxList,
 } from '@/components/ui/combobox'
-import { TextField } from '@/components/form/fields'
+import { PhoneField, TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import {
   measurementFromSnapshot,
@@ -150,7 +150,7 @@ export function CustomerBlock({
                       label="Full Name"
                     />
 
-                    <TextField
+                    <PhoneField
                       form={form}
                       name={`${base}.mobileNo`}
                       label="Phone"
