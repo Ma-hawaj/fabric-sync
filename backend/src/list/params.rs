@@ -1,8 +1,11 @@
+use std::fmt;
+
 use axum::{
     async_trait,
     extract::{FromRequestParts, Query},
     http::request::Parts,
 };
+use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde::Deserialize;
 
 use crate::error::AppError;
@@ -70,8 +73,11 @@ impl JoinOperator {
 
 /// A filter value arrives as either a scalar or a list — `multiSelect` sends a
 /// list, `isBetween` sends a two-element list, everything else sends a scalar.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-#[serde(untagged)]
+///
+/// Scalars are deserialized from their JSON form rather than a string so the
+/// picker DSL can send `true`/`42` instead of `"true"`/`"42"`; each is coerced
+/// to its string spelling so the SQL layer only ever sees text.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FilterValue {
     One(String),
     Many(Vec<String>),
@@ -80,6 +86,74 @@ pub enum FilterValue {
 impl Default for FilterValue {
     fn default() -> Self {
         Self::One(String::new())
+    }
+}
+
+impl<'de> Deserialize<'de> for FilterValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(FilterValueVisitor)
+    }
+}
+
+struct FilterValueVisitor;
+
+impl<'de> Visitor<'de> for FilterValueVisitor {
+    type Value = FilterValue;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a string, boolean, number, or list of those")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(FilterValue::One(value.to_string()))
+    }
+
+    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(FilterValue::One(value.to_string()))
+    }
+
+    fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(FilterValue::One(value.to_string()))
+    }
+
+    fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(FilterValue::One(value.to_string()))
+    }
+
+    fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(FilterValue::One(value.to_string()))
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let mut values = Vec::new();
+        while let Some(element) = seq.next_element::<FilterValue>()? {
+            match element {
+                FilterValue::One(value) => values.push(value),
+                FilterValue::Many(nested) => values.extend(nested),
+            }
+        }
+        Ok(FilterValue::Many(values))
     }
 }
 
@@ -404,6 +478,58 @@ mod tests {
 
         assert_eq!(one.as_many(), vec!["paid".to_string()]);
         assert_eq!(many.as_many().len(), 2);
+    }
+
+    #[test]
+    fn filter_values_deserialize_from_booleans_and_numbers() {
+        // The picker DSL forwards raw JSON scalars (`value: true`), not strings.
+        for (json, expected) in [
+            ("true", FilterValue::One("true".to_string())),
+            ("false", FilterValue::One("false".to_string())),
+            ("42", FilterValue::One("42".to_string())),
+            ("-7", FilterValue::One("-7".to_string())),
+            ("2.5", FilterValue::One("2.5".to_string())),
+            ("\"paid\"", FilterValue::One("paid".to_string())),
+        ] {
+            let parsed: FilterValue = serde_json::from_str(json).unwrap();
+            assert_eq!(parsed, expected, "{json}");
+        }
+    }
+
+    #[test]
+    fn filter_lists_coerce_each_element_to_a_string() {
+        let parsed: FilterValue = serde_json::from_str("[true, \"paid\", 3]").unwrap();
+        assert_eq!(
+            parsed,
+            FilterValue::Many(vec![
+                "true".to_string(),
+                "paid".to_string(),
+                "3".to_string(),
+            ])
+        );
+        assert_eq!(parsed.as_many().len(), 3);
+    }
+
+    #[test]
+    fn the_picker_dsl_boolean_filters_parse_end_to_end() {
+        // The exact `filters` JSON the invoice form's Sold From combobox sends
+        // with its STOCK_FILTERS attached.
+        let params = parse(raw(
+            "page=1&perPage=20&filters=%5B%7B%22id%22%3A%22isActive%22%2C%22value%22%3Atrue%2C\
+             %22variant%22%3A%22boolean%22%2C%22operator%22%3A%22eq%22%7D%2C%7B%22id%22%3A%22holdsStock%22%2C\
+             %22value%22%3Atrue%2C%22variant%22%3A%22boolean%22%2C%22operator%22%3A%22eq%22%7D%5D",
+        ))
+        .unwrap();
+
+        assert_eq!(params.filters.len(), 2);
+        assert_eq!(
+            params.filters[0].value,
+            FilterValue::One("true".to_string())
+        );
+        assert_eq!(
+            params.filters[1].value,
+            FilterValue::One("true".to_string())
+        );
     }
 
     #[test]
