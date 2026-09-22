@@ -50,9 +50,8 @@ describe('DataTableToolbar text filter', () => {
   it('shows each keystroke immediately rather than dropping it', () => {
     render(<ToolbarHarness />)
 
-    const input = screen.getByPlaceholderText<HTMLInputElement>(
-      'Filter name...',
-    )
+    const input =
+      screen.getByPlaceholderText<HTMLInputElement>('Filter name...')
 
     // A controlled input fed straight from `column.getFilterValue()` would
     // drop these keystrokes, because that value only moves once the debounced
