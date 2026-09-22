@@ -2,6 +2,7 @@ import { parseAsInteger, useQueryState, useQueryStates } from 'nuqs'
 import type { ColumnDef } from '@tanstack/react-table'
 import * as React from 'react'
 
+import { getColumnDefId } from '@/lib/data-table'
 import { getSortingStateParser } from '@/lib/parsers'
 import {
   DEFAULT_PER_PAGE,
@@ -41,7 +42,11 @@ export function useListParams<TData>({
 
   const columnIds = React.useMemo(
     () =>
-      new Set(columns.map((column) => column.id).filter(Boolean) as string[]),
+      new Set(
+        columns
+          .map((column) => getColumnDefId(column))
+          .filter((id) => id != null),
+      ),
     [columns],
   )
 

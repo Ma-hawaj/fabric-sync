@@ -24,6 +24,7 @@ import type { UseQueryStateOptions } from 'nuqs'
 import * as React from 'react'
 
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
+import { getColumnDefId } from '@/lib/data-table'
 import {
   DEFAULT_PER_PAGE,
   FILTERS_KEY,
@@ -100,20 +101,10 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       history,
       scroll,
       shallow,
-      throttleMs,
-      debounceMs,
       clearOnDefault,
       startTransition,
     }),
-    [
-      history,
-      scroll,
-      shallow,
-      throttleMs,
-      debounceMs,
-      clearOnDefault,
-      startTransition,
-    ],
+    [history, scroll, shallow, clearOnDefault, startTransition],
   )
 
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>(
@@ -158,7 +149,9 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
 
   const columnIds = React.useMemo(() => {
     return new Set(
-      columns.map((column) => column.id).filter(Boolean) as string[],
+      columns
+        .map((column) => getColumnDefId(column))
+        .filter((id) => id != null),
     )
   }, [columns])
 
@@ -227,7 +220,11 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       const filterUpdates = next.reduce<
         Record<string, string | string[] | null>
       >((acc, filter) => {
-        if (filterableColumns.find((column) => column.id === filter.id)) {
+        if (
+          filterableColumns.find(
+            (column) => getColumnDefId(column) === filter.id,
+          )
+        ) {
           acc[filter.id] = filter.value as string | string[]
         }
         return acc
@@ -250,7 +247,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   )
 
   const hasActionsColumn = React.useMemo(
-    () => columns.some((column) => column.id === 'actions'),
+    () => columns.some((column) => getColumnDefId(column) === 'actions'),
     [columns],
   )
 

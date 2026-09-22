@@ -7,7 +7,11 @@ import type {
   SortingState,
 } from '@tanstack/react-table'
 
-import { getDefaultFilterOperator, getValidFilters } from '@/lib/data-table'
+import {
+  getColumnDefId,
+  getDefaultFilterOperator,
+  getValidFilters,
+} from '@/lib/data-table'
 import type {
   ExtendedColumnFilter,
   FilterOperator,
@@ -48,7 +52,7 @@ export function buildFilterParsers<TData>(
   options?: Omit<UseQueryStateOptions<string>, 'parse'>,
 ): FilterParsers {
   return filterableColumns(columns).reduce<FilterParsers>((parsers, column) => {
-    const id = column.id ?? ''
+    const id = getColumnDefId(column) ?? ''
 
     // The two branches are kept apart rather than picking a parser and then
     // calling `withOptions` on it: the union of the two parser types has no
@@ -122,7 +126,11 @@ export function toFilterDsl<TData>(
   columns: ColumnDef<TData>[],
   columnFilters: ColumnFiltersState,
 ): ExtendedColumnFilter<TData>[] {
-  const byId = new Map(columns.map((column) => [column.id, column]))
+  const byId = new Map<string, ColumnDef<TData>>(
+    columns
+      .map((column) => [getColumnDefId(column), column] as const)
+      .filter((entry): entry is [string, ColumnDef<TData>] => entry[0] != null),
+  )
 
   const filters = columnFilters.flatMap((filter) => {
     const variant = byId.get(filter.id)?.meta?.variant

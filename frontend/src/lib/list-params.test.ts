@@ -196,4 +196,38 @@ describe('buildFilterParsers', () => {
     expect(parsers.status.parse('paid,unpaid')).toEqual(['paid', 'unpaid'])
     expect(parsers.name.parse('John Smith')).toBe('John Smith')
   })
+
+  it('keys accessor-based columns by their accessor, matching TanStack ids', () => {
+    // TanStack derives a column's id from `accessorKey` at table-build time and
+    // never writes it back onto the raw def. The URL parsers and the request
+    // DSL have only the raw defs, so they must re-derive the id the same way or
+    // every accessor column collapses onto one '' key and filters never write.
+    const accessorColumns: ColumnDef<Row>[] = [
+      {
+        accessorKey: 'name',
+        enableColumnFilter: true,
+        meta: { label: 'Name', variant: 'text' },
+      },
+      {
+        accessorKey: 'totalPrice',
+        enableColumnFilter: true,
+        meta: { label: 'Total', variant: 'range' },
+      },
+      { accessorKey: 'actions' },
+    ]
+
+    const parsers = buildFilterParsers(accessorColumns)
+    expect(Object.keys(parsers).sort()).toEqual(['name', 'totalPrice'])
+
+    const filters = toFilterDsl(accessorColumns, [{ id: 'name', value: 'ali' }])
+    expect(filters).toEqual([
+      {
+        id: 'name',
+        value: 'ali',
+        variant: 'text',
+        operator: 'iLike',
+        filterId: 'name',
+      },
+    ])
+  })
 })
