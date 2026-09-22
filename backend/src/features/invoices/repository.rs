@@ -8,8 +8,8 @@ use crate::{
 
 use super::types::{
     CreateInvoiceInput, CreateOrderInput, CreateProductLineInput, InvoiceDetailLine,
-    InvoiceLineKind, InvoiceListCustomer, InvoiceListItem, InvoiceParty, InvoiceRecord,
-    InvoiceRedemptionLine, OrderDesignValues, PaymentType, ReceivedInvoice,
+    InvoiceLineKind, InvoiceListItem, InvoiceParty, InvoiceRecord, InvoiceRedemptionLine,
+    OrderDesignValues, PaymentType, ReceivedInvoice,
 };
 
 /// Everything `GET /invoices/:id` reads, before the totals are worked out.

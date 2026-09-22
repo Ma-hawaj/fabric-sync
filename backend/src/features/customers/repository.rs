@@ -1,3 +1,4 @@
+use sqlx::types::Json;
 use uuid::Uuid;
 
 use crate::{
@@ -6,7 +7,7 @@ use crate::{
     state::AppState,
 };
 
-use super::types::{CreateMeasurementInput, Customer};
+use super::types::{CreateMeasurementInput, Customer, Measurement};
 
 // The `GROUP BY` is on the customer's primary key, so the wrapper's `LIMIT`
 // counts customers rather than measurement rows. `last_measured_on` is exposed
