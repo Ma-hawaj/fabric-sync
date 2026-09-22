@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { useDataTable } from '@/hooks/use-data-table'
+import { useListParams } from '@/hooks/use-list-params'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
@@ -12,7 +13,6 @@ import { useUpdateGiftCard } from './hooks/use-update-gift-card'
 import type { GiftCard } from './types/gift-card'
 
 export function GiftCardsPage() {
-  const { data: giftCards = [], isLoading } = useGiftCards()
   const updateGiftCard = useUpdateGiftCard()
   const today = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
 
@@ -41,12 +41,19 @@ export function GiftCardsPage() {
     [toggleActive, updateGiftCard.isPending, today],
   )
 
+  const { searchParams } = useListParams({ columns })
+  const {
+    data: giftCards,
+    pageCount,
+    total,
+    isLoading,
+  } = useGiftCards(searchParams)
+
   const { table } = useDataTable({
     data: giftCards,
     columns,
-    manualFiltering: false,
-    manualSorting: false,
-    manualPagination: false,
+    pageCount,
+    rowCount: total,
   })
 
   return (

@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
 import { OrderBlock } from './order-block'
 import { createEmptyCustomer } from '../../types/invoice-form'
 import type { Material } from '../../types/materials'
+import { apiGetMock } from '@/lib/list-fixtures'
 import { CURRENCY } from '@/lib/currency'
 
 const MATERIALS: Material[] = [
@@ -26,20 +28,32 @@ const MATERIALS: Material[] = [
   },
 ]
 
+// The material picker queries the server per keystroke, so the API layer is
+// mocked to serve the search against in-memory rows instead of hitting the
+// network in jsdom.
+const { apiGet } = vi.hoisted(() => ({ apiGet: vi.fn() }))
+vi.mock('@/lib/api', () => ({
+  apiClient: { get: apiGet },
+  ApiError: class ApiError extends Error {},
+}))
+
 function Harness() {
   const form = useForm({
     defaultValues: { customers: [createEmptyCustomer()] },
   })
+  apiGet.mockImplementation(apiGetMock({ '/materials': MATERIALS }))
+  const client = new QueryClient()
   return (
-    <OrderBlock
-      form={form as never}
-      customerIndex={0}
-      orderIndex={0}
-      orderNumber={1}
-      materials={MATERIALS}
-      removable={false}
-      onRemove={() => {}}
-    />
+    <QueryClientProvider client={client}>
+      <OrderBlock
+        form={form as never}
+        customerIndex={0}
+        orderIndex={0}
+        orderNumber={1}
+        removable={false}
+        onRemove={() => {}}
+      />
+    </QueryClientProvider>
   )
 }
 
@@ -99,11 +113,13 @@ describe('OrderBlock', () => {
     expect(
       await screen.findByRole('option', { name: 'Wool Blend — Grey' }),
     ).toBeTruthy()
-    expect(
-      screen.queryByRole('option', {
-        name: 'Cotton Poplin — White (FB-CTN-WHT-01)',
-      }),
-    ).toBeNull()
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('option', {
+          name: 'Cotton Poplin — White (FB-CTN-WHT-01)',
+        }),
+      ).toBeNull(),
+    )
   })
 
   it("shows the material's stock across locations once selected", async () => {

@@ -1,6 +1,8 @@
+import * as React from 'react'
 import { XIcon } from 'lucide-react'
 import { NumberField } from '@/components/form/fields'
 import { DesignOptionGrid } from '@/components/form/design-option-grid'
+import { AsyncCombobox } from '@/components/form/async-combobox'
 import { Button } from '@/components/ui/button'
 import {
   Combobox,
@@ -44,7 +46,6 @@ interface OrderBlockProps {
   customerIndex: number
   orderIndex: number
   orderNumber: number
-  materials: Material[]
   onRemove: () => void
   removable: boolean
 }
@@ -54,11 +55,16 @@ export function OrderBlock({
   customerIndex,
   orderIndex,
   orderNumber,
-  materials,
   onRemove,
   removable,
 }: OrderBlockProps) {
   const base = `customers[${customerIndex}].orders[${orderIndex}]`
+  // The row behind the stored `materialId`, remembered from the picker. The
+  // "made at" options come from the material's own stock rows, which the list
+  // endpoint returns nested — so the whole materials list is not needed.
+  const [pickedMaterial, setPickedMaterial] = React.useState<Material | null>(
+    null,
+  )
 
   return (
     <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
@@ -160,78 +166,57 @@ export function OrderBlock({
         <h4 className="text-sm font-semibold">Material</h4>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <form.Field name={`${base}.materialId` as never}>
-            {(field: any) => {
-              const selected = materials.find((m) => m.id === field.state.value)
-              return (
-                <Field
-                  className="lg:col-span-2"
-                  data-invalid={field.state.meta.errors.length > 0}
-                >
-                  <FieldLabel htmlFor={field.name}>Material</FieldLabel>
-                  <Combobox
-                    items={materials}
-                    itemToStringLabel={materialOptionLabel}
-                    isItemEqualToValue={(a: Material, b: Material) =>
-                      a.id === b.id
-                    }
-                    value={selected ?? null}
-                    onValueChange={(material: Material | null) => {
-                      field.handleChange(material?.id ?? '')
-                      // "Made At" only lists this material's stock locations —
-                      // drop a previously chosen one that may not stock it.
-                      form.setFieldValue(
-                        `${base}.productionLocationId` as never,
-                        '' as never,
-                      )
-                    }}
-                  >
-                    <ComboboxInput
-                      id={field.name}
-                      placeholder="Search material by name or SKU..."
-                      className="w-full"
-                      showClear
-                    />
-                    <ComboboxContent>
-                      <ComboboxEmpty>No materials found.</ComboboxEmpty>
-                      <ComboboxList>
-                        {(material: Material) => (
-                          <ComboboxItem key={material.id} value={material}>
-                            {materialOptionLabel(material)}
-                          </ComboboxItem>
-                        )}
-                      </ComboboxList>
-                    </ComboboxContent>
-                  </Combobox>
-                  <FieldError errors={field.state.meta.errors} />
-                  {selected && (
-                    <p className="text-xs text-muted-foreground">
-                      Available: {materialTotalStock(selected)} {selected.unit}
-                      {selected.locations.length > 0 &&
-                        ` — ${selected.locations
-                          .map(
-                            (stock) => `${stock.location}: ${stock.quantity}`,
-                          )
-                          .join(', ')}`}
-                    </p>
-                  )}
-                </Field>
-              )
-            }}
+            {(field: any) => (
+              <Field
+                className="lg:col-span-2"
+                data-invalid={field.state.meta.errors.length > 0}
+              >
+                <FieldLabel htmlFor={field.name}>Material</FieldLabel>
+                <AsyncCombobox<Material>
+                  id={field.name}
+                  endpoint="/materials"
+                  queryKey="invoice-order-material"
+                  searchField={['name', 'sku']}
+                  toOption={(material) => ({
+                    value: material.id,
+                    label: materialOptionLabel(material),
+                  })}
+                  value={field.state.value || null}
+                  onValueChange={(value) => {
+                    field.handleChange(value ?? '')
+                    // "Made At" only lists this material's stock locations —
+                    // drop a previously chosen one that may not stock it.
+                    form.setFieldValue(
+                      `${base}.productionLocationId` as never,
+                      '' as never,
+                    )
+                  }}
+                  onSelectRow={setPickedMaterial}
+                  placeholder="Search material by name or SKU..."
+                  emptyMessage="No materials found."
+                />
+                <FieldError errors={field.state.meta.errors} />
+                {pickedMaterial && (
+                  <p className="text-xs text-muted-foreground">
+                    Available: {materialTotalStock(pickedMaterial)}{' '}
+                    {pickedMaterial.unit}
+                    {pickedMaterial.locations.length > 0 &&
+                      ` — ${pickedMaterial.locations
+                        .map((stock) => `${stock.location}: ${stock.quantity}`)
+                        .join(', ')}`}
+                  </p>
+                )}
+              </Field>
+            )}
           </form.Field>
 
           {/* A material can only be made at a location where it is in
               stock — so this picker lists the selected material's stock
               locations rather than every stock-holding branch. */}
-          <form.Subscribe
-            selector={(state: any) =>
-              state.values.customers[customerIndex]?.orders[orderIndex]
-                ?.materialId
-            }
-          >
-            {(materialId: string) => {
-              const material = materials.find((m) => m.id === materialId)
+          <form.Field name={`${base}.productionLocationId` as never}>
+            {(field: any) => {
               const stockOptions: StockLocationOption[] =
-                material?.locations
+                pickedMaterial?.locations
                   .filter((stock) => stock.quantity > 0)
                   .map((stock) => ({
                     id: stock.locationId,
@@ -240,60 +225,51 @@ export function OrderBlock({
                     holdsStock: true,
                     isActive: true,
                     quantity: stock.quantity,
-                    unit: material.unit,
+                    unit: pickedMaterial.unit,
                   })) ?? []
+              const selected = stockOptions.find(
+                (location) => location.id === field.state.value,
+              )
               return (
-                <form.Field name={`${base}.productionLocationId` as never}>
-                  {(field: any) => {
-                    const selected = stockOptions.find(
-                      (location) => location.id === field.state.value,
-                    )
-                    return (
-                      <Field data-invalid={field.state.meta.errors.length > 0}>
-                        <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
-                        <Combobox
-                          items={stockOptions}
-                          itemToStringLabel={stockOptionLabel}
-                          isItemEqualToValue={(a: Location, b: Location) =>
-                            a.id === b.id
-                          }
-                          value={selected ?? null}
-                          onValueChange={(location: Location | null) => {
-                            field.handleChange(location?.id ?? '')
-                          }}
-                        >
-                          <ComboboxInput
-                            id={field.name}
-                            placeholder="Search location..."
-                            className="w-full"
-                            showClear
-                          />
-                          <ComboboxContent>
-                            <ComboboxEmpty>
-                              {material
-                                ? 'This material has no stock available.'
-                                : 'Pick a material first.'}
-                            </ComboboxEmpty>
-                            <ComboboxList>
-                              {(location: StockLocationOption) => (
-                                <ComboboxItem
-                                  key={location.id}
-                                  value={location}
-                                >
-                                  {stockOptionLabel(location)}
-                                </ComboboxItem>
-                              )}
-                            </ComboboxList>
-                          </ComboboxContent>
-                        </Combobox>
-                        <FieldError errors={field.state.meta.errors} />
-                      </Field>
-                    )
-                  }}
-                </form.Field>
+                <Field data-invalid={field.state.meta.errors.length > 0}>
+                  <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
+                  <Combobox
+                    items={stockOptions}
+                    itemToStringLabel={stockOptionLabel}
+                    isItemEqualToValue={(a: Location, b: Location) =>
+                      a.id === b.id
+                    }
+                    value={selected ?? null}
+                    onValueChange={(location: Location | null) => {
+                      field.handleChange(location?.id ?? '')
+                    }}
+                  >
+                    <ComboboxInput
+                      id={field.name}
+                      placeholder="Search location..."
+                      className="w-full"
+                      showClear
+                    />
+                    <ComboboxContent>
+                      <ComboboxEmpty>
+                        {pickedMaterial
+                          ? 'This material has no stock available.'
+                          : 'Pick a material first.'}
+                      </ComboboxEmpty>
+                      <ComboboxList>
+                        {(location: StockLocationOption) => (
+                          <ComboboxItem key={location.id} value={location}>
+                            {stockOptionLabel(location)}
+                          </ComboboxItem>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
+                  <FieldError errors={field.state.meta.errors} />
+                </Field>
               )
             }}
-          </form.Subscribe>
+          </form.Field>
 
           <NumberField
             form={form}

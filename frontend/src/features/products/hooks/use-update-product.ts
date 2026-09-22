@@ -20,19 +20,17 @@ async function updateProduct({
   entries,
   ...changes
 }: UpdateProductInput): Promise<Product> {
-  const { data: patched } = await apiClient.patch<Product>(
-    `/products/${id}`,
-    changes,
-  )
+  const response = await apiClient.patch<Product>(`/products/${id}`, changes)
+  const patched = response.data
   if (!entries?.length) return patched
 
   // Stock is added through its own endpoint, which also returns the full
   // product — so its response is the newer of the two.
-  const { data: withStock } = await apiClient.post<Product>(
-    `/products/${id}/stock`,
-    { entries },
-  )
-  return withStock
+  const stockResponse = await apiClient.post<Product>(`/products/${id}/stock`, {
+    entries,
+  })
+
+  return stockResponse.data
 }
 
 export function useUpdateProduct() {
@@ -40,12 +38,11 @@ export function useUpdateProduct() {
 
   return useMutation({
     mutationFn: updateProduct,
-    onSuccess: (product) => {
-      queryClient.setQueryData<Product[]>(['products'], (products = []) =>
-        products
-          .map((existing) => (existing.id === product.id ? product : existing))
-          .sort((a, b) => a.name.localeCompare(b.name)),
-      )
+    onSuccess: () => {
+      // The cache holds one entry per page-and-filter combination now, and
+      // each holds an envelope rather than a bare array, so there is no
+      // single list to splice into. Prefix matching refreshes them all.
+      void queryClient.invalidateQueries({ queryKey: ['products'] })
     },
   })
 }

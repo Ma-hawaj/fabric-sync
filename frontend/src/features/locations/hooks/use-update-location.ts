@@ -17,8 +17,9 @@ async function updateLocation({
   id,
   ...changes
 }: UpdateLocationInput): Promise<Location> {
-  const { data } = await apiClient.patch<Location>(`/locations/${id}`, changes)
-  return data
+  const response = await apiClient.patch<Location>(`/locations/${id}`, changes)
+
+  return response.data
 }
 
 export function useUpdateLocation() {
@@ -26,14 +27,11 @@ export function useUpdateLocation() {
 
   return useMutation({
     mutationFn: updateLocation,
-    onSuccess: (location) => {
-      queryClient.setQueryData<Location[]>(['locations'], (locations = []) =>
-        locations
-          .map((existing) =>
-            existing.id === location.id ? location : existing,
-          )
-          .sort((a, b) => a.name.localeCompare(b.name)),
-      )
+    onSuccess: () => {
+      // The cache holds one entry per page-and-filter combination now, and
+      // each holds an envelope rather than a bare array, so there is no
+      // single list to splice into. Prefix matching refreshes them all.
+      void queryClient.invalidateQueries({ queryKey: ['locations'] })
     },
   })
 }

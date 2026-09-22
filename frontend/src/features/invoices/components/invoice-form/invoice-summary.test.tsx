@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
 import type { Customer } from '@/features/customers/types/customers'
+import type { Product } from '@/features/products/types/product'
+import { apiGetMock } from '@/lib/list-fixtures'
 import { InvoiceSummary } from './invoice-summary'
 import {
   createEmptyCustomer,
@@ -14,18 +17,48 @@ import {
 import type { InvoiceFormValues } from '../../types/invoice-form'
 import { CURRENCY } from '@/lib/currency'
 
-const EXISTING_CUSTOMERS: Customer[] = []
-const PRODUCT_NAMES = { 'prod-1': 'Silk Scarf' }
+const PRODUCTS: Product[] = [
+  {
+    id: 'prod-1',
+    name: 'Silk Scarf',
+    sku: 'FB-SLK-01',
+    unitPrice: 50,
+    isActive: true,
+    locations: [],
+  },
+]
+
+// The summary's receiving-branch and optional-customer pickers query the
+// server, so the API layer is mocked to serve in-memory rows instead of
+// hitting the network in jsdom. These tests read the summary rows, not the
+// picker options, so empty/simple fixtures are enough.
+const { apiGet } = vi.hoisted(() => ({ apiGet: vi.fn() }))
+vi.mock('@/lib/api', () => ({
+  apiClient: { get: apiGet },
+  ApiError: class ApiError extends Error {},
+}))
 
 function Harness({ defaultValues }: { defaultValues: InvoiceFormValues }) {
   const form = useForm({ defaultValues })
+  apiGet.mockImplementation(
+    apiGetMock({
+      '/customers': [],
+      '/locations': [],
+    }),
+  )
+  const customerNames = { current: new Map<string, Customer>() }
+  const productNames = {
+    current: new Map(PRODUCTS.map((product) => [product.id, product])),
+  }
+  const client = new QueryClient()
   return (
-    <InvoiceSummary
-      form={form as never}
-      existingCustomers={EXISTING_CUSTOMERS}
-      branches={[]}
-      productNames={PRODUCT_NAMES}
-    />
+    <QueryClientProvider client={client}>
+      <InvoiceSummary
+        form={form as never}
+        customerNames={customerNames}
+        productNames={productNames}
+      />
+    </QueryClientProvider>
   )
 }
 

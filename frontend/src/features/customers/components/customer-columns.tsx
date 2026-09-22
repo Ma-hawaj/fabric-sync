@@ -20,10 +20,6 @@ export const getCustomerColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) => {
-      const val = row.getValue<string>(columnId)
-      return val.toLowerCase().includes(String(filterValue).toLowerCase())
-    },
     meta: {
       label: 'ID',
       placeholder: 'Filter ID...',
@@ -40,10 +36,6 @@ export const getCustomerColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) => {
-      const val = row.getValue<string>(columnId)
-      return val.toLowerCase().includes(String(filterValue).toLowerCase())
-    },
     meta: {
       label: 'Name',
       placeholder: 'Filter name...',
@@ -58,10 +50,6 @@ export const getCustomerColumns = (
     cell: ({ row }) => <div>{row.getValue('mobileNo')}</div>,
     enableSorting: true,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) => {
-      const val = row.getValue<string>(columnId)
-      return val.toLowerCase().includes(String(filterValue).toLowerCase())
-    },
     meta: {
       label: 'Phone Number',
       placeholder: 'Filter phone...',

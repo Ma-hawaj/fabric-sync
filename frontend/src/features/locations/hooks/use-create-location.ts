@@ -4,12 +4,13 @@ import type { LocationFormValues } from '../types/location-form'
 import type { Location } from '../types/location'
 
 async function createLocation(values: LocationFormValues): Promise<Location> {
-  const { data } = await apiClient.post<Location>('/locations', {
+  const response = await apiClient.post<Location>('/locations', {
     name: values.name,
     receivesOrders: values.receivesOrders,
     holdsStock: values.holdsStock,
   })
-  return data
+
+  return response.data
 }
 
 export function useCreateLocation() {
@@ -17,12 +18,13 @@ export function useCreateLocation() {
 
   return useMutation({
     mutationFn: createLocation,
-    onSuccess: (location) => {
+    onSuccess: () => {
       // Patching the cache rather than invalidating keeps the inventory and
       // invoice pickers in step without a refetch.
-      queryClient.setQueryData<Location[]>(['locations'], (locations = []) =>
-        [...locations, location].sort((a, b) => a.name.localeCompare(b.name)),
-      )
+      // The cache holds one entry per page-and-filter combination now, and
+      // each holds an envelope rather than a bare array, so there is no
+      // single list to splice into. Prefix matching refreshes them all.
+      void queryClient.invalidateQueries({ queryKey: ['locations'] })
     },
   })
 }

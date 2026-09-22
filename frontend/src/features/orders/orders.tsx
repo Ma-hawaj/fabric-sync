@@ -5,22 +5,28 @@ import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getOrderColumns } from './components/order-columns'
 import { ReceiveOrderDialog } from './components/receive-order-dialog'
+import { useAllInventory } from '@/features/inventory/hooks/use-inventory'
+import { useOrderStages } from '@/features/order-stages/hooks/use-order-stages'
+import { useListParams } from '@/hooks/use-list-params'
 import { useOrders } from './hooks/use-orders'
-import { stageFilterOptions } from './lib/order-tracking'
 import type { Order } from './types/orders'
 
 export function OrdersPage() {
-  const { data: orders = [], isLoading } = useOrders()
-  const navigate = useNavigate()
   const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(null)
+  const navigate = useNavigate()
 
-  // The material and stage filters offer exactly what is present in the
-  // fetched orders.
+  // The material and stage filters come from their own whole-list queries.
+  // Deriving the options from the orders on screen would, under server-side
+  // paging, offer only the ones the current page happens to mention.
+  const { data: materials } = useAllInventory()
+  const { data: stages = [] } = useOrderStages()
   const columns = React.useMemo(() => {
-    const materials = [...new Set(orders.map((o) => o.material))].sort()
+    const names = [
+      ...new Set(materials.map((material) => material.name)),
+    ].sort()
     return getOrderColumns(
-      materials.map((m) => ({ label: m, value: m })),
-      stageFilterOptions(orders).map((s) => ({ label: s, value: s })),
+      names.map((name) => ({ label: name, value: name })),
+      stages.map((stage) => ({ label: stage.name, value: stage.name })),
       setSelectedOrder,
       (order) =>
         void navigate({
@@ -28,14 +34,16 @@ export function OrdersPage() {
           params: { orderId: order.id },
         }),
     )
-  }, [orders, navigate])
+  }, [materials, stages, navigate])
+
+  const { searchParams } = useListParams({ columns })
+  const { data: orders, pageCount, total, isLoading } = useOrders(searchParams)
 
   const { table } = useDataTable({
     data: orders,
     columns,
-    manualFiltering: false,
-    manualSorting: false,
-    manualPagination: false,
+    pageCount,
+    rowCount: total,
   })
 
   return (

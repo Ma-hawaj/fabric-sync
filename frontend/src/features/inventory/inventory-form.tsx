@@ -1,18 +1,9 @@
-import * as React from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from '@/components/ui/combobox'
 import {
   Select,
   SelectContent,
@@ -21,13 +12,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { TextField } from '@/components/form/fields'
+import { AsyncCombobox } from '@/components/form/async-combobox'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { StockEntryRow } from './components/stock-entry-row'
 import { UNITS } from './data/inventory-options'
-import { useLocations } from '@/features/locations/hooks/use-locations'
-import { stockLocations } from '@/features/locations/lib/location-filters'
 import { useAddStock } from './hooks/use-add-stock'
-import { useInventory } from './hooks/use-inventory'
 import { inventoryFormSchema } from './lib/inventory-schema'
 import {
   createEmptyInventoryForm,
@@ -42,14 +31,6 @@ function materialOptionLabel(material: Material) {
 
 export function InventoryFormPage() {
   const navigate = useNavigate()
-  const { data: materials = [] } = useInventory()
-  // Stock can only be booked into locations that hold it — a branch that only
-  // hands finished orders to customers is not a stock location.
-  const { data: allLocations = [] } = useLocations()
-  const locations = React.useMemo(
-    () => stockLocations(allLocations),
-    [allLocations],
-  )
   const addStock = useAddStock()
 
   const form = useForm({
@@ -116,37 +97,22 @@ export function InventoryFormPage() {
                   {(field) => (
                     <Field data-invalid={field.state.meta.errors.length > 0}>
                       <FieldLabel htmlFor={field.name}>Material</FieldLabel>
-                      <Combobox
-                        items={materials}
-                        itemToStringLabel={materialOptionLabel}
-                        isItemEqualToValue={(a: Material, b: Material) =>
-                          a.id === b.id
+                      <AsyncCombobox<Material>
+                        id={field.name}
+                        endpoint="/materials"
+                        queryKey="inventory-material-picker"
+                        searchField={['name', 'sku']}
+                        placeholder="Search material by name or SKU..."
+                        emptyMessage="No materials found."
+                        toOption={(material) => ({
+                          value: material.id,
+                          label: materialOptionLabel(material),
+                        })}
+                        value={field.state.value || null}
+                        onValueChange={(materialId) =>
+                          field.handleChange(materialId ?? '')
                         }
-                        value={
-                          materials.find((m) => m.id === field.state.value) ??
-                          null
-                        }
-                        onValueChange={(material: Material | null) =>
-                          field.handleChange(material?.id ?? '')
-                        }
-                      >
-                        <ComboboxInput
-                          id={field.name}
-                          placeholder="Search material by name or SKU..."
-                          className="w-full"
-                          showClear
-                        />
-                        <ComboboxContent>
-                          <ComboboxEmpty>No materials found.</ComboboxEmpty>
-                          <ComboboxList>
-                            {(material: Material) => (
-                              <ComboboxItem key={material.id} value={material}>
-                                {materialOptionLabel(material)}
-                              </ComboboxItem>
-                            )}
-                          </ComboboxList>
-                        </ComboboxContent>
-                      </Combobox>
+                      />
                       <FieldError errors={field.state.meta.errors} />
                     </Field>
                   )}
@@ -164,8 +130,8 @@ export function InventoryFormPage() {
                         <FieldLabel htmlFor={field.name}>Unit</FieldLabel>
                         <Select
                           value={field.state.value}
-                          onValueChange={(value: string) =>
-                            field.handleChange(value)
+                          onValueChange={(value: string | null) =>
+                            field.handleChange(value ?? '')
                           }
                         >
                           <SelectTrigger id={field.name} className="w-full">
@@ -197,7 +163,6 @@ export function InventoryFormPage() {
                     key={entry.key}
                     form={form as never}
                     entryIndex={index}
-                    locations={locations}
                     removable={entriesField.state.value.length > 1}
                     onRemove={() => entriesField.removeValue(index)}
                   />
