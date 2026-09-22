@@ -7,7 +7,7 @@ use crate::error::AppError;
 use super::{
     columns::ListSpec,
     params::ListParams,
-    sql::{self, BindValue},
+    sql::{self, BindValue, BuiltQuery},
 };
 
 /// The envelope every list endpoint returns. `total` is the number of rows
@@ -24,6 +24,19 @@ pub struct Page<T> {
 }
 
 type PgQuery<'q> = sqlx::query::Query<'q, Postgres, sqlx::postgres::PgArguments>;
+
+/// Prints a built statement and its binds before it is submitted to Postgres,
+/// so the exact SQL a request produced is visible even if it later errors or
+/// comes back with a surprising row set. `RUST_LOG=...list=debug` selects this
+/// target; sqlx's own statement logging only fires after execution.
+fn log_query(kind: &str, built: &BuiltQuery) {
+    tracing::debug!(
+        kind,
+        binds = %format!("{:?}", built.binds),
+        sql = %built.sql,
+        "executing"
+    );
+}
 
 fn bind_all<'q>(mut query: PgQuery<'q>, binds: &'q [BindValue]) -> PgQuery<'q> {
     for bind in binds {
@@ -54,6 +67,7 @@ where
     T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
 {
     let built = sql::build(spec, params)?;
+    log_query("list page", &built);
     let rows = bind_all(sqlx::query(&built.sql), &built.binds)
         .fetch_all(pool)
         .await?;
@@ -86,6 +100,7 @@ where
     T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
 {
     let built = sql::build_by_id(spec, id)?;
+    log_query("list by id", &built);
     let row = bind_all(sqlx::query(&built.sql), &built.binds)
         .fetch_optional(pool)
         .await?;
