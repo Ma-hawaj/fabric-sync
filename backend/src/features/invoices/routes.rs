@@ -19,5 +19,12 @@ pub fn router() -> Router<AppState> {
         // browser prints to PDF today is what an unattended PDF renderer will
         // be handed later.
         .route("/invoices/:id/document", get(handlers::invoice_document))
+        // The WhatsApp ready-for-collection card — the same self-contained HTML
+        // shape, captured to a PNG and sent to the customer once the last order
+        // on the invoice is production-complete.
+        .route(
+            "/invoices/:id/ready-card",
+            get(handlers::invoice_ready_card),
+        )
         .route("/invoices/:id/receive", post(handlers::receive_invoice))
 }

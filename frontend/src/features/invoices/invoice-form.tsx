@@ -1,11 +1,12 @@
 import * as React from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
-import { FileDownIcon, PlusIcon } from 'lucide-react'
+import { FileDownIcon, MessageCircleIcon, PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { AsyncCombobox } from '@/components/form/async-combobox'
+import { SendInvoiceWhatsAppDialog } from '@/components/send-invoice-whatsapp-dialog'
 import { ApiError } from '@/lib/api'
 import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
@@ -53,9 +54,14 @@ export function InvoiceFormPage() {
   // availability text, which needs a named location the way the old whole-list
   // lookup provided it.
   const [soldFromBranchName, setSoldFromBranchName] = React.useState('')
-  // Which of the two submit buttons was pressed. A ref rather than state
+  // Which of the submit buttons was pressed. A ref rather than state
   // because it is read once inside onSubmit and must not re-render the form.
   const exportAfterSave = React.useRef(false)
+  const sendAfterSave = React.useRef(false)
+  // The invoice handed to the WhatsApp dialog once it exists; null closes it.
+  const [whatsAppInvoiceId, setWhatsAppInvoiceId] = React.useState<
+    string | null
+  >(null)
 
   // A plain type annotation (not `satisfies`) so TFormData widens to
   // InvoiceFormValues' union members (e.g. `discount: number | ''`) rather
@@ -96,6 +102,12 @@ export function InvoiceFormPage() {
         } catch {
           toast.error('The invoice was saved, but the PDF could not be opened.')
         }
+      }
+
+      if (sendAfterSave.current) {
+        sendAfterSave.current = false
+        setWhatsAppInvoiceId(created.id)
+        return
       }
 
       await navigate({ to: '/invoices' })
@@ -335,11 +347,33 @@ export function InvoiceFormPage() {
             <FileDownIcon className="h-4 w-4" />
             Save & Export PDF
           </Button>
+          <Button
+            type="submit"
+            variant="outline"
+            disabled={createInvoice.isPending}
+            onClick={() => {
+              sendAfterSave.current = true
+            }}
+          >
+            <MessageCircleIcon className="h-4 w-4" />
+            Save & Send via WhatsApp
+          </Button>
           <Button type="submit" disabled={createInvoice.isPending}>
             Save
           </Button>
         </div>
       </form>
+
+      <SendInvoiceWhatsAppDialog
+        invoiceId={whatsAppInvoiceId}
+        kind="created"
+        onOpenChange={(open) => {
+          if (!open) {
+            setWhatsAppInvoiceId(null)
+            void navigate({ to: '/invoices' })
+          }
+        }}
+      />
     </div>
   )
 }

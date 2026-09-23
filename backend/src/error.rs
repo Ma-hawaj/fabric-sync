@@ -22,6 +22,11 @@ pub enum AppError {
     /// network error, or an unexpected response shape) — a 500, but distinct
     /// from `Auth`, which is boot-time OIDC-discovery failure only.
     Zitadel(String),
+    /// A call to the WhatsApp Business Cloud API failed — a network error, an
+    /// unexpected response shape, or WhatsApp's own rejection carrying its
+    /// message through. A 502: the third-party channel did (or refused to do)
+    /// the work, so the client should surface WhatsApp's text rather than ours.
+    WhatsApp(String),
 }
 
 impl From<std::io::Error> for AppError {
@@ -86,6 +91,7 @@ impl IntoResponse for AppError {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             Self::Template(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
             Self::Zitadel(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
+            Self::WhatsApp(message) => (StatusCode::BAD_GATEWAY, message),
         };
 
         // Folded into the canonical "request completed" line (see

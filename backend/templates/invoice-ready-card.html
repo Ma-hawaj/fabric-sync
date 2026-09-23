@@ -1,0 +1,299 @@
+{#
+  The WhatsApp ready-for-collection card. Rendered like the invoice document
+  but as a compact, customer-facing notice — sent when the last order on an
+  invoice is production-complete, so the customer knows to come collect.
+
+  Edit this file to restyle it. Set INVOICE_TEMPLATE_DIR to backend/templates
+  and changes show up on the next request with no rebuild; unset, the copy
+  compiled into the binary is used (see src/features/invoices/document.rs).
+
+  Everything must stay self-contained — inline styles, inline SVG, `data:`
+  URIs. It is rasterized to a PNG in the browser (html-to-image) and sent
+  through WhatsApp, so there is no network and no origin of its own.
+
+  Available:
+    company    — COMPANY_* env vars (see config.rs InvoiceBranding, camelCase)
+    invoiceRef — the human-readable invoice id, e.g. "INV-42"
+    collectAt  — the branch the customer collects at, if one is on the invoice
+    orderCount — how many made-to-measure orders the invoice carries
+    amounts    — { total, amountPaid, balanceDue }, each pre-formatted so the
+                 design can't change how money is written
+    currency   — currency code, e.g. "BHD"
+#}
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ready — {{ invoiceRef }}</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 10mm;
+      }
+
+      :root {
+        --ink: #10151c;
+        --muted: #6b7280;
+        --rule: #d8dee7;
+        --tint: #f4f6f9;
+        --accent: #1d4ed8;
+        --accent-soft: #eef3ff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 18mm;
+        font-family: 'Noto Sans Arabic', 'IBM Plex Sans Arabic', 'Segoe UI',
+          Tahoma, Arial, sans-serif;
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--ink);
+        background: var(--tint);
+      }
+
+      .card {
+        max-width: 190mm;
+        margin: 0 auto;
+        background: #fff;
+        border: 1px solid var(--rule);
+        border-radius: 18px;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(16, 21, 28, 0.06);
+      }
+
+      .banner {
+        background: var(--accent);
+        color: #fff;
+        padding: 22px 28px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+
+      .banner .logo {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        background: #fff;
+        object-fit: contain;
+        flex: none;
+      }
+
+      .banner .logo-fallback {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        background: #fff;
+        color: var(--accent);
+        font-weight: 800;
+        font-size: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+      }
+
+      .banner .company-name {
+        font-size: 18px;
+        font-weight: 800;
+        line-height: 1.2;
+      }
+
+      .banner .company-name small {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        opacity: 0.9;
+      }
+
+      .banner .ref {
+        margin-inline-start: auto;
+        text-align: center;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .banner .ref small {
+        display: block;
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        opacity: 0.9;
+      }
+
+      .body {
+        padding: 26px 28px 22px;
+      }
+
+      .headline {
+        text-align: center;
+        padding: 4px 0 0;
+      }
+
+      .headline h1 {
+        margin: 0 0 4px;
+        font-size: 26px;
+        font-weight: 800;
+        color: var(--accent);
+      }
+
+      .headline h1 .latin {
+        font-size: 15px;
+        font-weight: 700;
+        display: block;
+        color: var(--ink);
+        letter-spacing: 0.02em;
+      }
+
+      .headline p {
+        margin: 10px 0 0;
+        color: var(--muted);
+      }
+
+      .headline .collect-at {
+        margin-top: 16px;
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+
+      .summary {
+        margin-top: 22px;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      .summary .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 16px;
+      }
+
+      .summary .row + .row {
+        border-top: 1px solid var(--rule);
+      }
+
+      .summary .row:nth-child(even) {
+        background: var(--tint);
+      }
+
+      .summary .row .k {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .summary .row .k small {
+        display: block;
+        font-size: 10px;
+      }
+
+      .summary .row .v {
+        font-weight: 800;
+        font-size: 14px;
+      }
+
+      .summary .row.due .v {
+        color: var(--accent);
+        font-size: 17px;
+      }
+
+      .footer {
+        margin-top: 22px;
+        padding-top: 14px;
+        border-top: 1px solid var(--rule);
+        color: var(--muted);
+        font-size: 10.5px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 18px;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .footer .dot {
+        color: var(--rule);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="banner">
+        {%- if company.logoDataUrl %}
+        <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
+        {%- else %}
+        <div class="logo-fallback">{{ company.nameAr[:2] }}</div>
+        {%- endif %}
+
+        <div class="company-name">
+          {{ company.nameAr }}<small>{{ company.nameEn }}</small>
+        </div>
+
+        <div class="ref">
+          <small>Invoice</small>{{ invoiceRef }}
+        </div>
+      </div>
+
+      <div class="body">
+        <div class="headline">
+          <h1>
+            طلبك جاهز للاستلام
+            <span class="latin">Your order is ready for collection</span>
+          </h1>
+          <p>
+            يسعدنا إعلامك بأن طلبك قد اكتمل وبات جاهزاً للاستلام لدينا.
+            <br />
+            We're happy to let you know your order is complete and ready to
+            collect.
+          </p>
+          {%- if collectAt %}
+          <div class="collect-at">
+            استلام من: {{ collectAt }}
+            <br />
+            <span style="font-weight: 500; color: var(--muted)">Collect from: {{ collectAt }}</span>
+          </div>
+          {%- endif %}
+        </div>
+
+        <div class="summary">
+          <div class="row">
+            <span class="k">عدد الطلبات <small>Orders ready</small></span>
+            <span class="v">{{ orderCount }}</span>
+          </div>
+          <div class="row">
+            <span class="k">الإجمالي <small>Total</small></span>
+            <span class="v">{{ amounts.total }} {{ currency }}</span>
+          </div>
+          {%- if amounts.amountPaid != "0.000" %}
+          <div class="row">
+            <span class="k">المدفوع <small>Paid</small></span>
+            <span class="v">{{ amounts.amountPaid }} {{ currency }}</span>
+          </div>
+          {%- endif %}
+          <div class="row due">
+            <span class="k">الرصيد المستحق <small>Balance due</small></span>
+            <span class="v">{{ amounts.balanceDue }} {{ currency }}</span>
+          </div>
+        </div>
+
+        <div class="footer">
+          {%- if company.phone %}<span>{{ company.phone }}</span>{% endif %}
+          {%- if company.phone and company.email %}<span class="dot">•</span>{% endif %}
+          {%- if company.email %}<span>{{ company.email }}</span>{% endif %}
+          {%- if company.phone or company.email %}
+          <span class="dot">•</span>
+          {%- endif %}
+          <span>شكراً لثقتكم بنا — Thank you for your trust.</span>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

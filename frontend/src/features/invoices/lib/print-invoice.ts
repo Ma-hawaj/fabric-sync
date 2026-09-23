@@ -2,15 +2,24 @@ import { apiClient } from '@/lib/api'
 import { printHtmlDocument } from '@/lib/print-document'
 
 /**
- * Prints an invoice, by way of the document the backend renders for it. The
- * rendering happens server-side (see backend `invoices/document.rs`), so the
- * request goes through `apiClient` and carries an Authorization header.
+ * Prints a backend-rendered invoice document by way of the HTML the backend
+ * renders for it (server-side, see backend `invoices/document.rs`), carrying
+ * an Authorization header through `apiClient`.
  */
-export async function printInvoiceDocument(invoiceId: string): Promise<void> {
-  const { data: html } = await apiClient.get<string>(
-    `/invoices/${invoiceId}/document`,
-    { responseType: 'text' },
-  )
+async function printDocument(path: string, title: string): Promise<void> {
+  const { data: html } = await apiClient.get<string>(path, {
+    responseType: 'text',
+  })
 
-  await printHtmlDocument(html, 'invoice')
+  await printHtmlDocument(html, title)
+}
+
+/** The printable invoice (GET /invoices/:id/document). */
+export function printInvoiceDocument(invoiceId: string): Promise<void> {
+  return printDocument(`/invoices/${invoiceId}/document`, 'invoice')
+}
+
+/** The ready-for-collection card (GET /invoices/:id/ready-card). */
+export function printReadyCardDocument(invoiceId: string): Promise<void> {
+  return printDocument(`/invoices/${invoiceId}/ready-card`, 'ready-card')
 }

@@ -8,3 +8,4 @@ pub mod order_stages;
 pub mod orders;
 pub mod products;
 pub mod users;
+pub mod whatsapp;

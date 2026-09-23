@@ -47,6 +47,14 @@ pub struct Config {
     /// and the seed itself refuses to run against a database that already has
     /// data — see `seed::run`.
     pub seed_dev_data: bool,
+    /// Meta WhatsApp Business Cloud API credentials for the invoice-sending
+    /// channel. `None` unless the phone number id and the access token are both
+    /// set; a request to that channel then fails fast with a clear message
+    /// rather than a boot-time error, so an unconfigured dev box still runs.
+    pub whatsapp_phone_number_id: Option<String>,
+    pub whatsapp_access_token: Option<String>,
+    /// Graph API version to call, e.g. `v21.0`. Optional; the client defaults it.
+    pub whatsapp_api_version: Option<String>,
     pub invoice_branding: InvoiceBranding,
 }
 
@@ -103,6 +111,9 @@ impl Config {
         let seed_dev_data = env::var("SEED_DEV_DATA")
             .map(|value| value == "true" || value == "1")
             .unwrap_or(false);
+        let whatsapp_phone_number_id = env::var("WHATSAPP_PHONE_NUMBER_ID").ok();
+        let whatsapp_access_token = env::var("WHATSAPP_ACCESS_TOKEN").ok();
+        let whatsapp_api_version = env::var("WHATSAPP_API_VERSION").ok();
 
         Self {
             port,
@@ -115,6 +126,9 @@ impl Config {
             zitadel_users_client_id,
             zitadel_users_client_secret,
             seed_dev_data,
+            whatsapp_phone_number_id,
+            whatsapp_access_token,
+            whatsapp_api_version,
             invoice_branding: InvoiceBranding::from_env(),
         }
     }
