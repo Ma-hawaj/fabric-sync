@@ -182,7 +182,7 @@ Current backend routes, by feature module:
 | `gift_cards`   | `GET /gift-cards`, `POST /gift-cards`, `PATCH /gift-cards/:id`, `GET /gift-cards/by-code/:code`                                                                                                                   |
 | `users`        | `GET /users`                                                                                                                                                                                                      |
 
-Every `GET` list route above is served by the shared list layer and returns `{data, page, perPage, total, pageCount}` — never a bare array — with one exception: `GET /users` is a hardcoded mock (see below) with no database or `ListSpec` behind it.
+Every `GET` list route above except `GET /users` is served by the shared list layer and returns `{data, page, perPage, total, pageCount}` — never a bare array. `GET /users` instead returns a bare array from `ZitadelUserDirectory` (see below), with no database or `ListSpec` behind it.
 
 Path params use axum 0.7's `:id` syntax (0.8 switched to `{id}` — don't copy that from newer axum docs).
 

@@ -67,17 +67,17 @@ where
     T: for<'r> FromRow<'r, PgRow> + Send + Unpin,
 {
     let built = sql::build(spec, params)?;
+    let count = sql::build_count(spec, params)?;
+    log_query("list count", &count);
+    let total = bind_all(sqlx::query(&count.sql), &count.binds)
+        .fetch_one(pool)
+        .await?
+        .try_get::<i64, _>("list_total")?;
+
     log_query("list page", &built);
     let rows = bind_all(sqlx::query(&built.sql), &built.binds)
         .fetch_all(pool)
         .await?;
-
-    // Every row carries the same window count; with no rows there is nothing
-    // matching, so the total is zero.
-    let total = match rows.first() {
-        Some(row) => row.try_get::<i64, _>("list_total")?,
-        None => 0,
-    };
 
     let data = rows
         .iter()

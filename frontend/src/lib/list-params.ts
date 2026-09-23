@@ -40,7 +40,7 @@ export function filterableColumns<TData>(columns: ColumnDef<TData>[]) {
 
 /**
  * One nuqs parser per filterable column. Columns offering a fixed set of
- * options hold a list; everything else holds a single string.
+ * multiSelect and range controls hold a list; everything else holds a single string.
  */
 export type FilterParsers = Record<
   string,
@@ -57,7 +57,11 @@ export function buildFilterParsers<TData>(
     // The two branches are kept apart rather than picking a parser and then
     // calling `withOptions` on it: the union of the two parser types has no
     // single call signature, so TypeScript can't resolve the shared call.
-    if (column.meta?.options) {
+    if (
+      column.meta?.variant === 'multiSelect' ||
+      column.meta?.variant === 'range' ||
+      column.meta?.variant === 'dateRange'
+    ) {
       const parser = parseAsArrayOf(parseAsString, ARRAY_SEPARATOR)
       parsers[id] = options ? parser.withOptions(options) : parser
     } else {

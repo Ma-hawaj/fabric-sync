@@ -249,7 +249,7 @@ pub struct ListParams {
 impl ListParams {
     pub fn offset(&self) -> i64 {
         match self.per_page {
-            Some(per_page) => (self.page - 1) * per_page,
+            Some(per_page) => self.page.saturating_sub(1).saturating_mul(per_page),
             None => 0,
         }
     }
@@ -264,7 +264,7 @@ impl ListParams {
         match self.per_page {
             // `i64::div_ceil` is still unstable, and both operands are known
             // positive here, so the rounding is done by hand.
-            Some(per_page) => (total + per_page - 1) / per_page,
+            Some(per_page) => total / per_page + i64::from(total % per_page != 0),
             None => 1,
         }
     }
@@ -357,6 +357,14 @@ mod tests {
         assert_eq!(params.offset(), 20);
         assert_eq!(params.page_count(37), 4);
         assert_eq!(params.effective_per_page(37), 10);
+    }
+
+    #[test]
+    fn large_page_offset_saturates() {
+        let params = parse(raw("page=9223372036854775807&perPage=100")).unwrap();
+
+        assert_eq!(params.offset(), i64::MAX);
+        assert_eq!(params.page_count(i64::MAX), 92_233_720_368_547_759);
     }
 
     #[test]

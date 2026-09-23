@@ -1,4 +1,9 @@
-import { parseAsInteger, useQueryState, useQueryStates } from 'nuqs'
+import {
+  parseAsInteger,
+  parseAsStringLiteral,
+  useQueryState,
+  useQueryStates,
+} from 'nuqs'
 import type { ColumnDef } from '@tanstack/react-table'
 import * as React from 'react'
 
@@ -6,6 +11,7 @@ import { getColumnDefId } from '@/lib/data-table'
 import { getSortingStateParser } from '@/lib/parsers'
 import {
   DEFAULT_PER_PAGE,
+  JOIN_OPERATOR_KEY,
   PAGE_KEY,
   PER_PAGE_KEY,
   SORT_KEY,
@@ -56,6 +62,10 @@ export function useListParams<TData>({
       [] as ExtendedColumnSort<TData>[],
     ),
   )
+  const [joinOperator] = useQueryState(
+    JOIN_OPERATOR_KEY,
+    parseAsStringLiteral(['and', 'or']).withDefault('and'),
+  )
 
   const filterParsers = React.useMemo(
     () => buildFilterParsers(columns),
@@ -69,7 +79,13 @@ export function useListParams<TData>({
     return {
       page,
       perPage,
-      searchParams: toApiSearchParams({ page, perPage, sorting, filters }),
+      searchParams: toApiSearchParams({
+        page,
+        perPage,
+        sorting,
+        filters,
+        joinOperator,
+      }),
     }
-  }, [columns, filterValues, page, perPage, sorting])
+  }, [columns, filterValues, joinOperator, page, perPage, sorting])
 }

@@ -37,25 +37,9 @@ pub struct BuiltQuery {
 /// is what lets one builder serve every endpoint: the `GROUP BY` + `json_agg`
 /// shapes and the `LEFT JOIN LATERAL` shape all present as a flat row here. Each
 /// base query already produces exactly one row per entity, so `LIMIT` over the
-/// wrapper is a limit on entities. `count(*) OVER ()` carries the filtered total
-/// on every row, which saves a second round trip for the count.
+/// wrapper is a limit on entities.
 pub fn build(spec: &ListSpec, params: &ListParams) -> Result<BuiltQuery, AppError> {
-    let mut binds = Vec::new();
-    let mut sql = format!(
-        "WITH base AS (\n{}\n)\nSELECT base.*, count(*) OVER () AS list_total\nFROM base",
-        spec.base_sql.trim()
-    );
-
-    let predicates = params
-        .filters
-        .iter()
-        .map(|filter| predicate(spec, filter, &mut binds))
-        .collect::<Result<Vec<_>, _>>()?;
-
-    if !predicates.is_empty() {
-        sql.push_str("\nWHERE ");
-        sql.push_str(&predicates.join(params.join.sql()));
-    }
+    let BuiltQuery { mut sql, mut binds } = build_filtered(spec, params, "base.*")?;
 
     sql.push_str("\nORDER BY ");
     for item in &params.sort {
@@ -74,6 +58,35 @@ pub fn build(spec: &ListSpec, params: &ListParams) -> Result<BuiltQuery, AppErro
         binds.push(BindValue::Int(params.offset()));
         let offset = binds.len();
         sql.push_str(&format!("\nLIMIT ${limit} OFFSET ${offset}"));
+    }
+
+    Ok(BuiltQuery { sql, binds })
+}
+
+pub fn build_count(spec: &ListSpec, params: &ListParams) -> Result<BuiltQuery, AppError> {
+    build_filtered(spec, params, "count(*) AS list_total")
+}
+
+fn build_filtered(
+    spec: &ListSpec,
+    params: &ListParams,
+    selection: &str,
+) -> Result<BuiltQuery, AppError> {
+    let mut binds = Vec::new();
+    let mut sql = format!(
+        "WITH base AS (\n{}\n)\nSELECT {selection}\nFROM base",
+        spec.base_sql.trim()
+    );
+
+    let predicates = params
+        .filters
+        .iter()
+        .map(|filter| predicate(spec, filter, &mut binds))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if !predicates.is_empty() {
+        sql.push_str("\nWHERE ");
+        sql.push_str(&predicates.join(params.join.sql()));
     }
 
     Ok(BuiltQuery { sql, binds })
@@ -394,7 +407,7 @@ mod tests {
         let built = build(&SPEC, &params(json!({}))).unwrap();
 
         assert!(built.sql.starts_with("WITH base AS ("), "{}", built.sql);
-        assert!(built.sql.contains("count(*) OVER () AS list_total"));
+        assert!(built.sql.contains("SELECT base.*\nFROM base"));
         assert!(!built.sql.contains("WHERE"));
         assert!(built.sql.trim_end().ends_with("ORDER BY id DESC"));
         assert!(built.binds.is_empty());
@@ -437,6 +450,32 @@ mod tests {
                 BindValue::Int(5),
             ]
         );
+    }
+
+    #[test]
+    fn count_reuses_filters_without_sorting_or_paging() {
+        let params = params(json!({
+            "page": 3,
+            "perPage": 10,
+            "sort": json!([{ "id": "name", "desc": true }]).to_string(),
+            "filters": json!([
+                { "id": "name", "value": "ali", "variant": "text", "operator": "iLike" },
+                { "id": "total", "value": "10", "variant": "number", "operator": "gt" }
+            ]).to_string(),
+            "joinOperator": "or",
+        }));
+
+        let page = build(&SPEC, &params).unwrap();
+        let count = build_count(&SPEC, &params).unwrap();
+
+        assert!(count
+            .sql
+            .contains("SELECT count(*) AS list_total\nFROM base"));
+        assert!(count.sql.contains("$1 || '%' OR base.\"total\" > $2"));
+        assert!(!count.sql.contains("ORDER BY"));
+        assert!(!count.sql.contains("LIMIT"));
+        assert!(!count.sql.contains("OFFSET"));
+        assert_eq!(count.binds, page.binds[..2]);
     }
 
     #[test]

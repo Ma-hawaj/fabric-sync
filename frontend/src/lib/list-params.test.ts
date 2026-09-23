@@ -190,11 +190,36 @@ describe('buildFilterParsers', () => {
     ])
   })
 
-  it('parses an option-backed column as a list and the rest as single values', () => {
+  it('parses multi-selects and ranges as lists and other variants as scalars', () => {
     const parsers = buildFilterParsers(columns)
 
     expect(parsers.status.parse('paid,unpaid')).toEqual(['paid', 'unpaid'])
+    expect(parsers.totalPrice.parse('10,500')).toEqual(['10', '500'])
+    expect(parsers.invoiceDate.parse('1,2')).toEqual(['1', '2'])
     expect(parsers.name.parse('John Smith')).toBe('John Smith')
+    expect(parsers.itemCount.parse('3')).toBe('3')
+  })
+
+  it('uses variants even when scalar columns have options or lists do not', () => {
+    const parsers = buildFilterParsers<Row>([
+      {
+        id: 'status',
+        enableColumnFilter: true,
+        meta: {
+          label: 'Status',
+          variant: 'select',
+          options: [{ label: 'Paid', value: 'paid' }],
+        },
+      },
+      {
+        id: 'totalPrice',
+        enableColumnFilter: true,
+        meta: { label: 'Total', variant: 'range' },
+      },
+    ])
+
+    expect(parsers.status.parse('paid,unpaid')).toBe('paid,unpaid')
+    expect(parsers.totalPrice.parse('10,500')).toEqual(['10', '500'])
   })
 
   it('keys accessor-based columns by their accessor, matching TanStack ids', () => {
