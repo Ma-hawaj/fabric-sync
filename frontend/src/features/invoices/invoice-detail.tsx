@@ -11,9 +11,16 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { CURRENCY } from '@/lib/currency'
-import { ArrowLeftIcon, FileDownIcon, ReceiptText, Users } from 'lucide-react'
+import {
+  ArrowLeftIcon,
+  FileDownIcon,
+  MessageCircleIcon,
+  ReceiptText,
+  Users,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
+import { SendInvoiceWhatsAppDialog } from '@/components/send-invoice-whatsapp-dialog'
 import { useInvoice } from './hooks/use-invoice'
 import { printInvoiceDocument } from './lib/print-invoice'
 import type { Invoice, InvoiceCustomer } from './types/invoices'
@@ -96,6 +103,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 
         <div className="flex items-center gap-2">
           <ExportPdfButton invoiceId={invoice.id} />
+          <SendWhatsAppButton invoiceId={invoice.id} />
           <ReceiveInvoiceButton
             invoice={invoice}
             disabled={invoice.paymentStatus === 'paid'}
@@ -256,6 +264,24 @@ function ReceiveInvoiceButton({
       </Button>
       <ReceiveInvoiceDialog
         invoice={open ? invoice : null}
+        onOpenChange={(isOpen) => !isOpen && setOpen(false)}
+      />
+    </>
+  )
+}
+
+function SendWhatsAppButton({ invoiceId }: { invoiceId: string }) {
+  const [open, setOpen] = React.useState(false)
+
+  return (
+    <>
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        <MessageCircleIcon className="h-4 w-4" />
+        Send via WhatsApp
+      </Button>
+      <SendInvoiceWhatsAppDialog
+        invoiceId={open ? invoiceId : null}
+        kind="resent"
         onOpenChange={(isOpen) => !isOpen && setOpen(false)}
       />
     </>

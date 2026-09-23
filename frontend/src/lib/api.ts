@@ -24,12 +24,20 @@ apiClient.interceptors.request.use(async (config) => {
 
 // Normalizes every HTTP-level failure to `ApiError` here, once, so hooks
 // don't each need their own try/catch just to get a `.status` to branch on
-// (e.g. a 409 conflict).
+// (e.g. a 409 conflict). The message prefers the backend's own text (the
+// error body is plain text) over axios's generic "Request failed…", so a
+// rejection like a WhatsApp error carries its reason through to the toast.
 apiClient.interceptors.response.use(
   (response) => response,
   (error: unknown) => {
     if (isAxiosError(error) && error.response) {
-      return Promise.reject(new ApiError(error.message, error.response.status))
+      const serverMessage =
+        typeof error.response.data === 'string'
+          ? error.response.data
+          : undefined
+      return Promise.reject(
+        new ApiError(serverMessage || error.message, error.response.status),
+      )
     }
     return Promise.reject(error)
   },

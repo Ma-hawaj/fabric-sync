@@ -49,6 +49,17 @@ pub async fn invoice_document(
     ))
 }
 
+/// The ready-for-collection card, as HTML. Same fetch-and-rasterize shape as
+/// the invoice document — captured to a PNG in the browser and sent to the
+/// customer over WhatsApp when the last order on the invoice is done.
+pub async fn invoice_ready_card(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(invoice_id): Path<Uuid>,
+) -> Result<Html<String>, AppError> {
+    Ok(Html(document::render_ready_card(&state, invoice_id).await?))
+}
+
 pub async fn create_invoice(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,

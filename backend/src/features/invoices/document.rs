@@ -23,7 +23,7 @@ use crate::{
 
 use super::{
     designs, service,
-    types::{InvoiceDetail, InvoiceParty, OrderDesignValues},
+    types::{InvoiceDetail, InvoiceLineKind, InvoiceParty, OrderDesignValues},
 };
 
 /// The copy of the template compiled into the binary, used unless
@@ -31,6 +31,13 @@ use super::{
 const DEFAULT_TEMPLATE: &str = include_str!("../../../templates/invoice.html");
 
 const TEMPLATE_NAME: &str = "invoice.html";
+
+/// The ready-for-collection card template, same embedding rules as
+/// `DEFAULT_TEMPLATE`.
+const DEFAULT_READY_CARD_TEMPLATE: &str =
+    include_str!("../../../templates/invoice-ready-card.html");
+
+const READY_CARD_TEMPLATE_NAME: &str = "invoice-ready-card.html";
 
 /// The order design slots, in the order they render on the document. The value
 /// in each column is looked up against the catalog; a stored value that
@@ -226,6 +233,72 @@ pub async fn render_invoice_document(
     })?)
 }
 
+/// Renders the ready-for-collection card for an invoice — a compact,
+/// customer-facing notice that the tailoring is done and ready to collect,
+/// sent over WhatsApp once the last order on the invoice is production-complete.
+///
+/// It is a document like the invoice page (self-contained HTML, browser-shaped
+/// Arabic), so the same capture-and-send path that rasterizes the invoice also
+/// handles this card.
+pub async fn render_ready_card(
+    state: &AppState,
+    invoice_id: uuid::Uuid,
+) -> Result<String, AppError> {
+    let detail = service::get_invoice(state, invoice_id).await?;
+    let branding = state.invoice_branding();
+
+    let env = crate::document::template_environment(
+        branding,
+        READY_CARD_TEMPLATE_NAME,
+        DEFAULT_READY_CARD_TEMPLATE,
+    )?;
+    let template = env.get_template(READY_CARD_TEMPLATE_NAME)?;
+
+    Ok(template.render(ready_card_context(&detail, branding)?)?)
+}
+
+/// The ready card's template context, assembled from the invoice and branding
+/// alone — a pure seam so the render can be exercised without a database.
+fn ready_card_context(
+    detail: &InvoiceDetail,
+    branding: &InvoiceBranding,
+) -> Result<minijinja::Value, AppError> {
+    Ok(context! {
+        company => minijinja::Value::from_serialize(branding),
+        // "INV-42", built here so the template never formats identity numbers.
+        invoiceRef => format!("INV-{}", detail.invoice_number),
+        // The branch the customer collects at; the template falls back to its
+        // own copy when the invoice has no branch.
+        collectAt => detail.branch_name.as_deref(),
+        // Only the made-to-measure orders are "ready" — a product or gift card
+        // line has nothing waiting at the tailor.
+        orderCount => detail
+            .lines
+            .iter()
+            .filter(|line| matches!(line.kind, InvoiceLineKind::Order))
+            .count(),
+        amounts => minijinja::Value::from_serialize(ready_card_amounts(detail)),
+        currency => CURRENCY,
+    })
+}
+
+/// The amounts the ready card carries, pre-formatted like the invoice's
+/// `formatted_amounts` so the template can't change how money is written.
+fn ready_card_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<String, String> {
+    let totals = &detail.totals;
+    let mut amounts = std::collections::BTreeMap::new();
+
+    for (key, value) in [
+        ("total", totals.total),
+        ("amountPaid", totals.amount_paid),
+        ("balanceDue", totals.balance_due),
+    ] {
+        amounts.insert(key.to_string(), format_amount(value));
+    }
+
+    amounts
+}
+
 /// Everyone the invoice is for: the named buyer if there is one, otherwise the
 /// customers its tailoring lines were measured for, each listed once and in
 /// the order their first line appears.
@@ -293,7 +366,7 @@ fn formatted_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::invoices::types::OrderDesignValues;
+    use crate::features::invoices::types::{InvoiceDetailLine, OrderDesignValues};
 
     fn branding() -> InvoiceBranding {
         InvoiceBranding {
@@ -344,6 +417,43 @@ mod tests {
     fn the_default_template_compiles() {
         let env = environment(&branding()).unwrap();
         assert!(env.get_template(TEMPLATE_NAME).is_ok());
+    }
+
+    #[test]
+    fn the_ready_card_template_renders_the_invoice_and_orders() {
+        let mut detail = super::tests_support::detail();
+        detail.branch_name = Some("Seef Mall".to_string());
+        detail.lines.push(InvoiceDetailLine {
+            kind: InvoiceLineKind::Order,
+            order_id: Some(uuid::Uuid::nil()),
+            description: "Order line".to_string(),
+            detail: Some("Thobe: Saudi".to_string()),
+            customer: None,
+            quantity: 1.0,
+            unit: Some("pcs".to_string()),
+            unit_price: 100.0,
+            line_total: 100.0,
+            taxable: true,
+            design_values: None,
+        });
+
+        let env = crate::document::template_environment(
+            &branding(),
+            READY_CARD_TEMPLATE_NAME,
+            DEFAULT_READY_CARD_TEMPLATE,
+        )
+        .unwrap();
+        let template = env.get_template(READY_CARD_TEMPLATE_NAME).unwrap();
+        let html = template
+            .render(ready_card_context(&detail, &branding()).unwrap())
+            .unwrap();
+
+        assert!(html.contains("INV-1"));
+        assert!(html.contains("ready for collection"));
+        assert!(html.contains("Seef Mall"));
+        assert!(html.contains("110.000")); // total, pre-formatted
+                                           // Only the order line counts as "ready" — its row prints the count.
+        assert!(html.contains(">1<"));
     }
 
     #[test]

@@ -1,9 +1,11 @@
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CURRENCY } from '@/lib/currency'
 import { ReadOnlyMeasurement } from '@/features/customers/components/read-only-measurement'
+import { SendInvoiceWhatsAppDialog } from '@/components/send-invoice-whatsapp-dialog'
 import {
   ArrowLeftIcon,
   FileDownIcon,
@@ -17,6 +19,7 @@ import { OrderTrackingPanel } from './components/order-tracking-panel'
 import { LogRepairDialog } from './components/log-repair-dialog'
 import { ReceiveOrderDialog } from './components/receive-order-dialog'
 import { useOrder } from './hooks/use-order'
+import { isInvoiceFullyReady } from './lib/invoice-completion'
 import { printOrderDocument } from './lib/print-order'
 import type { OrderDetail } from './types/orders'
 
@@ -33,8 +36,31 @@ function shortId(id: string) {
 
 export function OrderDetailPage({ orderId }: { orderId: string }) {
   const { data: order, isLoading, isError } = useOrder(orderId)
+  const queryClient = useQueryClient()
   const [repairOrderId, setRepairOrderId] = React.useState<string | null>(null)
   const [receiveOpen, setReceiveOpen] = React.useState(false)
+  const [readyWhatsAppInvoiceId, setReadyWhatsAppInvoiceId] = React.useState<
+    string | null
+  >(null)
+
+  // The order's own build just finished; offer the WhatsApp send only once the
+  // whole invoice is ready, so a half-finished invoice doesn't prompt.
+  const handleOrderReady = (finished: OrderDetail) => {
+    void (async () => {
+      let allReady: boolean
+      try {
+        allReady = await isInvoiceFullyReady(finished.invoiceId, queryClient)
+      } catch {
+        toast('Could not check the other orders on this invoice.')
+        return
+      }
+      if (!allReady) {
+        toast('Other orders on this invoice are still in progress.')
+        return
+      }
+      setReadyWhatsAppInvoiceId(finished.invoiceId)
+    })()
+  }
 
   if (isLoading) {
     return (
@@ -190,6 +216,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         <OrderTrackingPanel
           order={order}
           onLogRepair={(o) => setRepairOrderId(o.id)}
+          onOrderReady={handleOrderReady}
         />
       </section>
 
@@ -217,6 +244,12 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       <LogRepairDialog
         order={repairOrderId === order.id ? order : null}
         onOpenChange={(open) => !open && setRepairOrderId(null)}
+      />
+
+      <SendInvoiceWhatsAppDialog
+        invoiceId={readyWhatsAppInvoiceId}
+        kind="ready"
+        onOpenChange={(open) => !open && setReadyWhatsAppInvoiceId(null)}
       />
     </div>
   )

@@ -48,6 +48,8 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 interface OrderTrackingPanelProps {
   order: OrderDetail
   onLogRepair: (order: Order) => void
+  /** Fires when completing a stage finishes the order (currentStage -> null). */
+  onOrderReady?: (order: Order) => void
 }
 
 /**
@@ -59,6 +61,7 @@ interface OrderTrackingPanelProps {
 export function OrderTrackingPanel({
   order,
   onLogRepair,
+  onOrderReady,
 }: OrderTrackingPanelProps) {
   return (
     <div className="space-y-6">
@@ -66,7 +69,11 @@ export function OrderTrackingPanel({
       <Separator />
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">Production</h3>
-        <StageChecklist order={order} stages={order.stages} />
+        <StageChecklist
+          order={order}
+          stages={order.stages}
+          onOrderReady={onOrderReady}
+        />
       </section>
       <Separator />
       <RepairsSection order={order} onLogRepair={onLogRepair} />
@@ -135,9 +142,11 @@ function ProductionLocationPicker({ order }: { order: Order }) {
 function StageChecklist({
   order,
   stages,
+  onOrderReady,
 }: {
   order: Order
   stages: OrderStageEntry[]
+  onOrderReady?: (order: Order) => void
 }) {
   if (stages.length === 0) {
     return (
@@ -150,13 +159,26 @@ function StageChecklist({
   return (
     <ul className="space-y-2">
       {stages.map((stage) => (
-        <StageRow key={stage.stageId} order={order} stage={stage} />
+        <StageRow
+          key={stage.stageId}
+          order={order}
+          stage={stage}
+          onOrderReady={onOrderReady}
+        />
       ))}
     </ul>
   )
 }
 
-function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
+function StageRow({
+  order,
+  stage,
+  onOrderReady,
+}: {
+  order: Order
+  stage: OrderStageEntry
+  onOrderReady?: (order: Order) => void
+}) {
   const setStage = useSetOrderStage()
   const [destination, setDestination] = React.useState('')
 
@@ -183,10 +205,20 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
           : `${stage.name} was marked ${status}.`,
       error: 'Could not update this stage. Please try again.',
     })
+    let updated
     try {
-      await pending
+      updated = await pending
     } catch {
       return
+    }
+    // The transition, not just any completed order — only notify when this
+    // very action finished the build.
+    if (
+      status === 'done' &&
+      order.currentStage !== null &&
+      updated.currentStage === null
+    ) {
+      onOrderReady?.(updated)
     }
     setDestination('')
   }

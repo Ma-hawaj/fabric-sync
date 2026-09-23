@@ -33,6 +33,7 @@
     "cmdk": "^1.1.1",
     "cn": "^0.3.0",
     "date-fns": "^4.4.0",
+    "html-to-image": "^1.11.13",
     "lucide-react": "^0.545.0",
     "nuqs": "^2.9.0",
     "oidc-client-ts": "^3.5.0",
