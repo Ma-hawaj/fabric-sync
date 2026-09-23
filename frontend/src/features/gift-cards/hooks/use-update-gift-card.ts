@@ -13,8 +13,9 @@ async function updateGiftCard({
   id,
   ...changes
 }: UpdateGiftCardInput): Promise<GiftCard> {
-  const { data } = await apiClient.patch<GiftCard>(`/gift-cards/${id}`, changes)
-  return data
+  const response = await apiClient.patch<GiftCard>(`/gift-cards/${id}`, changes)
+
+  return response.data
 }
 
 export function useUpdateGiftCard() {
@@ -22,12 +23,11 @@ export function useUpdateGiftCard() {
 
   return useMutation({
     mutationFn: updateGiftCard,
-    onSuccess: (giftCard) => {
-      queryClient.setQueryData<GiftCard[]>(['gift-cards'], (cards = []) =>
-        cards.map((existing) =>
-          existing.id === giftCard.id ? giftCard : existing,
-        ),
-      )
+    onSuccess: () => {
+      // The cache holds one entry per page-and-filter combination now, and
+      // each holds an envelope rather than a bare array, so there is no
+      // single list to splice into. Prefix matching refreshes them all.
+      void queryClient.invalidateQueries({ queryKey: ['gift-cards'] })
     },
   })
 }

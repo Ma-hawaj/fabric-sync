@@ -1,14 +1,21 @@
 use uuid::Uuid;
 
-use crate::{error::AppError, state::AppState};
+use crate::{
+    error::AppError,
+    list::{self, ListParams},
+    state::AppState,
+};
 
 use super::{
     repository,
     types::{AddStockInput, CreateMaterialInput, Material},
 };
 
-pub async fn list_materials(state: &AppState) -> Result<Vec<Material>, AppError> {
-    Ok(repository::list_materials(state).await?)
+pub async fn list_materials(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<Material>, AppError> {
+    repository::list_materials(state, params).await
 }
 
 pub async fn create_material(

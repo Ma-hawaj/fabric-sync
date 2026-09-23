@@ -4,6 +4,7 @@ mod config;
 mod document;
 mod error;
 mod features;
+mod list;
 mod request_log;
 mod seed;
 mod state;

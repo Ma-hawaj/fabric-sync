@@ -1,22 +1,55 @@
 use uuid::Uuid;
 
-use crate::state::AppState;
+use crate::{
+    error::AppError,
+    list::{self, ColumnDef, ColumnKind, ListParams, ListSpec},
+    state::AppState,
+};
 
 use super::types::OrderStage;
 
+// `applies_to` and `status` exist only to be filtered on: the page offers them
+// as multi-selects over what are really booleans, so the projection happens
+// here rather than in the filter layer, mirroring `locations`'s `uses`/
+// `status`. Their tokens are what the frontend's filter options carry as
+// values.
+const SPEC: ListSpec = ListSpec {
+    base_sql: r#"
+        SELECT
+            id,
+            name,
+            sort_order,
+            requires_delivery,
+            is_active,
+            CASE WHEN requires_delivery THEN 'deliveriesOnly' ELSE 'everyOrder' END AS applies_to,
+            CASE WHEN is_active THEN 'active' ELSE 'retired' END AS status
+        FROM order_stages
+    "#,
+    columns: &[
+        ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        ("name", ColumnDef::new("name", ColumnKind::Text)),
+        (
+            "sortOrder",
+            ColumnDef::new("sort_order", ColumnKind::Number),
+        ),
+        (
+            "requiresDelivery",
+            ColumnDef::new("requires_delivery", ColumnKind::Bool),
+        ),
+        ("isActive", ColumnDef::new("is_active", ColumnKind::Bool)),
+        ("appliesTo", ColumnDef::new("applies_to", ColumnKind::Text)),
+        ("status", ColumnDef::new("status", ColumnKind::Text)),
+    ],
+    default_order: "sort_order ASC, name ASC",
+};
+
 // Returns retired stages too — the order stages page lists them behind a status
 // filter, and the order checklist narrows to the active ones itself.
-pub async fn list_stages(state: &AppState) -> Result<Vec<OrderStage>, sqlx::Error> {
-    sqlx::query_as!(
-        OrderStage,
-        r#"
-        SELECT id, name, sort_order, requires_delivery, is_active
-        FROM order_stages
-        ORDER BY sort_order, name
-        "#
-    )
-    .fetch_all(state.db())
-    .await
+pub async fn list_stages(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<OrderStage>, AppError> {
+    list::fetch_page(state.db(), &SPEC, params).await
 }
 
 pub async fn create_stage(

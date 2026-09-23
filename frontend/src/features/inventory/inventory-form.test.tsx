@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { apiGetMock } from '@/lib/list-fixtures'
 import { InventoryFormPage } from './inventory-form'
 import type { Material } from './types/inventory'
 
@@ -15,7 +16,10 @@ const MATERIALS: Material[] = [
     name: 'Cotton Poplin — White',
     sku: 'FB-CTN-WHT-01',
     unit: 'meters',
-    locations: [],
+    locations: [
+      { locationId: 'loc-1', location: 'Main Warehouse', quantity: 100 },
+      { locationId: 'loc-2', location: 'Downtown Branch', quantity: 20 },
+    ],
   },
   {
     id: 'mat-2',
@@ -26,12 +30,23 @@ const MATERIALS: Material[] = [
   },
 ]
 
+// The material picker queries the server per keystroke, so the API layer is
+// mocked to serve the search against in-memory rows instead of hitting the
+// network in jsdom.
+const { apiGet } = vi.hoisted(() => ({ apiGet: vi.fn() }))
+vi.mock('@/lib/api', () => ({
+  apiClient: { get: apiGet },
+  ApiError: class ApiError extends Error {},
+}))
+
 function renderPage() {
+  apiGet.mockImplementation(
+    apiGetMock({
+      '/materials': MATERIALS,
+      '/locations': [],
+    }),
+  )
   const client = new QueryClient()
-  // Seed the cache so useInventory serves data without fetching (its
-  // staleTime keeps the seeded data fresh for the whole test).
-  client.setQueryData(['materials'], MATERIALS)
-  client.setQueryData(['locations'], [])
   return render(
     <QueryClientProvider client={client}>
       <InventoryFormPage />
@@ -78,11 +93,13 @@ describe('InventoryFormPage material search', () => {
     expect(
       await screen.findByRole('option', { name: 'Wool Blend — Grey' }),
     ).toBeTruthy()
-    expect(
-      screen.queryByRole('option', {
-        name: 'Cotton Poplin — White (FB-CTN-WHT-01)',
-      }),
-    ).toBeNull()
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('option', {
+          name: 'Cotton Poplin — White (FB-CTN-WHT-01)',
+        }),
+      ).toBeNull(),
+    )
   })
 
   it('matches on the SKU as well as the name', async () => {
@@ -96,8 +113,10 @@ describe('InventoryFormPage material search', () => {
         name: 'Cotton Poplin — White (FB-CTN-WHT-01)',
       }),
     ).toBeTruthy()
-    expect(
-      screen.queryByRole('option', { name: 'Wool Blend — Grey' }),
-    ).toBeNull()
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('option', { name: 'Wool Blend — Grey' }),
+      ).toBeNull(),
+    )
   })
 })

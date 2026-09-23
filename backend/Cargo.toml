@@ -13,7 +13,10 @@ openidconnect = "4.0.1"
 qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "migrate", "chrono", "macros", "uuid", "json"] }
+# Needed at runtime, not just in tests: the `sort` and `filters` query params are
+# JSON documents (see `list`), so they are parsed on every list request.
+serde_json = "1"
+sqlx ={ version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "migrate", "chrono", "macros", "uuid", "json"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = "0.1"
@@ -22,4 +25,6 @@ uuid = { version = "1", features = ["serde", "v4"] }
 dotenvy = "0.15"
 
 [dev-dependencies]
-serde_json = "1"
+# Lets the list-params tests build a request from a real query string rather
+# than hand-constructing the struct they are meant to be checking.
+serde_urlencoded = "0.7"

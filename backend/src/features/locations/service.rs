@@ -1,6 +1,10 @@
 use uuid::Uuid;
 
-use crate::{error::AppError, state::AppState};
+use crate::{
+    error::AppError,
+    list::{self, ListParams},
+    state::AppState,
+};
 
 use super::{
     repository,
@@ -31,8 +35,11 @@ fn validate_capabilities(receives_orders: bool, holds_stock: bool) -> Result<(),
     Ok(())
 }
 
-pub async fn list_locations(state: &AppState) -> Result<Vec<Location>, AppError> {
-    Ok(repository::list_locations(state).await?)
+pub async fn list_locations(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<Location>, AppError> {
+    repository::list_locations(state, params).await
 }
 
 pub async fn create_location(

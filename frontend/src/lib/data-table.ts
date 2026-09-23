@@ -1,10 +1,28 @@
-import type { Column } from '@tanstack/react-table'
+import type { Column, ColumnDef } from '@tanstack/react-table'
 import { dataTableConfig } from '@/config/data-table'
 import type {
   ExtendedColumnFilter,
   FilterOperator,
   FilterVariant,
 } from '@/types/data-table'
+
+/**
+ * The id a column ends up with on a real `Column` instance. TanStack derives it
+ * from `accessorKey` (dots become underscores) or a string `header` when the
+ * def carries no explicit `id`, and never writes the result back onto the def —
+ * so code that only has the raw `ColumnDef`s must re-derive it the same way or
+ * every such column reads as id-less.
+ */
+export function getColumnDefId<TData>(
+  column: ColumnDef<TData>,
+): string | undefined {
+  if (column.id) return column.id
+  if (typeof column.accessorKey === 'string') {
+    return column.accessorKey.replaceAll('.', '_')
+  }
+  if (typeof column.header === 'string') return column.header
+  return undefined
+}
 
 export function getColumnPinningStyle<TData>({
   column,

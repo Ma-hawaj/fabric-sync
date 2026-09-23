@@ -1,12 +1,6 @@
+import * as React from 'react'
 import { NumberField, TextField } from '@/components/form/fields'
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from '@/components/ui/combobox'
+import { AsyncCombobox } from '@/components/form/async-combobox'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -18,6 +12,8 @@ import {
 import { Separator } from '@/components/ui/separator'
 import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
+import { ORDER_RECEIVING_FILTERS } from '@/features/locations/lib/location-filters'
+import type { Product } from '@/features/products/types/product'
 import { CURRENCY } from '@/lib/currency'
 import {
   computeGiftCardLineTotal,
@@ -46,12 +42,11 @@ const VAT_RATE = 0.1
 
 function customerDisplayName(
   draft: InvoiceCustomerDraft,
-  existingCustomers: Customer[],
+  customerNames: ReadonlyMap<string, Customer>,
 ) {
   if (draft.mode === 'existing') {
     return (
-      existingCustomers.find((c) => c.id === draft.existingCustomerId)?.name ??
-      'Select a customer'
+      customerNames.get(draft.existingCustomerId)?.name ?? 'Select a customer'
     )
   }
   return draft.name || 'New Customer'
@@ -65,11 +60,11 @@ interface CustomerLineItems {
 
 function buildLineItems(
   customers: InvoiceCustomerDraft[],
-  existingCustomers: Customer[],
+  customerNames: ReadonlyMap<string, Customer>,
 ): CustomerLineItems[] {
   return customers.map((customer) => ({
     key: customer.key,
-    customerName: customerDisplayName(customer, existingCustomers),
+    customerName: customerDisplayName(customer, customerNames),
     orders: customer.orders.map((order, idx) => ({
       key: order.key,
       label: `Order ${idx + 1}`,
@@ -86,11 +81,11 @@ interface SummaryRow {
 
 function buildProductRows(
   products: InvoiceProductDraft[],
-  productNames: Record<string, string>,
+  productNames: ReadonlyMap<string, Product>,
 ): SummaryRow[] {
   return products.map((line, index) => ({
     key: line.key,
-    label: productNames[line.productId] ?? `Product ${index + 1}`,
+    label: productNames.get(line.productId)?.name ?? `Product ${index + 1}`,
     total: computeProductLineTotal(line),
   }))
 }
@@ -105,17 +100,15 @@ function buildGiftCardRows(giftCards: InvoiceGiftCardDraft[]): SummaryRow[] {
 
 interface InvoiceSummaryProps {
   form: InvoiceFormApi
-  existingCustomers: Customer[]
-  branches: Location[]
-  /** Product id to name, for labelling the product rows below. */
-  productNames?: Record<string, string>
+  /** Rows the pickers handed over, read at render time for the line labels. */
+  customerNames: React.MutableRefObject<Map<string, Customer>>
+  productNames: React.MutableRefObject<Map<string, Product>>
 }
 
 export function InvoiceSummary({
   form,
-  existingCustomers,
-  branches,
-  productNames = {},
+  customerNames,
+  productNames,
 }: InvoiceSummaryProps) {
   return (
     <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
@@ -124,42 +117,26 @@ export function InvoiceSummary({
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField form={form} name="date" label="Date" />
         <form.Field name={'receivingBranch' as never}>
-          {(field: any) => {
-            const selected = branches.find((b) => b.id === field.state.value)
-            return (
-              <div className="space-y-1">
-                <Label htmlFor={field.name}>Receiving Branch</Label>
-                <Combobox
-                  items={branches}
-                  itemToStringLabel={(branch: Location) => branch.name}
-                  isItemEqualToValue={(a: Location, b: Location) =>
-                    a.id === b.id
-                  }
-                  value={selected ?? null}
-                  onValueChange={(branch: Location | null) =>
-                    field.handleChange(branch?.id ?? '')
-                  }
-                >
-                  <ComboboxInput
-                    id={field.name}
-                    placeholder="Search branch..."
-                    className="w-full"
-                    showClear
-                  />
-                  <ComboboxContent>
-                    <ComboboxEmpty>No branches found.</ComboboxEmpty>
-                    <ComboboxList>
-                      {(branch: Location) => (
-                        <ComboboxItem key={branch.id} value={branch}>
-                          {branch.name}
-                        </ComboboxItem>
-                      )}
-                    </ComboboxList>
-                  </ComboboxContent>
-                </Combobox>
-              </div>
-            )
-          }}
+          {(field: any) => (
+            <div className="space-y-1">
+              <Label htmlFor={field.name}>Receiving Branch</Label>
+              <AsyncCombobox<Location>
+                id={field.name}
+                endpoint="/locations"
+                queryKey="invoice-receiving-branch"
+                searchField="name"
+                filters={ORDER_RECEIVING_FILTERS}
+                toOption={(location) => ({
+                  value: location.id,
+                  label: location.name,
+                })}
+                value={field.state.value || null}
+                onValueChange={(value) => field.handleChange(value ?? '')}
+                placeholder="Search branch..."
+                emptyMessage="No branches found."
+              />
+            </div>
+          )}
         </form.Field>
 
         {/* A tailoring invoice finds its customer through the orders, so this
@@ -168,46 +145,25 @@ export function InvoiceSummary({
           {(customers: InvoiceCustomerDraft[]) =>
             customers.length === 0 && (
               <form.Field name={'customerId' as never}>
-                {(field: any) => {
-                  const selected =
-                    existingCustomers.find((c) => c.id === field.state.value) ??
-                    null
-                  return (
-                    <div className="space-y-1">
-                      <Label htmlFor={field.name}>Customer (optional)</Label>
-                      <Combobox
-                        items={existingCustomers}
-                        itemToStringLabel={(customer: Customer) =>
-                          `${customer.name} — ${customer.mobileNo}`
-                        }
-                        isItemEqualToValue={(a: Customer, b: Customer) =>
-                          a.id === b.id
-                        }
-                        value={selected}
-                        onValueChange={(customer: Customer | null) =>
-                          field.handleChange(customer?.id ?? '')
-                        }
-                      >
-                        <ComboboxInput
-                          id={field.name}
-                          placeholder="Search customer..."
-                          className="w-full"
-                          showClear
-                        />
-                        <ComboboxContent>
-                          <ComboboxEmpty>No customers found.</ComboboxEmpty>
-                          <ComboboxList>
-                            {(customer: Customer) => (
-                              <ComboboxItem key={customer.id} value={customer}>
-                                {customer.name} — {customer.mobileNo}
-                              </ComboboxItem>
-                            )}
-                          </ComboboxList>
-                        </ComboboxContent>
-                      </Combobox>
-                    </div>
-                  )
-                }}
+                {(field: any) => (
+                  <div className="space-y-1">
+                    <Label htmlFor={field.name}>Customer (optional)</Label>
+                    <AsyncCombobox<Customer>
+                      id={field.name}
+                      endpoint="/customers"
+                      queryKey="invoice-summary-customer"
+                      searchField={['name', 'mobileNo']}
+                      toOption={(customer) => ({
+                        value: customer.id,
+                        label: `${customer.name} — ${customer.mobileNo}`,
+                      })}
+                      value={field.state.value || null}
+                      onValueChange={(id) => field.handleChange(id ?? '')}
+                      placeholder="Search customer..."
+                      emptyMessage="No customers found."
+                    />
+                  </div>
+                )}
               </form.Field>
             )
           }
@@ -230,8 +186,8 @@ export function InvoiceSummary({
             InvoiceGiftCardDraft[],
           ]
 
-          const lineItems = buildLineItems(customers, existingCustomers)
-          const productRows = buildProductRows(products, productNames)
+          const lineItems = buildLineItems(customers, customerNames.current)
+          const productRows = buildProductRows(products, productNames.current)
           const giftCardRows = buildGiftCardRows(giftCards)
 
           // Orders and products are both goods, so they share one taxable

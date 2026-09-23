@@ -13,19 +13,25 @@ function entriesPayload(values: InventoryFormValues) {
 // Both endpoints return the full updated material, so the cache can be
 // patched from the response instead of refetching the whole list.
 async function addStock(values: InventoryFormValues): Promise<Material> {
-  const { data } =
-    values.mode === 'existing'
-      ? await apiClient.post<Material>(
-          `/materials/${values.materialId}/stock`,
-          { entries: entriesPayload(values) },
-        )
-      : await apiClient.post<Material>('/materials', {
-          name: values.name,
-          sku: values.sku.trim() || null,
-          unit: values.unit,
-          entries: entriesPayload(values),
-        })
-  return data
+  const entries = entriesPayload(values)
+
+  if (values.mode === 'existing') {
+    const response = await apiClient.post<Material>(
+      `/materials/${values.materialId}/stock`,
+      { entries },
+    )
+
+    return response.data
+  }
+
+  const response = await apiClient.post<Material>('/materials', {
+    name: values.name,
+    sku: values.sku.trim() || null,
+    unit: values.unit,
+    entries,
+  })
+
+  return response.data
 }
 
 export function useAddStock() {
@@ -33,13 +39,11 @@ export function useAddStock() {
 
   return useMutation({
     mutationFn: addStock,
-    onSuccess: (material) => {
-      queryClient.setQueryData<Material[]>(['materials'], (materials = []) => {
-        const exists = materials.some((m) => m.id === material.id)
-        return exists
-          ? materials.map((m) => (m.id === material.id ? material : m))
-          : [...materials, material]
-      })
+    onSuccess: () => {
+      // The cache holds one entry per page-and-filter combination now, and
+      // each holds an envelope rather than a bare array, so there is no
+      // single list to splice into. Prefix matching refreshes them all.
+      void queryClient.invalidateQueries({ queryKey: ['materials'] })
     },
   })
 }

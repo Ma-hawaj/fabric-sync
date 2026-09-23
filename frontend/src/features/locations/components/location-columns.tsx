@@ -16,18 +16,6 @@ export function locationUses(location: Location): string[] {
   return uses
 }
 
-// Shared by the "Used for" and "Status" columns: both filter an array-valued
-// cell against the multiSelect toolbar filter, which hands over a string[].
-function matchesAnySelected(cellValue: string[], filterValue: unknown) {
-  if (
-    !filterValue ||
-    (Array.isArray(filterValue) && filterValue.length === 0)
-  ) {
-    return true
-  }
-  return (filterValue as string[]).some((value) => cellValue.includes(value))
-}
-
 export const getLocationColumns = (
   onToggleActive: (location: Location) => void,
   isToggling: boolean,
@@ -42,10 +30,6 @@ export const getLocationColumns = (
     ),
     enableSorting: true,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) => {
-      const val = row.getValue<string>(columnId)
-      return val.toLowerCase().includes(String(filterValue).toLowerCase())
-    },
     meta: {
       label: 'Name',
       placeholder: 'Filter name...',
@@ -69,15 +53,13 @@ export const getLocationColumns = (
     ),
     enableSorting: false,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) =>
-      matchesAnySelected(row.getValue<string[]>(columnId), filterValue),
     meta: {
       label: 'Used For',
       placeholder: 'Filter use...',
       variant: 'multiSelect',
       options: [
-        { label: RECEIVES_ORDERS_LABEL, value: RECEIVES_ORDERS_LABEL },
-        { label: HOLDS_STOCK_LABEL, value: HOLDS_STOCK_LABEL },
+        { label: RECEIVES_ORDERS_LABEL, value: 'receivesOrders' },
+        { label: HOLDS_STOCK_LABEL, value: 'holdsStock' },
       ],
     },
   },
@@ -97,15 +79,13 @@ export const getLocationColumns = (
       ),
     enableSorting: false,
     enableColumnFilter: true,
-    filterFn: (row, columnId, filterValue) =>
-      matchesAnySelected(row.getValue<string[]>(columnId), filterValue),
     meta: {
       label: 'Status',
       placeholder: 'Filter status...',
       variant: 'multiSelect',
       options: [
-        { label: 'Active', value: 'Active' },
-        { label: 'Inactive', value: 'Inactive' },
+        { label: 'Active', value: 'active' },
+        { label: 'Inactive', value: 'inactive' },
       ],
     },
   },

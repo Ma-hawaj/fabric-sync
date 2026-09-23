@@ -3,17 +3,9 @@ import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from '@/components/ui/combobox'
 import { NumberField, TextField } from '@/components/form/fields'
+import { AsyncCombobox } from '@/components/form/async-combobox'
 import { ApiError } from '@/lib/api'
-import { useCustomers } from '@/features/customers/hooks/use-customers'
 import { CURRENCY } from '@/lib/currency'
 import { useCreateGiftCard } from './hooks/use-create-gift-card'
 import { giftCardFormSchema } from './lib/gift-card-schema'
@@ -22,7 +14,6 @@ import type { Customer } from '@/features/customers/types/customers'
 
 export function GiftCardFormPage() {
   const navigate = useNavigate()
-  const { data: customers = [] } = useCustomers()
   const createGiftCard = useCreateGiftCard()
 
   const form = useForm({
@@ -80,48 +71,30 @@ export function GiftCardFormPage() {
           </div>
 
           <form.Field name="customerId">
-            {(field) => {
-              const selected =
-                customers.find((c) => c.id === field.state.value) ?? null
-              return (
-                <Field data-invalid={field.state.meta.errors.length > 0}>
-                  <FieldLabel htmlFor={field.name}>
-                    Customer (optional)
-                  </FieldLabel>
-                  <Combobox
-                    items={customers}
-                    itemToStringLabel={(customer: Customer) =>
-                      `${customer.name} — ${customer.mobileNo}`
-                    }
-                    isItemEqualToValue={(a: Customer, b: Customer) =>
-                      a.id === b.id
-                    }
-                    value={selected}
-                    onValueChange={(customer: Customer | null) =>
-                      field.handleChange(customer?.id ?? '')
-                    }
-                  >
-                    <ComboboxInput
-                      id={field.name}
-                      placeholder="Search customer..."
-                      className="w-full"
-                      showClear
-                    />
-                    <ComboboxContent>
-                      <ComboboxEmpty>No customers found.</ComboboxEmpty>
-                      <ComboboxList>
-                        {(customer: Customer) => (
-                          <ComboboxItem key={customer.id} value={customer}>
-                            {customer.name} — {customer.mobileNo}
-                          </ComboboxItem>
-                        )}
-                      </ComboboxList>
-                    </ComboboxContent>
-                  </Combobox>
-                  <FieldError errors={field.state.meta.errors} />
-                </Field>
-              )
-            }}
+            {(field) => (
+              <Field data-invalid={field.state.meta.errors.length > 0}>
+                <FieldLabel htmlFor={field.name}>
+                  Customer (optional)
+                </FieldLabel>
+                <AsyncCombobox<Customer>
+                  id={field.name}
+                  endpoint="/customers"
+                  queryKey="gift-card-customers"
+                  searchField={['name', 'mobileNo']}
+                  placeholder="Search customer..."
+                  emptyMessage="No customers found."
+                  toOption={(customer) => ({
+                    value: customer.id,
+                    label: `${customer.name} — ${customer.mobileNo}`,
+                  })}
+                  value={field.state.value || null}
+                  onValueChange={(customerId) =>
+                    field.handleChange(customerId ?? '')
+                  }
+                />
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
+            )}
           </form.Field>
 
           <TextField

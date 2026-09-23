@@ -61,12 +61,6 @@ export function getOrderColumns(
       ),
       enableSorting: true,
       enableColumnFilter: true,
-      filterFn: (row, columnId, filterValue) => {
-        const cellValue = row.getValue<string>(columnId)
-        return cellValue
-          .toLowerCase()
-          .includes(String(filterValue).toLowerCase())
-      },
       meta: {
         label: 'Invoice',
         placeholder: 'Filter invoice...',
@@ -84,39 +78,6 @@ export function getOrderColumns(
       },
       enableSorting: true,
       enableColumnFilter: true,
-      filterFn: (row, columnId, filterValue) => {
-        const cellValue = row.getValue<Date>(columnId)
-        const time = cellValue.getTime()
-
-        if (!Array.isArray(filterValue)) {
-          if (typeof filterValue === 'number') {
-            return (
-              cellValue.toDateString() === new Date(filterValue).toDateString()
-            )
-          }
-          return true
-        }
-
-        const [startVal, endVal] = filterValue
-        const start =
-          startVal !== undefined && startVal !== null
-            ? Number(startVal)
-            : undefined
-        const end =
-          endVal !== undefined && endVal !== null ? Number(endVal) : undefined
-
-        if (start !== undefined && !isNaN(start)) {
-          const startDate = new Date(start)
-          startDate.setHours(0, 0, 0, 0)
-          if (time < startDate.getTime()) return false
-        }
-        if (end !== undefined && !isNaN(end)) {
-          const endDate = new Date(end)
-          endDate.setHours(23, 59, 59, 999)
-          if (time > endDate.getTime()) return false
-        }
-        return true
-      },
       meta: {
         label: 'Invoice Date',
         variant: 'dateRange',
@@ -130,12 +91,6 @@ export function getOrderColumns(
       cell: ({ row }) => <div>{row.getValue('customerName')}</div>,
       enableSorting: true,
       enableColumnFilter: true,
-      filterFn: (row, columnId, filterValue) => {
-        const cellValue = row.getValue<string>(columnId)
-        return cellValue
-          .toLowerCase()
-          .includes(String(filterValue).toLowerCase())
-      },
       meta: {
         label: 'Customer Name',
         placeholder: 'Filter customer...',
@@ -150,12 +105,6 @@ export function getOrderColumns(
       cell: ({ row }) => <div>{row.getValue('customerMobile')}</div>,
       enableSorting: true,
       enableColumnFilter: true,
-      filterFn: (row, columnId, filterValue) => {
-        const cellValue = row.getValue<string>(columnId)
-        return cellValue
-          .toLowerCase()
-          .includes(String(filterValue).toLowerCase())
-      },
       meta: {
         label: 'Customer Mobile',
         placeholder: 'Filter mobile...',
@@ -170,15 +119,6 @@ export function getOrderColumns(
       cell: ({ row }) => <div>{row.getValue('material')}</div>,
       enableSorting: true,
       enableColumnFilter: true,
-      filterFn: (row, columnId, filterValue) => {
-        if (
-          !filterValue ||
-          (Array.isArray(filterValue) && filterValue.length === 0)
-        )
-          return true
-        const cellValue = row.getValue<string>(columnId)
-        return (filterValue as string[]).includes(cellValue)
-      },
       meta: {
         label: 'Material',
         placeholder: 'Filter materials...',
@@ -231,15 +171,6 @@ export function getOrderColumns(
       },
       enableSorting: true,
       enableColumnFilter: true,
-      filterFn: (row, columnId, filterValue) => {
-        if (
-          !filterValue ||
-          (Array.isArray(filterValue) && filterValue.length === 0)
-        )
-          return true
-        const cellValue = row.getValue<string>(columnId)
-        return (filterValue as string[]).includes(cellValue)
-      },
       meta: {
         label: 'Status',
         variant: 'multiSelect',
@@ -262,15 +193,6 @@ export function getOrderColumns(
       },
       enableSorting: true,
       enableColumnFilter: true,
-      filterFn: (row, columnId, filterValue) => {
-        if (
-          !filterValue ||
-          (Array.isArray(filterValue) && filterValue.length === 0)
-        )
-          return true
-        const cellValue = row.getValue<string>(columnId)
-        return (filterValue as string[]).includes(cellValue)
-      },
       meta: {
         label: 'Stage',
         placeholder: 'Filter stage...',
@@ -335,15 +257,6 @@ export function getOrderColumns(
       },
       enableSorting: true,
       enableColumnFilter: true,
-      filterFn: (row, columnId, filterValue) => {
-        if (
-          !filterValue ||
-          (Array.isArray(filterValue) && filterValue.length === 0)
-        )
-          return true
-        const cellValue = row.getValue<string>(columnId)
-        return (filterValue as string[]).includes(cellValue)
-      },
       meta: {
         label: 'Payment Status',
         variant: 'multiSelect',

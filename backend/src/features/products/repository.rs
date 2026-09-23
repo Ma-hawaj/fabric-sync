@@ -1,22 +1,30 @@
-use sqlx::types::Json;
 use uuid::Uuid;
 
-use crate::state::AppState;
+use crate::{
+    error::AppError,
+    list::{self, ColumnDef, ColumnKind, ListParams, ListSpec},
+    state::AppState,
+};
 
-use super::types::{Product, ProductLocationStock, StockEntryInput};
+use super::types::{Product, StockEntryInput};
 
-async fn fetch_products(
-    state: &AppState,
-    product_id: Option<Uuid>,
-) -> Result<Vec<Product>, sqlx::Error> {
-    let rows = sqlx::query!(
-        r#"
+// Returns inactive products too — the products page lists them behind a status
+// filter, and the invoice form narrows to the active ones itself. `status` is
+// the token that filter sends.
+const SPEC: ListSpec = ListSpec {
+    base_sql: r#"
         SELECT
             p.id,
             p.name,
             p.sku,
-            p.unit_price::float8 AS "unit_price!",
+            p.unit_price::float8 AS unit_price,
             p.is_active,
+            CASE WHEN p.is_active THEN 'active' ELSE 'inactive' END AS status,
+            COALESCE(sum(ps.quantity), 0)::float8 AS total_quantity,
+            COALESCE(
+                array_agg(b.name ORDER BY b.name) FILTER (WHERE ps.id IS NOT NULL),
+                ARRAY[]::text[]
+            ) AS location_names,
             COALESCE(
                 json_agg(
                     json_build_object(
@@ -27,43 +35,43 @@ async fn fetch_products(
                     ORDER BY b.name
                 ) FILTER (WHERE ps.id IS NOT NULL),
                 '[]'
-            ) AS "locations!: Json<Vec<ProductLocationStock>>"
+            ) AS locations
         FROM products p
         LEFT JOIN product_stock ps ON ps.product_id = p.id
         LEFT JOIN branch b ON b.id = ps.branch_id
-        WHERE $1::uuid IS NULL OR p.id = $1
         GROUP BY p.id, p.name, p.sku, p.unit_price, p.is_active
-        ORDER BY p.name
-        "#,
-        product_id,
-    )
-    .fetch_all(state.db())
-    .await?;
+    "#,
+    columns: &[
+        ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        ("name", ColumnDef::new("name", ColumnKind::Text)),
+        ("sku", ColumnDef::new("sku", ColumnKind::Text)),
+        (
+            "unitPrice",
+            ColumnDef::new("unit_price", ColumnKind::Number),
+        ),
+        ("isActive", ColumnDef::new("is_active", ColumnKind::Bool)),
+        ("status", ColumnDef::new("status", ColumnKind::Text)),
+        (
+            "totalQuantity",
+            ColumnDef::new("total_quantity", ColumnKind::Number),
+        ),
+        (
+            "locations",
+            ColumnDef::new("location_names", ColumnKind::TextArray),
+        ),
+    ],
+    default_order: "name ASC",
+};
 
-    Ok(rows
-        .into_iter()
-        .map(|row| Product {
-            id: row.id,
-            name: row.name,
-            sku: row.sku,
-            unit_price: row.unit_price,
-            is_active: row.is_active,
-            locations: row.locations.0,
-        })
-        .collect())
-}
-
-// Returns inactive products too — the products page lists them behind a status
-// filter, and the invoice form narrows to the active ones itself.
-pub async fn list_products(state: &AppState) -> Result<Vec<Product>, sqlx::Error> {
-    fetch_products(state, None).await
-}
-
-pub async fn get_product(
+pub async fn list_products(
     state: &AppState,
-    product_id: Uuid,
-) -> Result<Option<Product>, sqlx::Error> {
-    Ok(fetch_products(state, Some(product_id)).await?.pop())
+    params: &ListParams,
+) -> Result<list::Page<Product>, AppError> {
+    list::fetch_page(state.db(), &SPEC, params).await
+}
+
+pub async fn get_product(state: &AppState, product_id: Uuid) -> Result<Option<Product>, AppError> {
+    list::fetch_by_id(state.db(), &SPEC, product_id).await
 }
 
 async fn upsert_stock(

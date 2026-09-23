@@ -1,6 +1,11 @@
 use axum::{extract::State, Extension, Json};
 
-use crate::{auth::AuthenticatedUser, error::AppError, state::AppState};
+use crate::{
+    auth::AuthenticatedUser,
+    error::AppError,
+    list::{ListParams, Page},
+    state::AppState,
+};
 
 use super::{
     service,
@@ -10,12 +15,13 @@ use super::{
 pub async fn list_customers(
     State(state): State<AppState>,
     Extension(user): Extension<AuthenticatedUser>,
-) -> Result<Json<Vec<Customer>>, AppError> {
+    params: ListParams,
+) -> Result<Json<Page<Customer>>, AppError> {
     let _subject = user.subject();
     let _client_id = user.client_id();
     let _scopes = user.scopes();
 
-    Ok(Json(service::list_customers(&state).await?))
+    Ok(Json(service::list_customers(&state, &params).await?))
 }
 
 pub async fn create_customer(

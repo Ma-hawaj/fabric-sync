@@ -4,7 +4,12 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::{auth::AuthenticatedUser, error::AppError, state::AppState};
+use crate::{
+    auth::AuthenticatedUser,
+    error::AppError,
+    list::{ListParams, Page},
+    state::AppState,
+};
 
 use super::{
     service,
@@ -14,8 +19,9 @@ use super::{
 pub async fn list_products(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,
-) -> Result<Json<Vec<Product>>, AppError> {
-    Ok(Json(service::list_products(&state).await?))
+    params: ListParams,
+) -> Result<Json<Page<Product>>, AppError> {
+    Ok(Json(service::list_products(&state, &params).await?))
 }
 
 pub async fn create_product(

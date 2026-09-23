@@ -5,7 +5,11 @@ use uuid::Uuid;
 
 use crate::features::customers;
 use crate::features::users;
-use crate::{error::AppError, state::AppState};
+use crate::{
+    error::AppError,
+    list::{self, ListParams},
+    state::AppState,
+};
 
 use super::{
     repository,
@@ -364,6 +368,26 @@ async fn load_order(state: &AppState, order_id: Uuid) -> Result<OrderListItem, A
         .expect("one row in, one row out"))
 }
 
+// Paginated at the row level, then enriched: the checklist/repair queries run
+// once per page rather than once per table, and the page's `total`/
+// `pageCount` come straight from the filtered-row count `list::fetch_page`
+// already computed, unaffected by anything the enrichment pass adds.
+pub async fn list_orders(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<OrderListItem>, AppError> {
+    let page = repository::list_orders(state, params).await?;
+    let data = assemble(state, page.data).await?;
+
+    Ok(list::Page {
+        data,
+        page: page.page,
+        per_page: page.per_page,
+        total: page.total,
+        page_count: page.page_count,
+    })
+}
+
 /// One order with everything a standalone detail page needs — the list row's
 /// full assembly plus the human-readable invoice number and the measurement
 /// snapshot the garment was cut to.
@@ -388,12 +412,6 @@ pub(crate) async fn get_order(state: &AppState, order_id: Uuid) -> Result<OrderD
         invoice_number: row.invoice_number,
         measurement,
     })
-}
-
-pub async fn list_orders(state: &AppState) -> Result<Vec<OrderListItem>, AppError> {
-    let rows = repository::list_orders(state).await?;
-
-    assemble(state, rows).await
 }
 
 /// Marks an order received and, once every order on its invoice has been

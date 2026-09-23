@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
 import type { Customer } from '@/features/customers/types/customers'
+import { apiGetMock } from '@/lib/list-fixtures'
 import { CustomerBlock } from './customer-block'
 import { createEmptyCustomer } from '../../types/invoice-form'
 import type { InvoiceCustomerDraft } from '../../types/invoice-form'
@@ -34,20 +36,32 @@ const EXISTING_CUSTOMERS: Customer[] = [
   },
 ]
 
+// The customer picker queries the server per keystroke, so the API layer is
+// mocked to serve the search against in-memory rows instead of hitting the
+// network in jsdom.
+const { apiGet } = vi.hoisted(() => ({ apiGet: vi.fn() }))
+vi.mock('@/lib/api', () => ({
+  apiClient: { get: apiGet },
+  ApiError: class ApiError extends Error {},
+}))
+
 function Harness({ customer }: { customer: InvoiceCustomerDraft }) {
   const form = useForm({
     defaultValues: { customers: [customer] },
   })
+  apiGet.mockImplementation(apiGetMock({ '/customers': EXISTING_CUSTOMERS }))
+  const client = new QueryClient()
   return (
-    <CustomerBlock
-      form={form as never}
-      customerIndex={0}
-      customerNumber={1}
-      existingCustomers={EXISTING_CUSTOMERS}
-      materials={[]}
-      removable={false}
-      onRemove={() => {}}
-    />
+    <QueryClientProvider client={client}>
+      <CustomerBlock
+        form={form as never}
+        customerIndex={0}
+        customerNumber={1}
+        onCustomerPicked={() => {}}
+        removable={false}
+        onRemove={() => {}}
+      />
+    </QueryClientProvider>
   )
 }
 
@@ -97,11 +111,13 @@ describe('CustomerBlock', () => {
         name: 'Fatima Al-Farsi — +971-55-9876543',
       }),
     ).toBeTruthy()
-    expect(
-      screen.queryByRole('option', {
-        name: 'Ahmed Al-Mansoori — +971-50-1234567',
-      }),
-    ).toBeNull()
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('option', {
+          name: 'Ahmed Al-Mansoori — +971-50-1234567',
+        }),
+      ).toBeNull(),
+    )
   })
 
   it("loads the selected existing customer's current measurement snapshot", async () => {

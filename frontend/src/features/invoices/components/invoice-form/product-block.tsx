@@ -1,13 +1,7 @@
+import * as React from 'react'
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from '@/components/ui/combobox'
+import { AsyncCombobox } from '@/components/form/async-combobox'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { NumberField } from '@/components/form/fields'
 import {
@@ -15,13 +9,23 @@ import {
   productStockAt,
 } from '@/features/products/types/product'
 import type { Product } from '@/features/products/types/product'
+import type { PickerFilter } from '@/lib/async-combobox'
 import { CURRENCY } from '@/lib/currency'
 import type { InvoiceFormApi } from '../../types/invoice-form'
+
+// Products come off the shelf only while they are on sale. A single search
+// field (name) rather than name+SKU because the backend joins every filter —
+// the search text and this — with one connector, so an OR of two search fields
+// cannot be ANDed with an active-only filter.
+const ACTIVE_PRODUCT_FILTER: readonly PickerFilter[] = [
+  { id: 'isActive', value: true, variant: 'boolean', operator: 'eq' },
+]
 
 interface ProductBlockProps {
   form: InvoiceFormApi
   lineIndex: number
-  products: Product[]
+  /** The picked row, so the summary can label this line. */
+  onProductPicked: (product: Product | null) => void
   /** The location stock comes off, used to show what is actually available. */
   branchId: string
   branchName: string
@@ -31,20 +35,22 @@ interface ProductBlockProps {
 export function ProductBlock({
   form,
   lineIndex,
-  products,
+  onProductPicked,
   branchId,
   branchName,
   onRemove,
 }: ProductBlockProps) {
   const base = `products[${lineIndex}]`
+  // The row behind the stored `productId`, remembered from the picker, so both
+  // the availability hint and the price prefill have the full product without
+  // having downloaded the whole catalog.
+  const [picked, setPicked] = React.useState<Product | null>(null)
 
   return (
     <div className="flex items-start gap-3">
       <form.Field name={`${base}.productId` as never}>
         {(field: any) => {
-          const selected =
-            products.find((product) => product.id === field.state.value) ?? null
-          const available = selected ? productStockAt(selected, branchId) : null
+          const available = picked ? productStockAt(picked, branchId) : null
 
           return (
             <Field
@@ -52,13 +58,21 @@ export function ProductBlock({
               className="flex-1"
             >
               <FieldLabel htmlFor={field.name}>Product</FieldLabel>
-              <Combobox
-                items={products}
-                itemToStringLabel={productOptionLabel}
-                isItemEqualToValue={(a: Product, b: Product) => a.id === b.id}
-                value={selected}
-                onValueChange={(product: Product | null) => {
-                  field.handleChange(product?.id ?? '')
+              <AsyncCombobox<Product>
+                id={field.name}
+                endpoint="/products"
+                queryKey="invoice-product"
+                searchField="name"
+                filters={ACTIVE_PRODUCT_FILTER}
+                toOption={(product) => ({
+                  value: product.id,
+                  label: productOptionLabel(product),
+                })}
+                value={field.state.value || null}
+                onValueChange={(id) => field.handleChange(id ?? '')}
+                onSelectRow={(product) => {
+                  setPicked(product)
+                  onProductPicked(product)
                   // Prefill the price from the catalog; staff can still
                   // override it on the line.
                   form.setFieldValue(
@@ -66,25 +80,10 @@ export function ProductBlock({
                     (product?.unitPrice ?? '') as never,
                   )
                 }}
-              >
-                <ComboboxInput
-                  id={field.name}
-                  placeholder="Search product by name or SKU..."
-                  className="w-full"
-                  showClear
-                />
-                <ComboboxContent>
-                  <ComboboxEmpty>No products found.</ComboboxEmpty>
-                  <ComboboxList>
-                    {(product: Product) => (
-                      <ComboboxItem key={product.id} value={product}>
-                        {productOptionLabel(product)}
-                      </ComboboxItem>
-                    )}
-                  </ComboboxList>
-                </ComboboxContent>
-              </Combobox>
-              {selected && branchId && (
+                placeholder="Search product by name..."
+                emptyMessage="No products found."
+              />
+              {picked && branchId && (
                 <p className="text-xs text-muted-foreground">
                   Available: {available} at {branchName}
                 </p>

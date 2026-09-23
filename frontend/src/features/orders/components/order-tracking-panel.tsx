@@ -12,12 +12,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { CURRENCY } from '@/lib/currency'
-import { useLocations } from '@/features/locations/hooks/use-locations'
+import { AsyncCombobox } from '@/components/form/async-combobox'
 import {
-  orderReceivingLocations,
-  productionLocations,
+  ORDER_RECEIVING_FILTERS,
+  PRODUCTION_FILTERS,
 } from '@/features/locations/lib/location-filters'
 import { useUsers } from '@/features/users/hooks/use-users'
+import type { Location } from '@/features/locations/types/location'
 import {
   repairStatusLabel,
   stageBadgeVariant,
@@ -74,17 +75,7 @@ export function OrderTrackingPanel({
 }
 
 function ProductionLocationPicker({ order }: { order: Order }) {
-  const { data: locations = [] } = useLocations()
   const updateOrder = useUpdateOrder()
-  // The rules live in location-filters.ts; never read the flags inline.
-  const options = React.useMemo(
-    () =>
-      productionLocations(locations).map((location) => ({
-        value: location.id,
-        label: location.name,
-      })),
-    [locations],
-  )
 
   const handleChange = async (productionLocationId: string) => {
     const pending = updateOrder.mutateAsync({
@@ -107,24 +98,26 @@ function ProductionLocationPicker({ order }: { order: Order }) {
   return (
     <section className="space-y-2">
       <Label htmlFor="production-location">Made At</Label>
-      <Select
-        items={options}
-        value={order.productionLocationId ?? ''}
-        onValueChange={(value) => {
-          if (value !== null) void handleChange(value)
+      <AsyncCombobox<Location>
+        id="production-location"
+        endpoint="/locations"
+        queryKey="production-location-picker"
+        searchField="name"
+        filters={PRODUCTION_FILTERS}
+        placeholder="Not assigned yet..."
+        emptyMessage="No locations found."
+        toOption={(location) => ({
+          value: location.id,
+          label: location.name,
+        })}
+        getValueLabel={(id) =>
+          id === order.productionLocationId ? order.productionLocation : null
+        }
+        value={order.productionLocationId}
+        onValueChange={(locationId) => {
+          if (locationId !== null) void handleChange(locationId)
         }}
-      >
-        <SelectTrigger id="production-location" className="w-full">
-          <SelectValue placeholder="Not assigned yet..." />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      />
       <p className="text-xs text-muted-foreground">
         Collected from {order.receivingLocation ?? 'an unassigned branch'}. A
         delivery stage only applies while these two differ.
@@ -165,21 +158,12 @@ function StageChecklist({
 
 function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
   const setStage = useSetOrderStage()
-  const { data: locations = [] } = useLocations()
   const [destination, setDestination] = React.useState('')
 
   // Completing a delivery has to say where the garment went — the backend
   // rejects it otherwise, so the picker appears inline before Done is offered.
   const needsDestination =
     stage.requiresDelivery && stage.applicable && stage.status !== 'done'
-  const destinationOptions = React.useMemo(
-    () =>
-      orderReceivingLocations(locations).map((location) => ({
-        value: location.id,
-        label: location.name,
-      })),
-    [locations],
-  )
 
   const record = async (
     status: OrderStageEntry['status'],
@@ -287,27 +271,21 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
       {needsDestination && stage.status === 'pending' && (
         <div className="mt-3 space-y-1">
           <Label htmlFor={`destination-${stage.stageId}`}>Deliver To</Label>
-          <Select
-            items={destinationOptions}
-            value={destination}
-            onValueChange={(value) => {
-              if (value !== null) setDestination(value)
-            }}
-          >
-            <SelectTrigger
-              id={`destination-${stage.stageId}`}
-              className="w-full"
-            >
-              <SelectValue placeholder="Pick a destination..." />
-            </SelectTrigger>
-            <SelectContent>
-              {destinationOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <AsyncCombobox<Location>
+            id={`destination-${stage.stageId}`}
+            endpoint="/locations"
+            queryKey="stage-destination-locations"
+            searchField="name"
+            filters={ORDER_RECEIVING_FILTERS}
+            placeholder="Pick a destination..."
+            emptyMessage="No locations found."
+            toOption={(location) => ({
+              value: location.id,
+              label: location.name,
+            })}
+            value={destination || null}
+            onValueChange={(locationId) => setDestination(locationId ?? '')}
+          />
         </div>
       )}
     </li>

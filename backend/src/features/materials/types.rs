@@ -12,13 +12,14 @@ pub struct MaterialLocationStock {
     pub quantity: f64,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Material {
     pub id: Uuid,
     pub name: String,
     pub sku: Option<String>,
     pub unit: String,
+    #[sqlx(json)]
     pub locations: Vec<MaterialLocationStock>,
 }
 

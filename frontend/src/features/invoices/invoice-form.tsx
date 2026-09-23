@@ -5,22 +5,12 @@ import { FileDownIcon, PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from '@/components/ui/combobox'
+import { AsyncCombobox } from '@/components/form/async-combobox'
 import { ApiError } from '@/lib/api'
-import { useCustomers } from '@/features/customers/hooks/use-customers'
-import { useLocations } from '@/features/locations/hooks/use-locations'
-import {
-  orderReceivingLocations,
-  stockLocations,
-} from '@/features/locations/lib/location-filters'
-import { useProducts } from '@/features/products/hooks/use-products'
+import type { Customer } from '@/features/customers/types/customers'
+import type { Location } from '@/features/locations/types/location'
+import { STOCK_FILTERS } from '@/features/locations/lib/location-filters'
+import type { Product } from '@/features/products/types/product'
 import { CURRENCY } from '@/lib/currency'
 import { CustomerBlock } from './components/invoice-form/customer-block'
 import { GiftCardBlock } from './components/invoice-form/gift-card-block'
@@ -28,7 +18,6 @@ import { InvoiceSummary } from './components/invoice-form/invoice-summary'
 import { ProductBlock } from './components/invoice-form/product-block'
 import { RedemptionBlock } from './components/invoice-form/redemption-block'
 import { useCreateInvoice } from './hooks/use-create-invoice'
-import { useMaterials } from './hooks/use-materials'
 import { invoiceFormSchema } from './lib/invoice-schema'
 import { printInvoiceDocument } from './lib/print-invoice'
 import {
@@ -39,42 +28,31 @@ import {
   createEmptyRedemption,
 } from './types/invoice-form'
 import type { InvoiceFormValues } from './types/invoice-form'
-import type { Location } from '@/features/locations/types/location'
 
 export function InvoiceFormPage() {
   const navigate = useNavigate()
-  const { data: existingCustomers = [] } = useCustomers()
-  const { data: materials = [] } = useMaterials()
-  // "Receiving Branch" is where the customer collects the finished order, so
-  // it lists only locations flagged as receiving orders — a store that just
-  // holds material stock is not a collection point.
-  const { data: allLocations = [] } = useLocations()
-  const branches = React.useMemo(
-    () => orderReceivingLocations(allLocations),
-    [allLocations],
-  )
-  // Products come off stock, so they sell from a location that holds it —
-  // a different question from where a finished order is collected.
-  const sellFromLocations = React.useMemo(
-    () => stockLocations(allLocations),
-    [allLocations],
-  )
-  // A tailoring order's "made at" picker is fed from the selected material's
-  // own stock locations in order-block.tsx, so no location list is derived
-  // here.
-  const { data: allProducts = [] } = useProducts()
-  const products = React.useMemo(
-    () => allProducts.filter((product) => product.isActive),
-    [allProducts],
-  )
-  const productNames = React.useMemo(
-    () =>
-      Object.fromEntries(
-        allProducts.map((product) => [product.id, product.name]),
-      ),
-    [allProducts],
-  )
   const createInvoice = useCreateInvoice()
+  // The summary and the sibling blocks need to label a stored id — the name of
+  // a picked customer or product. Rows arrive one page at a time, so the whole
+  // list is no longer available to look them up: these refs remember each row
+  // a picker handed over, keyed by id, and the summary re-reads them on every
+  // render (its own subscriptions to the line items already re-render it).
+  const pickedCustomersRef = React.useRef(new Map<string, Customer>())
+  const pickedProductsRef = React.useRef(new Map<string, Product>())
+  const rememberCustomer = React.useCallback((customer: Customer | null) => {
+    if (customer) {
+      pickedCustomersRef.current.set(customer.id, customer)
+    }
+  }, [])
+  const rememberProduct = React.useCallback((product: Product | null) => {
+    if (product) {
+      pickedProductsRef.current.set(product.id, product)
+    }
+  }, [])
+  // The picked "Sold From" branch's name feeds each product line's
+  // availability text, which needs a named location the way the old whole-list
+  // lookup provided it.
+  const [soldFromBranchName, setSoldFromBranchName] = React.useState('')
   // Which of the two submit buttons was pressed. A ref rather than state
   // because it is read once inside onSubmit and must not re-render the form.
   const exportAfterSave = React.useRef(false)
@@ -151,8 +129,7 @@ export function InvoiceFormPage() {
                   form={form as never}
                   customerIndex={index}
                   customerNumber={index + 1}
-                  existingCustomers={existingCustomers}
-                  materials={materials}
+                  onCustomerPicked={rememberCustomer}
                   // Removable down to none: an invoice may consist only of
                   // products or gift cards.
                   removable
@@ -185,50 +162,30 @@ export function InvoiceFormPage() {
             {(productLines: InvoiceFormValues['products']) =>
               productLines.length > 0 && (
                 <form.Field name={'productBranch' as never}>
-                  {(field: any) => {
-                    const selected =
-                      sellFromLocations.find(
-                        (location) => location.id === field.state.value,
-                      ) ?? null
-                    return (
-                      <div className="space-y-1 max-w-sm">
-                        <Label htmlFor={field.name}>Sold From</Label>
-                        <Combobox
-                          items={sellFromLocations}
-                          itemToStringLabel={(location: Location) =>
-                            location.name
-                          }
-                          isItemEqualToValue={(a: Location, b: Location) =>
-                            a.id === b.id
-                          }
-                          value={selected}
-                          onValueChange={(location: Location | null) =>
-                            field.handleChange(location?.id ?? '')
-                          }
-                        >
-                          <ComboboxInput
-                            id={field.name}
-                            placeholder="Search location..."
-                            className="w-full"
-                            showClear
-                          />
-                          <ComboboxContent>
-                            <ComboboxEmpty>No locations found.</ComboboxEmpty>
-                            <ComboboxList>
-                              {(location: Location) => (
-                                <ComboboxItem
-                                  key={location.id}
-                                  value={location}
-                                >
-                                  {location.name}
-                                </ComboboxItem>
-                              )}
-                            </ComboboxList>
-                          </ComboboxContent>
-                        </Combobox>
-                      </div>
-                    )
-                  }}
+                  {(field: any) => (
+                    <div className="space-y-1 max-w-sm">
+                      <Label htmlFor={field.name}>Sold From</Label>
+                      <AsyncCombobox<Location>
+                        endpoint="/locations"
+                        queryKey="invoice-sold-from"
+                        searchField="name"
+                        filters={STOCK_FILTERS}
+                        toOption={(location) => ({
+                          value: location.id,
+                          label: location.name,
+                        })}
+                        value={field.state.value}
+                        onValueChange={(value) =>
+                          field.handleChange(value ?? '')
+                        }
+                        onSelectRow={(location) =>
+                          setSoldFromBranchName(location?.name ?? '')
+                        }
+                        placeholder="Search location..."
+                        emptyMessage="No locations found."
+                      />
+                    </div>
+                  )}
                 </form.Field>
               )
             }
@@ -247,13 +204,9 @@ export function InvoiceFormPage() {
                           key={line.key}
                           form={form as never}
                           lineIndex={index}
-                          products={products}
+                          onProductPicked={rememberProduct}
                           branchId={productBranch}
-                          branchName={
-                            sellFromLocations.find(
-                              (location) => location.id === productBranch,
-                            )?.name ?? ''
-                          }
+                          branchName={soldFromBranchName}
                           onRemove={() => productsField.removeValue(index)}
                         />
                       ))}
@@ -351,9 +304,8 @@ export function InvoiceFormPage() {
 
         <InvoiceSummary
           form={form as never}
-          existingCustomers={existingCustomers}
-          branches={branches}
-          productNames={productNames}
+          customerNames={pickedCustomersRef}
+          productNames={pickedProductsRef}
         />
 
         <form.Subscribe

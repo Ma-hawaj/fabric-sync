@@ -1,22 +1,60 @@
 use uuid::Uuid;
 
-use crate::state::AppState;
+use crate::{
+    error::AppError,
+    list::{self, ColumnDef, ColumnKind, ListParams, ListSpec},
+    state::AppState,
+};
 
 use super::types::Location;
 
+// `uses` and `status` exist only to be filtered on: the list page offers them as
+// multi-selects over what are really booleans, so the projection happens here
+// rather than in the filter layer. Their tokens are what the frontend's filter
+// options carry as values.
+const SPEC: ListSpec = ListSpec {
+    base_sql: r#"
+        SELECT
+            id,
+            name,
+            receives_orders,
+            holds_stock,
+            is_active,
+            array_remove(
+                ARRAY[
+                    CASE WHEN receives_orders THEN 'receivesOrders' END,
+                    CASE WHEN holds_stock THEN 'holdsStock' END
+                ],
+                NULL
+            ) AS uses,
+            CASE WHEN is_active THEN 'active' ELSE 'inactive' END AS status
+        FROM branch
+    "#,
+    columns: &[
+        ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        ("name", ColumnDef::new("name", ColumnKind::Text)),
+        ("uses", ColumnDef::new("uses", ColumnKind::TextArray)),
+        ("status", ColumnDef::new("status", ColumnKind::Text)),
+        (
+            "receivesOrders",
+            ColumnDef::new("receives_orders", ColumnKind::Bool),
+        ),
+        (
+            "holdsStock",
+            ColumnDef::new("holds_stock", ColumnKind::Bool),
+        ),
+        ("isActive", ColumnDef::new("is_active", ColumnKind::Bool)),
+    ],
+    default_order: "name ASC",
+};
+
 // Returns inactive locations too — the locations page lists them behind a
 // status filter, and callers that need only usable ones filter by capability.
-pub async fn list_locations(state: &AppState) -> Result<Vec<Location>, sqlx::Error> {
-    sqlx::query_as!(
-        Location,
-        r#"
-        SELECT id, name, receives_orders, holds_stock, is_active
-        FROM branch
-        ORDER BY name
-        "#,
-    )
-    .fetch_all(state.db())
-    .await
+pub async fn list_locations(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<Location>, AppError> {
+    list::fetch_page(state.db(), &SPEC, params).await
 }
 
 pub async fn create_location(

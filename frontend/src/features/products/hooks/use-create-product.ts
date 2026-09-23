@@ -5,13 +5,14 @@ import type { Product } from '../types/product'
 import type { ProductFormValues } from '../types/product-form'
 
 async function createProduct(values: ProductFormValues): Promise<Product> {
-  const { data } = await apiClient.post<Product>('/products', {
+  const response = await apiClient.post<Product>('/products', {
     name: values.name,
     sku: values.sku.trim() || null,
     unitPrice: values.unitPrice === '' ? 0 : values.unitPrice,
     entries: stockEntriesPayload(values.entries),
   })
-  return data
+
+  return response.data
 }
 
 export function useCreateProduct() {
@@ -19,12 +20,13 @@ export function useCreateProduct() {
 
   return useMutation({
     mutationFn: createProduct,
-    onSuccess: (product) => {
+    onSuccess: () => {
       // The endpoint returns the full product, so the cache can be patched
       // rather than refetched — the invoice form's picker reads the same key.
-      queryClient.setQueryData<Product[]>(['products'], (products = []) =>
-        [...products, product].sort((a, b) => a.name.localeCompare(b.name)),
-      )
+      // The cache holds one entry per page-and-filter combination now, and
+      // each holds an envelope rather than a bare array, so there is no
+      // single list to splice into. Prefix matching refreshes them all.
+      void queryClient.invalidateQueries({ queryKey: ['products'] })
     },
   })
 }

@@ -70,6 +70,67 @@ interface DataTableToolbarFilterProps<TData> {
   column: Column<TData>
 }
 
+function DataTableTextFilter<TData>({
+  column,
+  placeholder,
+  type = 'text',
+  unit,
+}: {
+  column: Column<TData>
+  placeholder: string
+  type?: 'text' | 'number'
+  unit?: string
+}) {
+  // The column's value only changes once the debounced URL write lands, so a
+  // value fed straight from `column.getFilterValue()` would drop every
+  // keystroke. Keep a local draft for instant feedback and push each change
+  // into the column; the URL round-trip then only has to catch up. The effect
+  // syncs external changes back (Reset, browser back/forward) but not the
+  // user's own keystrokes, since those don't move `getFilterValue()` until the
+  // debounce lands.
+  const [draft, setDraft] = React.useState(() => {
+    return (column.getFilterValue() as string | undefined) ?? ''
+  })
+
+  const columnValue = (column.getFilterValue() as string | undefined) ?? ''
+
+  React.useEffect(() => {
+    setDraft(columnValue)
+  }, [columnValue])
+
+  const onDraftChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const next = event.target.value
+    setDraft(next)
+    column.setFilterValue(next)
+  }
+
+  const input = (
+    <Input
+      type={type}
+      inputMode={type === 'number' ? 'numeric' : undefined}
+      placeholder={placeholder}
+      value={draft}
+      onChange={onDraftChange}
+      className={cn(
+        'h-8',
+        type === 'number' ? 'w-[120px]' : 'w-40 lg:w-56',
+        unit && 'pe-8',
+      )}
+    />
+  )
+
+  if (!unit) return input
+
+  return (
+    <div className="relative">
+      {input}
+      <span className="absolute top-0 end-0 bottom-0 flex items-center rounded-e-md bg-accent px-2 text-muted-foreground text-sm">
+        {unit}
+      </span>
+    </div>
+  )
+}
+
 function DataTableToolbarFilter<TData>({
   column,
 }: DataTableToolbarFilterProps<TData>) {
@@ -82,31 +143,20 @@ function DataTableToolbarFilter<TData>({
       switch (columnMeta.variant) {
         case 'text':
           return (
-            <Input
+            <DataTableTextFilter
+              column={column}
               placeholder={columnMeta.placeholder ?? columnMeta.label}
-              value={(column.getFilterValue() as string | undefined) ?? ''}
-              onChange={(event) => column.setFilterValue(event.target.value)}
-              className="h-8 w-40 lg:w-56"
             />
           )
 
         case 'number':
           return (
-            <div className="relative">
-              <Input
-                type="number"
-                inputMode="numeric"
-                placeholder={columnMeta.placeholder ?? columnMeta.label}
-                value={(column.getFilterValue() as string | undefined) ?? ''}
-                onChange={(event) => column.setFilterValue(event.target.value)}
-                className={cn('h-8 w-[120px]', columnMeta.unit && 'pe-8')}
-              />
-              {columnMeta.unit && (
-                <span className="absolute top-0 end-0 bottom-0 flex items-center rounded-e-md bg-accent px-2 text-muted-foreground text-sm">
-                  {columnMeta.unit}
-                </span>
-              )}
-            </div>
+            <DataTableTextFilter
+              column={column}
+              type="number"
+              placeholder={columnMeta.placeholder ?? columnMeta.label}
+              unit={columnMeta.unit}
+            />
           )
 
         case 'range':

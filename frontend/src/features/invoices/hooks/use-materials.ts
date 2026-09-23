@@ -1,16 +1,17 @@
-import { useQuery } from '@tanstack/react-query'
-import { apiClient } from '@/lib/api'
+import { useListQuery } from '@/hooks/use-list-query'
 import type { Material } from '../types/materials'
 
-async function fetchMaterials(): Promise<Material[]> {
-  const { data } = await apiClient.get<Material[]>('/materials')
-  return data
-}
+const ALL = new URLSearchParams()
 
+/**
+ * Every material, for the invoice form's picker. Shares the `materials` key
+ * prefix with the inventory table's paginated hook but keeps its own cache
+ * entry, so the two no longer overwrite each other's differently-shaped data.
+ */
 export function useMaterials() {
-  return useQuery({
-    queryKey: ['materials'],
-    queryFn: fetchMaterials,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+  return useListQuery<Material>({
+    endpoint: '/materials',
+    queryKey: 'materials',
+    searchParams: ALL,
   })
 }

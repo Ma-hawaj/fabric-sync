@@ -1,16 +1,10 @@
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from '@/components/ui/combobox'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { NumberField } from '@/components/form/fields'
+import { AsyncCombobox } from '@/components/form/async-combobox'
 import type { AnyFormApi } from '@/components/form/fields'
+import { STOCK_FILTERS } from '@/features/locations/lib/location-filters'
 import type { Location } from '@/features/locations/types/location'
 
 // Typed as AnyFormApi rather than InventoryFormApi because the products form
@@ -19,7 +13,6 @@ import type { Location } from '@/features/locations/types/location'
 interface StockEntryRowProps {
   form: AnyFormApi
   entryIndex: number
-  locations: Location[]
   removable: boolean
   onRemove: () => void
 }
@@ -27,7 +20,6 @@ interface StockEntryRowProps {
 export function StockEntryRow({
   form,
   entryIndex,
-  locations,
   removable,
   onRemove,
 }: StockEntryRowProps) {
@@ -36,44 +28,32 @@ export function StockEntryRow({
   return (
     <div className="flex items-start gap-3">
       <form.Field name={`${base}.locationId` as never}>
-        {(field: any) => {
-          const selected = locations.find((l) => l.id === field.state.value)
-          return (
-            <Field
-              data-invalid={field.state.meta.errors.length > 0}
-              className="flex-1"
-            >
-              <FieldLabel htmlFor={field.name}>Location</FieldLabel>
-              <Combobox
-                items={locations}
-                itemToStringLabel={(location: Location) => location.name}
-                isItemEqualToValue={(a: Location, b: Location) => a.id === b.id}
-                value={selected ?? null}
-                onValueChange={(location: Location | null) =>
-                  field.handleChange(location?.id ?? '')
-                }
-              >
-                <ComboboxInput
-                  id={field.name}
-                  placeholder="Search location..."
-                  className="w-full"
-                  showClear
-                />
-                <ComboboxContent>
-                  <ComboboxEmpty>No locations found.</ComboboxEmpty>
-                  <ComboboxList>
-                    {(location: Location) => (
-                      <ComboboxItem key={location.id} value={location}>
-                        {location.name}
-                      </ComboboxItem>
-                    )}
-                  </ComboboxList>
-                </ComboboxContent>
-              </Combobox>
-              <FieldError errors={field.state.meta.errors} />
-            </Field>
-          )
-        }}
+        {(field: any) => (
+          <Field
+            data-invalid={field.state.meta.errors.length > 0}
+            className="flex-1"
+          >
+            <FieldLabel htmlFor={field.name}>Location</FieldLabel>
+            <AsyncCombobox<Location>
+              id={field.name}
+              endpoint="/locations"
+              queryKey="stock-entry-locations"
+              searchField="name"
+              filters={STOCK_FILTERS}
+              placeholder="Search location..."
+              emptyMessage="No locations found."
+              toOption={(location) => ({
+                value: location.id,
+                label: location.name,
+              })}
+              value={field.state.value || null}
+              onValueChange={(locationId) =>
+                field.handleChange(locationId ?? '')
+              }
+            />
+            <FieldError errors={field.state.meta.errors} />
+          </Field>
+        )}
       </form.Field>
 
       <div className="flex-1">

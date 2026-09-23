@@ -5,7 +5,7 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Location {
     pub id: Uuid,
