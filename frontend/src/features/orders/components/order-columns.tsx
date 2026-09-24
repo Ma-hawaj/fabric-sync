@@ -16,12 +16,6 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: CURRENCY,
 })
 
-// Invoice ids are uuidv7 — time-ordered, so the short prefix still sorts by
-// creation and is unique enough to identify an invoice at a glance.
-function shortId(id: string) {
-  return id.slice(0, 8).toUpperCase()
-}
-
 const statusOptions = [
   { label: 'Pending', value: 'pending' },
   { label: 'Received', value: 'received' },
@@ -50,13 +44,31 @@ export function getOrderColumns(
 ): ColumnDef<Order, any>[] {
   return [
     {
-      accessorKey: 'invoiceId',
+      accessorKey: 'orderNumber',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Order" />
+      ),
+      cell: ({ row }) => (
+        <div className="font-mono font-medium">
+          ORD-{row.getValue<number>('orderNumber')}
+        </div>
+      ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Order',
+        placeholder: 'Filter order...',
+        variant: 'number',
+      },
+    },
+    {
+      accessorKey: 'invoiceNumber',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Invoice" />
       ),
       cell: ({ row }) => (
         <div className="font-mono font-medium">
-          {shortId(row.getValue('invoiceId'))}
+          INV-{row.getValue<number>('invoiceNumber')}
         </div>
       ),
       enableSorting: true,
@@ -64,7 +76,7 @@ export function getOrderColumns(
       meta: {
         label: 'Invoice',
         placeholder: 'Filter invoice...',
-        variant: 'text',
+        variant: 'number',
       },
     },
     {

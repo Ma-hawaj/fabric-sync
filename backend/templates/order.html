@@ -112,7 +112,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Order INV-{{ order.invoiceNumber }}</title>
+    <title>Order ORD-{{ order.orderNumber }}</title>
     <style>
       @page {
         size: A4;
@@ -512,7 +512,7 @@
         </h2>
         <div class="doc-number">
           INV-{{ order.invoiceNumber }}
-          <span class="ord" dir="ltr">ORD-{{ order.id[:8] }}</span>
+          <span class="ord" dir="ltr">ORD-{{ order.orderNumber }}</span>
         </div>
       </div>
     </header>
@@ -694,7 +694,7 @@
     <div class="closing">
       <footer>
         شكراً لتعاملكم معنا · Thank you for your business
-        <div dir="ltr">ORD-{{ order.id[:8] }} · {{ order.invoiceDate }}</div>
+        <div dir="ltr">ORD-{{ order.orderNumber }} · {{ order.invoiceDate }}</div>
       </footer>
     </div>
   </body>

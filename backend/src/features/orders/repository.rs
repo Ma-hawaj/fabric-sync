@@ -31,6 +31,7 @@ const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
             o.id,
+            o.order_number,
             o.invoice_id,
             i.invoice_number,
             i.invoice_date,
@@ -106,7 +107,15 @@ const SPEC: ListSpec = ListSpec {
     "#,
     columns: &[
         ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        (
+            "orderNumber",
+            ColumnDef::new("order_number", ColumnKind::Number),
+        ),
         ("invoiceId", ColumnDef::new("invoice_id", ColumnKind::Uuid)),
+        (
+            "invoiceNumber",
+            ColumnDef::new("invoice_number", ColumnKind::Number),
+        ),
         (
             "invoiceDate",
             ColumnDef::new("invoice_date", ColumnKind::Date),

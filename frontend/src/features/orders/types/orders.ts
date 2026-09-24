@@ -64,7 +64,15 @@ export interface OrderRepair {
 // hence the separate advance/final payment type fields.
 export interface Order {
   id: string
+  /**
+   * The tailor-quotable identity (`ORD-###`) — a bare number here, formatted
+   * for display by the consumer, the same way `OrderDetail.invoiceNumber`
+   * stays a number below.
+   */
+  orderNumber: number
   invoiceId: string
+  /** The parent invoice's number, shown next to the order's own. */
+  invoiceNumber: number
   invoiceDate: Date
   measurementId: string
   customerName: string
@@ -97,10 +105,11 @@ export interface Order {
   invoiceFinalPaymentType: PaymentType | null
 }
 
-// Shape of GET /orders/:id — the whole order row plus the human-readable
-// invoice number the order's document is titled with, and the single
-// measurement snapshot the garment was cut to (the one the invoice's order
-// links to, not the customer's full history).
+// Shape of GET /orders/:id — the whole order row plus the measurement
+// snapshot the garment was cut to (the one the invoice's order links to, not
+// the customer's full history). Both readable numbers ride along: the
+// order's own (`orderNumber`) titles the page, the invoice's
+// (`invoiceNumber`) names the bill it belongs to.
 export interface OrderDetail extends Order {
   /**
    * The invoice's human-readable identity (`INV-###`) — a tax invoice needs a

@@ -43,7 +43,9 @@ function stage(
 function order(overrides: Partial<Order>): Order {
   return {
     id: 'order-1',
+    orderNumber: 7,
     invoiceId: 'invoice-1',
+    invoiceNumber: 42,
     invoiceDate: new Date('2026-07-01'),
     measurementId: 'measurement-1',
     customerName: 'Abdullah Al-Otaibi',

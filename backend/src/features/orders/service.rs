@@ -288,7 +288,9 @@ fn assemble_order(
 
     OrderListItem {
         id: row.id,
+        order_number: row.order_number,
         invoice_id: row.invoice_id,
+        invoice_number: row.invoice_number,
         invoice_date: row.invoice_date,
         measurement_id: row.measurement_id,
         customer_name: row.customer_name,
