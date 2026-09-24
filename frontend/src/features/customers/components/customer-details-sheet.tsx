@@ -153,7 +153,7 @@ export function CustomerDetailsSheet({
                 <p className="mt-2 text-sm font-medium text-warning">
                   No measurements on file
                 </p>
-                <p className="text-xs text-warning/80 mt-1">
+                <p className="text-xs text-foreground mt-1">
                   This customer doesn't have any measurement records recorded
                   yet.
                 </p>
