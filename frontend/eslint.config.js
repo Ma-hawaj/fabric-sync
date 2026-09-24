@@ -147,7 +147,6 @@ export default [
           allow: ['toaster'],
         },
       ],
-      'shadcn/require-static-classes': 'error',
     },
   },
   {
