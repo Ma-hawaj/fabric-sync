@@ -67,7 +67,7 @@ export function ReadOnlyMeasurement({
             key={view}
             className="rounded-xl border border-border/60 bg-card p-3 pb-1 shadow-sm"
           >
-            <h5 className="mb-1 text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+            <h5 className="mb-1 text-xs font-bold uppercase tracking-wider text-info">
               {VIEW_TITLES[view]}
             </h5>
             <ThobDiagram view={view} showRecorded values={values} />
@@ -79,7 +79,7 @@ export function ReadOnlyMeasurement({
           key={group.id}
           className="rounded-xl border border-border/60 bg-card p-4 shadow-sm"
         >
-          <h4 className="mb-3 border-b border-border/30 pb-2 text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+          <h4 className="mb-3 border-b border-border/30 pb-2 text-xs font-bold uppercase tracking-wider text-info">
             {group.title}
           </h4>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
