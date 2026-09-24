@@ -84,7 +84,7 @@ export function CustomerDetailsSheet({
           <div className="space-y-6 px-6 pb-8">
             <SheetHeader className="border-b pb-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-info/10 text-info">
                   <User className="h-5 w-5" />
                 </div>
                 <div className="flex-1">
@@ -148,12 +148,12 @@ export function CustomerDetailsSheet({
             </div>
 
             {customer.measurements.length === 0 ? (
-              <div className="rounded-lg border border-yellow-200/50 bg-yellow-50/50 p-4 text-center dark:bg-yellow-950/10 dark:border-yellow-900/30">
-                <ShieldAlert className="mx-auto h-8 w-8 text-yellow-600 dark:text-yellow-400" />
-                <p className="mt-2 text-sm font-medium text-yellow-800 dark:text-yellow-300">
+              <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-center">
+                <ShieldAlert className="mx-auto h-8 w-8 text-warning" />
+                <p className="mt-2 text-sm font-medium text-warning">
                   No measurements on file
                 </p>
-                <p className="text-xs text-yellow-600/80 dark:text-yellow-400/80 mt-1">
+                <p className="text-xs text-warning/80 mt-1">
                   This customer doesn't have any measurement records recorded
                   yet.
                 </p>
@@ -174,7 +174,7 @@ export function CustomerDetailsSheet({
                         className={cn(
                           'px-3 py-2 text-xs font-medium rounded-md whitespace-nowrap transition-all duration-150 border',
                           activeMeasurement?.id === m.id
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                            ? 'bg-info text-info-foreground border-info shadow-sm'
                             : 'bg-card hover:bg-muted text-muted-foreground border-border/60 hover:text-foreground',
                         )}
                       >
@@ -262,7 +262,7 @@ function MetricItem({
   if (value === undefined || value === '') return null
   return (
     <div
-      className="flex flex-col border-b border-border/30 pb-2 transition-colors hover:border-blue-500/60"
+      className="flex flex-col border-b border-border/30 pb-2 transition-colors hover:border-info/60"
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
     >
@@ -287,7 +287,7 @@ function StyleSection({
 
   return (
     <div className="rounded-xl border border-border/60 bg-card p-4.5 shadow-sm space-y-3">
-      <h4 className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1.5 pb-2 border-b border-border/30">
+      <h4 className="text-xs font-bold uppercase tracking-wider text-info flex items-center gap-1.5 pb-2 border-b border-border/30">
         <Ruler className="h-3.5 w-3.5" />
         {title}
       </h4>

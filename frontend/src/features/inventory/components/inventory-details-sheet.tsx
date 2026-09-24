@@ -38,7 +38,7 @@ export function InventoryDetailsSheet({
           <div className="space-y-6 px-6 pb-8">
             <SheetHeader className="border-b pb-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-info/10 text-info">
                   <Package className="h-5 w-5" />
                 </div>
                 <div>

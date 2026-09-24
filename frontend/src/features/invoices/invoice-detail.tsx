@@ -69,7 +69,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-info/10 text-info">
             <ReceiptText className="h-5 w-5" />
           </div>
           <div>
@@ -248,7 +248,7 @@ function ReceiveInvoiceButton({
     <>
       <Button
         variant="outline"
-        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
+        className="text-info hover:text-info/80 hover:bg-info/5 dark:hover:bg-info/10"
         disabled={disabled}
         onClick={() => setOpen(true)}
       >

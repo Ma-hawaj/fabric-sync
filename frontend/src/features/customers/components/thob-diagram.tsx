@@ -242,9 +242,7 @@ function Callout({
   return (
     <g
       className={cn(
-        active
-          ? 'text-blue-600 dark:text-blue-400'
-          : 'text-muted-foreground/70',
+        active ? 'text-info' : 'text-muted-foreground/70',
         onSelect && 'cursor-pointer',
       )}
       onClick={onSelect ? () => onSelect(field.name) : undefined}
