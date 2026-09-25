@@ -3,9 +3,11 @@ import {
   COMPLETED,
   NOT_STARTED,
   currentStageLabel,
+  isStageLocked,
   openRepairCount,
   repairStatusLabel,
   stageFilterOptions,
+  stageLockedReason,
   stageStatusLabel,
   stageTimingLabel,
 } from './order-tracking'
@@ -215,5 +217,69 @@ describe('repairStatusLabel', () => {
   it('renders the stored snake_case status readably', () => {
     expect(repairStatusLabel('in_progress')).toBe('In progress')
     expect(repairStatusLabel('open')).toBe('Open')
+  })
+})
+
+describe('stageLockedReason', () => {
+  it('is null for the current stage', () => {
+    expect(stageLockedReason(FULL_CHECKLIST, 'stage-1')).toBeNull()
+    expect(isStageLocked(FULL_CHECKLIST, 'stage-1')).toBe(false)
+  })
+
+  it('locks a pending stage behind an earlier pending one', () => {
+    expect(stageLockedReason(FULL_CHECKLIST, 'stage-3')).toMatch(/Cutting/)
+    expect(isStageLocked(FULL_CHECKLIST, 'stage-3')).toBe(true)
+  })
+
+  it('unlocks a stage once its predecessors are done or skipped', () => {
+    const stages = [
+      stage('Cutting', 1, 'done'),
+      stage('Sewing', 2, 'skipped'),
+      stage('Finishing', 3, 'pending'),
+    ]
+    expect(stageLockedReason(stages, 'stage-3')).toBeNull()
+  })
+
+  it('locks a recorded stage while a later one is still recorded', () => {
+    const stages = [
+      stage('Cutting', 1, 'done'),
+      stage('Sewing', 2, 'done'),
+      stage('Finishing', 3, 'pending'),
+    ]
+    expect(stageLockedReason(stages, 'stage-1')).toMatch(/Sewing/)
+    expect(isStageLocked(stages, 'stage-1')).toBe(true)
+  })
+
+  it('leaves the last recorded stage reopenable', () => {
+    const stages = [
+      stage('Cutting', 1, 'done'),
+      stage('Sewing', 2, 'done'),
+      stage('Finishing', 3, 'pending'),
+    ]
+    expect(stageLockedReason(stages, 'stage-2')).toBeNull()
+  })
+
+  it('treats a non-applicable delivery as transparent in both directions', () => {
+    const stages = [
+      stage('Cutting', 1, 'done'),
+      stage('Location delivery', 4, 'pending', {
+        requiresDelivery: true,
+        applicable: false,
+      }),
+      stage('Finishing', 3, 'pending'),
+    ]
+    // Finishing waits on Cutting, not on the delivery that never applies.
+    expect(stageLockedReason(stages, 'stage-3')).toBeNull()
+    // And a non-applicable stage itself is never actionable.
+    expect(
+      stageLockedReason(
+        [stage('Cutting', 1, 'pending'), ...stages.slice(1)],
+        'stage-4',
+      ),
+    ).toBeNull()
+  })
+
+  it('is null for an unknown stage', () => {
+    expect(stageLockedReason(FULL_CHECKLIST, 'stage-99')).toBeNull()
   })
 })

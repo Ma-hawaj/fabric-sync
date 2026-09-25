@@ -24,12 +24,17 @@ apiClient.interceptors.request.use(async (config) => {
 
 // Normalizes every HTTP-level failure to `ApiError` here, once, so hooks
 // don't each need their own try/catch just to get a `.status` to branch on
-// (e.g. a 409 conflict).
+// (e.g. a 409 conflict). The message prefers the server's response text —
+// error responses are plain-text messages meant to be shown — falling back
+// to axios's generic status line when there is no body.
 apiClient.interceptors.response.use(
   (response) => response,
   (error: unknown) => {
     if (isAxiosError(error) && error.response) {
-      return Promise.reject(new ApiError(error.message, error.response.status))
+      const data = error.response.data
+      const message =
+        typeof data === 'string' && data.length > 0 ? data : error.message
+      return Promise.reject(new ApiError(message, error.response.status))
     }
     return Promise.reject(error)
   },

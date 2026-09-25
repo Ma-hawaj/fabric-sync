@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { CURRENCY } from '@/lib/currency'
+import { ApiError } from '@/lib/api'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import {
   ORDER_RECEIVING_FILTERS,
@@ -22,6 +23,7 @@ import type { Location } from '@/features/locations/types/location'
 import {
   repairStatusLabel,
   stageBadgeVariant,
+  stageLockedReason,
   stageStatusLabel,
   stageTimingLabel,
 } from '../lib/order-tracking'
@@ -165,6 +167,13 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
   const needsDestination =
     stage.requiresDelivery && stage.applicable && stage.status !== 'done'
 
+  // Stages are worked strictly in order: a stage waits on every earlier
+  // applicable stage, and a recorded one can only be reopened newest-first.
+  // The backend enforces the same rule, so this is display gating — the 400
+  // branch below covers races (e.g. two tabs) that slip past it.
+  const lockReason = stageLockedReason(order.stages, stage.stageId)
+  const locked = lockReason !== null
+
   const record = async (
     status: OrderStageEntry['status'],
     locationId?: string,
@@ -181,7 +190,10 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
         status === 'pending'
           ? `${stage.name} was reopened.`
           : `${stage.name} was marked ${status}.`,
-      error: 'Could not update this stage. Please try again.',
+      error: (error) =>
+        error instanceof ApiError && error.status === 400
+          ? error.message
+          : 'Could not update this stage. Please try again.',
     })
     try {
       await pending
@@ -225,6 +237,9 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
           {stage.notes && (
             <p className="mt-1 text-xs text-muted-foreground">{stage.notes}</p>
           )}
+          {locked && (
+            <p className="mt-1 text-xs text-muted-foreground">{lockReason}</p>
+          )}
         </div>
 
         {stage.applicable && (
@@ -237,7 +252,9 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
                   variant="ghost"
                   className="h-8 w-auto px-2"
                   disabled={
-                    setStage.isPending || (needsDestination && !destination)
+                    setStage.isPending ||
+                    locked ||
+                    (needsDestination && !destination)
                   }
                   onClick={() => void record('done', destination || undefined)}
                 >
@@ -247,7 +264,7 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
                   size="sm"
                   variant="ghost"
                   className="h-8 w-auto px-2"
-                  disabled={setStage.isPending}
+                  disabled={setStage.isPending || locked}
                   onClick={() => void record('skipped')}
                 >
                   Skip
@@ -258,7 +275,7 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
                 size="sm"
                 variant="ghost"
                 className="h-8 w-auto px-2"
-                disabled={setStage.isPending}
+                disabled={setStage.isPending || locked}
                 onClick={() => void record('pending')}
               >
                 Undo
