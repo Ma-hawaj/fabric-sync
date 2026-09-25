@@ -5,6 +5,7 @@ import { NumberField } from '@/components/form/fields'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import type { AnyFormApi } from '@/components/form/fields'
 import { STOCK_FILTERS } from '@/features/locations/lib/location-filters'
+import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
 import type { Location } from '@/features/locations/types/location'
 
 // Typed as AnyFormApi rather than InventoryFormApi because the products form
@@ -24,6 +25,9 @@ export function StockEntryRow({
   onRemove,
 }: StockEntryRowProps) {
   const base = `entries[${entryIndex}]`
+  // Labels a pre-selected default before its row has loaded onto any picker
+  // page — without this the input renders blank until the list is opened.
+  const stockDefault = useApplicableDefaultLocation('stock')
 
   return (
     <div className="flex items-start gap-3">
@@ -46,6 +50,9 @@ export function StockEntryRow({
                 value: location.id,
                 label: location.name,
               })}
+              getValueLabel={(id) =>
+                id === stockDefault?.id ? stockDefault.name : null
+              }
               value={field.state.value || null}
               onValueChange={(locationId) =>
                 field.handleChange(locationId ?? '')

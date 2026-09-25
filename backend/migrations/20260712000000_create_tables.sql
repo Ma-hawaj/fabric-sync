@@ -203,6 +203,17 @@ CREATE TABLE order_stage_assignments (
     UNIQUE (order_id, stage_id)
 );
 
+-- Per-account user settings. One row per user; one nullable column per
+-- preference, starting with the default location — future preferences add
+-- columns, not tables. user_id is the Zitadel subject as TEXT rather than a
+-- foreign key because there is no local user table (same precedent as
+-- order_stage_assignments.assignee_id).
+CREATE TABLE user_preferences (
+    user_id TEXT PRIMARY KEY,
+    default_location_id UUID REFERENCES branch(id) ON DELETE SET NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- A finished good sold as-is, as opposed to `materials`, which are raw fabric
 -- consumed by a tailoring order. A product carries a list price because it
 -- sells at one; an order's price is typed in per line instead. Deactivating a

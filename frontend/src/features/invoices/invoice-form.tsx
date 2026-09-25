@@ -10,6 +10,7 @@ import { ApiError } from '@/lib/api'
 import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
 import { STOCK_FILTERS } from '@/features/locations/lib/location-filters'
+import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
 import type { Product } from '@/features/products/types/product'
 import { CURRENCY } from '@/lib/currency'
 import { CustomerBlock } from './components/invoice-form/customer-block'
@@ -63,6 +64,15 @@ export function InvoiceFormPage() {
   // the zod schema below expects the wide type.
   const defaultValues: InvoiceFormValues = createEmptyInvoiceForm()
 
+  // The user's default location pre-fills the two branch pickers below —
+  // receiving when it takes orders, sold-from when it holds stock. Only empty
+  // fields are touched, so a default that arrives late never overwrites a
+  // choice already made, and setting a value back to blank keeps it blank
+  // until the field is empty on a later pass (the guard re-checks the value,
+  // not a one-shot ref).
+  const receivingDefault = useApplicableDefaultLocation('receiving')
+  const stockDefault = useApplicableDefaultLocation('stock')
+
   const form = useForm({
     defaultValues,
     validators: { onSubmit: invoiceFormSchema },
@@ -101,6 +111,21 @@ export function InvoiceFormPage() {
       await navigate({ to: '/invoices' })
     },
   })
+
+  React.useEffect(() => {
+    if (receivingDefault && form.state.values.receivingBranch === '') {
+      form.setFieldValue(
+        'receivingBranch' as never,
+        receivingDefault.id as never,
+      )
+    }
+    if (stockDefault && form.state.values.productBranch === '') {
+      form.setFieldValue('productBranch' as never, stockDefault.id as never)
+      // The availability text under each product line reads this state, not
+      // the picker — keep it in step with the pre-select above.
+      setSoldFromBranchName(stockDefault.name)
+    }
+  }, [receivingDefault, stockDefault, form])
 
   return (
     <div className="space-y-6">
@@ -174,6 +199,9 @@ export function InvoiceFormPage() {
                           value: location.id,
                           label: location.name,
                         })}
+                        getValueLabel={(id) =>
+                          id === stockDefault?.id ? stockDefault.name : null
+                        }
                         value={field.state.value}
                         onValueChange={(value) =>
                           field.handleChange(value ?? '')
