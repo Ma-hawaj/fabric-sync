@@ -47,7 +47,7 @@ pub struct Customer {
     pub measurements: Vec<Measurement>,
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateMeasurementInput {
     pub date: NaiveDate,

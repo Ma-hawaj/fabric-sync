@@ -18,6 +18,8 @@ import { InvoiceSummary } from './components/invoice-form/invoice-summary'
 import { ProductBlock } from './components/invoice-form/product-block'
 import { RedemptionBlock } from './components/invoice-form/redemption-block'
 import { useCreateInvoice } from './hooks/use-create-invoice'
+import type { CreatedInvoice } from './lib/invoice-payload'
+import type { InvoiceEditSeeds } from './lib/invoice-edit-mapper'
 import { invoiceFormSchema } from './lib/invoice-schema'
 import { printInvoiceDocument } from './lib/print-invoice'
 import {
@@ -29,16 +31,46 @@ import {
 } from './types/invoice-form'
 import type { InvoiceFormValues } from './types/invoice-form'
 
-export function InvoiceFormPage() {
+interface InvoiceFormMutation {
+  mutateAsync: (values: InvoiceFormValues) => Promise<CreatedInvoice>
+  isPending: boolean
+}
+
+interface InvoiceFormProps {
+  defaultValues: InvoiceFormValues
+  title: string
+  subtitle: string
+  /** "Saving" on create, "Updating" on edit — labels the toasts. */
+  saveVerb: 'Saving' | 'Updating'
+  savedVerb: 'saved' | 'updated'
+  mutation: InvoiceFormMutation
+  /** Rows the edit payload rebuilt, so pickers open labelled. */
+  seeds?: InvoiceEditSeeds
+}
+
+export function InvoiceForm({
+  defaultValues,
+  title,
+  subtitle,
+  saveVerb,
+  savedVerb,
+  mutation,
+  seeds,
+}: InvoiceFormProps) {
   const navigate = useNavigate()
-  const createInvoice = useCreateInvoice()
   // The summary and the sibling blocks need to label a stored id — the name of
   // a picked customer or product. Rows arrive one page at a time, so the whole
   // list is no longer available to look them up: these refs remember each row
   // a picker handed over, keyed by id, and the summary re-reads them on every
   // render (its own subscriptions to the line items already re-render it).
-  const pickedCustomersRef = React.useRef(new Map<string, Customer>())
-  const pickedProductsRef = React.useRef(new Map<string, Product>())
+  // On edit they start seeded from the loaded invoice, so the summary reads
+  // correctly before anything is re-picked.
+  const pickedCustomersRef = React.useRef(
+    new Map<string, Customer>(seeds?.customers),
+  )
+  const pickedProductsRef = React.useRef(
+    new Map<string, Product>(seeds?.products),
+  )
   const rememberCustomer = React.useCallback((customer: Customer | null) => {
     if (customer) {
       pickedCustomersRef.current.set(customer.id, customer)
@@ -52,35 +84,31 @@ export function InvoiceFormPage() {
   // The picked "Sold From" branch's name feeds each product line's
   // availability text, which needs a named location the way the old whole-list
   // lookup provided it.
-  const [soldFromBranchName, setSoldFromBranchName] = React.useState('')
+  const [soldFromBranchName, setSoldFromBranchName] = React.useState(
+    seeds?.soldFromBranchName ?? '',
+  )
   // Which of the two submit buttons was pressed. A ref rather than state
   // because it is read once inside onSubmit and must not re-render the form.
   const exportAfterSave = React.useRef(false)
-
-  // A plain type annotation (not `satisfies`) so TFormData widens to
-  // InvoiceFormValues' union members (e.g. `discount: number | ''`) rather
-  // than the narrower literal types inferred from these particular values —
-  // the zod schema below expects the wide type.
-  const defaultValues: InvoiceFormValues = createEmptyInvoiceForm()
 
   const form = useForm({
     defaultValues,
     validators: { onSubmit: invoiceFormSchema },
     onSubmit: async ({ value }) => {
-      const pending = createInvoice.mutateAsync(value)
+      const pending = mutation.mutateAsync(value)
       toast.promise(pending, {
-        loading: 'Saving invoice...',
+        loading: `${saveVerb} invoice...`,
         success: (invoice) =>
-          `Invoice saved — total ${CURRENCY} ${invoice.totalPrice.toFixed(2)}.`,
+          `Invoice ${savedVerb} — total ${CURRENCY} ${invoice.totalPrice.toFixed(2)}.`,
         error: (error) =>
           error instanceof ApiError && error.status === 409
             ? 'A customer with this name and phone number already exists.'
-            : 'Could not save this invoice. Please try again.',
+            : `Could not ${saveVerb.toLowerCase()} this invoice. Please try again.`,
       })
 
-      let created
+      let saved
       try {
-        created = await pending
+        saved = await pending
       } catch {
         return
       }
@@ -92,9 +120,11 @@ export function InvoiceFormPage() {
       if (exportAfterSave.current) {
         exportAfterSave.current = false
         try {
-          await printInvoiceDocument(created.id)
+          await printInvoiceDocument(saved.id)
         } catch {
-          toast.error('The invoice was saved, but the PDF could not be opened.')
+          toast.error(
+            `The invoice was ${savedVerb}, but the PDF could not be opened.`,
+          )
         }
       }
 
@@ -105,11 +135,8 @@ export function InvoiceFormPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">New Invoice</h1>
-        <p className="text-muted-foreground">
-          Create a customer order, updating measurements or adding customers as
-          needed.
-        </p>
+        <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+        <p className="text-muted-foreground">{subtitle}</p>
       </div>
 
       <form
@@ -130,6 +157,18 @@ export function InvoiceFormPage() {
                   customerIndex={index}
                   customerNumber={index + 1}
                   onCustomerPicked={rememberCustomer}
+                  initialCustomerForId={(id) =>
+                    seeds?.customers.get(id) ?? null
+                  }
+                  customerLabelForId={(id) =>
+                    seeds?.customerLabels.get(id) ?? null
+                  }
+                  initialMaterialForId={(id) =>
+                    seeds?.materials.get(id) ?? null
+                  }
+                  materialLabelForId={(id) =>
+                    seeds?.materialLabels.get(id) ?? null
+                  }
                   // Removable down to none: an invoice may consist only of
                   // products or gift cards.
                   removable
@@ -174,6 +213,9 @@ export function InvoiceFormPage() {
                           value: location.id,
                           label: location.name,
                         })}
+                        getValueLabel={(id) =>
+                          seeds?.locationLabels.get(id) ?? null
+                        }
                         value={field.state.value}
                         onValueChange={(value) =>
                           field.handleChange(value ?? '')
@@ -205,6 +247,12 @@ export function InvoiceFormPage() {
                           form={form as never}
                           lineIndex={index}
                           onProductPicked={rememberProduct}
+                          initialProductForId={(id) =>
+                            seeds?.products.get(id) ?? null
+                          }
+                          productLabelForId={(id) =>
+                            seeds?.productLabels.get(id) ?? null
+                          }
                           branchId={productBranch}
                           branchName={soldFromBranchName}
                           onRemove={() => productsField.removeValue(index)}
@@ -306,6 +354,8 @@ export function InvoiceFormPage() {
           form={form as never}
           customerNames={pickedCustomersRef}
           productNames={pickedProductsRef}
+          locationLabelForId={(id) => seeds?.locationLabels.get(id) ?? null}
+          customerLabelForId={(id) => seeds?.customerLabels.get(id) ?? null}
         />
 
         <form.Subscribe
@@ -327,7 +377,7 @@ export function InvoiceFormPage() {
           <Button
             type="submit"
             variant="outline"
-            disabled={createInvoice.isPending}
+            disabled={mutation.isPending}
             onClick={() => {
               exportAfterSave.current = true
             }}
@@ -335,11 +385,31 @@ export function InvoiceFormPage() {
             <FileDownIcon className="h-4 w-4" />
             Save & Export PDF
           </Button>
-          <Button type="submit" disabled={createInvoice.isPending}>
+          <Button type="submit" disabled={mutation.isPending}>
             Save
           </Button>
         </div>
       </form>
     </div>
+  )
+}
+
+export function InvoiceFormPage() {
+  const createInvoice = useCreateInvoice()
+  // A plain type annotation (not `satisfies`) so TFormData widens to
+  // InvoiceFormValues' union members (e.g. `discount: number | ''`) rather
+  // than the narrower literal types inferred from these particular values —
+  // the zod schema below expects the wide type.
+  const defaultValues: InvoiceFormValues = createEmptyInvoiceForm()
+
+  return (
+    <InvoiceForm
+      defaultValues={defaultValues}
+      title="New Invoice"
+      subtitle="Create a customer order, updating measurements or adding customers as needed."
+      saveVerb="Saving"
+      savedVerb="saved"
+      mutation={createInvoice}
+    />
   )
 }

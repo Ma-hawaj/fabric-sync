@@ -11,7 +11,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { CURRENCY } from '@/lib/currency'
-import { ArrowLeftIcon, FileDownIcon, ReceiptText, Users } from 'lucide-react'
+import {
+  ArrowLeftIcon,
+  FileDownIcon,
+  PencilIcon,
+  ReceiptText,
+  Users,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
 import { useInvoice } from './hooks/use-invoice'
@@ -96,6 +102,19 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 
         <div className="flex items-center gap-2">
           <ExportPdfButton invoiceId={invoice.id} />
+          <Button
+            variant="outline"
+            disabled={invoice.paymentStatus === 'paid'}
+            onClick={() =>
+              void navigate({
+                to: '/invoices/$invoiceId/edit',
+                params: { invoiceId: invoice.id },
+              })
+            }
+          >
+            <PencilIcon className="h-4 w-4" />
+            Edit
+          </Button>
           <ReceiveInvoiceButton
             invoice={invoice}
             disabled={invoice.paymentStatus === 'paid'}

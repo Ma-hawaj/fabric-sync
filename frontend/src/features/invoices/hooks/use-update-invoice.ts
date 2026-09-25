@@ -4,30 +4,32 @@ import type { InvoiceFormValues } from '../types/invoice-form'
 import { invoicePayload } from '../lib/invoice-payload'
 import type { CreatedInvoice } from '../lib/invoice-payload'
 
-async function createInvoice(
+async function updateInvoice(
+  invoiceId: string,
   values: InvoiceFormValues,
 ): Promise<CreatedInvoice> {
-  const { data } = await apiClient.post<CreatedInvoice>(
-    '/invoices',
+  const { data } = await apiClient.put<CreatedInvoice>(
+    `/invoices/${invoiceId}`,
     invoicePayload(values),
   )
   return data
 }
 
-export function useCreateInvoice() {
+/**
+ * A full rebuild from a fresh copy of the create input. Invalidates the same
+ * lists as creation — an edit can create customers, rewrite measurements, and
+ * move stock and gift card balances around — plus this invoice's own detail
+ * and edit caches.
+ */
+export function useUpdateInvoice(invoiceId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: createInvoice,
+    mutationFn: (values: InvoiceFormValues) => updateInvoice(invoiceId, values),
     onSuccess: () => {
-      // Saving an invoice can create customers and always records new
-      // measurement snapshots, so cached customers are stale now — as are
-      // the invoice and order lists.
       void queryClient.invalidateQueries({ queryKey: ['customers'] })
       void queryClient.invalidateQueries({ queryKey: ['invoices'] })
       void queryClient.invalidateQueries({ queryKey: ['orders'] })
-      // A sale can draw down product stock, issue new cards, and spend the
-      // balance on existing ones.
       void queryClient.invalidateQueries({ queryKey: ['products'] })
       void queryClient.invalidateQueries({ queryKey: ['gift-cards'] })
     },

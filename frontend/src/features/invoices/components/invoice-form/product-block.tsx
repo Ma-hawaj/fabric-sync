@@ -26,6 +26,10 @@ interface ProductBlockProps {
   lineIndex: number
   /** The picked row, so the summary can label this line. */
   onProductPicked: (product: Product | null) => void
+  /** The row behind a stored id on an edit form, before anything is re-picked. */
+  initialProductForId?: (id: string) => Product | null
+  /** The label for a stored id whose row isn't loaded yet (edit forms). */
+  productLabelForId?: (id: string) => string | null
   /** The location stock comes off, used to show what is actually available. */
   branchId: string
   branchName: string
@@ -36,6 +40,8 @@ export function ProductBlock({
   form,
   lineIndex,
   onProductPicked,
+  initialProductForId,
+  productLabelForId,
   branchId,
   branchName,
   onRemove,
@@ -43,8 +49,16 @@ export function ProductBlock({
   const base = `products[${lineIndex}]`
   // The row behind the stored `productId`, remembered from the picker, so both
   // the availability hint and the price prefill have the full product without
-  // having downloaded the whole catalog.
-  const [picked, setPicked] = React.useState<Product | null>(null)
+  // having downloaded the whole catalog. On an edit form it starts seeded
+  // from the loaded invoice.
+  const storedProductId = (
+    form.state.values as unknown as {
+      products?: { productId?: string }[]
+    }
+  ).products?.[lineIndex]?.productId
+  const [picked, setPicked] = React.useState<Product | null>(() =>
+    storedProductId ? (initialProductForId?.(storedProductId) ?? null) : null,
+  )
 
   return (
     <div className="flex items-start gap-3">
@@ -68,6 +82,7 @@ export function ProductBlock({
                   value: product.id,
                   label: productOptionLabel(product),
                 })}
+                getValueLabel={productLabelForId}
                 value={field.state.value || null}
                 onValueChange={(id) => field.handleChange(id ?? '')}
                 onSelectRow={(product) => {
