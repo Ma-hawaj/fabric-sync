@@ -1,10 +1,22 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
+import { Badge } from '@/components/ui/badge'
 import type { User } from '../types/user'
 import { UserAvatar } from './user-avatar'
 
-function joinedOrDash(values: string[]): string {
-  return values.length > 0 ? values.join(', ') : '—'
+function NameBadges({ values }: { values: string[] }) {
+  if (values.length === 0) {
+    return <span className="text-muted-foreground">—</span>
+  }
+  return (
+    <span className="flex flex-wrap gap-1">
+      {values.map((value) => (
+        <Badge key={value} variant="secondary">
+          {value}
+        </Badge>
+      ))}
+    </span>
+  )
 }
 
 export const userColumns: ColumnDef<User, any>[] = [
@@ -38,13 +50,13 @@ export const userColumns: ColumnDef<User, any>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Roles" />
     ),
-    cell: ({ row }) => joinedOrDash(row.original.roles),
+    cell: ({ row }) => <NameBadges values={row.original.roles} />,
   },
   {
     accessorKey: 'groups',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Groups" />
     ),
-    cell: ({ row }) => joinedOrDash(row.original.groups),
+    cell: ({ row }) => <NameBadges values={row.original.groups} />,
   },
 ]
