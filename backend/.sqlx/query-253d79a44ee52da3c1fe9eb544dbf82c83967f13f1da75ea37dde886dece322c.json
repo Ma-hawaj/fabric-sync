@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE product_stock\n        SET quantity = quantity + $3::float8\n        WHERE product_id = $1 AND branch_id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "253d79a44ee52da3c1fe9eb544dbf82c83967f13f1da75ea37dde886dece322c"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT EXISTS(\n            SELECT 1 FROM order_stage_progress p\n            JOIN orders o ON o.id = p.order_id\n            WHERE o.invoice_id = $1\n        ) OR EXISTS(\n            SELECT 1 FROM order_stage_assignments a\n            JOIN orders o ON o.id = a.order_id\n            WHERE o.invoice_id = $1\n        ) OR EXISTS(\n            SELECT 1 FROM order_repairs r\n            JOIN orders o ON o.id = r.order_id\n            WHERE o.invoice_id = $1\n        ) AS \"exists!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7cccc3ce63598fb3ca1266ec5b6c06870d9db4e183337f37de195b0c65ac9dad"
+}

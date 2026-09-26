@@ -10,6 +10,7 @@ import {
   MeasurementFields,
 } from '@/features/customers/components/measurement-fields'
 import type { Customer } from '@/features/customers/types/customers'
+import type { Material } from '../../types/materials'
 import { createEmptyOrder } from '../../types/invoice-form'
 import type { CustomerMode, InvoiceFormApi } from '../../types/invoice-form'
 import { OrderBlock } from './order-block'
@@ -24,6 +25,14 @@ interface CustomerBlockProps {
   customerNumber: number
   /** The picked row, so the summary can label this customer's line items. */
   onCustomerPicked: (customer: Customer | null) => void
+  /** The row behind a stored id on an edit form, before anything is re-picked. */
+  initialCustomerForId?: (id: string) => Customer | null
+  /** The label for a stored id whose row isn't loaded yet (edit forms). */
+  customerLabelForId?: (id: string) => string | null
+  /** The material row behind a stored order id (edit forms). */
+  initialMaterialForId?: (id: string) => Material | null
+  /** The label for a stored material id (edit forms). */
+  materialLabelForId?: (id: string) => string | null
   onRemove: () => void
   removable: boolean
 }
@@ -33,14 +42,26 @@ export function CustomerBlock({
   customerIndex,
   customerNumber,
   onCustomerPicked,
+  initialCustomerForId,
+  customerLabelForId,
+  initialMaterialForId,
+  materialLabelForId,
   onRemove,
   removable,
 }: CustomerBlockProps) {
   const base = `customers[${customerIndex}]`
   // The full row behind the stored `existingCustomerId`. The whole-customer
   // list is no longer loaded, so measurements for the prefill, the info panel
-  // and the history all resolve from the row the picker handed over.
-  const [picked, setPicked] = React.useState<Customer | null>(null)
+  // and the history all resolve from the row the picker handed over — or, on
+  // an edit form, the row the loaded invoice rebuilt for that id.
+  const storedId = (
+    form.state.values as unknown as {
+      customers?: { existingCustomerId?: string }[]
+    }
+  ).customers?.[customerIndex]?.existingCustomerId
+  const [picked, setPicked] = React.useState<Customer | null>(() =>
+    storedId ? (initialCustomerForId?.(storedId) ?? null) : null,
+  )
 
   return (
     <div className="space-y-6 rounded-xl border border-border/60 bg-card p-5">
@@ -91,6 +112,7 @@ export function CustomerBlock({
                             value: customer.id,
                             label: customerOptionLabel(customer),
                           })}
+                          getValueLabel={customerLabelForId}
                           value={idField.state.value || null}
                           onValueChange={(id) => idField.handleChange(id ?? '')}
                           onSelectRow={(customer) => {
@@ -172,6 +194,8 @@ export function CustomerBlock({
                 customerIndex={customerIndex}
                 orderIndex={orderIndex}
                 orderNumber={orderIndex + 1}
+                initialMaterialForId={initialMaterialForId}
+                materialLabelForId={materialLabelForId}
                 removable={ordersField.state.value.length > 1}
                 onRemove={() => ordersField.removeValue(orderIndex)}
               />

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT g.id AS gift_card_id, g.code\n        FROM invoice_items ii\n        JOIN gift_cards g ON g.id = ii.gift_card_id\n        WHERE ii.invoice_id = $1 AND ii.kind = 'gift_card'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "gift_card_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "code",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "98231dd4fb76265bd629f193ba8218813be1ffc40b5c2bc9a9e37ed35723ff23"
+}
