@@ -53,6 +53,17 @@ export interface InvoiceTotals {
   balanceDue: number
 }
 
+/** One row of the invoice's payments ledger, oldest first. */
+export interface InvoicePayment {
+  id: string
+  amount: number
+  /** Null only on legacy rows imported without a recorded method. */
+  paymentType: PaymentType | null
+  paidAt: string
+  /** The pickup this was taken at, when it was taken at one. */
+  orderId: string | null
+}
+
 /** Shape of GET /invoices/:id. */
 export interface InvoiceDetail {
   id: string
@@ -63,10 +74,10 @@ export interface InvoiceDetail {
   /** Named directly only on a retail sale; a tailoring invoice leaves it null. */
   buyer: InvoiceParty | null
   paymentStatus: PaymentStatus
-  advanceAmount: number
-  advancePaymentType: PaymentType | null
-  finalPaymentType: PaymentType | null
+  /** The most recent payment's method, if anything has been paid. */
+  paymentMethod: PaymentType | null
   lines: InvoiceLine[]
   redemptions: InvoiceRedemption[]
+  payments: InvoicePayment[]
   totals: InvoiceTotals
 }

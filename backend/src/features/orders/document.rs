@@ -76,18 +76,12 @@ fn formatted_amounts(detail: &OrderDetail) -> BTreeMap<String, String> {
         format_amount(detail.order.invoice_total_price),
     );
     amounts.insert(
-        "advanceAmount".into(),
-        format_amount(detail.order.invoice_advance_amount),
-    );
-    amounts.insert(
         "amountPaid".into(),
         format_amount(detail.order.invoice_amount_paid),
     );
     amounts.insert(
         "balanceDue".into(),
-        format_amount(
-            (detail.order.invoice_total_price - detail.order.invoice_amount_paid).max(0.0),
-        ),
+        format_amount(detail.order.invoice_balance_due),
     );
 
     for (index, repair) in detail.order.repairs.iter().enumerate() {
@@ -592,9 +586,10 @@ mod tests {
         assert_eq!(amounts["materialAmount"], "3.5");
         assert_eq!(amounts["price"], "100.000");
         assert_eq!(amounts["total"], "300.000");
-        assert_eq!(amounts["amountPaid"], "400.000");
-        // Paid exceeds the total — never a negative balance on a document.
-        assert_eq!(amounts["balanceDue"], "0.000");
+        assert_eq!(amounts["amountPaid"], "120.000");
+        // The balance arrives floored at zero from the query — a document
+        // never prints a negative due, even on an overpaid legacy invoice.
+        assert_eq!(amounts["balanceDue"], "180.000");
     }
 
     #[test]
@@ -735,11 +730,10 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         current_stage: None,
         repairs: Vec::new(),
         invoice_total_price: 300.0,
-        invoice_amount_paid: 400.0,
+        invoice_amount_paid: 120.0,
         invoice_payment_status: "partial".to_string(),
-        invoice_advance_amount: 120.0,
-        invoice_advance_payment_type: None,
-        invoice_final_payment_type: None,
+        invoice_balance_due: 180.0,
+        invoice_payment_method: None,
     }
 }
 

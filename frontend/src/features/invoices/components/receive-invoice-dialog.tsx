@@ -48,20 +48,24 @@ export function ReceiveInvoiceDialog({
     setPaymentType('')
   }, [invoice?.id])
 
-  const balanceDue = invoice
-    ? Math.max(invoice.totalPrice - invoice.amountPaid, 0)
-    : 0
+  // No money changes hands when nothing is left to pay — the method picker
+  // stays hidden and the request carries a null payment type.
+  const needsPayment = (invoice?.balanceDue ?? 0) > 0
+  const canConfirm =
+    invoice && (!needsPayment || paymentType) && !receiveInvoice.isPending
 
   const handleConfirm = async () => {
-    if (!invoice || !paymentType) return
+    if (!invoice || !canConfirm) return
 
     const pending = receiveInvoice.mutateAsync({
       invoiceId: invoice.id,
-      paymentType,
+      paymentType: needsPayment ? (paymentType as PaymentType) : null,
     })
     toast.promise(pending, {
       loading: 'Marking invoice received...',
-      success: 'Invoice marked received.',
+      success: needsPayment
+        ? 'Invoice marked received and settled.'
+        : 'Invoice marked received.',
       error: 'Could not update this invoice. Please try again.',
     })
 
@@ -94,54 +98,58 @@ export function ReceiveInvoiceDialog({
                 <span className="text-muted-foreground">Invoice Total</span>
                 <span>{currencyFormatter.format(invoice.totalPrice)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Advance Paid</span>
-                <span>
-                  {currencyFormatter.format(invoice.advanceAmount)}
-                  {invoice.advancePaymentType &&
-                    ` (${paymentTypeOptions.find((o) => o.value === invoice.advancePaymentType)?.label})`}
-                </span>
-              </div>
+              {invoice.giftCardRedeemed > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Paid by gift card
+                  </span>
+                  <span>
+                    {currencyFormatter.format(invoice.giftCardRedeemed)}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Already Paid</span>
                 <span>{currencyFormatter.format(invoice.amountPaid)}</span>
               </div>
               <div className="flex justify-between font-semibold">
                 <span>Remaining Balance</span>
-                <span>{currencyFormatter.format(balanceDue)}</span>
+                <span>{currencyFormatter.format(invoice.balanceDue)}</span>
               </div>
             </div>
 
             <p className="text-sm text-muted-foreground">
-              {balanceDue > 0
-                ? 'Marks every order on this invoice received and settles the remaining balance in full using the final payment method below.'
-                : 'This invoice is already fully paid.'}
+              {needsPayment
+                ? 'Marks every order on this invoice received and settles the remaining balance in full using the payment method below.'
+                : 'This invoice is already fully paid — this just collects every order on it.'}
             </p>
 
-            <div className="space-y-1">
-              <Label htmlFor="invoice-final-payment-type">
-                Final Payment Method
-              </Label>
-              <Select
-                items={paymentTypeOptions}
-                value={paymentType}
-                onValueChange={(value: PaymentType) => setPaymentType(value)}
-              >
-                <SelectTrigger
-                  id="invoice-final-payment-type"
-                  className="w-full"
+            {needsPayment && (
+              <div className="space-y-1">
+                <Label htmlFor="invoice-final-payment-type">
+                  Final Payment Method
+                </Label>
+                <Select
+                  items={paymentTypeOptions}
+                  value={paymentType}
+                  onValueChange={(value: PaymentType) => setPaymentType(value)}
                 >
-                  <SelectValue placeholder="Select payment method..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {paymentTypeOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                  <SelectTrigger
+                    id="invoice-final-payment-type"
+                    className="w-full"
+                  >
+                    <SelectValue placeholder="Select payment method..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {paymentTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <DialogFooter>
               <Button
@@ -151,10 +159,7 @@ export function ReceiveInvoiceDialog({
               >
                 Cancel
               </Button>
-              <Button
-                onClick={handleConfirm}
-                disabled={!paymentType || receiveInvoice.isPending}
-              >
+              <Button onClick={handleConfirm} disabled={!canConfirm}>
                 Confirm Received
               </Button>
             </DialogFooter>

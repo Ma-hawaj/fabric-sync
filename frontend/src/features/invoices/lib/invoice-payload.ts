@@ -87,9 +87,14 @@ export function invoicePayload(values: InvoiceFormValues) {
     branchId: values.receivingBranch || null,
     discount: numberOrZero(values.discount),
     discountUnit: values.discountUnit,
-    paymentStatus: values.paymentStatus,
-    amountPaid: numberOrZero(values.amountPaid),
-    paymentType: values.paymentType || null,
+    // Untouched blank rows never reach the server — every payment sent has a
+    // positive amount and a named method (the schema enforces it).
+    payments: values.payments
+      .filter((payment) => payment.amount !== '' && payment.amount > 0)
+      .map((payment) => ({
+        amount: numberOrZero(payment.amount),
+        paymentType: payment.paymentType || null,
+      })),
     // Only meaningful for a sale with no orders to find a customer through;
     // it is left blank otherwise.
     customerId: values.customerId || null,

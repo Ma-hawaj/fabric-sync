@@ -104,7 +104,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           <ExportPdfButton invoiceId={invoice.id} />
           <Button
             variant="outline"
-            disabled={invoice.paymentStatus === 'paid'}
+            disabled={detail.payments.length > 0}
             onClick={() =>
               void navigate({
                 to: '/invoices/$invoiceId/edit',
@@ -115,10 +115,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
             <PencilIcon className="h-4 w-4" />
             Edit
           </Button>
-          <ReceiveInvoiceButton
-            invoice={invoice}
-            disabled={invoice.paymentStatus === 'paid'}
-          />
+          <ReceiveInvoiceButton invoice={invoice} />
         </div>
       </div>
 
@@ -210,7 +207,10 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 
       <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
         <dl className="ms-auto max-w-sm space-y-1.5 text-sm">
-          <TotalRow label="Subtotal" value={detail.totals.subtotal} />
+          <TotalRow
+            label="Subtotal (incl. VAT)"
+            value={detail.totals.subtotal}
+          />
           {detail.totals.discountAmount > 0 && (
             <TotalRow
               label={
@@ -248,19 +248,61 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           />
         </dl>
       </div>
+
+      {detail.payments.length > 0 && (
+        <div>
+          <SectionHeading icon={<ReceiptText className="h-3.5 w-3.5" />}>
+            Payments
+          </SectionHeading>
+          <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead>Pickup</TableHead>
+                  <TableHead className="text-end">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {detail.payments.map((payment) => (
+                  <TableRow key={payment.id}>
+                    <TableCell>
+                      {new Date(payment.paidAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="capitalize">
+                      {payment.paymentType ?? '—'}
+                    </TableCell>
+                    <TableCell>
+                      {payment.orderId ? (
+                        <Link
+                          to="/orders/$orderId"
+                          params={{ orderId: payment.orderId }}
+                          className="text-info hover:underline"
+                        >
+                          View order
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground">Advance</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-end font-medium tabular-nums">
+                      {currencyFormatter.format(payment.amount)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // The receive dialog needs its trigger; keep it self-contained here rather
 // than a separate dialog state in this page.
-function ReceiveInvoiceButton({
-  invoice,
-  disabled,
-}: {
-  invoice: Invoice
-  disabled: boolean
-}) {
+function ReceiveInvoiceButton({ invoice }: { invoice: Invoice }) {
   const [open, setOpen] = React.useState(false)
 
   return (
@@ -268,10 +310,9 @@ function ReceiveInvoiceButton({
       <Button
         variant="outline"
         className="text-info hover:text-info/80 hover:bg-info/5 dark:hover:bg-info/10"
-        disabled={disabled}
         onClick={() => setOpen(true)}
       >
-        {disabled ? 'Received' : 'Mark Received'}
+        Mark Received
       </Button>
       <ReceiveInvoiceDialog
         invoice={open ? invoice : null}
@@ -330,9 +371,9 @@ function toInvoice(detail: InvoiceDetail): Invoice {
     totalPrice: detail.totals.total,
     paymentStatus: detail.paymentStatus,
     amountPaid: detail.totals.amountPaid,
-    advanceAmount: detail.advanceAmount,
-    advancePaymentType: detail.advancePaymentType,
-    finalPaymentType: detail.finalPaymentType,
+    balanceDue: detail.totals.balanceDue,
+    paymentMethod: detail.paymentMethod,
+    giftCardRedeemed: detail.totals.giftCardRedeemed,
   }
 }
 

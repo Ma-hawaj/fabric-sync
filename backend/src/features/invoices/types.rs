@@ -23,28 +23,10 @@ impl DiscountUnit {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum PaymentStatus {
-    Unpaid,
-    Partial,
-    Paid,
-}
-
-impl PaymentStatus {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Unpaid => "unpaid",
-            Self::Partial => "partial",
-            Self::Paid => "paid",
-        }
-    }
-}
-
-// How a payment was actually made. An invoice can be settled in up to two
-// payments — an advance taken at invoice creation and a final payment made
-// when the order is received (see features::orders) — each recording its own
-// `PaymentType`.
+// How a payment was actually made. An invoice is settled through any number
+// of payments — advances at creation, per-pickup payments as orders are
+// collected, till payments in between — each recording its own `PaymentType`
+// as a row in `invoice_payments`.
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PaymentType {
@@ -143,6 +125,16 @@ pub struct InvoiceCustomerInput {
     pub orders: Vec<CreateOrderInput>,
 }
 
+/// One payment taken with the invoice: an advance collected up front. Later
+/// payments go through `POST /invoices/:id/payments` or the receive
+/// endpoints, which is why this carries no `order_id`.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatePaymentInput {
+    pub amount: f64,
+    pub payment_type: PaymentType,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateInvoiceInput {
@@ -152,13 +144,11 @@ pub struct CreateInvoiceInput {
     #[serde(default)]
     pub discount: f64,
     pub discount_unit: DiscountUnit,
-    pub payment_status: PaymentStatus,
+    // Payments taken up front, in the order they were taken. May be empty;
+    // the sum must not exceed what the invoice charges (validated in
+    // service.rs).
     #[serde(default)]
-    pub amount_paid: f64,
-    // The method used for the advance payment above. Required whenever
-    // amount_paid is greater than zero (validated in service.rs).
-    #[serde(default)]
-    pub payment_type: Option<PaymentType>,
+    pub payments: Vec<CreatePaymentInput>,
     // A tailoring invoice finds its customer through its orders; a sale of only
     // products or gift cards has none to go through, so the buyer is named
     // directly here instead.
@@ -253,9 +243,25 @@ pub struct InvoiceEditRedemption {
     pub amount: f64,
 }
 
+/// One row of the payments ledger, newest last. `payment_type` is null only
+/// on legacy rows imported without a recorded method.
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoicePayment {
+    pub id: Uuid,
+    pub amount: f64,
+    pub payment_type: Option<String>,
+    pub paid_at: DateTime<Utc>,
+    pub order_id: Option<Uuid>,
+}
+
 /// Shape of `GET /invoices/:id/edit`: the invoice as input values rather than
 /// as a printed document. `GET /invoices/:id` keeps serving the display shape
 /// — names without ids — which is why this is a separate type and endpoint.
+///
+/// An invoice with payments cannot be edited at all (see
+/// service::update_invoice), so `payments` is informational here: the form
+/// maps it back to its `payments` input only when it is empty.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEdit {
@@ -267,9 +273,7 @@ pub struct InvoiceEdit {
     pub branch_name: Option<String>,
     pub discount: f64,
     pub discount_unit: String,
-    pub payment_status: String,
-    pub amount_paid: f64,
-    pub payment_type: Option<String>,
+    pub payments: Vec<InvoicePayment>,
     pub customer_id: Option<Uuid>,
     pub customers: Vec<InvoiceEditCustomer>,
     pub products: Vec<InvoiceEditProductLine>,
@@ -290,11 +294,14 @@ pub struct InvoiceListCustomer {
 /// Body for `POST /invoices/:id/receive` — marks every order on the invoice
 /// received and settles the remaining balance in one action, for when the
 /// customer collects everything (and pays) at once rather than picking up
-/// order lines individually (see features::orders::receive_order).
+/// order lines individually (see features::orders::receive_order). Omitted
+/// when nothing is left to pay — collecting a fully-paid invoice takes no
+/// money.
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReceiveInvoiceInput {
-    pub payment_type: PaymentType,
+    #[serde(default)]
+    pub payment_type: Option<PaymentType>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -303,7 +310,38 @@ pub struct ReceivedInvoice {
     pub id: Uuid,
     pub payment_status: String,
     pub amount_paid: f64,
-    pub final_payment_type: Option<String>,
+    pub balance_due: f64,
+    pub payment_method: Option<String>,
+}
+
+/// Body for `POST /invoices/:id/payments` — a till payment not tied to
+/// collecting anything: an extra advance, or the remainder paid after every
+/// order was already collected. `order_id` attributes it to a pickup when it
+/// was taken at one; it must belong to this invoice.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordPaymentInput {
+    pub amount: f64,
+    pub payment_type: PaymentType,
+    #[serde(default)]
+    pub order_id: Option<Uuid>,
+}
+
+/// The invoice's money state after a payment landed. Returned alongside the
+/// recorded payment so the client can update its balances without refetching.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentSummary {
+    pub payment_status: String,
+    pub amount_paid: f64,
+    pub balance_due: f64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordedPayment {
+    pub payment: InvoicePayment,
+    pub summary: PaymentSummary,
 }
 
 /// A person named on the invoice — the buyer, or the customer a tailoring
@@ -408,7 +446,9 @@ pub struct InvoiceTotalsBreakdown {
 
 /// The invoice row itself, before the lines and totals are assembled onto it.
 /// Internal to the read path — the repository returns this, the service turns
-/// it into an `InvoiceDetail`.
+/// it into an `InvoiceDetail`. `payment_status`, `amount_paid` and
+/// `payment_method` are derived from the payments ledger in the query, since
+/// the table no longer stores them.
 #[derive(Clone, Debug)]
 pub struct InvoiceRecord {
     pub id: Uuid,
@@ -422,9 +462,7 @@ pub struct InvoiceRecord {
     pub payment_status: String,
     pub total_price: f64,
     pub amount_paid: f64,
-    pub advance_amount: f64,
-    pub advance_payment_type: Option<String>,
-    pub final_payment_type: Option<String>,
+    pub payment_method: Option<String>,
     pub gift_card_redeemed: f64,
 }
 
@@ -444,11 +482,12 @@ pub struct InvoiceDetail {
     /// and finds its customers through the lines instead.
     pub buyer: Option<InvoiceParty>,
     pub payment_status: String,
-    pub advance_amount: f64,
-    pub advance_payment_type: Option<String>,
-    pub final_payment_type: Option<String>,
+    /// The method of the most recent payment, for the document header. The
+    /// full history is in `payments`.
+    pub payment_method: Option<String>,
     pub lines: Vec<InvoiceDetailLine>,
     pub redemptions: Vec<InvoiceRedemptionLine>,
+    pub payments: Vec<InvoicePayment>,
     pub totals: InvoiceTotalsBreakdown,
 }
 
@@ -466,9 +505,12 @@ pub struct InvoiceListItem {
     pub total_price: f64,
     pub payment_status: String,
     pub amount_paid: f64,
-    pub advance_amount: f64,
-    pub advance_payment_type: Option<String>,
-    pub final_payment_type: Option<String>,
+    /// What the customer still owes: the total less gift card tender and
+    /// every payment. Display-only — the dialogs collect against it.
+    pub balance_due: f64,
+    /// The method of the most recent payment, backing the list's payment
+    /// method column.
+    pub payment_method: Option<String>,
     /// Gift card tender applied to this invoice. Not part of `amount_paid`:
     /// together they add up to `total_price` on a settled invoice.
     pub gift_card_redeemed: f64,

@@ -1,5 +1,5 @@
 import type { DiscountUnit } from './invoice-form'
-import type { PaymentStatus, PaymentType } from './invoices'
+import type { InvoicePayment } from './invoice-detail'
 
 /** Backend measurement fields as serialized camelCase (numbers stay null). */
 export interface InvoiceEditMeasurement {
@@ -83,9 +83,8 @@ export interface InvoiceEdit {
   branchName: string | null
   discount: number
   discountUnit: DiscountUnit
-  paymentStatus: PaymentStatus
-  amountPaid: number
-  paymentType: PaymentType | null
+  /** Non-empty exactly when the invoice cannot be edited (it has payments). */
+  payments: InvoicePayment[]
   customerId: string | null
   customers: InvoiceEditCustomer[]
   products: InvoiceEditProductLine[]

@@ -58,10 +58,9 @@ export interface OrderRepair {
 // and material. invoiceDate arrives as an ISO date string and is parsed to a
 // Date in use-orders.ts for the table's date-range filter.
 //
-// An invoice is settled in up to two payments: an advance taken up front (at
-// invoice creation) and a final payment that clears the remaining balance
-// (when the order is received) — each may use a different payment method,
-// hence the separate advance/final payment type fields.
+// An invoice is settled through any number of payments (the ledger);
+// invoiceAmountPaid is their sum and invoicePaymentMethod the most recent
+// one's method.
 export interface Order {
   id: string
   /**
@@ -100,9 +99,8 @@ export interface Order {
   invoiceTotalPrice: number
   invoiceAmountPaid: number
   invoicePaymentStatus: InvoicePaymentStatus
-  invoiceAdvanceAmount: number
-  invoiceAdvancePaymentType: PaymentType | null
-  invoiceFinalPaymentType: PaymentType | null
+  invoiceBalanceDue: number
+  invoicePaymentMethod: PaymentType | null
 }
 
 // Shape of GET /orders/:id — the whole order row plus the measurement

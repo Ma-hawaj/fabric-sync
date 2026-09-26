@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE invoices\n        SET invoice_date = $2,\n            branch_id = $3,\n            discount = $4::float8,\n            discount_unit = $5,\n            customer_id = $6,\n            total_price = $7::float8,\n            gift_card_redeemed = $8::float8\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Uuid",
+        "Float8",
+        "Text",
+        "Uuid",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b2c8579194af96ef8a7d4b6959d39ce367051bd34f75874c638b4ac1f8d2acce"
+}

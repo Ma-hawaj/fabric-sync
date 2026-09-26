@@ -310,9 +310,8 @@ fn assemble_order(
         invoice_total_price: row.invoice_total_price,
         invoice_amount_paid: row.invoice_amount_paid,
         invoice_payment_status: row.invoice_payment_status,
-        invoice_advance_amount: row.invoice_advance_amount,
-        invoice_advance_payment_type: row.invoice_advance_payment_type,
-        invoice_final_payment_type: row.invoice_final_payment_type,
+        invoice_balance_due: row.invoice_balance_due,
+        invoice_payment_method: row.invoice_payment_method,
     }
 }
 
@@ -416,9 +415,10 @@ pub(crate) async fn get_order(state: &AppState, order_id: Uuid) -> Result<OrderD
     })
 }
 
-/// Marks an order received and, once every order on its invoice has been
-/// received, settles the invoice's remaining balance in full via
-/// `final_payment_type`.
+/// Marks an order received and records the payment taken at that pickup.
+/// The invoice's money state is derived from the ledger, so nothing is
+/// settled here explicitly: it simply becomes paid once every order on it is
+/// received *and* the payments cover the balance.
 ///
 /// Deliberately not gated on the production checklist: staff hand a garment
 /// over when it is ready, so the current stage is shown alongside rather than
@@ -426,24 +426,68 @@ pub(crate) async fn get_order(state: &AppState, order_id: Uuid) -> Result<OrderD
 pub async fn receive_order(
     state: &AppState,
     order_id: Uuid,
-    final_payment_type: PaymentType,
+    amount: f64,
+    payment_type: Option<PaymentType>,
 ) -> Result<OrderListItem, AppError> {
+    if amount < 0.0 {
+        return Err(AppError::BadRequest(
+            "a pickup payment cannot be negative".to_string(),
+        ));
+    }
+    if amount > 0.0 && payment_type.is_none() {
+        return Err(AppError::BadRequest(
+            "a pickup payment needs a paymentType".to_string(),
+        ));
+    }
+
     let mut tx = state.db().begin().await?;
 
-    let invoice_id = repository::mark_received(&mut tx, order_id)
+    let locked = repository::lock_order(&mut tx, order_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
 
-    let invoice_settled = repository::invoice_fully_received(&mut tx, invoice_id).await?;
-    if invoice_settled {
-        repository::mark_invoice_paid(&mut tx, invoice_id, final_payment_type).await?;
+    if locked.status == "received" {
+        return Err(AppError::BadRequest(
+            "this order is already received".to_string(),
+        ));
     }
+
+    let invoice_id = locked.invoice_id;
+    repository::mark_received(&mut tx, order_id).await?;
+
+    if amount > 0.0 {
+        let payment_type = payment_type.expect("validated: payment type is set");
+        // Locked so two tills collecting sibling orders at once serialize
+        // rather than both paying against the same remaining balance.
+        let locked =
+            crate::features::invoices::repository::lock_invoice(&mut tx, invoice_id).await?;
+        let locked =
+            locked.ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
+        let paid = crate::features::invoices::repository::sum_payments(&mut tx, invoice_id).await?;
+        crate::features::invoices::service::validate_payment_amount(
+            amount,
+            locked.total_price,
+            locked.gift_card_redeemed,
+            paid,
+        )?;
+        crate::features::invoices::repository::insert_payment(
+            &mut tx,
+            invoice_id,
+            Some(order_id),
+            amount,
+            Some(payment_type.as_str()),
+        )
+        .await?;
+    }
+
+    let invoice_settled = repository::invoice_fully_received(&mut tx, invoice_id).await?;
 
     tx.commit().await?;
 
     tracing::info!(
         order_id = %order_id,
         invoice_id = %invoice_id,
+        amount,
         invoice_settled,
         "order received"
     );

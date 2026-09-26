@@ -28,7 +28,7 @@ const paymentStatusOptions = [
 ]
 
 const paymentTypeLabels: Record<
-  NonNullable<Order['invoiceFinalPaymentType']>,
+  NonNullable<Order['invoicePaymentMethod']>,
   string
 > = {
   benefit: 'Benefit',
@@ -233,8 +233,8 @@ export function getOrderColumns(
     },
     {
       id: 'balanceDue',
-      accessorFn: (order) =>
-        Math.max(order.invoiceTotalPrice - order.invoiceAmountPaid, 0),
+      // Server-computed: the total less gift card tender and every payment.
+      accessorFn: (order) => order.invoiceBalanceDue,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Balance Due" />
       ),
@@ -277,14 +277,13 @@ export function getOrderColumns(
     },
     {
       id: 'paymentMethod',
-      accessorFn: (order) =>
-        order.invoiceFinalPaymentType ?? order.invoiceAdvancePaymentType,
+      accessorFn: (order) => order.invoicePaymentMethod,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Payment Method" />
       ),
       cell: ({ row }) => {
         const type =
-          row.getValue<Order['invoiceFinalPaymentType']>('paymentMethod')
+          row.getValue<Order['invoicePaymentMethod']>('paymentMethod')
         return <div>{type ? paymentTypeLabels[type] : '—'}</div>
       },
       enableSorting: true,

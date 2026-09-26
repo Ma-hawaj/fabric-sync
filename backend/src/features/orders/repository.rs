@@ -7,7 +7,7 @@ use crate::{
     state::AppState,
 };
 
-use super::types::{AssignmentRow, OrderRow, PaymentType, ProgressRow, RepairRow, StageRow};
+use super::types::{AssignmentRow, OrderRow, ProgressRow, RepairRow, StageRow};
 
 // `balance_due` and `payment_method` are shown as columns on the orders page
 // and so have to be sortable and filterable; they are derived here rather
@@ -48,13 +48,14 @@ const SPEC: ListSpec = ListSpec {
             i.branch_id AS receiving_location_id,
             recv.name AS receiving_location,
             i.total_price::float8 AS invoice_total_price,
-            i.amount_paid::float8 AS invoice_amount_paid,
-            i.payment_status AS invoice_payment_status,
-            i.advance_amount::float8 AS invoice_advance_amount,
-            i.advance_payment_type AS invoice_advance_payment_type,
-            i.final_payment_type AS invoice_final_payment_type,
-            GREATEST(i.total_price - i.amount_paid, 0)::float8 AS balance_due,
-            COALESCE(i.final_payment_type, i.advance_payment_type) AS payment_method,
+            pay.paid AS invoice_amount_paid,
+            pay.status AS invoice_payment_status,
+            -- Unlike the list page's own balance, this one nets off gift
+            -- card tender too — it is what the receive dialog collects.
+            GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS invoice_balance_due,
+            method.payment_type AS invoice_payment_method,
+            GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS balance_due,
+            method.payment_type AS payment_method,
             CASE
                 WHEN next_stage.name IS NULL THEN 'Completed'
                 WHEN NOT EXISTS (
@@ -69,6 +70,30 @@ const SPEC: ListSpec = ListSpec {
         JOIN materials mat ON mat.id = o.material_id
         LEFT JOIN branch prod ON prod.id = o.production_branch_id
         LEFT JOIN branch recv ON recv.id = i.branch_id
+        -- The invoice's money state, derived from the payments ledger: the
+        -- table stores only the total, so the paid sum, the status and the
+        -- latest method are worked out here — mirrors fetch_invoice_detail.
+        LEFT JOIN LATERAL (
+            SELECT
+                COALESCE(SUM(amount), 0)::float8 AS paid,
+                CASE
+                    WHEN GREATEST(
+                        i.total_price - i.gift_card_redeemed - COALESCE(SUM(amount), 0),
+                        0
+                    ) = 0 THEN 'paid'
+                    WHEN COALESCE(SUM(amount), 0) = 0 THEN 'unpaid'
+                    ELSE 'partial'
+                END AS status
+            FROM invoice_payments
+            WHERE invoice_id = i.id
+        ) pay ON true
+        LEFT JOIN LATERAL (
+            SELECT payment_type
+            FROM invoice_payments
+            WHERE invoice_id = i.id
+            ORDER BY paid_at DESC, id DESC
+            LIMIT 1
+        ) method ON true
         -- Single-stock-location inference, scoped to this order's material,
         -- for the `current_stage` expression only — mirrors
         -- `single_stock_locations`/`effective_production` in Rust.
@@ -337,23 +362,54 @@ pub async fn list_repairs(
     .await
 }
 
-/// Marks the order received and returns its `invoice_id`, or `None` if the
-/// order doesn't exist.
-pub async fn mark_received(
+/// The order's invoice with the row locked. The service refuses a pickup on
+/// an already-received order through this: a retry would otherwise record
+/// the pickup's payment twice.
+pub struct LockedOrder {
+    pub invoice_id: Uuid,
+    pub status: String,
+}
+
+pub async fn lock_order(
     tx: &mut sqlx::PgTransaction<'_>,
     order_id: Uuid,
-) -> Result<Option<Uuid>, sqlx::Error> {
-    sqlx::query_scalar!(
+) -> Result<Option<LockedOrder>, sqlx::Error> {
+    let row = sqlx::query!(
         r#"
-        UPDATE orders
-        SET status = 'received', received_at = now()
+        SELECT invoice_id, status
+        FROM orders
         WHERE id = $1
-        RETURNING invoice_id
+        FOR UPDATE
         "#,
         order_id,
     )
     .fetch_optional(&mut **tx)
-    .await
+    .await?;
+
+    Ok(row.map(|row| LockedOrder {
+        invoice_id: row.invoice_id,
+        status: row.status,
+    }))
+}
+
+/// Marks the order received. The caller holds the row locked (see
+/// `lock_order`) and has refused already-received rows.
+pub async fn mark_received(
+    tx: &mut sqlx::PgTransaction<'_>,
+    order_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE orders
+        SET status = 'received', received_at = now()
+        WHERE id = $1
+        "#,
+        order_id,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
 }
 
 /// True once every order on the invoice has been received — the point at
@@ -374,30 +430,6 @@ pub async fn invoice_fully_received(
     .fetch_one(&mut **tx)
     .await
     .map(|all_received| all_received.unwrap_or(false))
-}
-
-/// Settles the invoice's remaining balance in full and records how that
-/// final payment was made.
-pub async fn mark_invoice_paid(
-    tx: &mut sqlx::PgTransaction<'_>,
-    invoice_id: Uuid,
-    final_payment_type: PaymentType,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"
-        UPDATE invoices
-        SET amount_paid = total_price - gift_card_redeemed,
-            payment_status = 'paid',
-            final_payment_type = $2
-        WHERE id = $1
-        "#,
-        invoice_id,
-        final_payment_type.as_str(),
-    )
-    .execute(&mut **tx)
-    .await?;
-
-    Ok(())
 }
 
 /// COALESCE keeps the stored value when the caller omits the field, matching
