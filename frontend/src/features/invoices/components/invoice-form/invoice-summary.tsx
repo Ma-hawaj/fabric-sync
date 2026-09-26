@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/separator'
 import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
 import { ORDER_RECEIVING_FILTERS } from '@/features/locations/lib/location-filters'
+import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
 import type { Product } from '@/features/products/types/product'
 import { CURRENCY } from '@/lib/currency'
 import {
@@ -110,6 +111,10 @@ export function InvoiceSummary({
   customerNames,
   productNames,
 }: InvoiceSummaryProps) {
+  // Labels a pre-selected default before its row has loaded onto any picker
+  // page — without this the input renders blank until the list is opened.
+  const receivingDefault = useApplicableDefaultLocation('receiving')
+
   return (
     <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
       <h3 className="text-sm font-semibold">Invoice Summary</h3>
@@ -130,6 +135,9 @@ export function InvoiceSummary({
                   value: location.id,
                   label: location.name,
                 })}
+                getValueLabel={(id) =>
+                  id === receivingDefault?.id ? receivingDefault.name : null
+                }
                 value={field.state.value || null}
                 onValueChange={(value) => field.handleChange(value ?? '')}
                 placeholder="Search branch..."

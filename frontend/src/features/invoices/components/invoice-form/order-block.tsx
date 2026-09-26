@@ -24,6 +24,7 @@ import {
   THOB_TYPE,
 } from '../../data/design-catalog'
 import type { Location } from '@/features/locations/types/location'
+import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
 import { materialTotalStock } from '../../types/materials'
 import type { Material } from '../../types/materials'
 import type { InvoiceFormApi } from '../../types/invoice-form'
@@ -65,6 +66,29 @@ export function OrderBlock({
   const [pickedMaterial, setPickedMaterial] = React.useState<Material | null>(
     null,
   )
+  // A garment can only be made where its material is stocked, so the default
+  // applies here only when it is one of the picked material's in-stock
+  // locations. Runs on every material change (the material picker clears Made
+  // At itself) but never overwrites a value already chosen.
+  const stockDefault = useApplicableDefaultLocation('stock')
+  React.useEffect(() => {
+    if (!stockDefault || !pickedMaterial) {
+      return
+    }
+    const stocked = pickedMaterial.locations.some(
+      (stock) => stock.locationId === stockDefault.id && stock.quantity > 0,
+    )
+    if (
+      stocked &&
+      form.state.values.customers[customerIndex]?.orders[orderIndex]
+        ?.productionLocationId === ''
+    ) {
+      form.setFieldValue(
+        `${base}.productionLocationId` as never,
+        stockDefault.id as never,
+      )
+    }
+  }, [stockDefault, pickedMaterial, form, base])
 
   return (
     <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">

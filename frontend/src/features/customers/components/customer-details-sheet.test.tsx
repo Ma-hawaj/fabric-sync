@@ -32,15 +32,20 @@ function renderSheet(customer: Customer | null) {
 }
 
 describe('CustomerDetailsSheet', () => {
-  it('groups the recorded measurements and drops the empty groups', () => {
+  it('keeps every field of a shown group in place, leaving missing values empty', () => {
     renderSheet(CUSTOMER)
 
     expect(screen.queryByText('Body Dimensions')).toBeTruthy()
     expect(screen.queryByText('Style & Finishing')).toBeTruthy()
-    // Nothing was recorded for any pocket field.
-    expect(screen.queryByText('Pockets')).toBeNull()
-    // Nor for the other body fields.
-    expect(screen.queryByText('Waist')).toBeNull()
+    expect(screen.queryByText('Pockets')).toBeTruthy()
+    // Waist was not recorded, but its slot stays so the recorded fields
+    // keep their grid positions.
+    expect(screen.queryByText('Waist')).toBeTruthy()
+    expect(screen.queryByText('108')).toBeTruthy()
+    // Body Dimensions has 13 fields and 2 recorded values; Style &
+    // Finishing is fully recorded. Every other slot holds a placeholder.
+    // (The sheet renders in a portal, so query the document body.)
+    expect(document.body.querySelectorAll('[data-empty]').length).toBe(15)
   })
 
   it('draws the thob sketch alongside the measurements', () => {

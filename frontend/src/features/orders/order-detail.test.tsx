@@ -91,6 +91,41 @@ function renderPage() {
   )
 }
 
+const DELIVERY_STAGE = {
+  stageId: 'stage-2',
+  name: 'Location delivery',
+  sortOrder: 2,
+  requiresDelivery: true,
+  applicable: true,
+  status: 'pending',
+  startedAt: '2026-07-28T10:00:00Z',
+  completedAt: null,
+  locationId: null,
+  location: null,
+  notes: null,
+  assigneeId: null,
+  assigneeName: null,
+} as const
+
+function renderDeliveryOrder(overrides: Partial<OrderDetail> = {}) {
+  const order: OrderDetail = {
+    ...ORDER,
+    id: 'order-2',
+    productionLocationId: 'branch-2',
+    productionLocation: 'Muharraq Store',
+    stages: [...ORDER.stages, { ...DELIVERY_STAGE }],
+    currentStage: 'Location delivery',
+    ...overrides,
+  }
+  const client = new QueryClient()
+  client.setQueryData(['orders', order.id], order)
+  return render(
+    <QueryClientProvider client={client}>
+      <OrderDetailPage orderId={order.id} />
+    </QueryClientProvider>,
+  )
+}
+
 describe('OrderDetailPage', () => {
   it('titles the page with the human-readable order number', () => {
     renderPage()
@@ -149,5 +184,31 @@ describe('OrderDetailPage', () => {
 
     expect(screen.queryByText('Loading order...')).toBeTruthy()
     expect(screen.queryByText('Order ORD-7')).toBeNull()
+  })
+
+  it('sends a delivery to the receiving branch with no destination picker', () => {
+    renderDeliveryOrder()
+
+    expect(screen.queryByText('Delivers to Manama Main Branch.')).toBeTruthy()
+    expect(screen.queryByText('Deliver To')).toBeNull()
+
+    const done = screen.getByRole('button', { name: 'Done' })
+    expect((done as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('blocks a delivery while the receiving branch is unknown', () => {
+    renderDeliveryOrder({
+      receivingLocationId: null,
+      receivingLocation: null,
+    })
+
+    expect(
+      screen.queryByText(
+        'Set a receiving branch on the invoice before completing this delivery.',
+      ),
+    ).toBeTruthy()
+
+    const done = screen.getByRole('button', { name: 'Done' })
+    expect((done as HTMLButtonElement).disabled).toBe(true)
   })
 })

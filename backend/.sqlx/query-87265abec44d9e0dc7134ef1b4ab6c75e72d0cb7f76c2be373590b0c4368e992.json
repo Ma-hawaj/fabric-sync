@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO user_preferences (user_id, default_location_id, updated_at)\n        VALUES ($1, $2, now())\n        ON CONFLICT (user_id)\n        DO UPDATE SET default_location_id = EXCLUDED.default_location_id, updated_at = now()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "87265abec44d9e0dc7134ef1b4ab6c75e72d0cb7f76c2be373590b0c4368e992"
+}

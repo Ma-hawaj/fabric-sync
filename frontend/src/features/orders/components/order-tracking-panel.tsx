@@ -13,10 +13,8 @@ import {
 } from '@/components/ui/select'
 import { CURRENCY } from '@/lib/currency'
 import { AsyncCombobox } from '@/components/form/async-combobox'
-import {
-  ORDER_RECEIVING_FILTERS,
-  PRODUCTION_FILTERS,
-} from '@/features/locations/lib/location-filters'
+import { PRODUCTION_FILTERS } from '@/features/locations/lib/location-filters'
+import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
 import { useUsers } from '@/features/users/hooks/use-users'
 import type { Location } from '@/features/locations/types/location'
 import {
@@ -76,6 +74,11 @@ export function OrderTrackingPanel({
 
 function ProductionLocationPicker({ order }: { order: Order }) {
   const updateOrder = useUpdateOrder()
+  // An existing order is never silently rewritten: the default is offered as
+  // a one-tap action while production is still unassigned and uninferred.
+  const stockDefault = useApplicableDefaultLocation('stock')
+  const showDefaultOffer =
+    !order.productionLocationId && !order.productionLocationInferred
 
   const handleChange = async (productionLocationId: string) => {
     const pending = updateOrder.mutateAsync({
@@ -122,6 +125,16 @@ function ProductionLocationPicker({ order }: { order: Order }) {
         Collected from {order.receivingLocation ?? 'an unassigned branch'}. A
         delivery stage only applies while these two differ.
       </p>
+      {showDefaultOffer && stockDefault && (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={updateOrder.isPending}
+          onClick={() => void handleChange(stockDefault.id)}
+        >
+          Use {stockDefault.name} (your default)
+        </Button>
+      )}
       {order.productionLocationInferred && (
         <p className="text-xs text-muted-foreground">
           Inferred from where {order.material} is stocked — pick a location to
@@ -158,12 +171,13 @@ function StageChecklist({
 
 function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
   const setStage = useSetOrderStage()
-  const [destination, setDestination] = React.useState('')
 
-  // Completing a delivery has to say where the garment went — the backend
-  // rejects it otherwise, so the picker appears inline before Done is offered.
+  // A delivery goes where the customer collects — the invoice's receiving
+  // branch, riding along on the order — so there is no destination picker.
+  // The backend still requires a location id, hence the guard on Done below.
   const needsDestination =
     stage.requiresDelivery && stage.applicable && stage.status !== 'done'
+  const destinationId = order.receivingLocationId
 
   const record = async (
     status: OrderStageEntry['status'],
@@ -188,7 +202,6 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
     } catch {
       return
     }
-    setDestination('')
   }
 
   return (
@@ -237,9 +250,11 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
                   variant="ghost"
                   className="h-8 w-auto px-2"
                   disabled={
-                    setStage.isPending || (needsDestination && !destination)
+                    setStage.isPending || (needsDestination && !destinationId)
                   }
-                  onClick={() => void record('done', destination || undefined)}
+                  onClick={() =>
+                    void record('done', destinationId ?? undefined)
+                  }
                 >
                   Done
                 </Button>
@@ -269,24 +284,11 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
       </div>
 
       {needsDestination && stage.status === 'pending' && (
-        <div className="mt-3 space-y-1">
-          <Label htmlFor={`destination-${stage.stageId}`}>Deliver To</Label>
-          <AsyncCombobox<Location>
-            id={`destination-${stage.stageId}`}
-            endpoint="/locations"
-            queryKey="stage-destination-locations"
-            searchField="name"
-            filters={ORDER_RECEIVING_FILTERS}
-            placeholder="Pick a destination..."
-            emptyMessage="No locations found."
-            toOption={(location) => ({
-              value: location.id,
-              label: location.name,
-            })}
-            value={destination || null}
-            onValueChange={(locationId) => setDestination(locationId ?? '')}
-          />
-        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {destinationId
+            ? `Delivers to ${order.receivingLocation}.`
+            : 'Set a receiving branch on the invoice before completing this delivery.'}
+        </p>
       )}
     </li>
   )
