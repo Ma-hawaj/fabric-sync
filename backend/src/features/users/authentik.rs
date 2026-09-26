@@ -42,11 +42,38 @@ struct AuthentikUser {
     username: String,
     #[serde(default)]
     name: Option<String>,
+    #[serde(default)]
+    email: Option<String>,
+    /// The user's avatar as Authentik computes it — either an `http(s)` URL
+    /// or a `data:` URI (generated initials by default) — passed straight
+    /// through for the frontend to render.
+    #[serde(default)]
+    avatar: Option<String>,
     /// `internal` / `external` / `service_account`, ...
     #[serde(default, rename = "type")]
     user_type: Option<String>,
     #[serde(default)]
     is_active: Option<bool>,
+    /// Roles assigned to the user (`roles_obj` carries `{name, ...}` per
+    /// role); only the names are kept.
+    #[serde(default)]
+    roles_obj: Vec<AuthentikRole>,
+    /// Groups the user belongs to (`groups_obj` carries `{name, ...}` per
+    /// group); only the names are kept.
+    #[serde(default)]
+    groups_obj: Vec<AuthentikGroup>,
+}
+
+#[derive(Deserialize)]
+struct AuthentikRole {
+    #[serde(default)]
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct AuthentikGroup {
+    #[serde(default)]
+    name: String,
 }
 
 /// Service accounts are machine identities, and inactive users can't take
@@ -62,10 +89,26 @@ fn assignable_user(user: AuthentikUser) -> Option<User> {
         .name
         .filter(|name| !name.is_empty())
         .unwrap_or(user.username);
+    let roles = user
+        .roles_obj
+        .into_iter()
+        .map(|role| role.name)
+        .filter(|name| !name.is_empty())
+        .collect();
+    let groups = user
+        .groups_obj
+        .into_iter()
+        .map(|group| group.name)
+        .filter(|name| !name.is_empty())
+        .collect();
 
     Some(User {
         id: user.uuid,
         name,
+        email: user.email,
+        avatar_url: user.avatar,
+        roles,
+        groups,
     })
 }
 
@@ -144,6 +187,54 @@ mod tests {
         let result = assignable_user(user).unwrap();
         assert_eq!(result.id, "123");
         assert_eq!(result.name, "Ahmed Al-Sayed");
+    }
+
+    #[test]
+    fn passes_through_email_avatar_and_role_names() {
+        let user: AuthentikUser = serde_json::from_value(serde_json::json!({
+            "uuid": "123",
+            "username": "ahmed.alsayed",
+            "name": "Ahmed Al-Sayed",
+            "email": "ahmed@example.com",
+            "avatar": "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+            "type": "internal",
+            "is_active": true,
+            "roles_obj": [
+                { "name": "Tailors", "uuid": "456" },
+                { "name": "", "uuid": "789" }
+            ],
+            "groups_obj": [
+                { "name": "Branch A", "pk": "abc" },
+                { "name": "", "pk": "def" }
+            ]
+        }))
+        .unwrap();
+
+        let result = assignable_user(user).unwrap();
+        assert_eq!(result.email.as_deref(), Some("ahmed@example.com"));
+        assert_eq!(
+            result.avatar_url.as_deref(),
+            Some("data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=")
+        );
+        assert_eq!(result.roles, vec!["Tailors".to_string()]);
+        assert_eq!(result.groups, vec!["Branch A".to_string()]);
+    }
+
+    #[test]
+    fn defaults_missing_contact_fields_to_empty() {
+        let user: AuthentikUser = serde_json::from_value(serde_json::json!({
+            "uuid": "123",
+            "username": "ahmed.alsayed",
+            "type": "internal",
+            "is_active": true
+        }))
+        .unwrap();
+
+        let result = assignable_user(user).unwrap();
+        assert_eq!(result.email, None);
+        assert_eq!(result.avatar_url, None);
+        assert!(result.roles.is_empty());
+        assert!(result.groups.is_empty());
     }
 
     #[test]
