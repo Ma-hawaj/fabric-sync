@@ -55,7 +55,7 @@ pnpm exec vitest run <path/to/file.test.ts>   # single test file
 
 Routes under `src/routes` are file-based (TanStack Router); `src/routeTree.gen.ts` is generated — don't hand-edit it (`pnpm run generate-routes` / `tsr generate` regenerates it, and the vite plugin also regenerates on dev/build).
 
-API calls are same-origin in dev: `VITE_API_BASE_URL=/api` (see `frontend/.env.example`) sends every `apiClient` call through the Vite dev-server proxy (`/api` → the backend with the prefix rewritten away; `BACKEND_URL` in `frontend/vite.config.ts` sets the target, default `http://localhost:8000`), so frontend and backend share one URL with no CORS involved. Bypass the proxy with a direct URL when needed:
+API calls are same-origin in dev: `VITE_API_BASE_URL=/api` (see `frontend/.env.example`) sends every `apiClient` call through the Vite dev-server proxy (`/api` → the backend with the prefix rewritten away; `BACKEND_URL` in `frontend/vite.config.ts` sets the target, default `http://localhost:8000`), so frontend and backend share one URL with no CORS involved. The IdP rides the same proxy: `VITE_OIDC_AUTHORITY` points at `<vite-origin>/application/o/<slug>/` (`/application/o` → Authentik untouched; `AUTHENTIK_URL` sets the target, default `http://localhost:9000`). Bypass the proxies with direct URLs when needed:
 
 ```bash
 VITE_API_BASE_URL=http://localhost:8000 pnpm run dev

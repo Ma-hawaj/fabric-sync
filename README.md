@@ -159,7 +159,7 @@ Copy `frontend/.env.example` to `frontend/.env` and set the OIDC vars for your i
 - `VITE_OIDC_REDIRECT_URI` / `VITE_OIDC_POST_LOGOUT_REDIRECT_URI`, default `http://localhost:3000/`
 - `VITE_OIDC_SCOPE`, default `openid profile email`
 
-API calls are same-origin in dev: `VITE_API_BASE_URL=/api` sends them through the Vite dev-server proxy (`/api` → the backend, prefix rewritten away — see `BACKEND_URL` in `frontend/vite.config.ts`), so frontend and backend share one URL with no CORS involved. To bypass the proxy and hit the backend directly instead:
+API calls are same-origin in dev: `VITE_API_BASE_URL=/api` sends them through the Vite dev-server proxy (`/api` → the backend, prefix rewritten away — see `BACKEND_URL` in `frontend/vite.config.ts`), so frontend and backend share one URL with no CORS involved. The IdP rides the same proxy: `VITE_OIDC_AUTHORITY` points at `<vite-origin>/application/o/<slug>/` (`/application/o` → Authentik, path untouched — see `AUTHENTIK_URL` in `frontend/vite.config.ts`), so discovery, login, and logout never leave the dev-server origin either. To bypass the proxies and hit the backends directly instead:
 
 ```bash
 cd frontend
