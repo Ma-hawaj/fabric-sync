@@ -76,6 +76,8 @@ export interface InvoiceDetail {
   paymentStatus: PaymentStatus
   /** The most recent payment's method, if anything has been paid. */
   paymentMethod: PaymentType | null
+  /** Goods receipt, separate from money: every order collected. */
+  received: boolean
   lines: InvoiceLine[]
   redemptions: InvoiceRedemption[]
   payments: InvoicePayment[]

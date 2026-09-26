@@ -312,6 +312,10 @@ pub struct ReceivedInvoice {
     pub amount_paid: f64,
     pub balance_due: f64,
     pub payment_method: Option<String>,
+    /// Goods receipt, separate from money: true once no order on the invoice
+    /// is still pending collection. Always true from the bulk-receive call,
+    /// which marks every pending order.
+    pub received: bool,
 }
 
 /// Body for `POST /invoices/:id/payments` — a till payment not tied to
@@ -463,6 +467,9 @@ pub struct InvoiceRecord {
     pub total_price: f64,
     pub amount_paid: f64,
     pub payment_method: Option<String>,
+    /// Goods receipt, separate from money: true once no order on the invoice
+    /// is still pending collection.
+    pub received: bool,
     pub gift_card_redeemed: f64,
 }
 
@@ -485,6 +492,10 @@ pub struct InvoiceDetail {
     /// The method of the most recent payment, for the document header. The
     /// full history is in `payments`.
     pub payment_method: Option<String>,
+    /// Goods receipt, separate from money: true once no order on the invoice
+    /// is still pending collection. The edit form and the receive actions
+    /// both read this rather than inferring it from the payment status.
+    pub received: bool,
     pub lines: Vec<InvoiceDetailLine>,
     pub redemptions: Vec<InvoiceRedemptionLine>,
     pub payments: Vec<InvoicePayment>,
@@ -511,6 +522,9 @@ pub struct InvoiceListItem {
     /// The method of the most recent payment, backing the list's payment
     /// method column.
     pub payment_method: Option<String>,
+    /// Goods receipt, separate from money: true once no order on the invoice
+    /// is still pending collection. Backs the list's collection filter.
+    pub received: bool,
     /// Gift card tender applied to this invoice. Not part of `amount_paid`:
     /// together they add up to `total_price` on a settled invoice.
     pub gift_card_redeemed: f64,

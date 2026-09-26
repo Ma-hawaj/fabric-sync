@@ -89,22 +89,27 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           </div>
         </div>
 
-        <Badge
-          variant={invoice.paymentStatus === 'paid' ? 'default' : 'outline'}
-          className="capitalize"
-        >
-          {invoice.paymentStatus === 'partial'
-            ? 'Partially paid'
-            : invoice.paymentStatus === 'paid'
-              ? 'Paid'
-              : 'Unpaid'}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge
+            variant={invoice.paymentStatus === 'paid' ? 'default' : 'outline'}
+            className="capitalize"
+          >
+            {invoice.paymentStatus === 'partial'
+              ? 'Partially paid'
+              : invoice.paymentStatus === 'paid'
+                ? 'Paid'
+                : 'Unpaid'}
+          </Badge>
+          <Badge variant={invoice.received ? 'default' : 'secondary'}>
+            {invoice.received ? 'Received' : 'Pending collection'}
+          </Badge>
+        </div>
 
         <div className="flex items-center gap-2">
           <ExportPdfButton invoiceId={invoice.id} />
           <Button
             variant="outline"
-            disabled={detail.payments.length > 0}
+            disabled={detail.payments.length > 0 || detail.received}
             onClick={() =>
               void navigate({
                 to: '/invoices/$invoiceId/edit',
@@ -374,6 +379,7 @@ function toInvoice(detail: InvoiceDetail): Invoice {
     balanceDue: detail.totals.balanceDue,
     paymentMethod: detail.paymentMethod,
     giftCardRedeemed: detail.totals.giftCardRedeemed,
+    received: detail.received,
   }
 }
 

@@ -22,4 +22,6 @@ export interface Invoice {
   balanceDue: number
   paymentMethod: PaymentType | null
   giftCardRedeemed: number
+  /** Goods receipt, separate from money: every order collected. */
+  received: boolean
 }

@@ -14,6 +14,7 @@ interface ReceivedInvoice {
   amountPaid: number
   balanceDue: number
   paymentMethod: PaymentType | null
+  received: boolean
 }
 
 async function receiveInvoice({

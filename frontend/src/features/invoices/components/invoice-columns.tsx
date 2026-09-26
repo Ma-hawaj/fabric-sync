@@ -182,6 +182,22 @@ export const getInvoiceColumns = (
     enableColumnFilter: false,
   },
   {
+    accessorKey: 'received',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Collected" />
+    ),
+    cell: ({ row }) => {
+      const received = row.getValue<boolean>('received')
+      return (
+        <Badge variant={received ? 'default' : 'secondary'}>
+          {received ? 'Received' : 'Pending'}
+        </Badge>
+      )
+    },
+    enableSorting: true,
+    enableColumnFilter: false,
+  },
+  {
     accessorKey: 'totalPrice',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Total Price" />

@@ -31,6 +31,7 @@ const DETAIL: InvoiceDetail = {
   buyer: null,
   paymentStatus: 'partial',
   paymentMethod: 'benefit',
+  received: false,
   lines: [
     {
       kind: 'order',
@@ -131,6 +132,25 @@ describe('InvoiceDetailPage', () => {
     expect(screen.queryByText('Payments')).toBeTruthy()
     expect(screen.queryByText('benefit')).toBeTruthy()
     expect(screen.queryByText('Advance')).toBeTruthy()
+  })
+
+  it('shows collection separately from payment and allows editing while neither has happened', () => {
+    renderPage({ ...DETAIL, payments: [], received: false })
+
+    expect(screen.queryByText('Pending collection')).toBeTruthy()
+    expect(screen.queryByText('Partially paid')).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
+    ).toBe(false)
+  })
+
+  it('marks a collected invoice received and disables editing', () => {
+    renderPage({ ...DETAIL, received: true })
+
+    expect(screen.queryByText('Received')).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
+    ).toBe(true)
   })
 
   it('waits for the line items rather than rendering an empty invoice', () => {

@@ -119,9 +119,11 @@ export function ReceiveInvoiceDialog({
             </div>
 
             <p className="text-sm text-muted-foreground">
-              {needsPayment
-                ? 'Marks every order on this invoice received and settles the remaining balance in full using the payment method below.'
-                : 'This invoice is already fully paid — this just collects every order on it.'}
+              {invoice.received
+                ? 'Every order on this invoice is already collected — this only settles the remaining balance.'
+                : needsPayment
+                  ? 'Marks every order on this invoice received and settles the remaining balance in full using the payment method below.'
+                  : 'This invoice is already fully paid — this just collects every order on it.'}
             </p>
 
             {needsPayment && (

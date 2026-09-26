@@ -72,6 +72,13 @@ pub async fn fetch_invoice_detail(
             pay.paid AS "amount_paid!",
             pay.status AS "payment_status!",
             method.payment_type AS "payment_method?",
+            -- Goods receipt is separate from money: true once no order on
+            -- the invoice is still pending collection. A retail-only invoice
+            -- has no orders, so there is nothing to collect.
+            NOT EXISTS(
+                SELECT 1 FROM orders o
+                WHERE o.invoice_id = i.id AND o.status <> 'received'
+            ) AS "received!",
             i.total_price::float8 AS "total_price!",
             i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
             -- The `?` suffixes are for sqlx: it reads nullability off the
@@ -255,6 +262,7 @@ pub async fn fetch_invoice_detail(
             total_price: invoice.total_price,
             amount_paid: invoice.amount_paid,
             payment_method: invoice.payment_method,
+            received: invoice.received,
             gift_card_redeemed: invoice.gift_card_redeemed,
         },
         lines,
@@ -283,6 +291,10 @@ const SPEC: ListSpec = ListSpec {
             pay.paid AS amount_paid,
             GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS balance_due,
             method.payment_type AS payment_method,
+            NOT EXISTS(
+                SELECT 1 FROM orders o
+                WHERE o.invoice_id = i.id AND o.status <> 'received'
+            ) AS received,
             i.gift_card_redeemed::float8 AS gift_card_redeemed,
             COALESCE(agg.item_count, 0) + COALESCE(items.item_count, 0) AS item_count,
             COALESCE(
@@ -395,6 +407,7 @@ const SPEC: ListSpec = ListSpec {
             "paymentMethod",
             ColumnDef::new("payment_method", ColumnKind::Text),
         ),
+        ("received", ColumnDef::new("received", ColumnKind::Bool)),
     ],
     default_order: "id DESC",
 };
