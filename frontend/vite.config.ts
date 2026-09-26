@@ -37,6 +37,24 @@ const config = defineConfig({
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
+      // Same-origin IdP in dev: `VITE_OIDC_AUTHORITY=<vite-origin>/application/o/<slug>/`
+      // sends the whole OIDC dance (discovery, authorize, token, userinfo,
+      // end-session) here instead of straight at Authentik's port. The path
+      // is passed through untouched — Authentik serves all of its OAuth2
+      // endpoints under `/application/o/`.
+      //
+      // `changeOrigin` stays off on purpose: Authentik builds the `iss`
+      // claim and its endpoint URLs from the request's Host header, and
+      // oidc-client-ts rejects tokens whose `iss` doesn't match the
+      // authority. Keeping the browser's Host lets Authentik mint URLs for
+      // the public origin, so discovery, issuer validation, and the auth
+      // code redirect all agree on one origin. Override the target with
+      // AUTHENTIK_URL=... when Authentik isn't on :9000.
+      '/application/o': {
+        target: process.env.AUTHENTIK_URL ?? 'http://localhost:9000',
+        changeOrigin: false,
+        secure: false,
+      },
     },
   },
 })
