@@ -195,8 +195,8 @@ CREATE TABLE order_stage_progress (
 --
 -- assignee_id is TEXT rather than a foreign key because there is no local
 -- user table yet (see features/users) — it is mocked pending real auth and a
--- Zitadel-backed directory. assignee_name is denormalized alongside it so a
--- past assignment still reads sensibly if that mock list ever changes.
+-- Authentik-backed directory. assignee_name is denormalized alongside it so a
+-- past assignment still reads sensibly if that directory ever changes.
 CREATE TABLE order_stage_assignments (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     order_id UUID NOT NULL REFERENCES orders(id),
