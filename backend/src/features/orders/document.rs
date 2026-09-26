@@ -650,6 +650,9 @@ mod tests {
         // against every field, so a malformed marker map fails right here.
         assert!(html.contains("واجهة الثوب"));
         assert!(html.contains("خلف الثوب"));
+        // The document is titled by the order's own readable number, not an
+        // id prefix.
+        assert!(html.contains("ORD-12"));
         // Recorded numeric values ride the captions, whole numbers trimmed,
         // each paired with its short diagram label.
         assert!(html.contains("120 inch · Front Length"));
@@ -712,7 +715,9 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
     use crate::features::orders::types::OrderListItem;
     OrderListItem {
         id: uuid::Uuid::nil(),
+        order_number: 12,
         invoice_id: uuid::Uuid::nil(),
+        invoice_number: 7,
         invoice_date: chrono::NaiveDate::from_ymd_opt(2026, 7, 30).unwrap(),
         measurement_id: uuid::Uuid::nil(),
         customer_name: "Ahmed".to_string(),

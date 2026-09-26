@@ -103,6 +103,9 @@ pub struct RepairRow {
 #[derive(Clone, Debug, sqlx::FromRow)]
 pub struct OrderRow {
     pub id: Uuid,
+    /// The tailor-quotable number (`ORD-###`), DB-assigned like
+    /// `invoices.invoice_number`.
+    pub order_number: i64,
     pub invoice_id: Uuid,
     pub invoice_number: i64,
     pub invoice_date: NaiveDate,
@@ -176,7 +179,13 @@ pub struct OrderRepair {
 #[serde(rename_all = "camelCase")]
 pub struct OrderListItem {
     pub id: Uuid,
+    /// The tailor-quotable number (`ORD-###`), DB-assigned like
+    /// `invoices.invoice_number`. A bare number here; consumers prefix it.
+    pub order_number: i64,
     pub invoice_id: Uuid,
+    /// The parent invoice's number, carried on the list row so the orders
+    /// table can show both numbers without a second lookup.
+    pub invoice_number: i64,
     pub invoice_date: NaiveDate,
     pub measurement_id: Uuid,
     pub customer_name: String,

@@ -25,12 +25,6 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: CURRENCY,
 })
 
-// Invoice ids are uuidv7 — time-ordered, so the short prefix still sorts by
-// creation and is unique enough to identify an invoice at a glance.
-function shortId(id: string) {
-  return id.slice(0, 8).toUpperCase()
-}
-
 export function OrderDetailPage({ orderId }: { orderId: string }) {
   const { data: order, isLoading, isError } = useOrder(orderId)
   const [repairOrderId, setRepairOrderId] = React.useState<string | null>(null)
@@ -72,14 +66,14 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight">
-                Order INV-{order.invoiceNumber}
+                Order ORD-{order.orderNumber}
               </h1>
               <p className="text-muted-foreground">
                 {order.customerName}
                 {' · '}
                 {new Date(order.invoiceDate).toLocaleDateString()}
                 {' · '}
-                <span className="font-mono">{shortId(order.id)}</span>
+                <span className="font-mono">INV-{order.invoiceNumber}</span>
               </p>
             </div>
           </div>
