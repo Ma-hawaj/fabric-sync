@@ -46,6 +46,49 @@ export function stageBadgeVariant(
   return 'outline'
 }
 
+/**
+ * Why a stage can't be acted on right now, or null when it can. Mirrors the
+ * backend's sequence rule: a pending stage waits on every earlier applicable
+ * stage, and a recorded stage can only be reopened once every later
+ * applicable stage is pending again. Stages that don't apply are transparent
+ * to the chain in both directions.
+ */
+export function stageLockedReason(
+  stages: OrderStageEntry[],
+  stageId: string,
+): string | null {
+  const ordered = [...stages].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+  )
+  const pos = ordered.findIndex((stage) => stage.stageId === stageId)
+  if (pos === -1) return null
+  const target = ordered[pos]
+  if (!target.applicable) return null
+
+  // A pending stage only waits on its predecessors — deliberately no
+  // successor check, so a gap left by older data can still be filled in.
+  if (target.status === 'pending') {
+    const blocker = ordered
+      .slice(0, pos)
+      .find((stage) => stage.applicable && stage.status === 'pending')
+    return blocker ? `Complete "${blocker.name}" first.` : null
+  }
+
+  // A recorded stage (reopen or re-record) waits on its successors.
+  const later = ordered
+    .slice(pos + 1)
+    .find((stage) => stage.applicable && stage.status !== 'pending')
+  return later ? `Undo "${later.name}" first.` : null
+}
+
+/** Whether a stage's Done/Skip/Undo actions are currently unavailable. */
+export function isStageLocked(
+  stages: OrderStageEntry[],
+  stageId: string,
+): boolean {
+  return stageLockedReason(stages, stageId) !== null
+}
+
 export function stageStatusLabel(entry: OrderStageEntry): string {
   if (!entry.applicable) return 'Not needed'
   if (entry.status === 'done') return 'Done'
