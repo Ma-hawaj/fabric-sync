@@ -159,7 +159,10 @@ export function createEmptyInvoiceForm(): InvoiceFormValues {
     productBranch: '',
     discount: '',
     discountUnit: 'amount',
-    payments: [],
+    // One blank row, like the old single advance: an untouched blank is
+    // tolerated by the schema and dropped by the payload, so an unpaid
+    // invoice submits no payments.
+    payments: [createEmptyPayment()],
     customers: [createEmptyCustomer()],
     products: [],
     giftCards: [],
