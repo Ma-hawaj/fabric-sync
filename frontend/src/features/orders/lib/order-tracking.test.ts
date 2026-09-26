@@ -62,12 +62,12 @@ function order(overrides: Partial<Order>): Order {
     stages: [],
     currentStage: null,
     repairs: [],
-    invoiceTotalPrice: 954.5,
+    invoiceTotalPrice: 830,
     invoiceAmountPaid: 0,
     invoicePaymentStatus: 'unpaid',
-    invoiceAdvanceAmount: 0,
-    invoiceAdvancePaymentType: null,
-    invoiceFinalPaymentType: null,
+    invoiceBalanceDue: 830,
+    invoiceGiftCardRedeemed: 0,
+    invoicePaymentMethod: null,
     ...overrides,
   }
 }

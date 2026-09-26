@@ -209,18 +209,25 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
     }),
   )
 
+  // An editable invoice carries no payments by definition (the backend
+  // refuses the edit otherwise), so this maps back empty — it is here so a
+  // future ledger-bearing edit shape keeps flowing into the form's input.
+  const payments = edit.payments.map((payment) => ({
+    key: crypto.randomUUID(),
+    amount: payment.amount,
+    paymentType: payment.paymentType ?? '',
+  }))
+
   const values: InvoiceFormValues = {
     date: edit.date,
     receivingBranch: edit.branchId ?? '',
     customerId: edit.customerId ?? '',
     productBranch,
-    // A zero discount or advance reads as blank, the way a fresh form does —
-    // the payload maps blanks back to zero on save.
+    // A zero discount reads as blank, the way a fresh form does — the payload
+    // maps blanks back to zero on save.
     discount: edit.discount === 0 ? '' : edit.discount,
     discountUnit: edit.discountUnit,
-    paymentStatus: edit.paymentStatus,
-    amountPaid: edit.amountPaid === 0 ? '' : edit.amountPaid,
-    paymentType: edit.paymentType ?? '',
+    payments,
     customers,
     products,
     giftCards,

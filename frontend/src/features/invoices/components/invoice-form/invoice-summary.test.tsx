@@ -11,6 +11,7 @@ import {
   createEmptyGiftCardLine,
   createEmptyInvoiceForm,
   createEmptyOrder,
+  createEmptyPayment,
   createEmptyProductLine,
   createEmptyRedemption,
 } from '../../types/invoice-form'
@@ -94,6 +95,11 @@ function customerWithOrder(price: number) {
   }
 }
 
+// An up-front payment row at the given amount.
+function payment(amount: number) {
+  return { ...createEmptyPayment(), amount, paymentType: 'cash' as const }
+}
+
 // Finds the amount next to a labeled row (e.g. "Subtotal", "Total") rather
 // than matching the amount text directly, since a single-order invoice's
 // line item and subtotal can render the same amount.
@@ -101,20 +107,22 @@ function rowValue(label: string) {
   return screen.getByText(label).closest('div')!.textContent.replace(label, '')
 }
 
+// Line prices are gross (VAT included): a 90 order holds 81.82 of net and
+// 8.18 of VAT, and the total is the 90 quoted — never 90 plus tax.
 describe('InvoiceSummary', () => {
-  it('computes subtotal, VAT, and total from order line items', () => {
+  it('extracts VAT from order line items instead of adding it', () => {
     render(
       <Harness
         defaultValues={baseValues({ customers: [customerWithOrder(90)] })}
       />,
     )
 
-    expect(rowValue('Subtotal')).toBe(`${CURRENCY} 90.00`)
-    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 9.00`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 99.00`)
+    expect(rowValue('Subtotal (incl. VAT)')).toBe(`${CURRENCY} 90.00`)
+    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 8.18`)
+    expect(rowValue('Total')).toBe(`${CURRENCY} 90.00`)
   })
 
-  it('applies a flat CURRENCY discount before computing VAT', () => {
+  it('applies a flat CURRENCY discount to the gross before extracting VAT', () => {
     render(
       <Harness
         defaultValues={baseValues({
@@ -125,12 +133,12 @@ describe('InvoiceSummary', () => {
       />,
     )
 
-    // taxable = 90 - 10 = 80, vat = 8, total = 88
-    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 8.00`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 88.00`)
+    // gross = 90 - 10 = 80, net 72.73, vat 7.27, total 80
+    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 7.27`)
+    expect(rowValue('Total')).toBe(`${CURRENCY} 80.00`)
   })
 
-  it('applies a percentage discount before computing VAT', () => {
+  it('applies a percentage discount to the gross before extracting VAT', () => {
     render(
       <Harness
         defaultValues={baseValues({
@@ -141,17 +149,17 @@ describe('InvoiceSummary', () => {
       />,
     )
 
-    // taxable = 90 - 9 = 81, vat = 8.10, total = 89.10
-    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 8.10`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 89.10`)
+    // gross = 90 - 9 = 81, net 73.64, vat 7.36, total 81
+    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 7.36`)
+    expect(rowValue('Total')).toBe(`${CURRENCY} 81.00`)
   })
 
-  it('computes balance due as total minus amount paid, never negative', () => {
+  it('computes balance due as total minus payments, never negative', () => {
     render(
       <Harness
         defaultValues={baseValues({
-          customers: [customerWithOrder(90)], // total 99.00
-          amountPaid: 200,
+          customers: [customerWithOrder(90)], // total 90.00
+          payments: [payment(200)],
         })}
       />,
     )
@@ -170,12 +178,12 @@ describe('InvoiceSummary', () => {
       target: { value: '20' },
     })
 
-    // taxable = 70, vat = 7, total = 77
-    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 7.00`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 77.00`)
+    // gross = 70, net 63.64, vat 6.36, total 70
+    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 6.36`)
+    expect(rowValue('Total')).toBe(`${CURRENCY} 70.00`)
   })
 
-  it('multiplies a product line out and taxes it with the orders', () => {
+  it('multiplies a product line out and shares the gross subtotal', () => {
     render(
       <Harness
         defaultValues={baseValues({
@@ -185,10 +193,10 @@ describe('InvoiceSummary', () => {
       />,
     )
 
-    // 90 + (3 × 20) = 150, vat = 15, total = 165
-    expect(rowValue('Subtotal')).toBe(`${CURRENCY} 150.00`)
-    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 15.00`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 165.00`)
+    // 90 + (3 × 20) = 150 gross, net 136.36, vat 13.64
+    expect(rowValue('Subtotal (incl. VAT)')).toBe(`${CURRENCY} 150.00`)
+    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 13.64`)
+    expect(rowValue('Total')).toBe(`${CURRENCY} 150.00`)
   })
 
   it('adds a gift card sale to the total without taxing it', () => {
@@ -204,9 +212,9 @@ describe('InvoiceSummary', () => {
     )
 
     // The card's 200 is outside the VAT base entirely.
-    expect(rowValue('Subtotal')).toBe(`${CURRENCY} 100.00`)
-    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 10.00`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 310.00`)
+    expect(rowValue('Subtotal (incl. VAT)')).toBe(`${CURRENCY} 100.00`)
+    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 9.09`)
+    expect(rowValue('Total')).toBe(`${CURRENCY} 300.00`)
   })
 
   it('keeps a percentage discount off gift card sales', () => {
@@ -223,35 +231,35 @@ describe('InvoiceSummary', () => {
       />,
     )
 
-    // 10% comes off the 100 of goods only: 90 × 1.10 = 99, plus 200
-    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 9.00`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 299.00`)
+    // 10% comes off the 100 of gross goods only: 90, plus 200
+    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 8.18`)
+    expect(rowValue('Total')).toBe(`${CURRENCY} 290.00`)
   })
 
-  it('nets a redemption off the balance due without changing the total', () => {
+  it('nets tender off the balance due without changing the total', () => {
     render(
       <Harness
         defaultValues={baseValues({
-          customers: [customerWithOrder(90)], // total 99.00
+          customers: [customerWithOrder(90)], // total 90.00
           redemptions: [
             { ...createEmptyRedemption(), code: 'GC-1', amount: 50 },
           ],
-          amountPaid: 20,
+          payments: [payment(20)],
         })}
       />,
     )
 
-    expect(rowValue('Total')).toBe(`${CURRENCY} 99.00`)
+    expect(rowValue('Total')).toBe(`${CURRENCY} 90.00`)
     expect(rowValue('Gift Card Redeemed')).toBe(`−${CURRENCY} 50.00`)
-    // 99 - 50 - 20 = 29
-    expect(rowValue('Balance Due')).toBe(`${CURRENCY} 29.00`)
+    // 90 - 50 - 20 = 20
+    expect(rowValue('Balance Due')).toBe(`${CURRENCY} 20.00`)
   })
 
   it('never redeems more than the invoice total', () => {
     render(
       <Harness
         defaultValues={baseValues({
-          customers: [customerWithOrder(90)], // total 99.00
+          customers: [customerWithOrder(90)], // total 90.00
           redemptions: [
             { ...createEmptyRedemption(), code: 'GC-1', amount: 500 },
           ],
@@ -259,7 +267,7 @@ describe('InvoiceSummary', () => {
       />,
     )
 
-    expect(rowValue('Gift Card Redeemed')).toBe(`−${CURRENCY} 99.00`)
+    expect(rowValue('Gift Card Redeemed')).toBe(`−${CURRENCY} 90.00`)
     expect(rowValue('Balance Due')).toBe(`${CURRENCY} 0.00`)
   })
 })

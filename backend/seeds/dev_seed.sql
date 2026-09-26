@@ -95,24 +95,37 @@ INSERT INTO measurements (
 
 -- One invoice per payment state, plus one of each discount unit and a
 -- product-only sale that names its buyer directly (no orders to reach a
--- customer through). Totals are VAT-inclusive: 15% applied after the discount.
+-- customer through). Line prices are VAT-inclusive (10% inside the gross),
+-- so the totals below are the discounted gross, not gross-plus-tax:
+-- 830 goods -> 830.00; 1420 less 100 -> 1320.00; 1200 less 10% -> 1080.00;
+-- 1050 -> 1050.00; 1400 -> 1400.00; retail 90 + a 500 card -> 590.00.
 INSERT INTO invoices (
     id, total_price, invoice_date, branch_id, discount, discount_unit,
-    payment_status, amount_paid, advance_amount, advance_payment_type,
-    final_payment_type, customer_id, gift_card_redeemed
+    customer_id, gift_card_redeemed
 ) VALUES
-    -- 830 goods, no discount -> 954.50, nothing paid yet
-    ('019a0000-0008-7000-8000-000000000001',  954.50, CURRENT_DATE - 12, '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  'unpaid',     0.00,    0.00, NULL,      NULL,   NULL, 0.00),
-    -- 1420 goods less a 100 discount -> 1518.00, 500 advance taken in cash
-    ('019a0000-0008-7000-8000-000000000002', 1518.00, CURRENT_DATE - 10, '019a0000-0001-7000-8000-000000000002', 100.00, 'amount',  'partial',  500.00,  500.00, 'cash',    NULL,   NULL, 0.00),
-    -- 1200 goods less 10% -> 1242.00, settled: 400 advance then the balance on card
-    ('019a0000-0008-7000-8000-000000000003', 1242.00, CURRENT_DATE - 30, '019a0000-0001-7000-8000-000000000001',  10.00, 'percent', 'paid',    1242.00,  400.00, 'benefit', 'card', NULL, 0.00),
-    -- 1050 goods -> 1207.50, 300 advance on card
-    ('019a0000-0008-7000-8000-000000000004', 1207.50, CURRENT_DATE - 6,  '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  'partial',  300.00,  300.00, 'card',    NULL,   NULL, 0.00),
-    -- 1400 goods -> 1610.00, part-settled with a gift card rather than a payment
-    ('019a0000-0008-7000-8000-000000000005', 1610.00, CURRENT_DATE - 3,  '019a0000-0001-7000-8000-000000000002',   0.00, 'amount',  'partial',    0.00,    0.00, NULL,      NULL,   NULL, 200.00),
-    -- Retail only: 90 of goods -> 103.50, plus a 500 gift card sold at face value
-    ('019a0000-0008-7000-8000-000000000006',  603.50, CURRENT_DATE - 1,  '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  'paid',     603.50,    0.00, NULL,      'cash', '019a0000-0002-7000-8000-000000000006', 0.00);
+    -- 830 goods, no discount -> 830.00, nothing paid yet
+    ('019a0000-0008-7000-8000-000000000001',  830.00, CURRENT_DATE - 12, '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  NULL, 0.00),
+    -- 1420 goods less a 100 discount -> 1320.00, 500 advance taken in cash
+    ('019a0000-0008-7000-8000-000000000002', 1320.00, CURRENT_DATE - 10, '019a0000-0001-7000-8000-000000000002', 100.00, 'amount',  NULL, 0.00),
+    -- 1200 goods less 10% -> 1080.00, settled: 400 advance then the balance on card
+    ('019a0000-0008-7000-8000-000000000003', 1080.00, CURRENT_DATE - 30, '019a0000-0001-7000-8000-000000000001',  10.00, 'percent', NULL, 0.00),
+    -- 1050 goods -> 1050.00, 300 advance on card
+    ('019a0000-0008-7000-8000-000000000004', 1050.00, CURRENT_DATE - 6,  '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  NULL, 0.00),
+    -- 1400 goods -> 1400.00, part-settled with a gift card rather than a payment
+    ('019a0000-0008-7000-8000-000000000005', 1400.00, CURRENT_DATE - 3,  '019a0000-0001-7000-8000-000000000002',   0.00, 'amount',  NULL, 200.00),
+    -- Retail only: 90 of goods, plus a 500 gift card sold at face value
+    ('019a0000-0008-7000-8000-000000000006',  590.00, CURRENT_DATE - 1,  '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  '019a0000-0002-7000-8000-000000000006', 0.00);
+
+-- Every payment lives in the ledger: advances at creation, the balance when
+-- an invoice settles. Invoice 01 has none (unpaid), 02 and 04 carry one
+-- advance each (partial), 03 and 06 are settled in full (paid), and 05 is
+-- part-settled by gift card tender rather than a payment.
+INSERT INTO invoice_payments (id, invoice_id, order_id, amount, payment_type, paid_at) VALUES
+    ('019a0000-000e-7000-8000-000000000001', '019a0000-0008-7000-8000-000000000002', NULL, 500.00, 'cash',    CURRENT_DATE - 10),
+    ('019a0000-000e-7000-8000-000000000002', '019a0000-0008-7000-8000-000000000003', NULL, 400.00, 'benefit', CURRENT_DATE - 30),
+    ('019a0000-000e-7000-8000-000000000003', '019a0000-0008-7000-8000-000000000003', NULL, 680.00, 'card',    CURRENT_DATE - 20),
+    ('019a0000-000e-7000-8000-000000000004', '019a0000-0008-7000-8000-000000000004', NULL, 300.00, 'card',    CURRENT_DATE - 6),
+    ('019a0000-000e-7000-8000-000000000005', '019a0000-0008-7000-8000-000000000006', NULL, 590.00, 'cash',    CURRENT_DATE - 1);
 
 -- production_branch_id is Central Workshop on most orders — a different
 -- location from where the customer collects, so the delivery stage applies.

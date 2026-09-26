@@ -4,14 +4,17 @@ import type { PaymentType } from '../types/invoices'
 
 interface ReceiveInvoiceInput {
   invoiceId: string
-  paymentType: PaymentType
+  /** Omitted when nothing is left to pay — collecting a paid invoice takes no money. */
+  paymentType: PaymentType | null
 }
 
 interface ReceivedInvoice {
   id: string
   paymentStatus: string
   amountPaid: number
-  finalPaymentType: PaymentType | null
+  balanceDue: number
+  paymentMethod: PaymentType | null
+  received: boolean
 }
 
 async function receiveInvoice({

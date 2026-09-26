@@ -7,7 +7,7 @@ import { CURRENCY } from '@/lib/currency'
 import type { Invoice, PaymentStatus } from '../types/invoices'
 
 const paymentTypeLabels: Record<
-  NonNullable<Invoice['finalPaymentType']>,
+  NonNullable<Invoice['paymentMethod']>,
   string
 > = {
   benefit: 'Benefit',
@@ -168,14 +168,31 @@ export const getInvoiceColumns = (
   },
   {
     id: 'paymentMethod',
-    accessorFn: (invoice) =>
-      invoice.finalPaymentType ?? invoice.advancePaymentType,
+    // The most recent payment's method, worked out server-side from the
+    // ledger.
+    accessorFn: (invoice) => invoice.paymentMethod,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Payment Method" />
     ),
     cell: ({ row }) => {
-      const type = row.getValue<Invoice['finalPaymentType']>('paymentMethod')
+      const type = row.getValue<Invoice['paymentMethod']>('paymentMethod')
       return <div>{type ? paymentTypeLabels[type] : '—'}</div>
+    },
+    enableSorting: true,
+    enableColumnFilter: false,
+  },
+  {
+    accessorKey: 'received',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Collected" />
+    ),
+    cell: ({ row }) => {
+      const received = row.getValue<boolean>('received')
+      return (
+        <Badge variant={received ? 'default' : 'secondary'}>
+          {received ? 'Received' : 'Pending'}
+        </Badge>
+      )
     },
     enableSorting: true,
     enableColumnFilter: false,
@@ -205,7 +222,6 @@ export const getInvoiceColumns = (
     enablePinning: true,
     cell: ({ row }) => {
       const invoice = row.original
-      const isPaid = invoice.paymentStatus === 'paid'
       return (
         <RowActions
           items={[
@@ -220,18 +236,19 @@ export const getInvoiceColumns = (
               onClick: () => onExportPdf(invoice),
             },
             {
-              // Paid invoices are settled history: the backend refuses to
-              // rebuild them, so the action is disabled rather than failing
-              // on save.
+              // Money taken is settled history: the backend refuses to
+              // rebuild an invoice with payments, so the action is disabled
+              // rather than failing on save.
               label: 'Edit',
               icon: PencilIcon,
-              disabled: isPaid,
+              disabled: invoice.amountPaid > 0,
               onClick: () => onEdit(invoice),
             },
             {
-              label: isPaid ? 'Received' : 'Mark Received',
+              // Always available: on a paid invoice this just collects the
+              // orders without taking money.
+              label: 'Mark Received',
               icon: CheckIcon,
-              disabled: isPaid,
               onClick: () => onReceive(invoice),
               separatorBefore: true,
             },

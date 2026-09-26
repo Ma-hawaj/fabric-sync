@@ -15,11 +15,15 @@ import type { Location } from '@/features/locations/types/location'
 import { ORDER_RECEIVING_FILTERS } from '@/features/locations/lib/location-filters'
 import type { Product } from '@/features/products/types/product'
 import { CURRENCY } from '@/lib/currency'
+import { PlusIcon, XIcon } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   computeGiftCardLineTotal,
+  computeInvoiceTotals,
   computeOrderLineTotal,
   computeProductLineTotal,
   computeRedemptionTotal,
+  VAT_RATE,
 } from '../../lib/invoice-pricing'
 import type {
   DiscountUnit,
@@ -28,17 +32,16 @@ import type {
   InvoiceFormApi,
   InvoiceGiftCardDraft,
   InvoiceProductDraft,
-  PaymentStatus,
+  PaymentDraft,
   PaymentType,
 } from '../../types/invoice-form'
+import { createEmptyPayment } from '../../types/invoice-form'
 
 const PAYMENT_TYPE_OPTIONS: { value: PaymentType; label: string }[] = [
   { value: 'benefit', label: 'Benefit' },
   { value: 'cash', label: 'Cash' },
   { value: 'card', label: 'Card' },
 ]
-
-const VAT_RATE = 0.1
 
 function customerDisplayName(
   draft: InvoiceCustomerDraft,
@@ -244,7 +247,9 @@ export function InvoiceSummary({
               <Separator />
 
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
+                <span className="text-muted-foreground">
+                  Subtotal (incl. VAT)
+                </span>
                 <span>
                   {CURRENCY} {subtotal.toFixed(2)}
                 </span>
@@ -276,50 +281,51 @@ export function InvoiceSummary({
                 selector={(state: any) => [
                   state.values.discount,
                   state.values.discountUnit,
-                  state.values.amountPaid,
+                  state.values.payments,
                   state.values.redemptions,
                 ]}
               >
                 {(subscribed: any) => {
-                  const [discount, discountUnit, amountPaid, redemptions] =
+                  const [discount, discountUnit, payments, redemptions] =
                     subscribed as [
                       number | '',
                       DiscountUnit,
-                      number | '',
+                      PaymentDraft[],
                       GiftCardRedemptionDraft[],
                     ]
-                  const discountValue = discount === '' ? 0 : discount
-                  const discountAmount =
-                    discountUnit === 'percent'
-                      ? subtotal * (discountValue / 100)
-                      : discountValue
-                  const taxable = Math.max(subtotal - discountAmount, 0)
-                  const vat = taxable * VAT_RATE
-                  // Selling stored value is not a taxable supply — VAT is
-                  // charged when the card is spent — so a card's face value
-                  // joins the total after the tax is worked out. Keep this in
-                  // step with VAT_RATE and compute_totals in the Rust service.
-                  const total = taxable + vat + giftCardSales
-                  // A card is tender, not a discount: it settles the invoice
-                  // rather than reducing what the sale was worth, and can
-                  // never pay out more than the total.
-                  const redeemed = Math.min(
-                    redemptions.reduce(
+                  // Line prices are gross (VAT included): the discount comes
+                  // off the gross and VAT is extracted from it — the shared
+                  // computeInvoiceTotals keeps this in step with the backend's
+                  // breakdown.
+                  const totals = computeInvoiceTotals({
+                    orderTotal: subtotal,
+                    productTotal: 0,
+                    giftCardSales,
+                    discount: discount === '' ? 0 : discount,
+                    discountUnit,
+                    redeemed: redemptions.reduce(
                       (sum, redemption) =>
                         sum + computeRedemptionTotal(redemption),
                       0,
                     ),
-                    total,
-                  )
-                  const paid = amountPaid === '' ? 0 : amountPaid
-                  const balanceDue = Math.max(total - redeemed - paid, 0)
+                    paid: payments.reduce(
+                      (sum, payment) =>
+                        sum +
+                        (payment.amount === ''
+                          ? 0
+                          : Math.max(payment.amount, 0)),
+                      0,
+                    ),
+                  })
 
                   return (
                     <>
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">VAT (10%)</span>
+                        <span className="text-muted-foreground">
+                          VAT ({Math.round(VAT_RATE * 100)}%, incl.)
+                        </span>
                         <span>
-                          {CURRENCY} {vat.toFixed(2)}
+                          {CURRENCY} {totals.vat.toFixed(2)}
                         </span>
                       </div>
                       {giftCardRows.map((row) => (
@@ -337,100 +343,124 @@ export function InvoiceSummary({
                       <div className="flex justify-between font-semibold">
                         <span>Total</span>
                         <span>
-                          {CURRENCY} {total.toFixed(2)}
+                          {CURRENCY} {totals.total.toFixed(2)}
                         </span>
                       </div>
-                      {redeemed > 0 && (
+                      {totals.redeemed > 0 && (
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">
                             Gift Card Redeemed
                           </span>
                           <span>
-                            −{CURRENCY} {redeemed.toFixed(2)}
+                            −{CURRENCY} {totals.redeemed.toFixed(2)}
                           </span>
                         </div>
                       )}
 
-                      <div className="grid gap-4 sm:grid-cols-2 pt-2">
-                        <form.Field name={'paymentStatus' as never}>
-                          {(field: any) => (
-                            <div className="space-y-1">
-                              <Label htmlFor={field.name}>Payment Status</Label>
-                              <Select
-                                items={[
-                                  { value: 'unpaid', label: 'Unpaid' },
-                                  { value: 'partial', label: 'Partial' },
-                                  { value: 'paid', label: 'Paid' },
-                                ]}
-                                value={field.state.value}
-                                onValueChange={(value: PaymentStatus) =>
-                                  field.handleChange(value)
-                                }
-                              >
-                                <SelectTrigger
-                                  id={field.name}
-                                  className="w-full"
-                                >
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="unpaid">Unpaid</SelectItem>
-                                  <SelectItem value="partial">
-                                    Partial
-                                  </SelectItem>
-                                  <SelectItem value="paid">Paid</SelectItem>
-                                </SelectContent>
-                              </Select>
+                      {/* Payments taken up front with the invoice. Later ones
+                          go through the receive endpoints or a till payment,
+                          so this list is usually empty or a single advance. */}
+                      <form.Field name={'payments' as never}>
+                        {(paymentsField: any) => (
+                          <div className="space-y-2 pt-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">
+                                Payments
+                              </span>
+                              {totals.paid > 0 && (
+                                <span className="text-sm text-muted-foreground">
+                                  {CURRENCY} {totals.paid.toFixed(2)} paid
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </form.Field>
-                        <NumberField
-                          form={form}
-                          name="amountPaid"
-                          label="Amount Paid"
-                        />
-                      </div>
-
-                      {paid > 0 && (
-                        <form.Field name={'paymentType' as never}>
-                          {(field: any) => (
-                            <div className="space-y-1">
-                              <Label htmlFor={field.name}>
-                                Advance Payment Method
-                              </Label>
-                              <Select
-                                items={PAYMENT_TYPE_OPTIONS}
-                                value={field.state.value}
-                                onValueChange={(value: PaymentType) =>
-                                  field.handleChange(value)
-                                }
-                              >
-                                <SelectTrigger
-                                  id={field.name}
-                                  className="w-full"
+                            {paymentsField.state.value.map(
+                              (payment: PaymentDraft, index: number) => (
+                                <div
+                                  key={payment.key}
+                                  className="flex items-end gap-2"
                                 >
-                                  <SelectValue placeholder="Select payment method..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {PAYMENT_TYPE_OPTIONS.map((option) => (
-                                    <SelectItem
-                                      key={option.value}
-                                      value={option.value}
-                                    >
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )}
-                        </form.Field>
-                      )}
+                                  <div className="flex-1">
+                                    <NumberField
+                                      form={form}
+                                      name={`payments[${index}].amount`}
+                                      label={index === 0 ? 'Amount' : ''}
+                                    />
+                                  </div>
+                                  <form.Field
+                                    name={
+                                      `payments[${index}].paymentType` as never
+                                    }
+                                  >
+                                    {(methodField: any) => (
+                                      <div className="w-36 space-y-1">
+                                        {index === 0 && (
+                                          <Label htmlFor={methodField.name}>
+                                            Method
+                                          </Label>
+                                        )}
+                                        <Select
+                                          items={PAYMENT_TYPE_OPTIONS}
+                                          value={methodField.state.value}
+                                          onValueChange={(value: PaymentType) =>
+                                            methodField.handleChange(value)
+                                          }
+                                        >
+                                          <SelectTrigger
+                                            id={methodField.name}
+                                            className="w-full"
+                                          >
+                                            <SelectValue placeholder="Method..." />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {PAYMENT_TYPE_OPTIONS.map(
+                                              (option) => (
+                                                <SelectItem
+                                                  key={option.value}
+                                                  value={option.value}
+                                                >
+                                                  {option.label}
+                                                </SelectItem>
+                                              ),
+                                            )}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    )}
+                                  </form.Field>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    type="button"
+                                    onClick={() =>
+                                      paymentsField.removeValue(index)
+                                    }
+                                    aria-label="Remove payment"
+                                  >
+                                    <XIcon className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              ),
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              type="button"
+                              onClick={() =>
+                                paymentsField.pushValue(createEmptyPayment())
+                              }
+                              className="w-full border-dashed"
+                            >
+                              <PlusIcon className="h-3.5 w-3.5" />
+                              Add Payment
+                            </Button>
+                          </div>
+                        )}
+                      </form.Field>
 
                       <div className="flex justify-between font-semibold pt-1">
                         <span>Balance Due</span>
                         <span>
-                          {CURRENCY} {balanceDue.toFixed(2)}
+                          {CURRENCY} {totals.balanceDue.toFixed(2)}
                         </span>
                       </div>
                     </>

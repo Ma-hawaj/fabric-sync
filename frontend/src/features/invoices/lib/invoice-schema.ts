@@ -1,5 +1,12 @@
 import { z } from 'zod'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
+import {
+  computeGiftCardLineTotal,
+  computeInvoiceTotals,
+  computeOrderLineTotal,
+  computeProductLineTotal,
+  computeRedemptionTotal,
+} from './invoice-pricing'
 
 // A blank string means "not entered yet" — mirrors NumberInput in
 // types/invoice-form.ts.
@@ -172,6 +179,33 @@ const redemptionDraftSchema = z
     }
   })
 
+// One payment taken up front with the invoice. The amount has to be positive
+// and the method named — a row with neither is an untouched blank the form
+// tolerates until it is filled or removed.
+const paymentDraftSchema = z
+  .object({
+    key: z.string(),
+    amount: numberInputSchema,
+    paymentType: z.enum(['benefit', 'cash', 'card', '']),
+  })
+  .superRefine((payment, ctx) => {
+    if (payment.amount === '' && !payment.paymentType) return
+    if (payment.amount === '' || payment.amount <= 0) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter an amount greater than 0.',
+        path: ['amount'],
+      })
+    }
+    if (!payment.paymentType) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick how this payment was made.',
+        path: ['paymentType'],
+      })
+    }
+  })
+
 export const invoiceFormSchema = z
   .object({
     date: z.string(),
@@ -180,23 +214,13 @@ export const invoiceFormSchema = z
     productBranch: z.string(),
     discount: numberInputSchema,
     discountUnit: z.enum(['amount', 'percent']),
-    paymentStatus: z.enum(['unpaid', 'partial', 'paid']),
-    amountPaid: numberInputSchema,
-    paymentType: z.enum(['benefit', 'cash', 'card', '']),
+    payments: z.array(paymentDraftSchema),
     customers: customersArraySchema,
     products: z.array(productLineDraftSchema),
     giftCards: z.array(giftCardLineDraftSchema),
     redemptions: z.array(redemptionDraftSchema),
   })
   .superRefine((value, ctx) => {
-    if (value.amountPaid !== '' && value.amountPaid > 0 && !value.paymentType) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Pick how the advance payment was made.',
-        path: ['paymentType'],
-      })
-    }
-
     const hasOrders = value.customers.some(
       (customer) => customer.orders.length > 0,
     )
@@ -231,4 +255,46 @@ export const invoiceFormSchema = z
         path: ['redemptions', index, 'code'],
       })
     })
+
+    // Up-front payments are capped at what the invoice charges — the same
+    // rule the backend enforces. Recomputed here from the drafts with the
+    // shared pricing math so the form and the server can't disagree.
+    const orderTotal = value.customers.reduce(
+      (sum, customer) =>
+        sum +
+        customer.orders.reduce(
+          (s, order) => s + computeOrderLineTotal(order),
+          0,
+        ),
+      0,
+    )
+    const totals = computeInvoiceTotals({
+      orderTotal,
+      productTotal: value.products.reduce(
+        (sum, line) => sum + computeProductLineTotal(line),
+        0,
+      ),
+      giftCardSales: value.giftCards.reduce(
+        (sum, line) => sum + computeGiftCardLineTotal(line),
+        0,
+      ),
+      discount: value.discount === '' ? 0 : value.discount,
+      discountUnit: value.discountUnit,
+      redeemed: value.redemptions.reduce(
+        (sum, redemption) => sum + computeRedemptionTotal(redemption),
+        0,
+      ),
+      paid: value.payments.reduce(
+        (sum, payment) =>
+          sum + (payment.amount === '' ? 0 : Math.max(payment.amount, 0)),
+        0,
+      ),
+    })
+    if (totals.paid - (totals.total - totals.redeemed) > 1e-9) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Payments cover more than the invoice total.',
+        path: ['payments'],
+      })
+    }
   })

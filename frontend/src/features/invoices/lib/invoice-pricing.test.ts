@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   computeGiftCardLineTotal,
+  computeInvoiceTotals,
   computeOrderLineTotal,
   computeProductLineTotal,
+  extractNet,
+  extractVat,
 } from './invoice-pricing'
 import {
   createEmptyGiftCardLine,
@@ -65,6 +68,44 @@ describe('computeProductLineTotal', () => {
         unitPrice: -5,
       }),
     ).toBe(0)
+  })
+})
+
+describe('extractNet / extractVat', () => {
+  it('splits a gross figure so net and VAT add back to it', () => {
+    expect(extractNet(100)).toBe(90.91)
+    expect(extractVat(100)).toBe(9.09)
+    expect(extractNet(100) + extractVat(100)).toBe(100)
+  })
+})
+
+describe('computeInvoiceTotals', () => {
+  const base = {
+    orderTotal: 100,
+    productTotal: 100,
+    giftCardSales: 0,
+    discount: 0,
+    discountUnit: 'amount' as const,
+    redeemed: 0,
+    paid: 0,
+  }
+
+  it('charges the gross with VAT extracted, not added', () => {
+    const totals = computeInvoiceTotals(base)
+    expect(totals.total).toBe(200)
+    expect(totals.taxable).toBe(181.82)
+    expect(totals.vat).toBe(18.18)
+  })
+
+  it('takes the discount off the gross before extracting VAT', () => {
+    const totals = computeInvoiceTotals({ ...base, discount: 20 })
+    expect(totals.total).toBe(180)
+    expect(totals.taxable + totals.vat).toBeCloseTo(180, 2)
+  })
+
+  it('nets tender off the balance due', () => {
+    const totals = computeInvoiceTotals({ ...base, redeemed: 50, paid: 60 })
+    expect(totals.balanceDue).toBe(90)
   })
 })
 

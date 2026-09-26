@@ -7,9 +7,9 @@ export interface InvoiceCustomer {
 }
 
 // Shape of GET /invoices — one row per invoice, with its customers and
-// material names aggregated. An invoice is settled in up to two payments —
-// an advance taken at creation and a final payment when the order is
-// received — each with its own payment method.
+// material names aggregated. An invoice is settled through any number of
+// payments (the ledger); `amountPaid` is their sum and `paymentMethod` the
+// most recent one's method.
 export interface Invoice {
   id: string
   date: string
@@ -19,7 +19,9 @@ export interface Invoice {
   totalPrice: number
   paymentStatus: PaymentStatus
   amountPaid: number
-  advanceAmount: number
-  advancePaymentType: PaymentType | null
-  finalPaymentType: PaymentType | null
+  balanceDue: number
+  paymentMethod: PaymentType | null
+  giftCardRedeemed: number
+  /** Goods receipt, separate from money: every order collected. */
+  received: boolean
 }

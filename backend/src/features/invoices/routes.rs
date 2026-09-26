@@ -24,4 +24,8 @@ pub fn router() -> Router<AppState> {
         // be handed later.
         .route("/invoices/:id/document", get(handlers::invoice_document))
         .route("/invoices/:id/receive", post(handlers::receive_invoice))
+        // A till payment taken without collecting anything — an extra advance
+        // or the remainder after everything was collected. Separate from
+        // receive because no order changes state.
+        .route("/invoices/:id/payments", post(handlers::record_payment))
 }

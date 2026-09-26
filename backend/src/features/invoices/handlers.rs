@@ -16,7 +16,7 @@ use super::{
     document, service,
     types::{
         CreateInvoiceInput, CreatedInvoice, InvoiceDetail, InvoiceEdit, InvoiceListItem,
-        ReceiveInvoiceInput, ReceivedInvoice,
+        ReceiveInvoiceInput, ReceivedInvoice, RecordPaymentInput, RecordedPayment,
     },
 };
 
@@ -90,5 +90,25 @@ pub async fn receive_invoice(
 ) -> Result<Json<ReceivedInvoice>, AppError> {
     Ok(Json(
         service::receive_invoice(&state, invoice_id, input.payment_type).await?,
+    ))
+}
+
+/// A till payment: money taken without collecting anything. See
+/// service::record_payment.
+pub async fn record_payment(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(invoice_id): Path<Uuid>,
+    Json(input): Json<RecordPaymentInput>,
+) -> Result<Json<RecordedPayment>, AppError> {
+    Ok(Json(
+        service::record_payment(
+            &state,
+            invoice_id,
+            input.amount,
+            input.payment_type,
+            input.order_id,
+        )
+        .await?,
     ))
 }

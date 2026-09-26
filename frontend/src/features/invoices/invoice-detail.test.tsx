@@ -30,9 +30,8 @@ const DETAIL: InvoiceDetail = {
   branchName: 'Manama Main Branch',
   buyer: null,
   paymentStatus: 'partial',
-  advanceAmount: 60,
-  advancePaymentType: 'benefit',
-  finalPaymentType: null,
+  paymentMethod: 'benefit',
+  received: false,
   lines: [
     {
       kind: 'order',
@@ -60,19 +59,28 @@ const DETAIL: InvoiceDetail = {
     },
   ],
   redemptions: [],
+  payments: [
+    {
+      id: 'pay-1',
+      amount: 60,
+      paymentType: 'benefit',
+      paidAt: '2026-07-28T09:35:00Z',
+      orderId: null,
+    },
+  ],
   totals: {
     subtotal: 100,
     discount: 0,
     discountUnit: 'amount',
     discountAmount: 0,
-    taxable: 100,
+    taxable: 90.91,
     vatRate: 0.1,
-    vat: 10,
+    vat: 9.09,
     giftCardSales: 200,
-    total: 310,
+    total: 300,
     giftCardRedeemed: 0,
     amountPaid: 60,
-    balanceDue: 250,
+    balanceDue: 240,
   },
 }
 
@@ -116,6 +124,33 @@ describe('InvoiceDetailPage', () => {
     expect(screen.queryByText('VAT (10%)')).toBeTruthy()
     expect(screen.queryByText('Gift cards sold')).toBeTruthy()
     expect(screen.queryByText('Balance due')).toBeTruthy()
+  })
+
+  it('lists the payment history with method and amount', () => {
+    renderPage(DETAIL)
+
+    expect(screen.queryByText('Payments')).toBeTruthy()
+    expect(screen.queryByText('benefit')).toBeTruthy()
+    expect(screen.queryByText('Advance')).toBeTruthy()
+  })
+
+  it('shows collection separately from payment and allows editing while neither has happened', () => {
+    renderPage({ ...DETAIL, payments: [], received: false })
+
+    expect(screen.queryByText('Pending collection')).toBeTruthy()
+    expect(screen.queryByText('Partially paid')).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
+    ).toBe(false)
+  })
+
+  it('marks a collected invoice received and disables editing', () => {
+    renderPage({ ...DETAIL, received: true })
+
+    expect(screen.queryByText('Received')).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
+    ).toBe(true)
   })
 
   it('waits for the line items rather than rendering an empty invoice', () => {

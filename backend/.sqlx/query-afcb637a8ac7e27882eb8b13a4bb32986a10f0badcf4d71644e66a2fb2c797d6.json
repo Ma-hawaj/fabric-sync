@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE orders\n        SET status = 'received', received_at = now()\n        WHERE invoice_id = $1 AND status <> 'received'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "afcb637a8ac7e27882eb8b13a4bb32986a10f0badcf4d71644e66a2fb2c797d6"
+}
