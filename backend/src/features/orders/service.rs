@@ -311,6 +311,7 @@ fn assemble_order(
         invoice_amount_paid: row.invoice_amount_paid,
         invoice_payment_status: row.invoice_payment_status,
         invoice_balance_due: row.invoice_balance_due,
+        invoice_gift_card_redeemed: row.invoice_gift_card_redeemed,
         invoice_payment_method: row.invoice_payment_method,
     }
 }

@@ -70,6 +70,7 @@ const ORDER: OrderDetail = {
   invoiceAmountPaid: 120,
   invoicePaymentStatus: 'partial',
   invoiceBalanceDue: 180,
+  invoiceGiftCardRedeemed: 0,
   invoicePaymentMethod: 'benefit',
   measurement: {
     id: 'm-1',

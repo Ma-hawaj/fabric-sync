@@ -733,6 +733,7 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         invoice_amount_paid: 120.0,
         invoice_payment_status: "partial".to_string(),
         invoice_balance_due: 180.0,
+        invoice_gift_card_redeemed: 0.0,
         invoice_payment_method: None,
     }
 }

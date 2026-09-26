@@ -100,6 +100,8 @@ export interface Order {
   invoiceAmountPaid: number
   invoicePaymentStatus: InvoicePaymentStatus
   invoiceBalanceDue: number
+  /** Gift card tender on the invoice — settled alongside ledger payments. */
+  invoiceGiftCardRedeemed: number
   invoicePaymentMethod: PaymentType | null
 }
 

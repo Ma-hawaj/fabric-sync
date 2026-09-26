@@ -118,6 +118,16 @@ export function ReceiveOrderDialog({
                 <span className="text-muted-foreground">Invoice Total</span>
                 <span>{currencyFormatter.format(order.invoiceTotalPrice)}</span>
               </div>
+              {order.invoiceGiftCardRedeemed > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Paid by gift card
+                  </span>
+                  <span>
+                    {currencyFormatter.format(order.invoiceGiftCardRedeemed)}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Already Paid</span>
                 <span>{currencyFormatter.format(order.invoiceAmountPaid)}</span>

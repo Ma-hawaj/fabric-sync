@@ -50,6 +50,7 @@ const SPEC: ListSpec = ListSpec {
             i.total_price::float8 AS invoice_total_price,
             pay.paid AS invoice_amount_paid,
             pay.status AS invoice_payment_status,
+            i.gift_card_redeemed::float8 AS invoice_gift_card_redeemed,
             -- Unlike the list page's own balance, this one nets off gift
             -- card tender too — it is what the receive dialog collects.
             GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS invoice_balance_due,

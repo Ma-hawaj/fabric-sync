@@ -125,6 +125,10 @@ pub struct OrderRow {
     pub invoice_amount_paid: f64,
     pub invoice_payment_status: String,
     pub invoice_balance_due: f64,
+    /// Gift card tender on the invoice: settled alongside payments, so the
+    /// receive dialog shows it rather than leaving a gap between the total
+    /// and what was paid.
+    pub invoice_gift_card_redeemed: f64,
     /// The method of the invoice's most recent payment, if any.
     pub invoice_payment_method: Option<String>,
 }
@@ -217,6 +221,10 @@ pub struct OrderListItem {
     pub invoice_amount_paid: f64,
     pub invoice_payment_status: String,
     pub invoice_balance_due: f64,
+    /// Gift card tender on the invoice: settled alongside payments, so the
+    /// receive dialog shows it rather than leaving a gap between the total
+    /// and what was paid.
+    pub invoice_gift_card_redeemed: f64,
     /// The method of the invoice's most recent payment, if any.
     pub invoice_payment_method: Option<String>,
 }

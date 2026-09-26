@@ -66,6 +66,7 @@ function order(overrides: Partial<Order>): Order {
     invoiceAmountPaid: 0,
     invoicePaymentStatus: 'unpaid',
     invoiceBalanceDue: 830,
+    invoiceGiftCardRedeemed: 0,
     invoicePaymentMethod: null,
     ...overrides,
   }
