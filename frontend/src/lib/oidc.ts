@@ -15,7 +15,7 @@ export function oidcConfigError(): string | null {
   return null
 }
 
-// Generic/OIDC-standard env vars — swapping the IdP (Zitadel locally,
+// Generic/OIDC-standard env vars — swapping the IdP (Authentik locally,
 // Keycloak, etc.) is a config change only, nothing here is provider-specific.
 export const oidcUserManager = new UserManager({
   authority: import.meta.env.VITE_OIDC_AUTHORITY,
@@ -28,9 +28,9 @@ export const oidcUserManager = new UserManager({
   scope: import.meta.env.VITE_OIDC_SCOPE ?? 'openid profile email',
   // oidc-client-ts defaults this to false, so `profile` would otherwise only
   // reflect whatever claims the IdP chose to embed in the ID token itself
-  // (Zitadel, notably, omits name/email there by default) rather than
-  // calling the standard OIDC userinfo endpoint for the scopes requested
-  // above — which is what actually populates the sidebar's user name.
+  // rather than calling the standard OIDC userinfo endpoint for the scopes
+  // requested above — which is what actually populates the sidebar's user
+  // name.
   loadUserInfo: true,
   // sessionStorage (not localStorage): token lifetime is tab-scoped, cleared
   // on tab close.

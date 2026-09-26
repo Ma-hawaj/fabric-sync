@@ -19,11 +19,20 @@ const config = defineConfig({
     setupFiles: ['./src/vitest-setup.ts'],
   },
   server: {
+    // Bind all interfaces so the dev server answers on the Tailscale
+    // hostname too, not just localhost (allowedHosts below only permits
+    // the host — it doesn't bind it).
+    host: true,
     allowedHosts: ['mahawaj.cow-carat.ts.net'],
     proxy: {
-      // Advanced configuration with path rewriting
+      // Same-origin API in dev: `VITE_API_BASE_URL=/api` sends every
+      // apiClient call here, and the rewrite strips the prefix so the
+      // backend sees its bare routes (`/api/orders` -> `/orders`). Keeps
+      // frontend and backend on one origin, so there are no CORS
+      // preflights. Override with BACKEND_URL=... when the backend isn't
+      // on :8000.
       '/api': {
-        target: 'http://localhost:8000',
+        target: process.env.BACKEND_URL ?? 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, ''),

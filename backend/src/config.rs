@@ -36,13 +36,18 @@ pub struct Config {
     pub oauth_client_secret: Option<String>,
     pub oauth_introspection_url: Option<String>,
     pub oauth_resource_audience: Option<String>,
-    /// Credentials for a dedicated Zitadel machine user used only to back
-    /// `GET /users` (see `features::users::zitadel`) — separate from
-    /// `oauth_client_id`/`oauth_client_secret` above, which authenticate an
-    /// API resource-server credential with no grantable directory-read
-    /// permission of its own. `None` unless both are set.
-    pub zitadel_users_client_id: Option<String>,
-    pub zitadel_users_client_secret: Option<String>,
+    /// Base URL of the Authentik instance backing `GET /users` (the server
+    /// root, e.g. `http://localhost:9000` — not the per-provider OIDC issuer
+    /// URL, which lives under `/application/o/<slug>/`). Separate from
+    /// `oauth_issuer_url` because Authentik's admin API and OIDC discovery
+    /// live at different paths. Unset means the local default below.
+    pub authentik_base_url: String,
+    /// Static API token for an Authentik service account that may list users,
+    /// used only to back `GET /users` (see `features::users::authentik`) —
+    /// separate from `oauth_client_id`/`oauth_client_secret` above, which
+    /// authenticate the confidential OAuth2 provider used only for
+    /// introspecting end-user tokens. `None` unless set.
+    pub authentik_api_token: Option<String>,
     /// Loads `seeds/dev_seed.sql` at startup. Off unless explicitly enabled,
     /// and the seed itself refuses to run against a database that already has
     /// data — see `seed::run`.
@@ -98,8 +103,11 @@ impl Config {
             .ok();
         let oauth_introspection_url = env::var("OAUTH_INTROSPECTION_URL").ok();
         let oauth_resource_audience = env::var("OAUTH_RESOURCE_AUDIENCE").ok();
-        let zitadel_users_client_id = env::var("ZITADEL_USERS_CLIENT_ID").ok();
-        let zitadel_users_client_secret = env::var("ZITADEL_USERS_CLIENT_SECRET").ok();
+        let authentik_base_url = env::var("AUTHENTIK_BASE_URL")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "http://localhost:9000".to_string());
+        let authentik_api_token = env::var("AUTHENTIK_API_TOKEN").ok();
         let seed_dev_data = env::var("SEED_DEV_DATA")
             .map(|value| value == "true" || value == "1")
             .unwrap_or(false);
@@ -112,8 +120,8 @@ impl Config {
             oauth_client_secret,
             oauth_introspection_url,
             oauth_resource_audience,
-            zitadel_users_client_id,
-            zitadel_users_client_secret,
+            authentik_base_url,
+            authentik_api_token,
             seed_dev_data,
             invoice_branding: InvoiceBranding::from_env(),
         }
