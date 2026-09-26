@@ -13,18 +13,18 @@ export function InvoiceEditPage({ invoiceId }: { invoiceId: string }) {
     [edit],
   )
 
-  if (isLoading || !mapped) {
+  if (isError) {
     return (
-      <div className="text-center text-sm text-muted-foreground">
-        Loading invoice...
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center text-sm text-destructive">
+        Could not load this invoice for editing.
       </div>
     )
   }
 
-  if (isError || !edit) {
+  if (isLoading || !mapped || !edit) {
     return (
-      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center text-sm text-destructive">
-        Could not load this invoice for editing.
+      <div className="text-center text-sm text-muted-foreground">
+        Loading invoice...
       </div>
     )
   }
