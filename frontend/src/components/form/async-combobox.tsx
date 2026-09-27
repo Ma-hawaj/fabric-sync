@@ -204,7 +204,6 @@ export function AsyncCombobox<T>({
       items={options}
       filteredItems={options}
       value={selectedOption}
-      defaultInputValue=""
       onValueChange={handleValueChange}
       isItemEqualToValue={(a, b) => a.value === b.value}
       onInputValueChange={handleInputValueChange}
