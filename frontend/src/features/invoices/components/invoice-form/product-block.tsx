@@ -11,6 +11,7 @@ import {
 import type { Product } from '@/features/products/types/product'
 import type { PickerFilter } from '@/lib/async-combobox'
 import { CURRENCY } from '@/lib/currency'
+import { GrossVatHint } from './gross-vat-hint'
 import type { InvoiceFormApi } from '../../types/invoice-form'
 
 // Products come off the shelf only while they are on sale. A single search
@@ -26,6 +27,10 @@ interface ProductBlockProps {
   lineIndex: number
   /** The picked row, so the summary can label this line. */
   onProductPicked: (product: Product | null) => void
+  /** The row behind a stored id on an edit form, before anything is re-picked. */
+  initialProductForId?: (id: string) => Product | null
+  /** The label for a stored id whose row isn't loaded yet (edit forms). */
+  productLabelForId?: (id: string) => string | null
   /** The location stock comes off, used to show what is actually available. */
   branchId: string
   branchName: string
@@ -36,6 +41,8 @@ export function ProductBlock({
   form,
   lineIndex,
   onProductPicked,
+  initialProductForId,
+  productLabelForId,
   branchId,
   branchName,
   onRemove,
@@ -43,8 +50,16 @@ export function ProductBlock({
   const base = `products[${lineIndex}]`
   // The row behind the stored `productId`, remembered from the picker, so both
   // the availability hint and the price prefill have the full product without
-  // having downloaded the whole catalog.
-  const [picked, setPicked] = React.useState<Product | null>(null)
+  // having downloaded the whole catalog. On an edit form it starts seeded
+  // from the loaded invoice.
+  const storedProductId = (
+    form.state.values as unknown as {
+      products?: { productId?: string }[]
+    }
+  ).products?.[lineIndex]?.productId
+  const [picked, setPicked] = React.useState<Product | null>(() =>
+    storedProductId ? (initialProductForId?.(storedProductId) ?? null) : null,
+  )
 
   return (
     <div className="flex items-start gap-3">
@@ -68,6 +83,7 @@ export function ProductBlock({
                   value: product.id,
                   label: productOptionLabel(product),
                 })}
+                getValueLabel={productLabelForId}
                 value={field.state.value || null}
                 onValueChange={(id) => field.handleChange(id ?? '')}
                 onSelectRow={(product) => {
@@ -102,8 +118,26 @@ export function ProductBlock({
         <NumberField
           form={form}
           name={`${base}.unitPrice`}
-          label={`Unit Price (${CURRENCY})`}
+          label={`Unit Price, incl. VAT (${CURRENCY})`}
         />
+        {/* The unit price is gross — the hint splits the line's total into
+            net and VAT so staff see both while pricing. */}
+        <form.Subscribe
+          selector={(state: any) => {
+            const line = (
+              state.values.products as
+                | { quantity?: number | ''; unitPrice?: number | '' }[]
+                | undefined
+            )?.[lineIndex]
+            const quantity =
+              typeof line?.quantity === 'number' ? line.quantity : 0
+            const unitPrice =
+              typeof line?.unitPrice === 'number' ? line.unitPrice : 0
+            return quantity > 0 && unitPrice > 0 ? quantity * unitPrice : ''
+          }}
+        >
+          {(lineTotal: number | '') => <GrossVatHint gross={lineTotal} />}
+        </form.Subscribe>
       </div>
 
       <Button

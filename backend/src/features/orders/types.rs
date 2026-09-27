@@ -103,6 +103,9 @@ pub struct RepairRow {
 #[derive(Clone, Debug, sqlx::FromRow)]
 pub struct OrderRow {
     pub id: Uuid,
+    /// The tailor-quotable number (`ORD-###`), DB-assigned like
+    /// `invoices.invoice_number`.
+    pub order_number: i64,
     pub invoice_id: Uuid,
     pub invoice_number: i64,
     pub invoice_date: NaiveDate,
@@ -121,9 +124,13 @@ pub struct OrderRow {
     pub invoice_total_price: f64,
     pub invoice_amount_paid: f64,
     pub invoice_payment_status: String,
-    pub invoice_advance_amount: f64,
-    pub invoice_advance_payment_type: Option<String>,
-    pub invoice_final_payment_type: Option<String>,
+    pub invoice_balance_due: f64,
+    /// Gift card tender on the invoice: settled alongside payments, so the
+    /// receive dialog shows it rather than leaving a gap between the total
+    /// and what was paid.
+    pub invoice_gift_card_redeemed: f64,
+    /// The method of the invoice's most recent payment, if any.
+    pub invoice_payment_method: Option<String>,
 }
 
 /// One entry of an assembled checklist: a stage from the catalog plus whatever
@@ -176,7 +183,13 @@ pub struct OrderRepair {
 #[serde(rename_all = "camelCase")]
 pub struct OrderListItem {
     pub id: Uuid,
+    /// The tailor-quotable number (`ORD-###`), DB-assigned like
+    /// `invoices.invoice_number`. A bare number here; consumers prefix it.
+    pub order_number: i64,
     pub invoice_id: Uuid,
+    /// The parent invoice's number, carried on the list row so the orders
+    /// table can show both numbers without a second lookup.
+    pub invoice_number: i64,
     pub invoice_date: NaiveDate,
     pub measurement_id: Uuid,
     pub customer_name: String,
@@ -207,9 +220,13 @@ pub struct OrderListItem {
     pub invoice_total_price: f64,
     pub invoice_amount_paid: f64,
     pub invoice_payment_status: String,
-    pub invoice_advance_amount: f64,
-    pub invoice_advance_payment_type: Option<String>,
-    pub invoice_final_payment_type: Option<String>,
+    pub invoice_balance_due: f64,
+    /// Gift card tender on the invoice: settled alongside payments, so the
+    /// receive dialog shows it rather than leaving a gap between the total
+    /// and what was paid.
+    pub invoice_gift_card_redeemed: f64,
+    /// The method of the invoice's most recent payment, if any.
+    pub invoice_payment_method: Option<String>,
 }
 
 /// One order, everything the list row carries plus the details a standalone
@@ -224,12 +241,18 @@ pub struct OrderDetail {
     pub measurement: Measurement,
 }
 
-/// Body for `POST /orders/:id/receive` — the payment method used for the
-/// final payment that settles the invoice's remaining balance.
+/// Body for `POST /orders/:id/receive` — marks the order collected and records
+/// the payment taken at that pickup. `amount` may be zero (collect with no
+/// money); when it is positive a `payment_type` is required. The invoice is
+/// settled in full only once every order on it is received *and* the balance
+/// reaches zero — see `receive_order`.
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReceiveOrderInput {
-    pub payment_type: PaymentType,
+    #[serde(default)]
+    pub amount: f64,
+    #[serde(default)]
+    pub payment_type: Option<PaymentType>,
 }
 
 /// Only the production location is editable on an order; everything else is

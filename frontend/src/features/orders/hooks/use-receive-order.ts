@@ -4,14 +4,19 @@ import type { Order, PaymentType } from '../types/orders'
 
 interface ReceiveOrderInput {
   orderId: string
-  paymentType: PaymentType
+  /** Collected at this pickup; zero collects with no money. */
+  amount: number
+  /** Required whenever the amount is greater than zero. */
+  paymentType: PaymentType | null
 }
 
 async function receiveOrder({
   orderId,
+  amount,
   paymentType,
 }: ReceiveOrderInput): Promise<Order> {
   const { data } = await apiClient.post<Order>(`/orders/${orderId}/receive`, {
+    amount,
     paymentType,
   })
   return data
@@ -23,10 +28,10 @@ export function useReceiveOrder() {
   return useMutation({
     mutationFn: receiveOrder,
     onSuccess: () => {
-      // Receiving one order can flip the invoice's payment status for every
-      // other order sharing it (once all are received), so refetch the whole
-      // list rather than patching just this row.
+      // A pickup records a payment against the shared invoice, so the
+      // invoice list is stale too — not just this order's row.
       void queryClient.invalidateQueries({ queryKey: ['orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
     },
   })
 }

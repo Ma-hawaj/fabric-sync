@@ -7,10 +7,12 @@ use crate::{
 };
 
 use super::types::{
-    CreateInvoiceInput, CreateOrderInput, CreateProductLineInput, InvoiceDetailLine,
-    InvoiceLineKind, InvoiceListItem, InvoiceParty, InvoiceRecord, InvoiceRedemptionLine,
-    OrderDesignValues, PaymentType, ReceivedInvoice,
+    CreateInvoiceInput, CreateOrderInput, CreateProductLineInput, InvoiceDetailLine, InvoiceEdit,
+    InvoiceEditCustomer, InvoiceEditGiftCardLine, InvoiceEditOrder, InvoiceEditProductLine,
+    InvoiceEditRedemption, InvoiceLineKind, InvoiceListItem, InvoiceParty, InvoicePayment,
+    InvoiceRecord, InvoiceRedemptionLine, OrderDesignValues,
 };
+use crate::features::customers::types::CreateMeasurementInput;
 
 /// Everything `GET /invoices/:id` reads, before the totals are worked out.
 pub struct InvoiceDetailRows {
@@ -63,12 +65,21 @@ pub async fn fetch_invoice_detail(
             i.created_at,
             i.discount::float8 AS "discount!",
             i.discount_unit,
-            i.payment_status,
+            -- Money state is derived from the ledger: the table stores only
+            -- the total, so the paid sum, the status and the latest method
+            -- are worked out here. The NUMERIC arithmetic stays exact —
+            -- nothing is rounded until the service layer.
+            pay.paid AS "amount_paid!",
+            pay.status AS "payment_status!",
+            method.payment_type AS "payment_method?",
+            -- Goods receipt is separate from money: true once no order on
+            -- the invoice is still pending collection. A retail-only invoice
+            -- has no orders, so there is nothing to collect.
+            NOT EXISTS(
+                SELECT 1 FROM orders o
+                WHERE o.invoice_id = i.id AND o.status <> 'received'
+            ) AS "received!",
             i.total_price::float8 AS "total_price!",
-            i.amount_paid::float8 AS "amount_paid!",
-            i.advance_amount::float8 AS "advance_amount!",
-            i.advance_payment_type,
-            i.final_payment_type,
             i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
             -- The `?` suffixes are for sqlx: it reads nullability off the
             -- column definition, which says NOT NULL, and can't see that a
@@ -79,6 +90,27 @@ pub async fn fetch_invoice_detail(
         FROM invoices i
         LEFT JOIN branch b ON b.id = i.branch_id
         LEFT JOIN customers c ON c.id = i.customer_id
+        LEFT JOIN LATERAL (
+            SELECT
+                COALESCE(SUM(amount), 0)::float8 AS paid,
+                CASE
+                    WHEN GREATEST(
+                        i.total_price - i.gift_card_redeemed - COALESCE(SUM(amount), 0),
+                        0
+                    ) = 0 THEN 'paid'
+                    WHEN COALESCE(SUM(amount), 0) = 0 THEN 'unpaid'
+                    ELSE 'partial'
+                END AS status
+            FROM invoice_payments
+            WHERE invoice_id = i.id
+        ) pay ON true
+        LEFT JOIN LATERAL (
+            SELECT payment_type
+            FROM invoice_payments
+            WHERE invoice_id = i.id
+            ORDER BY paid_at DESC, id DESC
+            LIMIT 1
+        ) method ON true
         WHERE i.id = $1
         "#,
         invoice_id,
@@ -229,9 +261,8 @@ pub async fn fetch_invoice_detail(
             payment_status: invoice.payment_status,
             total_price: invoice.total_price,
             amount_paid: invoice.amount_paid,
-            advance_amount: invoice.advance_amount,
-            advance_payment_type: invoice.advance_payment_type,
-            final_payment_type: invoice.final_payment_type,
+            payment_method: invoice.payment_method,
+            received: invoice.received,
             gift_card_redeemed: invoice.gift_card_redeemed,
         },
         lines,
@@ -255,14 +286,16 @@ const SPEC: ListSpec = ListSpec {
         SELECT
             i.id,
             i.invoice_date,
-            i.payment_status,
+            pay.status AS payment_status,
             i.total_price::float8 AS total_price,
-            i.amount_paid::float8 AS amount_paid,
-            i.advance_amount::float8 AS advance_amount,
-            i.advance_payment_type,
-            i.final_payment_type,
+            pay.paid AS amount_paid,
+            GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS balance_due,
+            method.payment_type AS payment_method,
+            NOT EXISTS(
+                SELECT 1 FROM orders o
+                WHERE o.invoice_id = i.id AND o.status <> 'received'
+            ) AS received,
             i.gift_card_redeemed::float8 AS gift_card_redeemed,
-            COALESCE(i.final_payment_type, i.advance_payment_type) AS payment_method,
             COALESCE(agg.item_count, 0) + COALESCE(items.item_count, 0) AS item_count,
             COALESCE(
                 agg.customers,
@@ -314,6 +347,30 @@ const SPEC: ListSpec = ListSpec {
         -- Falls back to the invoice's own customer when there are no orders to
         -- derive one from, which is the case for a pure retail sale.
         LEFT JOIN customers ic ON ic.id = i.customer_id
+        -- The money state, derived from the ledger like in
+        -- fetch_invoice_detail above: the paid sum, the status, and the most
+        -- recent payment's method.
+        LEFT JOIN LATERAL (
+            SELECT
+                COALESCE(SUM(amount), 0)::float8 AS paid,
+                CASE
+                    WHEN GREATEST(
+                        i.total_price - i.gift_card_redeemed - COALESCE(SUM(amount), 0),
+                        0
+                    ) = 0 THEN 'paid'
+                    WHEN COALESCE(SUM(amount), 0) = 0 THEN 'unpaid'
+                    ELSE 'partial'
+                END AS status
+            FROM invoice_payments
+            WHERE invoice_id = i.id
+        ) pay ON true
+        LEFT JOIN LATERAL (
+            SELECT payment_type
+            FROM invoice_payments
+            WHERE invoice_id = i.id
+            ORDER BY paid_at DESC, id DESC
+            LIMIT 1
+        ) method ON true
     "#,
     columns: &[
         ("id", ColumnDef::new("id", ColumnKind::Uuid)),
@@ -350,6 +407,7 @@ const SPEC: ListSpec = ListSpec {
             "paymentMethod",
             ColumnDef::new("payment_method", ColumnKind::Text),
         ),
+        ("received", ColumnDef::new("received", ColumnKind::Bool)),
     ],
     default_order: "id DESC",
 };
@@ -371,13 +429,10 @@ pub async fn insert_invoice(
         r#"
         INSERT INTO invoices (
             invoice_date, branch_id, discount, discount_unit,
-            payment_status, amount_paid, total_price,
-            advance_amount, advance_payment_type,
-            customer_id, gift_card_redeemed
+            total_price, customer_id, gift_card_redeemed
         )
         VALUES (
-            $1, $2, $3::float8, $4, $5, $6::float8, $7::float8,
-            $6::float8, $8, $9, $10::float8
+            $1, $2, $3::float8, $4, $5::float8, $6, $7::float8
         )
         RETURNING id
         "#,
@@ -385,10 +440,7 @@ pub async fn insert_invoice(
         input.branch_id,
         input.discount,
         input.discount_unit.as_str(),
-        input.payment_status.as_str(),
-        input.amount_paid,
         total_price,
-        input.payment_type.map(PaymentType::as_str),
         input.customer_id,
         gift_card_redeemed,
     )
@@ -396,50 +448,172 @@ pub async fn insert_invoice(
     .await
 }
 
-/// Marks every order on the invoice received and settles the remaining
-/// balance in full, recording how that final payment was made. Returns
-/// `None` if the invoice doesn't exist.
-///
-/// The balance settled is `total_price - gift_card_redeemed`, not the whole
-/// total: a gift card already paid its share at invoice time, so charging it
-/// again here would overstate what was actually collected.
-pub async fn receive_invoice(
+/// The invoice's totals with the row locked, so a payment validated against
+/// them cannot be interleaved with another one. `None` when the invoice
+/// doesn't exist.
+pub struct LockedInvoiceTotals {
+    pub total_price: f64,
+    pub gift_card_redeemed: f64,
+}
+
+pub async fn lock_invoice(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
-    final_payment_type: PaymentType,
-) -> Result<Option<ReceivedInvoice>, sqlx::Error> {
+) -> Result<Option<LockedInvoiceTotals>, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        SELECT total_price::float8 AS "total_price!", gift_card_redeemed::float8 AS "gift_card_redeemed!"
+        FROM invoices
+        WHERE id = $1
+        FOR UPDATE
+        "#,
+        invoice_id,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    Ok(row.map(|row| LockedInvoiceTotals {
+        total_price: row.total_price,
+        gift_card_redeemed: row.gift_card_redeemed,
+    }))
+}
+
+/// What the ledger holds for this invoice so far. Read inside the same
+/// transaction (and after the lock above) so the caller validates against a
+/// sum no concurrent payment can move.
+pub async fn sum_payments(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<f64, sqlx::Error> {
+    Ok(sqlx::query_scalar!(
+        r#"
+        SELECT COALESCE(SUM(amount), 0)::float8 AS "paid!"
+        FROM invoice_payments
+        WHERE invoice_id = $1
+        "#,
+        invoice_id,
+    )
+    .fetch_one(&mut **tx)
+    .await?)
+}
+
+/// Records one payment. Callers validate the amount against the remaining
+/// balance first — see service::validate_payment_amount.
+pub async fn insert_payment(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    order_id: Option<Uuid>,
+    amount: f64,
+    payment_type: Option<&str>,
+) -> Result<InvoicePayment, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        INSERT INTO invoice_payments (invoice_id, order_id, amount, payment_type)
+        VALUES ($1, $2, $3::float8, $4)
+        RETURNING id, amount::float8 AS "amount!", payment_type, paid_at, order_id
+        "#,
+        invoice_id,
+        order_id,
+        amount,
+        payment_type,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+
+    Ok(InvoicePayment {
+        id: row.id,
+        amount: row.amount,
+        payment_type: row.payment_type,
+        paid_at: row.paid_at,
+        order_id: row.order_id,
+    })
+}
+
+/// Every payment on the invoice, oldest first — the history the detail page
+/// and the printed document read.
+pub async fn list_payments(
+    state: &AppState,
+    invoice_id: Uuid,
+) -> Result<Vec<InvoicePayment>, sqlx::Error> {
+    sqlx::query_as!(
+        InvoicePayment,
+        r#"
+        SELECT id, amount::float8 AS "amount!", payment_type, paid_at, order_id
+        FROM invoice_payments
+        WHERE invoice_id = $1
+        ORDER BY paid_at, id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(state.db())
+    .await
+}
+
+/// The most recent payment's method, for header displays. `None` when nothing
+/// has been paid yet — or when the latest payment recorded no method.
+pub async fn latest_payment_method(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Option<String>, sqlx::Error> {
+    let method = sqlx::query_scalar!(
+        r#"
+        SELECT payment_type
+        FROM invoice_payments
+        WHERE invoice_id = $1
+        ORDER BY paid_at DESC, id DESC
+        LIMIT 1
+        "#,
+        invoice_id,
+    )
+    .fetch_optional(&mut **tx)
+    .await?
+    .flatten();
+
+    Ok(method)
+}
+
+/// Guards the payment endpoint: a pickup payment attributed to an order of
+/// another invoice must not land here.
+pub async fn order_belongs_to_invoice(
+    tx: &mut sqlx::PgTransaction<'_>,
+    order_id: Uuid,
+    invoice_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM orders
+            WHERE id = $1 AND invoice_id = $2
+        ) AS "exists!"
+        "#,
+        order_id,
+        invoice_id,
+    )
+    .fetch_one(&mut **tx)
+    .await?)
+}
+
+/// Marks every still-pending order on the invoice received. Already-received
+/// rows are left alone — re-stamping their `received_at` would rewrite when
+/// they were actually collected, which matters once settlement can land after
+/// collection (see service::receive_invoice). The money is settled separately
+/// by the caller inserting a balancing payment.
+pub async fn mark_orders_received(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         UPDATE orders
         SET status = 'received', received_at = now()
-        WHERE invoice_id = $1
+        WHERE invoice_id = $1 AND status <> 'received'
         "#,
         invoice_id,
     )
     .execute(&mut **tx)
     .await?;
 
-    let row = sqlx::query!(
-        r#"
-        UPDATE invoices
-        SET amount_paid = total_price - gift_card_redeemed,
-            payment_status = 'paid',
-            final_payment_type = $2
-        WHERE id = $1
-        RETURNING id, payment_status, amount_paid::float8 AS "amount_paid!", final_payment_type
-        "#,
-        invoice_id,
-        final_payment_type.as_str(),
-    )
-    .fetch_optional(&mut **tx)
-    .await?;
-
-    Ok(row.map(|row| ReceivedInvoice {
-        id: row.id,
-        payment_status: row.payment_status,
-        amount_paid: row.amount_paid,
-        final_payment_type: row.final_payment_type,
-    }))
+    Ok(())
 }
 
 pub async fn insert_order(
@@ -526,6 +700,691 @@ pub async fn insert_gift_card_item(
         gift_card_id,
         description,
         amount,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+/// Old tailoring lines, for restoring the material they consumed.
+pub struct OldOrderLine {
+    pub material_id: Uuid,
+    pub production_branch_id: Option<Uuid>,
+    pub material_amount: f64,
+}
+
+/// Old retail lines, for restoring the product stock they consumed.
+pub struct OldProductLine {
+    pub product_id: Option<Uuid>,
+    pub branch_id: Option<Uuid>,
+    pub quantity: f64,
+}
+
+/// A gift card this invoice sold, with the row to delete if the edit drops it.
+pub struct OldGiftCardSale {
+    pub gift_card_id: Uuid,
+    pub code: String,
+}
+
+/// Gift card tender this invoice spent, for paying the balance back.
+pub struct OldRedemption {
+    pub gift_card_id: Uuid,
+    pub amount: f64,
+}
+
+/// A measurement row this invoice's orders point at, with the customer it was
+/// taken for. The update matches these against the edited blocks to decide
+/// which rows to rewrite in place.
+pub struct OldMeasurementRef {
+    pub measurement_id: Uuid,
+    pub customer_id: Uuid,
+}
+
+pub async fn fetch_invoice_edit(
+    state: &AppState,
+    invoice_id: Uuid,
+) -> Result<Option<InvoiceEdit>, sqlx::Error> {
+    let Some(header) = sqlx::query!(
+        r#"
+        SELECT
+            i.invoice_number,
+            i.invoice_date,
+            i.branch_id,
+            b.name AS "branch_name?",
+            i.discount::float8 AS "discount!",
+            i.discount_unit,
+            i.customer_id
+        FROM invoices i
+        LEFT JOIN branch b ON b.id = i.branch_id
+        WHERE i.id = $1
+        "#,
+        invoice_id,
+    )
+    .fetch_optional(state.db())
+    .await?
+    else {
+        return Ok(None);
+    };
+
+    // One row per order, carrying its block's customer and measurement along:
+    // blocks are rebuilt app-side by grouping on (customer, measurement).
+    let order_rows = sqlx::query!(
+        r#"
+        SELECT
+            m.customer_id,
+            c.name AS customer_name,
+            c.mobile_no AS customer_mobile_no,
+            m.id AS measurement_id,
+            m.measurement_date,
+            m.length_fl::float8 AS length_fl,
+            m.length_bl::float8 AS length_bl,
+            m.chest::float8 AS chest,
+            m.waist::float8 AS waist,
+            m.hips::float8 AS hips,
+            m.shoulder::float8 AS shoulder,
+            m.sleeve_length::float8 AS sleeve_length,
+            m.neck::float8 AS neck,
+            m.open_hand::float8 AS open_hand,
+            m.chest_up::float8 AS chest_up,
+            m.cuff_width::float8 AS cuff_width,
+            m.neck_width::float8 AS neck_width,
+            m.aram_hole::float8 AS aram_hole,
+            m.fo_width::float8 AS fo_width,
+            m.frant_pocket_length::float8 AS frant_pocket_length,
+            m.farnt_pocket_length_by_width,
+            m.side_pocket,
+            m.mobile_pocket_length_by_width,
+            o.material_id,
+            mat.name AS material_name,
+            mat.unit AS material_unit,
+            o.material_amount::float8 AS "material_amount!",
+            o.production_branch_id,
+            b.name AS "production_location_name?",
+            ms.quantity::float8 AS stock_quantity,
+            o.price::float8 AS "price!",
+            o.thobe_type,
+            o.f_pocket,
+            o.collar,
+            o.sleeve,
+            o.patti,
+            o.more_details
+        FROM orders o
+        JOIN measurements m ON m.id = o.measurement_id
+        JOIN customers c ON c.id = m.customer_id
+        JOIN materials mat ON mat.id = o.material_id
+        LEFT JOIN branch b ON b.id = o.production_branch_id
+        LEFT JOIN material_stock ms
+            ON ms.material_id = o.material_id
+            AND ms.branch_id = o.production_branch_id
+        WHERE o.invoice_id = $1
+        ORDER BY o.id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(state.db())
+    .await?;
+
+    // Grouped by (customer, measurement) the way the form's customer blocks
+    // were entered: one measurement snapshot per block.
+    let mut customers: Vec<InvoiceEditCustomer> = Vec::new();
+    for row in order_rows {
+        let measurement = CreateMeasurementInput {
+            date: row.measurement_date,
+            length_fl: row.length_fl,
+            length_bl: row.length_bl,
+            chest: row.chest,
+            waist: row.waist,
+            hips: row.hips,
+            shoulder: row.shoulder,
+            sleeve_length: row.sleeve_length,
+            neck: row.neck,
+            open_hand: row.open_hand,
+            chest_up: row.chest_up,
+            cuff_width: row.cuff_width,
+            neck_width: row.neck_width,
+            aram_hole: row.aram_hole,
+            fo_width: row.fo_width,
+            frant_pocket_length: row.frant_pocket_length,
+            farnt_pocket_length_by_width: row.farnt_pocket_length_by_width,
+            side_pocket: row.side_pocket,
+            mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
+        };
+        let order = InvoiceEditOrder {
+            material_id: row.material_id,
+            material_name: row.material_name,
+            material_unit: row.material_unit,
+            material_amount: row.material_amount,
+            production_location_id: row.production_branch_id,
+            production_location_name: row.production_location_name,
+            stock_quantity: row.stock_quantity,
+            price: row.price,
+            thobe_type: row.thobe_type,
+            f_pocket: row.f_pocket,
+            collar: row.collar,
+            sleeve: row.sleeve,
+            patti: row.patti,
+            more_details: row.more_details,
+        };
+
+        match customers.iter_mut().find(|block| {
+            block.existing_customer_id == row.customer_id
+                && block.measurement_id == Some(row.measurement_id)
+        }) {
+            Some(block) => block.orders.push(order),
+            None => customers.push(InvoiceEditCustomer {
+                existing_customer_id: row.customer_id,
+                customer_name: row.customer_name,
+                customer_mobile_no: row.customer_mobile_no,
+                measurement_id: Some(row.measurement_id),
+                measurement,
+                orders: vec![order],
+            }),
+        }
+    }
+
+    let product_rows = sqlx::query!(
+        r#"
+        SELECT
+            ii.product_id,
+            ii.description,
+            ii.quantity::float8 AS "quantity!",
+            ii.unit_price::float8 AS "unit_price!",
+            ii.branch_id,
+            b.name AS "branch_name?",
+            ps.quantity::float8 AS stock_quantity
+        FROM invoice_items ii
+        LEFT JOIN branch b ON b.id = ii.branch_id
+        LEFT JOIN product_stock ps
+            ON ps.product_id = ii.product_id
+            AND ps.branch_id = ii.branch_id
+        WHERE invoice_id = $1 AND kind = 'product'
+        ORDER BY ii.id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(state.db())
+    .await?;
+
+    let gift_rows = sqlx::query!(
+        r#"
+        SELECT g.code, ii.line_total::float8 AS "amount!", g.expires_on
+        FROM invoice_items ii
+        JOIN gift_cards g ON g.id = ii.gift_card_id
+        WHERE ii.invoice_id = $1 AND ii.kind = 'gift_card'
+        ORDER BY ii.id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(state.db())
+    .await?;
+
+    let redemption_rows = sqlx::query!(
+        r#"
+        SELECT g.code, r.amount::float8 AS "amount!"
+        FROM gift_card_redemptions r
+        JOIN gift_cards g ON g.id = r.gift_card_id
+        WHERE r.invoice_id = $1
+        ORDER BY r.id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(state.db())
+    .await?;
+
+    // An invoice carrying payments cannot be edited at all, so this is empty
+    // whenever the form actually opens — it is here so the form can map an
+    // untouched ledger back to its payments input.
+    let payments = list_payments(state, invoice_id).await?;
+
+    Ok(Some(InvoiceEdit {
+        id: invoice_id,
+        invoice_number: header.invoice_number,
+        date: header.invoice_date,
+        branch_id: header.branch_id,
+        branch_name: header.branch_name,
+        discount: header.discount,
+        discount_unit: header.discount_unit,
+        payments,
+        customer_id: header.customer_id,
+        customers,
+        products: product_rows
+            .into_iter()
+            .map(|row| InvoiceEditProductLine {
+                product_id: row.product_id,
+                product_name: row.description,
+                quantity: row.quantity,
+                unit_price: row.unit_price,
+                branch_id: row.branch_id,
+                branch_name: row.branch_name,
+                stock_quantity: row.stock_quantity,
+            })
+            .collect(),
+        gift_cards: gift_rows
+            .into_iter()
+            .map(|row| InvoiceEditGiftCardLine {
+                code: row.code,
+                amount: row.amount,
+                expires_on: row.expires_on,
+            })
+            .collect(),
+        gift_card_redemptions: redemption_rows
+            .into_iter()
+            .map(|row| InvoiceEditRedemption {
+                code: row.code,
+                amount: row.amount,
+            })
+            .collect(),
+    }))
+}
+
+/// True once any order on the invoice has been collected.
+pub async fn invoice_has_received_orders(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM orders
+            WHERE invoice_id = $1 AND status = 'received'
+        ) AS "exists!"
+        "#,
+        invoice_id,
+    )
+    .fetch_one(&mut **tx)
+    .await?)
+}
+
+/// True once production has touched any order on the invoice: a recorded
+/// stage, an assignee, or a repair. Editing lines under that would rewrite
+/// history the shop floor already acted on.
+pub async fn invoice_has_production_activity(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM order_stage_progress p
+            JOIN orders o ON o.id = p.order_id
+            WHERE o.invoice_id = $1
+        ) OR EXISTS(
+            SELECT 1 FROM order_stage_assignments a
+            JOIN orders o ON o.id = a.order_id
+            WHERE o.invoice_id = $1
+        ) OR EXISTS(
+            SELECT 1 FROM order_repairs r
+            JOIN orders o ON o.id = r.order_id
+            WHERE o.invoice_id = $1
+        ) AS "exists!"
+        "#,
+        invoice_id,
+    )
+    .fetch_one(&mut **tx)
+    .await?)
+}
+
+pub async fn old_order_lines(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<OldOrderLine>, sqlx::Error> {
+    sqlx::query_as!(
+        OldOrderLine,
+        r#"
+        SELECT material_id, production_branch_id, material_amount::float8 AS "material_amount!"
+        FROM orders
+        WHERE invoice_id = $1
+        "#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+pub async fn old_product_lines(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<OldProductLine>, sqlx::Error> {
+    sqlx::query_as!(
+        OldProductLine,
+        r#"
+        SELECT product_id, branch_id, quantity::float8 AS "quantity!"
+        FROM invoice_items
+        WHERE invoice_id = $1 AND kind = 'product'
+        "#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+pub async fn old_gift_card_sales(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<OldGiftCardSale>, sqlx::Error> {
+    sqlx::query_as!(
+        OldGiftCardSale,
+        r#"
+        SELECT g.id AS gift_card_id, g.code
+        FROM invoice_items ii
+        JOIN gift_cards g ON g.id = ii.gift_card_id
+        WHERE ii.invoice_id = $1 AND ii.kind = 'gift_card'
+        "#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+pub async fn old_redemptions(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<OldRedemption>, sqlx::Error> {
+    sqlx::query_as!(
+        OldRedemption,
+        r#"
+        SELECT gift_card_id, amount::float8 AS "amount!"
+        FROM gift_card_redemptions
+        WHERE invoice_id = $1
+        "#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+pub async fn old_measurement_refs(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<OldMeasurementRef>, sqlx::Error> {
+    sqlx::query_as!(
+        OldMeasurementRef,
+        r#"
+        SELECT DISTINCT o.measurement_id, m.customer_id
+        FROM orders o
+        JOIN measurements m ON m.id = o.measurement_id
+        WHERE o.invoice_id = $1
+        "#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+/// True when no other invoice's orders point at this measurement: the row is
+/// exclusively this invoice's to rewrite or delete.
+pub async fn measurement_is_exclusive(
+    tx: &mut sqlx::PgTransaction<'_>,
+    measurement_id: Uuid,
+    invoice_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    Ok(!sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM orders
+            WHERE measurement_id = $1 AND invoice_id != $2
+        ) AS "exists!"
+        "#,
+        measurement_id,
+        invoice_id,
+    )
+    .fetch_one(&mut **tx)
+    .await?)
+}
+
+/// True once a sold card has been spent anywhere — including on the invoice
+/// that sold it. A spent card belongs to two invoices' histories, so it can
+/// neither be deleted nor re-issued by an edit.
+pub async fn sold_card_was_used(
+    tx: &mut sqlx::PgTransaction<'_>,
+    gift_card_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM gift_card_redemptions
+            WHERE gift_card_id = $1
+        ) AS "exists!"
+        "#,
+        gift_card_id,
+    )
+    .fetch_one(&mut **tx)
+    .await?)
+}
+
+/// Locks the gift cards an edit is about to reverse, so a till redemption
+/// can't land between the spent-check and the delete.
+pub async fn lock_gift_cards(
+    tx: &mut sqlx::PgTransaction<'_>,
+    gift_card_ids: &[Uuid],
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        SELECT id FROM gift_cards
+        WHERE id = ANY($1)
+        FOR UPDATE
+        "#,
+        gift_card_ids,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+// Restores are plain additions: the row must exist, since the guarded
+// decrement that consumed it required one.
+pub async fn restore_material_stock(
+    tx: &mut sqlx::PgTransaction<'_>,
+    material_id: Uuid,
+    branch_id: Uuid,
+    amount: f64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE material_stock
+        SET quantity = quantity + $3::float8
+        WHERE material_id = $1 AND branch_id = $2
+        "#,
+        material_id,
+        branch_id,
+        amount,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn restore_product_stock(
+    tx: &mut sqlx::PgTransaction<'_>,
+    product_id: Uuid,
+    branch_id: Uuid,
+    quantity: f64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE product_stock
+        SET quantity = quantity + $3::float8
+        WHERE product_id = $1 AND branch_id = $2
+        "#,
+        product_id,
+        branch_id,
+        quantity,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+/// Pays tender back onto the card when the redemption that spent it is
+/// deleted.
+pub async fn refund_gift_card(
+    tx: &mut sqlx::PgTransaction<'_>,
+    gift_card_id: Uuid,
+    amount: f64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE gift_cards
+        SET balance = balance + $2::float8
+        WHERE id = $1
+        "#,
+        gift_card_id,
+        amount,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn delete_redemptions(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"DELETE FROM gift_card_redemptions WHERE invoice_id = $1"#,
+        invoice_id,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn delete_orders(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(r#"DELETE FROM orders WHERE invoice_id = $1"#, invoice_id,)
+        .execute(&mut **tx)
+        .await?;
+
+    Ok(())
+}
+
+pub async fn delete_items(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"DELETE FROM invoice_items WHERE invoice_id = $1"#,
+        invoice_id,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn delete_gift_cards(
+    tx: &mut sqlx::PgTransaction<'_>,
+    gift_card_ids: &[Uuid],
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"DELETE FROM gift_cards WHERE id = ANY($1)"#,
+        gift_card_ids,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn delete_measurements(
+    tx: &mut sqlx::PgTransaction<'_>,
+    measurement_ids: &[Uuid],
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"DELETE FROM measurements WHERE id = ANY($1)"#,
+        measurement_ids,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+// The in-place rewrite: same row id, corrected values. Only called for rows
+// the exclusivity check proved belong to this invoice alone.
+pub async fn update_measurement(
+    tx: &mut sqlx::PgTransaction<'_>,
+    measurement_id: Uuid,
+    measurement: &CreateMeasurementInput,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE measurements
+        SET measurement_date = $2,
+            length_fl = $3::float8, length_bl = $4::float8,
+            chest = $5::float8, waist = $6::float8,
+            hips = $7::float8, shoulder = $8::float8,
+            sleeve_length = $9::float8, neck = $10::float8,
+            open_hand = $11::float8, chest_up = $12::float8,
+            cuff_width = $13::float8, neck_width = $14::float8,
+            aram_hole = $15::float8, fo_width = $16::float8,
+            frant_pocket_length = $17::float8,
+            farnt_pocket_length_by_width = $18, side_pocket = $19,
+            mobile_pocket_length_by_width = $20
+        WHERE id = $1
+        "#,
+        measurement_id,
+        measurement.date,
+        measurement.length_fl,
+        measurement.length_bl,
+        measurement.chest,
+        measurement.waist,
+        measurement.hips,
+        measurement.shoulder,
+        measurement.sleeve_length,
+        measurement.neck,
+        measurement.open_hand,
+        measurement.chest_up,
+        measurement.cuff_width,
+        measurement.neck_width,
+        measurement.aram_hole,
+        measurement.fo_width,
+        measurement.frant_pocket_length,
+        measurement.farnt_pocket_length_by_width,
+        measurement.side_pocket,
+        measurement.mobile_pocket_length_by_width,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn update_invoice_header(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    input: &CreateInvoiceInput,
+    total_price: f64,
+    gift_card_redeemed: f64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE invoices
+        SET invoice_date = $2,
+            branch_id = $3,
+            discount = $4::float8,
+            discount_unit = $5,
+            customer_id = $6,
+            total_price = $7::float8,
+            gift_card_redeemed = $8::float8
+        WHERE id = $1
+        "#,
+        invoice_id,
+        input.date,
+        input.branch_id,
+        input.discount,
+        input.discount_unit.as_str(),
+        input.customer_id,
+        total_price,
+        gift_card_redeemed,
     )
     .execute(&mut **tx)
     .await?;

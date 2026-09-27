@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT g.code, ii.line_total::float8 AS \"amount!\", g.expires_on\n        FROM invoice_items ii\n        JOIN gift_cards g ON g.id = ii.gift_card_id\n        WHERE ii.invoice_id = $1 AND ii.kind = 'gift_card'\n        ORDER BY ii.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 2,
+        "name": "expires_on",
+        "type_info": "Date"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "27baab8cdbe2579bb3fc9b069a9d1c8d79cacc5b420b6f4ba1c462887f60f96e"
+}

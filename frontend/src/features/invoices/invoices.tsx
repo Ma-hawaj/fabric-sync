@@ -45,6 +45,11 @@ export function InvoicesPage() {
           params: { invoiceId: invoice.id },
         }),
       exportPdf,
+      (invoice) =>
+        void navigate({
+          to: '/invoices/$invoiceId/edit',
+          params: { invoiceId: invoice.id },
+        }),
     )
   }, [materials, exportPdf, navigate])
 

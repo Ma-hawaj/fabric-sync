@@ -15,8 +15,8 @@ use crate::{
 use super::{
     document, service,
     types::{
-        CreateInvoiceInput, CreatedInvoice, InvoiceDetail, InvoiceListItem, ReceiveInvoiceInput,
-        ReceivedInvoice,
+        CreateInvoiceInput, CreatedInvoice, InvoiceDetail, InvoiceEdit, InvoiceListItem,
+        ReceiveInvoiceInput, ReceivedInvoice, RecordPaymentInput, RecordedPayment,
     },
 };
 
@@ -57,6 +57,31 @@ pub async fn create_invoice(
     Ok(Json(service::create_invoice(&state, input).await?))
 }
 
+/// The invoice as it was entered, for the edit form. Separate from the display
+/// shape above, which drops the ids the form needs to put its pickers back.
+pub async fn get_invoice_for_edit(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(invoice_id): Path<Uuid>,
+) -> Result<Json<InvoiceEdit>, AppError> {
+    Ok(Json(
+        service::get_invoice_for_edit(&state, invoice_id).await?,
+    ))
+}
+
+/// A full rebuild from a fresh copy of the create input. Refused once the
+/// invoice is paid, collected, or in production — see service::update_invoice.
+pub async fn update_invoice(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(invoice_id): Path<Uuid>,
+    Json(input): Json<CreateInvoiceInput>,
+) -> Result<Json<CreatedInvoice>, AppError> {
+    Ok(Json(
+        service::update_invoice(&state, invoice_id, input).await?,
+    ))
+}
+
 pub async fn receive_invoice(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,
@@ -65,5 +90,25 @@ pub async fn receive_invoice(
 ) -> Result<Json<ReceivedInvoice>, AppError> {
     Ok(Json(
         service::receive_invoice(&state, invoice_id, input.payment_type).await?,
+    ))
+}
+
+/// A till payment: money taken without collecting anything. See
+/// service::record_payment.
+pub async fn record_payment(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(invoice_id): Path<Uuid>,
+    Json(input): Json<RecordPaymentInput>,
+) -> Result<Json<RecordedPayment>, AppError> {
+    Ok(Json(
+        service::record_payment(
+            &state,
+            invoice_id,
+            input.amount,
+            input.payment_type,
+            input.order_id,
+        )
+        .await?,
     ))
 }

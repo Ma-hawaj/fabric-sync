@@ -31,6 +31,7 @@ vi.mock('@/lib/api', () => ({
 
 const ORDER: OrderDetail = {
   id: 'order-1',
+  orderNumber: 7,
   invoiceId: 'inv-1',
   invoiceDate: new Date('2026-07-28'),
   measurementId: 'm-1',
@@ -68,9 +69,9 @@ const ORDER: OrderDetail = {
   invoiceTotalPrice: 300,
   invoiceAmountPaid: 120,
   invoicePaymentStatus: 'partial',
-  invoiceAdvanceAmount: 120,
-  invoiceAdvancePaymentType: 'benefit',
-  invoiceFinalPaymentType: null,
+  invoiceBalanceDue: 180,
+  invoiceGiftCardRedeemed: 0,
+  invoicePaymentMethod: 'benefit',
   measurement: {
     id: 'm-1',
     customerId: 'c-1',
@@ -126,10 +127,12 @@ function renderDeliveryOrder(overrides: Partial<OrderDetail> = {}) {
 }
 
 describe('OrderDetailPage', () => {
-  it('titles the page with the human-readable invoice number', () => {
+  it('titles the page with the human-readable order number', () => {
     renderPage()
 
-    expect(screen.queryByText('Order INV-42')).toBeTruthy()
+    expect(screen.queryByText('Order ORD-7')).toBeTruthy()
+    // The parent invoice's number stays alongside as context.
+    expect(screen.queryByText('INV-42')).toBeTruthy()
     expect(screen.queryByText('Manama Main Branch')).toBeTruthy()
   })
 
@@ -180,7 +183,7 @@ describe('OrderDetailPage', () => {
     )
 
     expect(screen.queryByText('Loading order...')).toBeTruthy()
-    expect(screen.queryByText('Order INV-42')).toBeNull()
+    expect(screen.queryByText('Order ORD-7')).toBeNull()
   })
 
   it('sends a delivery to the receiving branch with no destination picker', () => {

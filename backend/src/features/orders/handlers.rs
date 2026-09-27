@@ -56,7 +56,7 @@ pub async fn receive_order(
     Json(input): Json<ReceiveOrderInput>,
 ) -> Result<Json<OrderListItem>, AppError> {
     Ok(Json(
-        service::receive_order(&state, order_id, input.payment_type).await?,
+        service::receive_order(&state, order_id, input.amount, input.payment_type).await?,
     ))
 }
 

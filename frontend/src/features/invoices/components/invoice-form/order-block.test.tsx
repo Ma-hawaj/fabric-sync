@@ -165,6 +165,6 @@ describe('OrderBlock', () => {
 
   it('has a manual price field for the order line', () => {
     render(<Harness />)
-    expect(screen.getByLabelText(`Price (${CURRENCY})`)).toBeTruthy()
+    expect(screen.getByLabelText(`Price incl. VAT (${CURRENCY})`)).toBeTruthy()
   })
 })

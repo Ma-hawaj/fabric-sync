@@ -1,0 +1,238 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            m.customer_id,\n            c.name AS customer_name,\n            c.mobile_no AS customer_mobile_no,\n            m.id AS measurement_id,\n            m.measurement_date,\n            m.length_fl::float8 AS length_fl,\n            m.length_bl::float8 AS length_bl,\n            m.chest::float8 AS chest,\n            m.waist::float8 AS waist,\n            m.hips::float8 AS hips,\n            m.shoulder::float8 AS shoulder,\n            m.sleeve_length::float8 AS sleeve_length,\n            m.neck::float8 AS neck,\n            m.open_hand::float8 AS open_hand,\n            m.chest_up::float8 AS chest_up,\n            m.cuff_width::float8 AS cuff_width,\n            m.neck_width::float8 AS neck_width,\n            m.aram_hole::float8 AS aram_hole,\n            m.fo_width::float8 AS fo_width,\n            m.frant_pocket_length::float8 AS frant_pocket_length,\n            m.farnt_pocket_length_by_width,\n            m.side_pocket,\n            m.mobile_pocket_length_by_width,\n            o.material_id,\n            mat.name AS material_name,\n            mat.unit AS material_unit,\n            o.material_amount::float8 AS \"material_amount!\",\n            o.production_branch_id,\n            b.name AS \"production_location_name?\",\n            ms.quantity::float8 AS stock_quantity,\n            o.price::float8 AS \"price!\",\n            o.thobe_type,\n            o.f_pocket,\n            o.collar,\n            o.sleeve,\n            o.patti,\n            o.more_details\n        FROM orders o\n        JOIN measurements m ON m.id = o.measurement_id\n        JOIN customers c ON c.id = m.customer_id\n        JOIN materials mat ON mat.id = o.material_id\n        LEFT JOIN branch b ON b.id = o.production_branch_id\n        LEFT JOIN material_stock ms\n            ON ms.material_id = o.material_id\n            AND ms.branch_id = o.production_branch_id\n        WHERE o.invoice_id = $1\n        ORDER BY o.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "customer_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "customer_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "customer_mobile_no",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "measurement_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "measurement_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 5,
+        "name": "length_fl",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "length_bl",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "chest",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 8,
+        "name": "waist",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 9,
+        "name": "hips",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 10,
+        "name": "shoulder",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 11,
+        "name": "sleeve_length",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 12,
+        "name": "neck",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 13,
+        "name": "open_hand",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 14,
+        "name": "chest_up",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 15,
+        "name": "cuff_width",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 16,
+        "name": "neck_width",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 17,
+        "name": "aram_hole",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 18,
+        "name": "fo_width",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 19,
+        "name": "frant_pocket_length",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 20,
+        "name": "farnt_pocket_length_by_width",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 21,
+        "name": "side_pocket",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 22,
+        "name": "mobile_pocket_length_by_width",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 23,
+        "name": "material_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 24,
+        "name": "material_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 25,
+        "name": "material_unit",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 26,
+        "name": "material_amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 27,
+        "name": "production_branch_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 28,
+        "name": "production_location_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 29,
+        "name": "stock_quantity",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 30,
+        "name": "price!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 31,
+        "name": "thobe_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 32,
+        "name": "f_pocket",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 33,
+        "name": "collar",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 34,
+        "name": "sleeve",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 35,
+        "name": "patti",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 36,
+        "name": "more_details",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      null,
+      true,
+      false,
+      null,
+      null,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "d30a700e28785672d8bc969b413b1146a3e66ea393fe8b5cc793e622eeabe0b1"
+}

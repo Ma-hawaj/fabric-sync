@@ -27,6 +27,9 @@ CREATE INDEX IF NOT EXISTS orders_production_branch_id_idx ON orders (production
 CREATE INDEX IF NOT EXISTS measurements_customer_id_idx ON measurements (customer_id);
 CREATE INDEX IF NOT EXISTS invoice_items_invoice_id_idx ON invoice_items (invoice_id);
 CREATE INDEX IF NOT EXISTS invoices_customer_id_idx ON invoices (customer_id);
+-- The per-invoice ledger aggregates (`SUM(amount)`, the latest method) run
+-- once per row of the invoices list and once per order row's invoice join.
+CREATE INDEX IF NOT EXISTS invoice_payments_invoice_id_idx ON invoice_payments (invoice_id);
 CREATE INDEX IF NOT EXISTS gift_cards_customer_id_idx ON gift_cards (customer_id);
 -- Batch-looked-up per page by `list_repairs` (`WHERE order_id = ANY($1)`);
 -- no UNIQUE constraint on this table covers it the way the progress and
@@ -38,5 +41,4 @@ CREATE INDEX IF NOT EXISTS customers_name_idx ON customers (name);
 CREATE INDEX IF NOT EXISTS materials_name_idx ON materials (name);
 CREATE INDEX IF NOT EXISTS products_name_idx ON products (name);
 CREATE INDEX IF NOT EXISTS invoices_invoice_date_idx ON invoices (invoice_date);
-CREATE INDEX IF NOT EXISTS invoices_payment_status_idx ON invoices (payment_status);
 CREATE INDEX IF NOT EXISTS orders_status_idx ON orders (status);

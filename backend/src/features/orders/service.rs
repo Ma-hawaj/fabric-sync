@@ -229,6 +229,80 @@ fn validate_delivery_location(
     Ok(())
 }
 
+// A checklist is worked strictly in order: a stage can only be recorded once
+// every earlier applicable stage is done or skipped, and a recorded stage can
+// only be reopened once every later applicable stage is pending again —
+// otherwise an undo would open a gap in the middle of the checklist.
+// Re-recording an earlier stage (done to skipped, new notes) needs no
+// successor check: it leaves no gap behind. Stages that don't apply are
+// transparent to the chain in both directions, the same way they are for
+// start times, as are retired stages nobody recorded (invisible, so they
+// can't be required).
+//
+// `catalog` is expected in checklist order (`list_stage_catalog` already
+// returns `ORDER BY sort_order, name`) and `progress` filtered to this order.
+fn validate_stage_sequence(
+    catalog: &[StageRow],
+    progress: &[ProgressRow],
+    production_location_id: Option<Uuid>,
+    receiving_location_id: Option<Uuid>,
+    stage_id: Uuid,
+    status: StageStatus,
+) -> Result<(), AppError> {
+    let target = catalog
+        .iter()
+        .find(|stage| stage.id == stage_id)
+        .ok_or_else(|| AppError::NotFound(format!("order stage {stage_id} not found")))?;
+
+    let is_recorded = |id: Uuid| progress.iter().any(|row| row.stage_id == id);
+    let applies = |stage: &StageRow| {
+        stage_applies(
+            stage.requires_delivery,
+            production_location_id,
+            receiving_location_id,
+        )
+    };
+
+    // The visible chain: active stages, plus anything already recorded (a
+    // retired stage stays once acted on), plus the target itself so a retired
+    // stage can still be judged against its neighbours.
+    let chain: Vec<&StageRow> = catalog
+        .iter()
+        .filter(|stage| stage.is_active || stage.id == stage_id || is_recorded(stage.id))
+        .collect();
+    let pos = chain
+        .iter()
+        .position(|stage| stage.id == stage_id)
+        .expect("the target is always part of the chain");
+
+    // Recording never opens a gap — the target itself becomes acted on — so
+    // a forward write only waits on its predecessors. Reopening does open
+    // one, so an undo only waits on its successors. A pending write over a
+    // recorded successor (a gap left by older data) is therefore allowed on
+    // purpose: it fills the gap back in.
+    if status == StageStatus::Pending {
+        if let Some(blocker) = chain[pos + 1..]
+            .iter()
+            .find(|stage| applies(stage) && is_recorded(stage.id))
+        {
+            return Err(AppError::BadRequest(format!(
+                "undo '{}' before reopening '{}'",
+                blocker.name, target.name
+            )));
+        }
+    } else if let Some(blocker) = chain[..pos]
+        .iter()
+        .find(|stage| applies(stage) && !is_recorded(stage.id))
+    {
+        return Err(AppError::BadRequest(format!(
+            "complete '{}' before '{}'",
+            blocker.name, target.name
+        )));
+    }
+
+    Ok(())
+}
+
 fn assemble_order(
     row: OrderRow,
     catalog: &[StageRow],
@@ -288,7 +362,9 @@ fn assemble_order(
 
     OrderListItem {
         id: row.id,
+        order_number: row.order_number,
         invoice_id: row.invoice_id,
+        invoice_number: row.invoice_number,
         invoice_date: row.invoice_date,
         measurement_id: row.measurement_id,
         customer_name: row.customer_name,
@@ -308,9 +384,9 @@ fn assemble_order(
         invoice_total_price: row.invoice_total_price,
         invoice_amount_paid: row.invoice_amount_paid,
         invoice_payment_status: row.invoice_payment_status,
-        invoice_advance_amount: row.invoice_advance_amount,
-        invoice_advance_payment_type: row.invoice_advance_payment_type,
-        invoice_final_payment_type: row.invoice_final_payment_type,
+        invoice_balance_due: row.invoice_balance_due,
+        invoice_gift_card_redeemed: row.invoice_gift_card_redeemed,
+        invoice_payment_method: row.invoice_payment_method,
     }
 }
 
@@ -414,9 +490,10 @@ pub(crate) async fn get_order(state: &AppState, order_id: Uuid) -> Result<OrderD
     })
 }
 
-/// Marks an order received and, once every order on its invoice has been
-/// received, settles the invoice's remaining balance in full via
-/// `final_payment_type`.
+/// Marks an order received and records the payment taken at that pickup.
+/// The invoice's money state is derived from the ledger, so nothing is
+/// settled here explicitly: it simply becomes paid once every order on it is
+/// received *and* the payments cover the balance.
 ///
 /// Deliberately not gated on the production checklist: staff hand a garment
 /// over when it is ready, so the current stage is shown alongside rather than
@@ -424,24 +501,71 @@ pub(crate) async fn get_order(state: &AppState, order_id: Uuid) -> Result<OrderD
 pub async fn receive_order(
     state: &AppState,
     order_id: Uuid,
-    final_payment_type: PaymentType,
+    amount: f64,
+    payment_type: Option<PaymentType>,
 ) -> Result<OrderListItem, AppError> {
+    if amount < 0.0 {
+        return Err(AppError::BadRequest(
+            "a pickup payment cannot be negative".to_string(),
+        ));
+    }
+    if amount > 0.0 && payment_type.is_none() {
+        return Err(AppError::BadRequest(
+            "a pickup payment needs a paymentType".to_string(),
+        ));
+    }
+
+    let order = repository::get_order(state, order_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
+    let invoice_id = order.invoice_id;
     let mut tx = state.db().begin().await?;
 
-    let invoice_id = repository::mark_received(&mut tx, order_id)
+    // Match invoice edits and whole-invoice receipts: always lock the invoice
+    // before its orders, including pickups that take no payment.
+    let invoice = crate::features::invoices::repository::lock_invoice(&mut tx, invoice_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
+    let locked = repository::lock_order(&mut tx, order_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
 
-    let invoice_settled = repository::invoice_fully_received(&mut tx, invoice_id).await?;
-    if invoice_settled {
-        repository::mark_invoice_paid(&mut tx, invoice_id, final_payment_type).await?;
+    if locked.status == "received" {
+        return Err(AppError::BadRequest(
+            "this order is already received".to_string(),
+        ));
     }
+
+    let invoice_id = locked.invoice_id;
+    repository::mark_received(&mut tx, order_id).await?;
+
+    if amount > 0.0 {
+        let payment_type = payment_type.expect("validated: payment type is set");
+        let paid = crate::features::invoices::repository::sum_payments(&mut tx, invoice_id).await?;
+        crate::features::invoices::service::validate_payment_amount(
+            amount,
+            invoice.total_price,
+            invoice.gift_card_redeemed,
+            paid,
+        )?;
+        crate::features::invoices::repository::insert_payment(
+            &mut tx,
+            invoice_id,
+            Some(order_id),
+            amount,
+            Some(payment_type.as_str()),
+        )
+        .await?;
+    }
+
+    let invoice_settled = repository::invoice_fully_received(&mut tx, invoice_id).await?;
 
     tx.commit().await?;
 
     tracing::info!(
         order_id = %order_id,
         invoice_id = %invoice_id,
+        amount,
         invoice_settled,
         "order received"
     );
@@ -503,6 +627,16 @@ pub async fn set_stage(
         ),
         input.status,
         input.location_id,
+    )?;
+
+    let progress = repository::list_progress(state, std::slice::from_ref(&order_id)).await?;
+    validate_stage_sequence(
+        &catalog,
+        &progress,
+        effective_production_id,
+        order.receiving_location_id,
+        stage_id,
+        input.status,
     )?;
 
     let mut tx = state.db().begin().await?;
@@ -1045,5 +1179,207 @@ mod tests {
         );
 
         assert!(stages.iter().all(|entry| entry.assignee_id.is_none()));
+    }
+
+    fn sequence(
+        catalog: &[StageRow],
+        progress: &[ProgressRow],
+        production_location_id: Option<Uuid>,
+        receiving_location_id: Option<Uuid>,
+        stage_sort_order: i32,
+        status: StageStatus,
+    ) -> Result<(), AppError> {
+        validate_stage_sequence(
+            catalog,
+            progress,
+            production_location_id,
+            receiving_location_id,
+            Uuid::from_u128(stage_sort_order as u128),
+            status,
+        )
+    }
+
+    #[test]
+    fn recording_the_current_stage_is_allowed() {
+        assert!(sequence(
+            &catalog(),
+            &[],
+            Some(workshop()),
+            Some(branch()),
+            1,
+            StageStatus::Done
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn recording_ahead_of_a_pending_stage_is_rejected() {
+        let error = sequence(
+            &catalog(),
+            &[],
+            Some(workshop()),
+            Some(branch()),
+            2,
+            StageStatus::Done,
+        )
+        .unwrap_err();
+
+        match error {
+            AppError::BadRequest(message) => {
+                assert!(message.contains("Cutting"), "{message}");
+                assert!(message.contains("Sewing"), "{message}");
+            }
+            other => panic!("expected a BadRequest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_skipped_predecessor_satisfies_the_sequence() {
+        assert!(sequence(
+            &catalog(),
+            &[progress(1, "skipped")],
+            Some(workshop()),
+            Some(branch()),
+            2,
+            StageStatus::Done,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn reopening_an_earlier_stage_is_rejected_while_a_later_one_is_recorded() {
+        let error = sequence(
+            &catalog(),
+            &[progress(1, "done"), progress(2, "done")],
+            Some(workshop()),
+            Some(branch()),
+            1,
+            StageStatus::Pending,
+        )
+        .unwrap_err();
+
+        match error {
+            AppError::BadRequest(message) => {
+                assert!(message.contains("Sewing"), "{message}");
+                assert!(message.contains("Cutting"), "{message}");
+            }
+            other => panic!("expected a BadRequest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn reopening_the_last_recorded_stage_is_allowed() {
+        assert!(sequence(
+            &catalog(),
+            &[progress(1, "done"), progress(2, "done")],
+            Some(workshop()),
+            Some(branch()),
+            2,
+            StageStatus::Pending,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn re_recording_an_earlier_stage_leaves_no_gap_so_it_is_allowed() {
+        // Overwriting Cutting's entry while Sewing is still recorded changes
+        // history but leaves every stage acted on, so unlike an undo it needs
+        // no successor check.
+        assert!(sequence(
+            &catalog(),
+            &[progress(1, "done"), progress(2, "done")],
+            Some(workshop()),
+            Some(branch()),
+            1,
+            StageStatus::Skipped,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn re_recording_the_last_recorded_stage_is_allowed() {
+        assert!(sequence(
+            &catalog(),
+            &[progress(1, "done")],
+            Some(workshop()),
+            Some(branch()),
+            1,
+            StageStatus::Skipped,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn a_stage_that_does_not_apply_is_transparent_to_the_sequence() {
+        // A delivery stage in the middle of the catalog, produced and
+        // collected at the same branch so it never applies — Sewing must not
+        // wait on it.
+        let mut catalog = catalog();
+        catalog.insert(
+            1,
+            StageRow {
+                id: Uuid::from_u128(50),
+                name: "Transfer".to_string(),
+                sort_order: 1,
+                requires_delivery: true,
+                is_active: true,
+            },
+        );
+
+        assert!(sequence(
+            &catalog,
+            &[progress(1, "done")],
+            Some(workshop()),
+            Some(workshop()),
+            2,
+            StageStatus::Done,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn a_retired_stage_nobody_touched_is_transparent_to_the_sequence() {
+        let mut catalog = catalog();
+        catalog[1].is_active = false;
+
+        assert!(sequence(
+            &catalog,
+            &[progress(1, "done")],
+            Some(workshop()),
+            Some(branch()),
+            3,
+            StageStatus::Done,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn reopening_a_stage_nobody_recorded_is_a_noop() {
+        // Clearing an absent row deletes nothing; still allowed so undoing
+        // stays idempotent.
+        assert!(sequence(
+            &catalog(),
+            &[progress(1, "done")],
+            Some(workshop()),
+            Some(branch()),
+            2,
+            StageStatus::Pending,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn sequencing_an_unknown_stage_is_not_found() {
+        let error = sequence(
+            &catalog(),
+            &[],
+            Some(workshop()),
+            Some(branch()),
+            99,
+            StageStatus::Done,
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, AppError::NotFound(_)));
     }
 }

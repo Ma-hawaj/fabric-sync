@@ -475,7 +475,7 @@
               {% endif %}
             </dd>
           </div>
-          {% set method = invoice.finalPaymentType or invoice.advancePaymentType %}
+          {% set method = invoice.paymentMethod %}
           {% if method %}
             <div class="row">
               <dt>طريقة الدفع<span class="en">Payment method</span></dt>
@@ -596,7 +596,7 @@
         <table class="totals">
           <tr>
             <td class="label">
-              المجموع الفرعي <span class="en">Subtotal</span>
+              المجموع الفرعي شامل الضريبة <span class="en">Subtotal (incl. VAT)</span>
             </td>
             <td class="num">{{ currency }} {{ amounts.subtotal }}</td>
           </tr>

@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -17,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Field, FieldError } from '@/components/ui/field'
 import { CURRENCY } from '@/lib/currency'
 import { useReceiveOrder } from '../hooks/use-receive-order'
 import type { Order, PaymentType } from '../types/orders'
@@ -42,23 +44,49 @@ export function ReceiveOrderDialog({
   onOpenChange,
 }: ReceiveOrderDialogProps) {
   const receiveOrder = useReceiveOrder()
+  const [amount, setAmount] = React.useState('')
   const [paymentType, setPaymentType] = React.useState<PaymentType | ''>('')
 
+  // Prefill this pickup with the whole remaining balance — staff collecting
+  // the last order usually settle everything, and a partial pickup just edits
+  // the figure down.
   React.useEffect(() => {
+    setAmount(
+      order && order.invoiceBalanceDue > 0
+        ? String(order.invoiceBalanceDue)
+        : '',
+    )
     setPaymentType('')
   }, [order?.id])
 
-  const balanceDue = order
-    ? Math.max(order.invoiceTotalPrice - order.invoiceAmountPaid, 0)
-    : 0
+  const parsedAmount = amount === '' ? 0 : Number(amount)
+  const amountValid =
+    amount === '' || (!Number.isNaN(parsedAmount) && parsedAmount >= 0)
+  const overBalance =
+    amountValid && order ? parsedAmount - order.invoiceBalanceDue > 1e-9 : false
+  const needsMethod = parsedAmount > 0
+
+  const canConfirm =
+    order &&
+    amountValid &&
+    !overBalance &&
+    (!needsMethod || paymentType) &&
+    !receiveOrder.isPending
 
   const handleConfirm = async () => {
-    if (!order || !paymentType) return
+    if (!order || !canConfirm) return
 
-    const pending = receiveOrder.mutateAsync({ orderId: order.id, paymentType })
+    const pending = receiveOrder.mutateAsync({
+      orderId: order.id,
+      amount: parsedAmount,
+      paymentType: needsMethod ? (paymentType as PaymentType) : null,
+    })
     toast.promise(pending, {
       loading: 'Marking order received...',
-      success: 'Order marked received.',
+      success:
+        parsedAmount > 0
+          ? 'Order marked received and payment recorded.'
+          : 'Order marked received.',
       error: 'Could not update this order. Please try again.',
     })
 
@@ -90,49 +118,78 @@ export function ReceiveOrderDialog({
                 <span className="text-muted-foreground">Invoice Total</span>
                 <span>{currencyFormatter.format(order.invoiceTotalPrice)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Advance Paid</span>
-                <span>
-                  {currencyFormatter.format(order.invoiceAdvanceAmount)}
-                  {order.invoiceAdvancePaymentType &&
-                    ` (${paymentTypeOptions.find((o) => o.value === order.invoiceAdvancePaymentType)?.label})`}
-                </span>
-              </div>
+              {order.invoiceGiftCardRedeemed > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Paid by gift card
+                  </span>
+                  <span>
+                    {currencyFormatter.format(order.invoiceGiftCardRedeemed)}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Already Paid</span>
                 <span>{currencyFormatter.format(order.invoiceAmountPaid)}</span>
               </div>
               <div className="flex justify-between font-semibold">
                 <span>Remaining Balance</span>
-                <span>{currencyFormatter.format(balanceDue)}</span>
+                <span>{currencyFormatter.format(order.invoiceBalanceDue)}</span>
               </div>
             </div>
 
-            <p className="text-sm text-muted-foreground">
-              {balanceDue > 0
-                ? 'Once every order on this invoice has been received, the remaining balance will be marked as paid in full using the final payment method below.'
-                : 'This invoice is already fully paid.'}
-            </p>
+            <Field data-invalid={!amountValid || overBalance}>
+              <Label htmlFor="pickup-amount">Collected Now ({CURRENCY})</Label>
+              <Input
+                id="pickup-amount"
+                inputMode="decimal"
+                placeholder="0.000"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+              <FieldError
+                errors={
+                  !amountValid
+                    ? [{ message: 'Enter a valid amount.' }]
+                    : overBalance
+                      ? [
+                          {
+                            message:
+                              'More than the invoice\u2019s remaining balance.',
+                          },
+                        ]
+                      : []
+                }
+              />
+            </Field>
 
-            <div className="space-y-1">
-              <Label htmlFor="final-payment-type">Final Payment Method</Label>
-              <Select
-                items={paymentTypeOptions}
-                value={paymentType}
-                onValueChange={(value: PaymentType) => setPaymentType(value)}
-              >
-                <SelectTrigger id="final-payment-type" className="w-full">
-                  <SelectValue placeholder="Select payment method..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {paymentTypeOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {needsMethod && (
+              <div className="space-y-1">
+                <Label htmlFor="pickup-payment-type">Payment Method</Label>
+                <Select
+                  items={paymentTypeOptions}
+                  value={paymentType}
+                  onValueChange={(value: PaymentType) => setPaymentType(value)}
+                >
+                  <SelectTrigger id="pickup-payment-type" className="w-full">
+                    <SelectValue placeholder="Select payment method..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {paymentTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <p className="text-sm text-muted-foreground">
+              {order.invoiceBalanceDue > 0
+                ? 'The invoice is settled in full once every order on it has been received and the balance reaches zero.'
+                : 'This invoice is already fully paid — this just collects the garment.'}
+            </p>
 
             <DialogFooter>
               <Button
@@ -142,10 +199,7 @@ export function ReceiveOrderDialog({
               >
                 Cancel
               </Button>
-              <Button
-                onClick={handleConfirm}
-                disabled={!paymentType || receiveOrder.isPending}
-              >
+              <Button onClick={handleConfirm} disabled={!canConfirm}>
                 Confirm Received
               </Button>
             </DialogFooter>

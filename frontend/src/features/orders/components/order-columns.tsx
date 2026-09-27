@@ -16,12 +16,6 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: CURRENCY,
 })
 
-// Invoice ids are uuidv7 — time-ordered, so the short prefix still sorts by
-// creation and is unique enough to identify an invoice at a glance.
-function shortId(id: string) {
-  return id.slice(0, 8).toUpperCase()
-}
-
 const statusOptions = [
   { label: 'Pending', value: 'pending' },
   { label: 'Received', value: 'received' },
@@ -34,7 +28,7 @@ const paymentStatusOptions = [
 ]
 
 const paymentTypeLabels: Record<
-  NonNullable<Order['invoiceFinalPaymentType']>,
+  NonNullable<Order['invoicePaymentMethod']>,
   string
 > = {
   benefit: 'Benefit',
@@ -50,13 +44,31 @@ export function getOrderColumns(
 ): ColumnDef<Order, any>[] {
   return [
     {
-      accessorKey: 'invoiceId',
+      accessorKey: 'orderNumber',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Order" />
+      ),
+      cell: ({ row }) => (
+        <div className="font-mono font-medium">
+          ORD-{row.getValue<number>('orderNumber')}
+        </div>
+      ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Order',
+        placeholder: 'Filter order...',
+        variant: 'number',
+      },
+    },
+    {
+      accessorKey: 'invoiceNumber',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Invoice" />
       ),
       cell: ({ row }) => (
         <div className="font-mono font-medium">
-          {shortId(row.getValue('invoiceId'))}
+          INV-{row.getValue<number>('invoiceNumber')}
         </div>
       ),
       enableSorting: true,
@@ -64,7 +76,7 @@ export function getOrderColumns(
       meta: {
         label: 'Invoice',
         placeholder: 'Filter invoice...',
-        variant: 'text',
+        variant: 'number',
       },
     },
     {
@@ -221,8 +233,8 @@ export function getOrderColumns(
     },
     {
       id: 'balanceDue',
-      accessorFn: (order) =>
-        Math.max(order.invoiceTotalPrice - order.invoiceAmountPaid, 0),
+      // Server-computed: the total less gift card tender and every payment.
+      accessorFn: (order) => order.invoiceBalanceDue,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Balance Due" />
       ),
@@ -265,14 +277,13 @@ export function getOrderColumns(
     },
     {
       id: 'paymentMethod',
-      accessorFn: (order) =>
-        order.invoiceFinalPaymentType ?? order.invoiceAdvancePaymentType,
+      accessorFn: (order) => order.invoicePaymentMethod,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Payment Method" />
       ),
       cell: ({ row }) => {
         const type =
-          row.getValue<Order['invoiceFinalPaymentType']>('paymentMethod')
+          row.getValue<Order['invoicePaymentMethod']>('paymentMethod')
         return <div>{type ? paymentTypeLabels[type] : '—'}</div>
       },
       enableSorting: true,

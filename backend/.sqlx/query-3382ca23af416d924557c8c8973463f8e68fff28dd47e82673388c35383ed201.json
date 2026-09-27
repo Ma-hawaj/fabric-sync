@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            i.invoice_number,\n            i.invoice_date,\n            i.branch_id,\n            b.name AS \"branch_name?\",\n            i.discount::float8 AS \"discount!\",\n            i.discount_unit,\n            i.customer_id\n        FROM invoices i\n        LEFT JOIN branch b ON b.id = i.branch_id\n        WHERE i.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "invoice_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "invoice_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 2,
+        "name": "branch_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "branch_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "discount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "discount_unit",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "customer_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      null,
+      false,
+      true
+    ]
+  },
+  "hash": "3382ca23af416d924557c8c8973463f8e68fff28dd47e82673388c35383ed201"
+}

@@ -5,6 +5,7 @@ import {
   createEmptyGiftCardLine,
   createEmptyInvoiceForm,
   createEmptyOrder,
+  createEmptyPayment,
   createEmptyProductLine,
   createEmptyRedemption,
 } from '../types/invoice-form'
@@ -258,23 +259,32 @@ describe('invoiceFormSchema', () => {
     expect(error?.path).toEqual(['redemptions', 1, 'code'])
   })
 
-  it('requires a payment type when an advance payment is entered', () => {
+  it('requires a payment type when a payment amount is entered', () => {
     const customer = {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
       existingCustomerId: 'cust-1',
       orders: [validOrder()],
     }
-    const withAdvance = { ...baseValues([customer]), amountPaid: 100 }
-    const result = invoiceFormSchema.safeParse(withAdvance)
+    const withPayment = {
+      ...baseValues([customer]),
+      payments: [{ ...createEmptyPayment(), amount: 100, paymentType: '' }],
+    }
+    const result = invoiceFormSchema.safeParse(withPayment)
     expect(result.success).toBe(false)
     if (!result.success) {
-      expect(result.error.issues[0]?.message).toMatch(/payment was made/i)
-      expect(result.error.issues[0]?.path).toEqual(['paymentType'])
+      expect(result.error.issues[0]?.message).toMatch(
+        /how this payment was made/i,
+      )
+      expect(result.error.issues[0]?.path).toEqual([
+        'payments',
+        0,
+        'paymentType',
+      ])
     }
   })
 
-  it('accepts an advance payment once a payment type is picked', () => {
+  it('accepts a payment once a payment type is picked', () => {
     const customer = {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
@@ -283,10 +293,34 @@ describe('invoiceFormSchema', () => {
     }
     const withPaymentType = {
       ...baseValues([customer]),
-      amountPaid: 100,
-      paymentType: 'cash' as const,
+      payments: [
+        { ...createEmptyPayment(), amount: 100, paymentType: 'cash' as const },
+      ],
     }
     expect(invoiceFormSchema.safeParse(withPaymentType).success).toBe(true)
+  })
+
+  it('rejects payments covering more than the invoice total', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      orders: [validOrder()], // 150 gross
+    }
+    const overpaid = {
+      ...baseValues([customer]),
+      payments: [
+        { ...createEmptyPayment(), amount: 200, paymentType: 'cash' as const },
+      ],
+    }
+    const result = invoiceFormSchema.safeParse(overpaid)
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toMatch(
+        /more than the invoice total/i,
+      )
+      expect(result.error.issues[0]?.path).toEqual(['payments'])
+    }
   })
 
   it('reports the correct customer path in multi-customer invoices', () => {

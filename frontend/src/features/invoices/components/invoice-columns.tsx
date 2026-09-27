@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { EyeIcon, FileDownIcon, CheckIcon } from 'lucide-react'
+import { EyeIcon, FileDownIcon, CheckIcon, PencilIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
@@ -7,7 +7,7 @@ import { CURRENCY } from '@/lib/currency'
 import type { Invoice, PaymentStatus } from '../types/invoices'
 
 const paymentTypeLabels: Record<
-  NonNullable<Invoice['finalPaymentType']>,
+  NonNullable<Invoice['paymentMethod']>,
   string
 > = {
   benefit: 'Benefit',
@@ -40,6 +40,7 @@ export const getInvoiceColumns = (
   onReceive: (invoice: Invoice) => void,
   onViewDetails: (invoice: Invoice) => void,
   onExportPdf: (invoice: Invoice) => void,
+  onEdit: (invoice: Invoice) => void,
 ): ColumnDef<Invoice, any>[] => [
   {
     accessorKey: 'id',
@@ -167,14 +168,31 @@ export const getInvoiceColumns = (
   },
   {
     id: 'paymentMethod',
-    accessorFn: (invoice) =>
-      invoice.finalPaymentType ?? invoice.advancePaymentType,
+    // The most recent payment's method, worked out server-side from the
+    // ledger.
+    accessorFn: (invoice) => invoice.paymentMethod,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Payment Method" />
     ),
     cell: ({ row }) => {
-      const type = row.getValue<Invoice['finalPaymentType']>('paymentMethod')
+      const type = row.getValue<Invoice['paymentMethod']>('paymentMethod')
       return <div>{type ? paymentTypeLabels[type] : '—'}</div>
+    },
+    enableSorting: true,
+    enableColumnFilter: false,
+  },
+  {
+    accessorKey: 'received',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Collected" />
+    ),
+    cell: ({ row }) => {
+      const received = row.getValue<boolean>('received')
+      return (
+        <Badge variant={received ? 'default' : 'secondary'}>
+          {received ? 'Received' : 'Pending'}
+        </Badge>
+      )
     },
     enableSorting: true,
     enableColumnFilter: false,
@@ -204,7 +222,6 @@ export const getInvoiceColumns = (
     enablePinning: true,
     cell: ({ row }) => {
       const invoice = row.original
-      const isPaid = invoice.paymentStatus === 'paid'
       return (
         <RowActions
           items={[
@@ -219,9 +236,20 @@ export const getInvoiceColumns = (
               onClick: () => onExportPdf(invoice),
             },
             {
-              label: isPaid ? 'Received' : 'Mark Received',
+              // Collected garments can't be re-specified: the backend refuses
+              // to rebuild an invoice with received orders, so the action is
+              // disabled rather than failing on save. Advances don't block —
+              // the ledger survives a rebuild untouched.
+              label: 'Edit',
+              icon: PencilIcon,
+              disabled: invoice.received,
+              onClick: () => onEdit(invoice),
+            },
+            {
+              // Always available: on a paid invoice this just collects the
+              // orders without taking money.
+              label: 'Mark Received',
               icon: CheckIcon,
-              disabled: isPaid,
               onClick: () => onReceive(invoice),
               separatorBefore: true,
             },

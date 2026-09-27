@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE measurements\n        SET measurement_date = $2,\n            length_fl = $3::float8, length_bl = $4::float8,\n            chest = $5::float8, waist = $6::float8,\n            hips = $7::float8, shoulder = $8::float8,\n            sleeve_length = $9::float8, neck = $10::float8,\n            open_hand = $11::float8, chest_up = $12::float8,\n            cuff_width = $13::float8, neck_width = $14::float8,\n            aram_hole = $15::float8, fo_width = $16::float8,\n            frant_pocket_length = $17::float8,\n            farnt_pocket_length_by_width = $18, side_pocket = $19,\n            mobile_pocket_length_by_width = $20\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "86187cb0977c16ff7e923f9d5a5630fe2cbfabdefd41e30cf8c59a7d9934b437"
+}
