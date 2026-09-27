@@ -109,6 +109,12 @@ interface InvoiceSummaryProps {
   /** Labels for stored ids whose rows aren't loaded yet (edit forms). */
   locationLabelForId?: (id: string) => string | null
   customerLabelForId?: (id: string) => string | null
+  /**
+   * On edit, money is read-only: the ledger survives a rebuild untouched,
+   * so the editor is replaced by the payments already taken. An edit that
+   * shrinks the lines below them is refused by the backend.
+   */
+  paymentsLocked?: boolean
 }
 
 export function InvoiceSummary({
@@ -117,6 +123,7 @@ export function InvoiceSummary({
   productNames,
   locationLabelForId,
   customerLabelForId,
+  paymentsLocked = false,
 }: InvoiceSummaryProps) {
   return (
     <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
@@ -373,86 +380,122 @@ export function InvoiceSummary({
                                 </span>
                               )}
                             </div>
-                            {paymentsField.state.value.map(
-                              (payment: PaymentDraft, index: number) => (
-                                <div
-                                  key={payment.key}
-                                  className="flex items-end gap-2"
-                                >
-                                  <div className="flex-1">
-                                    <NumberField
-                                      form={form}
-                                      name={`payments[${index}].amount`}
-                                      label={index === 0 ? 'Amount' : ''}
-                                    />
-                                  </div>
-                                  <form.Field
-                                    name={
-                                      `payments[${index}].paymentType` as never
-                                    }
-                                  >
-                                    {(methodField: any) => (
-                                      <div className="w-36 space-y-1">
-                                        {index === 0 && (
-                                          <Label htmlFor={methodField.name}>
-                                            Method
-                                          </Label>
-                                        )}
-                                        <Select
-                                          items={PAYMENT_TYPE_OPTIONS}
-                                          value={methodField.state.value}
-                                          onValueChange={(value: PaymentType) =>
-                                            methodField.handleChange(value)
-                                          }
-                                        >
-                                          <SelectTrigger
-                                            id={methodField.name}
-                                            className="w-full"
-                                          >
-                                            <SelectValue placeholder="Method..." />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {PAYMENT_TYPE_OPTIONS.map(
-                                              (option) => (
-                                                <SelectItem
-                                                  key={option.value}
-                                                  value={option.value}
-                                                >
-                                                  {option.label}
-                                                </SelectItem>
-                                              ),
-                                            )}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                    )}
-                                  </form.Field>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    type="button"
-                                    onClick={() =>
-                                      paymentsField.removeValue(index)
-                                    }
-                                    aria-label="Remove payment"
-                                  >
-                                    <XIcon className="h-3.5 w-3.5" />
-                                  </Button>
-                                </div>
-                              ),
+                            {paymentsLocked && (
+                              <p className="text-xs text-muted-foreground">
+                                Already taken — an edit never changes money.
+                                Take further payments via Receive.
+                              </p>
                             )}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              type="button"
-                              onClick={() =>
-                                paymentsField.pushValue(createEmptyPayment())
-                              }
-                              className="w-full border-dashed"
-                            >
-                              <PlusIcon className="h-3.5 w-3.5" />
-                              Add Payment
-                            </Button>
+                            {paymentsLocked &&
+                              paymentsField.state.value.map(
+                                (payment: PaymentDraft) => (
+                                  <div
+                                    key={payment.key}
+                                    className="flex justify-between text-sm"
+                                  >
+                                    <span className="text-muted-foreground">
+                                      {PAYMENT_TYPE_OPTIONS.find(
+                                        (o) => o.value === payment.paymentType,
+                                      )?.label ?? '—'}
+                                    </span>
+                                    <span>
+                                      {CURRENCY}{' '}
+                                      {(payment.amount === ''
+                                        ? 0
+                                        : payment.amount
+                                      ).toFixed(2)}
+                                    </span>
+                                  </div>
+                                ),
+                              )}
+                            {!paymentsLocked && (
+                              <>
+                                {paymentsField.state.value.map(
+                                  (payment: PaymentDraft, index: number) => (
+                                    <div
+                                      key={payment.key}
+                                      className="flex items-end gap-2"
+                                    >
+                                      <div className="flex-1">
+                                        <NumberField
+                                          form={form}
+                                          name={`payments[${index}].amount`}
+                                          label={index === 0 ? 'Amount' : ''}
+                                        />
+                                      </div>
+                                      <form.Field
+                                        name={
+                                          `payments[${index}].paymentType` as never
+                                        }
+                                      >
+                                        {(methodField: any) => (
+                                          <div className="w-36 space-y-1">
+                                            {index === 0 && (
+                                              <Label htmlFor={methodField.name}>
+                                                Method
+                                              </Label>
+                                            )}
+                                            <Select
+                                              items={PAYMENT_TYPE_OPTIONS}
+                                              value={methodField.state.value}
+                                              onValueChange={(
+                                                value: PaymentType,
+                                              ) =>
+                                                methodField.handleChange(value)
+                                              }
+                                            >
+                                              <SelectTrigger
+                                                id={methodField.name}
+                                                className="w-full"
+                                              >
+                                                <SelectValue placeholder="Method..." />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                {PAYMENT_TYPE_OPTIONS.map(
+                                                  (option) => (
+                                                    <SelectItem
+                                                      key={option.value}
+                                                      value={option.value}
+                                                    >
+                                                      {option.label}
+                                                    </SelectItem>
+                                                  ),
+                                                )}
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+                                        )}
+                                      </form.Field>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        type="button"
+                                        onClick={() =>
+                                          paymentsField.removeValue(index)
+                                        }
+                                        aria-label="Remove payment"
+                                      >
+                                        <XIcon className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  ),
+                                )}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  type="button"
+                                  onClick={() =>
+                                    paymentsField.pushValue(
+                                      createEmptyPayment(),
+                                    )
+                                  }
+                                  className="w-full border-dashed"
+                                >
+                                  <PlusIcon className="h-3.5 w-3.5" />
+                                  Add Payment
+                                </Button>
+                              </>
+                            )}
                           </div>
                         )}
                       </form.Field>

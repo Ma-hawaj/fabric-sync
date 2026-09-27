@@ -39,7 +39,13 @@ vi.mock('@/lib/api', () => ({
   ApiError: class ApiError extends Error {},
 }))
 
-function Harness({ defaultValues }: { defaultValues: InvoiceFormValues }) {
+function Harness({
+  defaultValues,
+  paymentsLocked = false,
+}: {
+  defaultValues: InvoiceFormValues
+  paymentsLocked?: boolean
+}) {
   const form = useForm({ defaultValues })
   apiGet.mockImplementation(
     apiGetMock({
@@ -58,6 +64,7 @@ function Harness({ defaultValues }: { defaultValues: InvoiceFormValues }) {
         form={form as never}
         customerNames={customerNames}
         productNames={productNames}
+        paymentsLocked={paymentsLocked}
       />
     </QueryClientProvider>
   )
@@ -269,5 +276,24 @@ describe('InvoiceSummary', () => {
 
     expect(rowValue('Gift Card Redeemed')).toBe(`−${CURRENCY} 90.00`)
     expect(rowValue('Balance Due')).toBe(`${CURRENCY} 0.00`)
+  })
+
+  it('locks payments to read-only on edit but still counts them', () => {
+    render(
+      <Harness
+        paymentsLocked
+        defaultValues={baseValues({
+          customers: [customerWithOrder(90)], // total 90.00
+          payments: [payment(20)],
+        })}
+      />,
+    )
+
+    // Taken money still nets off the balance…
+    expect(rowValue('Balance Due')).toBe(`${CURRENCY} 70.00`)
+    // …but there is no amount input or add button to change it with.
+    expect(screen.queryByLabelText('Amount')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add Payment' })).toBeNull()
+    expect(screen.queryByText('Cash')).toBeTruthy()
   })
 })

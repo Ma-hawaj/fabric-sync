@@ -209,9 +209,8 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
     }),
   )
 
-  // An editable invoice carries no payments by definition (the backend
-  // refuses the edit otherwise), so this maps back empty — it is here so a
-  // future ledger-bearing edit shape keeps flowing into the form's input.
+  // Payments already taken come along for the read-only summary — the
+  // backend ignores them on save and keeps the ledger untouched.
   const payments = edit.payments.map((payment) => ({
     key: crypto.randomUUID(),
     amount: payment.amount,

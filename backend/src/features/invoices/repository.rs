@@ -572,24 +572,6 @@ pub async fn latest_payment_method(
     Ok(method)
 }
 
-/// True once any money has been taken against the invoice.
-pub async fn invoice_has_payments(
-    tx: &mut sqlx::PgTransaction<'_>,
-    invoice_id: Uuid,
-) -> Result<bool, sqlx::Error> {
-    Ok(sqlx::query_scalar!(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM invoice_payments
-            WHERE invoice_id = $1
-        ) AS "exists!"
-        "#,
-        invoice_id,
-    )
-    .fetch_one(&mut **tx)
-    .await?)
-}
-
 /// Guards the payment endpoint: a pickup payment attributed to an order of
 /// another invoice must not land here.
 pub async fn order_belongs_to_invoice(

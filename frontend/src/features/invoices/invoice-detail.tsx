@@ -109,7 +109,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           <ExportPdfButton invoiceId={invoice.id} />
           <Button
             variant="outline"
-            disabled={detail.payments.length > 0 || detail.received}
+            disabled={detail.received}
             onClick={() =>
               void navigate({
                 to: '/invoices/$invoiceId/edit',

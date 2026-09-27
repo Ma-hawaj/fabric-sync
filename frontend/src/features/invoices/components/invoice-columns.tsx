@@ -236,12 +236,13 @@ export const getInvoiceColumns = (
               onClick: () => onExportPdf(invoice),
             },
             {
-              // Money taken is settled history: the backend refuses to
-              // rebuild an invoice with payments, so the action is disabled
-              // rather than failing on save.
+              // Collected garments can't be re-specified: the backend refuses
+              // to rebuild an invoice with received orders, so the action is
+              // disabled rather than failing on save. Advances don't block —
+              // the ledger survives a rebuild untouched.
               label: 'Edit',
               icon: PencilIcon,
-              disabled: invoice.amountPaid > 0,
+              disabled: invoice.received,
               onClick: () => onEdit(invoice),
             },
             {

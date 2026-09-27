@@ -160,6 +160,22 @@ pub fn validate_payment_amount(
     Ok(())
 }
 
+/// Rejects an edit whose rebuilt total no longer covers the money already
+/// taken: the ledger survives a rebuild untouched, so shrinking the lines
+/// below it would leave the invoice overpaid. Pure, so it can be tested
+/// without a database.
+fn validate_kept_payments(paid: f64, total: f64, redeemed: f64) -> Result<(), AppError> {
+    if round2(paid) - round2(total - redeemed) > 1e-9 {
+        return Err(AppError::BadRequest(format!(
+            "the {} already paid covers more than the edited total of {}",
+            format!("{:.2}", round2(paid)),
+            format!("{:.2}", round2(total - redeemed)),
+        )));
+    }
+
+    Ok(())
+}
+
 /// A till payment: money taken without collecting anything — an extra advance
 /// now, or the remainder after every order was already collected. When taken
 /// at a pickup, `order_id` attributes it there, and must belong to this
@@ -731,6 +747,17 @@ mod tests {
     }
 
     #[test]
+    fn validate_kept_payments_rejects_an_edit_shrunk_below_what_was_taken() {
+        // 500 already taken against a total rebuilt down to 400.
+        let error = validate_kept_payments(500.0, 400.0, 0.0).unwrap_err();
+        assert!(matches!(error, AppError::BadRequest(_)));
+        // Tender counts too: 100 paid plus 200 in gift cards covers a 300
+        // total exactly, but not a fils less.
+        assert!(validate_kept_payments(100.0, 300.0, 200.0).is_ok());
+        assert!(validate_kept_payments(100.0, 299.99, 200.0).is_err());
+    }
+
+    #[test]
     fn rejects_customer_with_both_existing_id_and_new_customer() {
         let mut invoice = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
         invoice.customers[0].new_customer = Some(super::super::types::NewCustomerInput {
@@ -1120,14 +1147,24 @@ fn plan_measurement_reuse(
 /// are torn down (stock restored, tender paid back, sold cards deleted) and
 /// the new lines go through the same writers as creation.
 ///
-/// Refused once money or work has moved past the draft stage — a paid invoice,
-/// a collected order, or any recorded stage/assignee/repair — since there is
-/// no longer an untouched sale to rebuild.
+/// The ledger is left alone — an edit never touches money, so an invoice
+/// carrying an advance stays editable. What is checked instead is that the
+/// money already taken still fits the rebuilt total.
+///
+/// Refused once goods or work have moved past the draft stage — a collected
+/// order, or any recorded stage/assignee/repair — since there is no longer
+/// an untouched sale to rebuild.
 pub async fn update_invoice(
     state: &AppState,
     invoice_id: Uuid,
-    input: CreateInvoiceInput,
+    mut input: CreateInvoiceInput,
 ) -> Result<CreatedInvoice, AppError> {
+    // Anything the form sends back for the ledger is ignored: payments are
+    // taken through the receive and payments endpoints, never smuggled in
+    // through an edit. Clearing before validate() also keeps the up-front
+    // overpay check — meant for creation — from firing on money that is
+    // already legitimately held.
+    input.payments = Vec::new();
     validate(&input)?;
 
     let totals = compute_totals(&input);
@@ -1138,14 +1175,11 @@ pub async fn update_invoice(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
 
-    // Refused once money has moved: unlike the old header overwrite, the
-    // ledger keeps every payment, so a rebuild can no longer silently reset
-    // what was already taken.
-    if repository::invoice_has_payments(&mut tx, invoice_id).await? {
-        return Err(AppError::BadRequest(
-            "this invoice has payments and cannot be edited".to_string(),
-        ));
-    }
+    // The money already taken has to fit the rebuilt total: shrinking the
+    // lines below what the customer already paid would leave the ledger
+    // overpaying the invoice, with no payment row to blame for it.
+    let kept = repository::sum_payments(&mut tx, invoice_id).await?;
+    validate_kept_payments(kept, totals.total, totals.redeemed)?;
 
     if repository::invoice_has_received_orders(&mut tx, invoice_id).await? {
         return Err(AppError::BadRequest(
@@ -1289,17 +1323,6 @@ pub async fn update_invoice(
         &input.gift_card_redemptions,
     )
     .await?;
-
-    for payment in &input.payments {
-        repository::insert_payment(
-            &mut tx,
-            invoice_id,
-            None,
-            payment.amount,
-            Some(payment.payment_type.as_str()),
-        )
-        .await?;
-    }
 
     repository::update_invoice_header(&mut tx, invoice_id, &input, totals.total, totals.redeemed)
         .await?;

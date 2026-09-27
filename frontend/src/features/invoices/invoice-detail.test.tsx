@@ -134,8 +134,8 @@ describe('InvoiceDetailPage', () => {
     expect(screen.queryByText('Advance')).toBeTruthy()
   })
 
-  it('shows collection separately from payment and allows editing while neither has happened', () => {
-    renderPage({ ...DETAIL, payments: [], received: false })
+  it('shows collection separately from payment and still allows editing with an advance taken', () => {
+    renderPage({ ...DETAIL, received: false })
 
     expect(screen.queryByText('Pending collection')).toBeTruthy()
     expect(screen.queryByText('Partially paid')).toBeTruthy()
