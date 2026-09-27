@@ -28,5 +28,34 @@ pub struct Preferences {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatePreferencesInput {
+    #[serde(deserialize_with = "Option::<Uuid>::deserialize")]
     pub default_location_id: Option<Uuid>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn default_location_key_is_required() {
+        for value in [json!({}), json!({ "defaultLocatonId": null })] {
+            let error = serde_json::from_value::<UpdatePreferencesInput>(value).unwrap_err();
+            assert!(error
+                .to_string()
+                .contains("missing field `defaultLocationId`"));
+        }
+    }
+
+    #[test]
+    fn default_location_accepts_null_and_uuid() {
+        let cleared: UpdatePreferencesInput =
+            serde_json::from_value(json!({ "defaultLocationId": null })).unwrap();
+        assert_eq!(cleared.default_location_id, None);
+
+        let id = Uuid::new_v4();
+        let selected: UpdatePreferencesInput =
+            serde_json::from_value(json!({ "defaultLocationId": id })).unwrap();
+        assert_eq!(selected.default_location_id, Some(id));
+    }
 }

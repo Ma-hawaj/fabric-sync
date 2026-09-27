@@ -270,7 +270,12 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
                     (needsDestination && !destinationId)
                   }
                   onClick={() =>
-                    void record('done', destinationId ?? undefined)
+                    void record(
+                      'done',
+                      needsDestination
+                        ? (destinationId ?? undefined)
+                        : undefined,
+                    )
                   }
                 >
                   Done

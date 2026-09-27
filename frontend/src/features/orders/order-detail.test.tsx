@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { OrderDetailPage } from './order-detail'
+import { apiClient } from '@/lib/api'
 import type { OrderDetail } from './types/orders'
 
 vi.mock('@tanstack/react-router', () => ({
@@ -25,7 +26,14 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/lib/api', () => ({
   ApiError: class ApiError extends Error {},
   apiClient: {
-    get: vi.fn().mockResolvedValue({ data: [] }),
+    get: vi.fn().mockImplementation((url: string) =>
+      Promise.resolve({
+        data: url.startsWith('/locations')
+          ? { data: [], total: 0, page: 1, perPage: 20 }
+          : [],
+      }),
+    ),
+    post: vi.fn().mockResolvedValue({ data: {} }),
   },
 }))
 
@@ -195,6 +203,26 @@ describe('OrderDetailPage', () => {
     const done = screen.getByRole('button', { name: 'Done' })
     expect((done as HTMLButtonElement).disabled).toBe(false)
   })
+
+  it.each([true, false])(
+    'records the correct location when requiresDelivery is %s',
+    async (requiresDelivery) => {
+      vi.mocked(apiClient.post).mockClear()
+      renderDeliveryOrder({
+        stages: [{ ...DELIVERY_STAGE, requiresDelivery }],
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+      await waitFor(() =>
+        expect(apiClient.post).toHaveBeenCalledWith(
+          '/orders/order-2/stages/stage-2',
+          {
+            status: 'done',
+            locationId: requiresDelivery ? 'branch-1' : undefined,
+          },
+        ),
+      )
+    },
+  )
 
   it('blocks a delivery while the receiving branch is unknown', () => {
     renderDeliveryOrder({
