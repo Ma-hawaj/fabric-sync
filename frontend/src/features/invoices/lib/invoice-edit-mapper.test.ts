@@ -11,9 +11,7 @@ function editFixture(): InvoiceEdit {
     branchName: 'Main Branch',
     discount: 0,
     discountUnit: 'amount',
-    paymentStatus: 'unpaid',
-    amountPaid: 0,
-    paymentType: null,
+    payments: [],
     customerId: null,
     customers: [
       {
@@ -85,12 +83,10 @@ describe('mapInvoiceEditToForm', () => {
     expect(values.date).toBe('2026-07-19')
     expect(values.receivingBranch).toBe('0197fdd2-6a67-7000-8000-000000000005')
     expect(values.productBranch).toBe('0197fdd2-6a67-7000-8000-000000000005')
-    expect(values.paymentStatus).toBe('unpaid')
     // Zeros read as blank, the way a fresh form does — the payload maps
     // blanks back to zero on save.
     expect(values.discount).toBe('')
-    expect(values.amountPaid).toBe('')
-    expect(values.paymentType).toBe('')
+    expect(values.payments).toEqual([])
   })
 
   it('maps customer blocks with measurements and design slots', () => {

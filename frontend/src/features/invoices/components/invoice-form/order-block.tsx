@@ -24,6 +24,7 @@ import {
   THOB_TYPE,
 } from '../../data/design-catalog'
 import type { Location } from '@/features/locations/types/location'
+import { GrossVatHint } from './gross-vat-hint'
 import { materialTotalStock } from '../../types/materials'
 import type { Material } from '../../types/materials'
 import type { InvoiceFormApi } from '../../types/invoice-form'
@@ -294,11 +295,23 @@ export function OrderBlock({
             label="Quantity (m)"
           />
 
-          <NumberField
-            form={form}
-            name={`${base}.price`}
-            label={`Price (${CURRENCY})`}
-          />
+          <div>
+            <NumberField
+              form={form}
+              name={`${base}.price`}
+              label={`Price incl. VAT (${CURRENCY})`}
+            />
+            {/* Prices are entered gross — the hint splits what was typed
+                into net and VAT so staff quote knowing both. */}
+            <form.Subscribe
+              selector={(state: any) =>
+                state.values.customers[customerIndex]?.orders[orderIndex]
+                  ?.price ?? ''
+              }
+            >
+              {(price: number | '') => <GrossVatHint gross={price} />}
+            </form.Subscribe>
+          </div>
         </div>
       </div>
     </div>

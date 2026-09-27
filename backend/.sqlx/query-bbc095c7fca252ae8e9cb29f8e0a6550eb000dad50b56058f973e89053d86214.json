@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT total_price::float8 AS \"total_price!\", gift_card_redeemed::float8 AS \"gift_card_redeemed!\"\n        FROM invoices\n        WHERE id = $1\n        FOR UPDATE\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total_price!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 1,
+        "name": "gift_card_redeemed!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "bbc095c7fca252ae8e9cb29f8e0a6550eb000dad50b56058f973e89053d86214"
+}

@@ -190,14 +190,16 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       <section className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
         <dl className="ms-auto max-w-sm space-y-1.5 text-sm">
           <PaymentRow label="Invoice Total" value={order.invoiceTotalPrice} />
-          <PaymentRow label="Advance Paid" value={order.invoiceAdvanceAmount} />
+          {order.invoiceGiftCardRedeemed > 0 && (
+            <PaymentRow
+              label="Paid by gift card"
+              value={-order.invoiceGiftCardRedeemed}
+            />
+          )}
           <PaymentRow label="Paid" value={-order.invoiceAmountPaid} />
           <PaymentRow
             label="Balance due"
-            value={Math.max(
-              order.invoiceTotalPrice - order.invoiceAmountPaid,
-              0,
-            )}
+            value={order.invoiceBalanceDue}
             emphasis
           />
         </dl>

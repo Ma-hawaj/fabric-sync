@@ -11,6 +11,7 @@ import {
 import type { Product } from '@/features/products/types/product'
 import type { PickerFilter } from '@/lib/async-combobox'
 import { CURRENCY } from '@/lib/currency'
+import { GrossVatHint } from './gross-vat-hint'
 import type { InvoiceFormApi } from '../../types/invoice-form'
 
 // Products come off the shelf only while they are on sale. A single search
@@ -117,8 +118,26 @@ export function ProductBlock({
         <NumberField
           form={form}
           name={`${base}.unitPrice`}
-          label={`Unit Price (${CURRENCY})`}
+          label={`Unit Price, incl. VAT (${CURRENCY})`}
         />
+        {/* The unit price is gross — the hint splits the line's total into
+            net and VAT so staff see both while pricing. */}
+        <form.Subscribe
+          selector={(state: any) => {
+            const line = (
+              state.values.products as
+                | { quantity?: number | ''; unitPrice?: number | '' }[]
+                | undefined
+            )?.[lineIndex]
+            const quantity =
+              typeof line?.quantity === 'number' ? line.quantity : 0
+            const unitPrice =
+              typeof line?.unitPrice === 'number' ? line.unitPrice : 0
+            return quantity > 0 && unitPrice > 0 ? quantity * unitPrice : ''
+          }}
+        >
+          {(lineTotal: number | '') => <GrossVatHint gross={lineTotal} />}
+        </form.Subscribe>
       </div>
 
       <Button

@@ -3,7 +3,6 @@ import { createEmptyMeasurement } from '@/features/customers/types/measurement-f
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 
 export type CustomerMode = 'existing' | 'new'
-export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
 export type PaymentType = 'benefit' | 'cash' | 'card'
 // A flat amount in the business currency, or a percentage of the subtotal —
 // deliberately not tied to a specific currency code (see lib/currency.ts).
@@ -76,6 +75,15 @@ export interface GiftCardRedemptionDraft {
   amount: NumberInput
 }
 
+// One payment taken up front with the invoice. Later payments go through the
+// receive endpoints or a till payment, so the form only ever carries the
+// opening ones — usually zero or one row.
+export interface PaymentDraft {
+  key: string
+  amount: NumberInput
+  paymentType: PaymentType | ''
+}
+
 export interface InvoiceFormValues {
   date: string
   receivingBranch: string
@@ -88,11 +96,7 @@ export interface InvoiceFormValues {
   productBranch: string
   discount: NumberInput
   discountUnit: DiscountUnit
-  paymentStatus: PaymentStatus
-  amountPaid: NumberInput
-  // The method used for the advance payment above — required whenever
-  // amountPaid is greater than zero.
-  paymentType: PaymentType | ''
+  payments: PaymentDraft[]
   customers: InvoiceCustomerDraft[]
   products: InvoiceProductDraft[]
   giftCards: InvoiceGiftCardDraft[]
@@ -155,13 +159,22 @@ export function createEmptyInvoiceForm(): InvoiceFormValues {
     productBranch: '',
     discount: '',
     discountUnit: 'amount',
-    paymentStatus: 'unpaid',
-    amountPaid: '',
-    paymentType: '',
+    // One blank row, like the old single advance: an untouched blank is
+    // tolerated by the schema and dropped by the payload, so an unpaid
+    // invoice submits no payments.
+    payments: [createEmptyPayment()],
     customers: [createEmptyCustomer()],
     products: [],
     giftCards: [],
     redemptions: [],
+  }
+}
+
+export function createEmptyPayment(): PaymentDraft {
+  return {
+    key: crypto.randomUUID(),
+    amount: '',
+    paymentType: '',
   }
 }
 

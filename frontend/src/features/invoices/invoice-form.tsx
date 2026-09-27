@@ -46,6 +46,8 @@ interface InvoiceFormProps {
   mutation: InvoiceFormMutation
   /** Rows the edit payload rebuilt, so pickers open labelled. */
   seeds?: InvoiceEditSeeds
+  /** Edits rebuild lines around the ledger: money is shown, not taken. */
+  editing?: boolean
 }
 
 export function InvoiceForm({
@@ -56,6 +58,7 @@ export function InvoiceForm({
   savedVerb,
   mutation,
   seeds,
+  editing = false,
 }: InvoiceFormProps) {
   const navigate = useNavigate()
   // The summary and the sibling blocks need to label a stored id — the name of
@@ -356,6 +359,7 @@ export function InvoiceForm({
           productNames={pickedProductsRef}
           locationLabelForId={(id) => seeds?.locationLabels.get(id) ?? null}
           customerLabelForId={(id) => seeds?.customerLabels.get(id) ?? null}
+          paymentsLocked={editing}
         />
 
         <form.Subscribe

@@ -35,13 +35,11 @@ CREATE TABLE material_stock (
     UNIQUE (material_id, branch_id)
 );
 
--- An invoice is settled in up to two payments: an advance taken up front (at
--- invoice creation) and a final payment that clears the remaining balance
--- (when the order is received) — each may use a different payment method,
--- hence the separate advance/final payment type columns. amount_paid tracks
--- the running total paid so far; advance_amount snapshots what the advance
--- payment was, since amount_paid is overwritten to total_price once the
--- final payment settles the balance.
+-- An invoice is settled through any number of payments — advances at
+-- creation, per-pickup payments as orders are collected, till payments in
+-- between — each its own row in invoice_payments below. The invoices table
+-- itself stores no money state: what is paid is the ledger's sum, and what
+-- the customer still owes is total_price - gift_card_redeemed - that sum.
 CREATE TABLE invoices (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     -- A tax invoice has to carry a human-readable number and the moment it was
@@ -55,20 +53,15 @@ CREATE TABLE invoices (
     branch_id UUID REFERENCES branch(id),
     discount NUMERIC(10, 2) NOT NULL DEFAULT 0,
     discount_unit TEXT NOT NULL DEFAULT 'amount' CHECK (discount_unit IN ('amount', 'percent')),
-    payment_status TEXT NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid', 'partial', 'paid')),
-    amount_paid NUMERIC(10, 2) NOT NULL DEFAULT 0,
-    advance_amount NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (advance_amount >= 0),
-    advance_payment_type TEXT CHECK (advance_payment_type IN ('benefit', 'cash', 'card')),
-    final_payment_type TEXT CHECK (final_payment_type IN ('benefit', 'cash', 'card')),
     -- A tailoring invoice finds its customer through orders → measurements, but
     -- a sale of only products or gift cards has no orders to go through. This
     -- names the buyer directly for those; it stays NULL on ordinary invoices.
     customer_id UUID REFERENCES customers(id),
     -- A gift card is tender rather than a discount, so total_price stays the
-    -- gross amount charged and this sits alongside amount_paid instead of
-    -- reducing the total. It is a third settlement channel next to the advance
-    -- and final payments above, so what the customer actually hands over to
-    -- clear the invoice is total_price - gift_card_redeemed.
+    -- gross amount charged and this sits alongside the ledger instead of
+    -- reducing the total. It is a settlement channel next to the payments
+    -- below, so what the customer actually hands over to clear the invoice is
+    -- total_price - gift_card_redeemed.
     gift_card_redeemed NUMERIC(10, 2) NOT NULL DEFAULT 0
 );
 
@@ -121,6 +114,23 @@ CREATE TABLE orders (
     -- production is assigned. When the two differ the garment has to be moved
     -- between locations, which is what a `requires_delivery` stage tracks.
     production_branch_id UUID REFERENCES branch(id)
+);
+
+-- Every payment against an invoice, in the order it was taken: advances at
+-- creation, per-pickup payments as orders are collected, till payments in
+-- between. Defined after orders so a payment taken at a pickup can point at
+-- it.
+CREATE TABLE invoice_payments (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    -- The pickup this payment was taken at, when it was taken at one. NULL
+    -- for advances and till payments not tied to a collection.
+    order_id UUID REFERENCES orders(id) ON DELETE SET NULL,
+    amount NUMERIC(10, 2) NOT NULL CHECK (amount > 0),
+    -- Nullable: the app always records a method, but rows imported without a
+    -- recorded method (see scripts/ingest_xlsm.py) keep NULL.
+    payment_type TEXT CHECK (payment_type IN ('benefit', 'cash', 'card')),
+    paid_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- The stages a garment passes through in production. Staff edit this list, so

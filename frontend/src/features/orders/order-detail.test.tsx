@@ -69,9 +69,9 @@ const ORDER: OrderDetail = {
   invoiceTotalPrice: 300,
   invoiceAmountPaid: 120,
   invoicePaymentStatus: 'partial',
-  invoiceAdvanceAmount: 120,
-  invoiceAdvancePaymentType: 'benefit',
-  invoiceFinalPaymentType: null,
+  invoiceBalanceDue: 180,
+  invoiceGiftCardRedeemed: 0,
+  invoicePaymentMethod: 'benefit',
   measurement: {
     id: 'm-1',
     customerId: 'c-1',
