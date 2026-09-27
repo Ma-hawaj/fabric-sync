@@ -131,7 +131,7 @@ describe('InvoiceDetailPage', () => {
 
     expect(screen.queryByText('Payments')).toBeTruthy()
     expect(screen.queryByText('benefit')).toBeTruthy()
-    expect(screen.queryByText('Advance')).toBeTruthy()
+    expect(screen.queryByText('Invoice payment')).toBeTruthy()
   })
 
   it('shows collection separately from payment and still allows editing with an advance taken', () => {

@@ -441,8 +441,17 @@ pub async fn receive_order(
         ));
     }
 
+    let order = repository::get_order(state, order_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
+    let invoice_id = order.invoice_id;
     let mut tx = state.db().begin().await?;
 
+    // Match invoice edits and whole-invoice receipts: always lock the invoice
+    // before its orders, including pickups that take no payment.
+    let invoice = crate::features::invoices::repository::lock_invoice(&mut tx, invoice_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
     let locked = repository::lock_order(&mut tx, order_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
@@ -458,17 +467,11 @@ pub async fn receive_order(
 
     if amount > 0.0 {
         let payment_type = payment_type.expect("validated: payment type is set");
-        // Locked so two tills collecting sibling orders at once serialize
-        // rather than both paying against the same remaining balance.
-        let locked =
-            crate::features::invoices::repository::lock_invoice(&mut tx, invoice_id).await?;
-        let locked =
-            locked.ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
         let paid = crate::features::invoices::repository::sum_payments(&mut tx, invoice_id).await?;
         crate::features::invoices::service::validate_payment_amount(
             amount,
-            locked.total_price,
-            locked.gift_card_redeemed,
+            invoice.total_price,
+            invoice.gift_card_redeemed,
             paid,
         )?;
         crate::features::invoices::repository::insert_payment(

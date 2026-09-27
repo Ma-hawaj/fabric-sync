@@ -76,7 +76,7 @@ function discountOf(
 ): number {
   const raw =
     discountUnit === 'percent' ? grossSubtotal * (discount / 100) : discount
-  return Math.min(Math.round(raw * 100) / 100, grossSubtotal)
+  return Math.max(0, Math.min(Math.round(raw * 100) / 100, grossSubtotal))
 }
 
 // The same arithmetic the backend's breakdown runs, for live form totals:

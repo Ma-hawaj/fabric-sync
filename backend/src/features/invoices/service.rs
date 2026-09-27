@@ -142,7 +142,7 @@ pub fn validate_payment_amount(
     gift_card_redeemed: f64,
     amount_paid: f64,
 ) -> Result<(), AppError> {
-    if amount <= 0.0 {
+    if round2(amount) <= 0.0 {
         return Err(AppError::BadRequest(
             "a payment has to be greater than zero".to_string(),
         ));
@@ -237,11 +237,11 @@ pub async fn receive_invoice(
 ) -> Result<ReceivedInvoice, AppError> {
     let mut tx = state.db().begin().await?;
 
-    repository::mark_orders_received(&mut tx, invoice_id).await?;
-
     let locked = repository::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
+
+    repository::mark_orders_received(&mut tx, invoice_id).await?;
 
     let paid = repository::sum_payments(&mut tx, invoice_id).await?;
     let summary = payment_summary(locked.total_price, locked.gift_card_redeemed, paid);
@@ -420,7 +420,7 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
     }
 
     for payment in &input.payments {
-        if payment.amount <= 0.0 {
+        if round2(payment.amount) <= 0.0 {
             return Err(AppError::BadRequest(
                 "a payment has to be greater than zero".to_string(),
             ));
@@ -741,6 +741,8 @@ mod tests {
     #[test]
     fn validate_payment_amount_rejects_non_positive_and_overpay() {
         assert!(validate_payment_amount(0.0, 200.0, 0.0, 0.0).is_err());
+        assert!(validate_payment_amount(0.004, 200.0, 0.0, 0.0).is_err());
+        assert!(validate_payment_amount(0.005, 200.0, 0.0, 0.0).is_ok());
         assert!(validate_payment_amount(-5.0, 200.0, 0.0, 0.0).is_err());
         assert!(validate_payment_amount(121.0, 200.0, 0.0, 80.0).is_err());
         assert!(validate_payment_amount(120.0, 200.0, 0.0, 80.0).is_ok());
@@ -848,6 +850,25 @@ mod tests {
                 .unwrap();
         let error = validate(&input).unwrap_err();
         assert!(matches!(error, AppError::BadRequest(_)));
+    }
+
+    #[test]
+    fn upfront_payments_must_remain_positive_after_rounding() {
+        for amount in [-1.0, 0.0, 0.004, 0.005, 0.01] {
+            let mut input = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
+            input.payments = serde_json::from_value(serde_json::json!([
+                { "amount": 10.0, "paymentType": "cash" },
+                { "amount": amount, "paymentType": "card" },
+            ]))
+            .unwrap();
+            if amount < 0.005 {
+                let error = validate(&input).unwrap_err();
+                assert!(matches!(error, AppError::BadRequest(message)
+                    if message == "a payment has to be greater than zero"));
+            } else {
+                assert!(validate(&input).is_ok());
+            }
+        }
     }
 
     #[test]

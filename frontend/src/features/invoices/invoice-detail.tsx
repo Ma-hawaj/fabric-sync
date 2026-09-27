@@ -288,7 +288,9 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                           View order
                         </Link>
                       ) : (
-                        <span className="text-muted-foreground">Advance</span>
+                        <span className="text-muted-foreground">
+                          Invoice payment
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className="text-end font-medium tabular-nums">

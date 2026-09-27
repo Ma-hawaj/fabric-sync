@@ -103,6 +103,24 @@ describe('computeInvoiceTotals', () => {
     expect(totals.taxable + totals.vat).toBeCloseTo(180, 2)
   })
 
+  it.each(['amount', 'percent'] as const)(
+    'clamps %s discounts to the gross subtotal without increasing the charge',
+    (discountUnit) => {
+      for (const discount of [-20, -0.004, 0]) {
+        const totals = computeInvoiceTotals({ ...base, discount, discountUnit })
+        expect(totals.discountAmount).toBe(0)
+        expect(totals.total).toBe(200)
+      }
+      const totals = computeInvoiceTotals({
+        ...base,
+        discount: 300,
+        discountUnit,
+      })
+      expect(totals.discountAmount).toBe(200)
+      expect(totals.total).toBe(0)
+    },
+  )
+
   it('nets tender off the balance due', () => {
     const totals = computeInvoiceTotals({ ...base, redeemed: 50, paid: 60 })
     expect(totals.balanceDue).toBe(90)
