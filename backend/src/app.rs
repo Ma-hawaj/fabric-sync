@@ -5,7 +5,7 @@ use crate::{
     auth,
     features::{
         customers, gift_cards, health, invoices, locations, materials, order_stages, orders,
-        products, users,
+        preferences, products, users,
     },
     request_log,
     state::AppState,
@@ -73,6 +73,12 @@ pub fn router(state: AppState) -> Router {
             state.clone(),
             auth::require_auth,
         )))
+        .merge(
+            preferences::router().route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::require_auth,
+            )),
+        )
         .layer(cors)
         // Outermost layer: wraps every `require_auth` route layer below (and
         // `/health`, which has none), so it's `Span::current()` for the whole

@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            p.default_location_id AS \"default_location_id?\",\n            b.name AS \"branch_name?\",\n            b.receives_orders AS \"receives_orders?\",\n            b.holds_stock AS \"holds_stock?\",\n            b.is_active AS \"is_active?\"\n        FROM (SELECT $1::TEXT AS user_id) AS u\n        LEFT JOIN user_preferences p ON p.user_id = u.user_id\n        LEFT JOIN branch b ON b.id = p.default_location_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "default_location_id?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "branch_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "receives_orders?",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "holds_stock?",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_active?",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "0379f4d9ddc2f61a637eaad47c43057f3fcd620369a6000f5611f8331c3d4ab1"
+}

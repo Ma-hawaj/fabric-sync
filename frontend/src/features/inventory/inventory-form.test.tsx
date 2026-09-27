@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiGetMock } from '@/lib/list-fixtures'
+import { typeSearchText } from '@/lib/test-events'
 import { InventoryFormPage } from './inventory-form'
 import type { Material } from './types/inventory'
 
@@ -88,7 +89,7 @@ describe('InventoryFormPage material search', () => {
     renderPage()
 
     openMaterialSearch()
-    fireEvent.change(searchInput(), { target: { value: 'Wool' } })
+    typeSearchText(searchInput(), 'Wool')
 
     expect(
       await screen.findByRole('option', { name: 'Wool Blend — Grey' }),
@@ -106,7 +107,7 @@ describe('InventoryFormPage material search', () => {
     renderPage()
 
     openMaterialSearch()
-    fireEvent.change(searchInput(), { target: { value: 'FB-CTN' } })
+    typeSearchText(searchInput(), 'FB-CTN')
 
     expect(
       await screen.findByRole('option', {

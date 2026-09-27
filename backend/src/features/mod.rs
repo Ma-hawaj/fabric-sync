@@ -6,5 +6,6 @@ pub mod locations;
 pub mod materials;
 pub mod order_stages;
 pub mod orders;
+pub mod preferences;
 pub mod products;
 pub mod users;

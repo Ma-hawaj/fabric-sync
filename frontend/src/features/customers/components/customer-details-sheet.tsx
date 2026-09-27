@@ -197,26 +197,16 @@ export function CustomerDetailsSheet({
                     <div className="grid gap-5 @2xl:grid-cols-[minmax(0,1fr)_16rem] @4xl:grid-cols-[minmax(0,1fr)_21rem]">
                       <div className="order-2 space-y-6 @2xl:order-1">
                         {MEASUREMENT_GROUPS.map((group) => {
-                          const recorded = fieldsInGroup(group.id)
-                            .map((field) => ({
-                              field,
-                              value: activeMeasurement[field.name],
-                            }))
-                            .filter(
-                              ({ value }) =>
-                                value !== undefined &&
-                                value !== null &&
-                                value !== '',
-                            )
-                          if (recorded.length === 0) return null
-
+                          const fields = fieldsInGroup(group.id)
                           return (
                             <StyleSection key={group.id} title={group.title}>
-                              {recorded.map(({ field, value }) => (
+                              {fields.map((field) => (
                                 <MetricItem
                                   key={field.name}
                                   label={field.label}
-                                  value={value ?? undefined}
+                                  value={
+                                    activeMeasurement[field.name] ?? undefined
+                                  }
                                   onHover={() => setHoveredField(field.name)}
                                   onLeave={() => setHoveredField(null)}
                                 />
@@ -259,16 +249,25 @@ function MetricItem({
   onHover?: () => void
   onLeave?: () => void
 }) {
-  if (value === undefined || value === '') return null
+  const empty = value === undefined || value === ''
   return (
     <div
-      className="flex flex-col border-b border-border/30 pb-2 transition-colors hover:border-info/60"
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
+      className={cn(
+        'flex flex-col border-b border-border/30 pb-2 transition-colors',
+        !empty && 'hover:border-info/60',
+      )}
+      // No diagram callout for a value that was never recorded.
+      onMouseEnter={empty ? undefined : onHover}
+      onMouseLeave={empty ? undefined : onLeave}
     >
       <span className="text-xs text-muted-foreground font-medium">{label}</span>
-      <span className="text-sm font-semibold text-foreground mt-0.5">
-        {value}
+      <span
+        className="text-sm font-semibold text-foreground mt-0.5"
+        data-empty={empty ? '' : undefined}
+      >
+        {/* Non-breaking space: holds the value line's height so an empty
+            slot occupies exactly the same box as a recorded one. */}
+        {empty ? '\u00A0' : value}
       </span>
     </div>
   )

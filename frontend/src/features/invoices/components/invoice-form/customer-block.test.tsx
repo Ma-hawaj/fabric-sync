@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
 import type { Customer } from '@/features/customers/types/customers'
 import { apiGetMock } from '@/lib/list-fixtures'
+import { typeSearchText } from '@/lib/test-events'
 import { CustomerBlock } from './customer-block'
 import { createEmptyCustomer } from '../../types/invoice-form'
 import type { InvoiceCustomerDraft } from '../../types/invoice-form'
@@ -104,7 +105,7 @@ describe('CustomerBlock', () => {
     render(<Harness customer={createEmptyCustomer()} />)
 
     openCustomerSearch()
-    fireEvent.change(searchInput(), { target: { value: 'Fatima' } })
+    typeSearchText(searchInput(), 'Fatima')
 
     expect(
       await screen.findByRole('option', {

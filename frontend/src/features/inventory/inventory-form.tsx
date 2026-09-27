@@ -1,5 +1,6 @@
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
+import * as React from 'react'
 import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -15,6 +16,7 @@ import { TextField } from '@/components/form/fields'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { StockEntryRow } from './components/stock-entry-row'
+import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
 import { UNITS } from './data/inventory-options'
 import { useAddStock } from './hooks/use-add-stock'
 import { inventoryFormSchema } from './lib/inventory-schema'
@@ -49,6 +51,20 @@ export function InventoryFormPage() {
       await navigate({ to: '/inventory' })
     },
   })
+
+  // The default location pre-fills the first stock row when it holds stock.
+  // Only row zero, and only while empty — further "Add Another Location" rows
+  // stay blank (each location may appear once), and a choice already made is
+  // never overwritten by a late-arriving default.
+  const stockDefault = useApplicableDefaultLocation('stock')
+  React.useEffect(() => {
+    if (stockDefault && form.state.values.entries[0]?.locationId === '') {
+      form.setFieldValue(
+        'entries[0].locationId' as never,
+        stockDefault.id as never,
+      )
+    }
+  }, [stockDefault, form])
 
   return (
     <div className="space-y-6">

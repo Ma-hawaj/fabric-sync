@@ -22,6 +22,12 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ThemeMenuItems } from '@/components/theme-menu-items'
 import { useAuth } from '@/lib/auth'
+import { useAllLocations } from '@/features/locations/hooks/use-locations'
+import {
+  usePreferences,
+  useSetDefaultLocation,
+} from '@/features/locations/hooks/use-default-location'
+import { toast } from 'sonner'
 import {
   HomeIcon,
   UsersIcon,
@@ -36,6 +42,7 @@ import {
   ShoppingBagIcon,
   GiftIcon,
   ChevronsUpDownIcon,
+  CheckIcon,
   LogInIcon,
   LogOutIcon,
   SunIcon,
@@ -67,8 +74,57 @@ function getInitials(name: string) {
   return initials.map((part) => part[0].toUpperCase()).join('')
 }
 
+function DefaultLocationSubmenu() {
+  const { data: preferences } = usePreferences()
+  const { data: locations } = useAllLocations()
+  const setDefaultLocation = useSetDefaultLocation()
+
+  const active = locations.filter((location) => location.isActive)
+  const currentId = preferences?.defaultLocationId ?? null
+
+  const change = (locationId: string | null, label: string) => {
+    if (locationId === currentId) {
+      return
+    }
+    const pending = setDefaultLocation.mutateAsync(locationId)
+    toast.promise(pending, {
+      loading: 'Saving default location...',
+      success: () =>
+        locationId === null
+          ? 'Default location cleared.'
+          : `Default location set to ${label}.`,
+      error: 'Could not save the default location. Please try again.',
+    })
+  }
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <MapPinIcon />
+        Default location
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuItem onClick={() => change(null, '')}>
+          <span className="flex-1">None</span>
+          {currentId === null && <CheckIcon />}
+        </DropdownMenuItem>
+        {active.map((location) => (
+          <DropdownMenuItem
+            key={location.id}
+            onClick={() => change(location.id, location.name)}
+          >
+            <span className="flex-1">{location.name}</span>
+            {currentId === location.id && <CheckIcon />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  )
+}
+
 function UserMenu() {
   const { isAuthenticated, user, signOut } = useAuth()
+  const { data: preferences } = usePreferences()
 
   if (!isAuthenticated || !user) {
     return (
@@ -89,7 +145,7 @@ function UserMenu() {
         <div className="grid flex-1 text-start text-sm leading-tight group-data-[collapsible=icon]:hidden">
           <span className="truncate font-medium">{user.name}</span>
           <span className="truncate text-xs text-sidebar-foreground/60">
-            {user.email}
+            {preferences?.defaultLocation?.name ?? user.email}
           </span>
         </div>
         <ChevronsUpDownIcon className="ms-auto group-data-[collapsible=icon]:hidden" />
@@ -117,6 +173,7 @@ function UserMenu() {
             <ThemeMenuItems />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        <DefaultLocationSubmenu />
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={signOut}>
           <LogOutIcon />

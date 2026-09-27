@@ -6,6 +6,7 @@ import { OrderBlock } from './order-block'
 import { createEmptyCustomer } from '../../types/invoice-form'
 import type { Material } from '../../types/materials'
 import { apiGetMock } from '@/lib/list-fixtures'
+import { typeSearchText } from '@/lib/test-events'
 import { CURRENCY } from '@/lib/currency'
 
 const MATERIALS: Material[] = [
@@ -108,7 +109,7 @@ describe('OrderBlock', () => {
     render(<Harness />)
 
     openMaterialSearch()
-    fireEvent.change(searchInput(), { target: { value: 'Wool' } })
+    typeSearchText(searchInput(), 'Wool')
 
     expect(
       await screen.findByRole('option', { name: 'Wool Blend — Grey' }),
