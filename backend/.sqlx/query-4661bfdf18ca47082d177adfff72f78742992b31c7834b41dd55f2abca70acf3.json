@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            i.invoice_number,\n            i.invoice_date,\n            i.branch_id,\n            b.name AS \"branch_name?\",\n            i.discount::float8 AS \"discount!\",\n            i.discount_unit,\n            i.payment_status,\n            i.amount_paid::float8 AS \"amount_paid!\",\n            i.advance_payment_type,\n            i.customer_id\n        FROM invoices i\n        LEFT JOIN branch b ON b.id = i.branch_id\n        WHERE i.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "invoice_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "invoice_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 2,
+        "name": "branch_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "branch_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "discount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "discount_unit",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "payment_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "amount_paid!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 8,
+        "name": "advance_payment_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "customer_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      null,
+      false,
+      false,
+      null,
+      true,
+      true
+    ]
+  },
+  "hash": "4661bfdf18ca47082d177adfff72f78742992b31c7834b41dd55f2abca70acf3"
+}

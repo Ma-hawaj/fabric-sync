@@ -186,6 +186,97 @@ pub struct CreatedInvoice {
     pub gift_card_redeemed: f64,
 }
 
+/// One tailoring line as it was entered, not as it prints: ids rather than
+/// names, so the edit form can put every picker back the way it was.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceEditOrder {
+    pub material_id: Uuid,
+    pub material_name: String,
+    /// The unit the availability hint prints ("Available: X meters").
+    pub material_unit: String,
+    pub material_amount: f64,
+    pub production_location_id: Option<Uuid>,
+    pub production_location_name: Option<String>,
+    /// Live stock at the production location, so the edit form can seed the
+    /// "Made At" picker without a second query. Informational only — the
+    /// guarded decrement on save is what actually enforces availability.
+    pub stock_quantity: Option<f64>,
+    pub price: f64,
+    pub thobe_type: Option<String>,
+    pub f_pocket: Option<String>,
+    pub collar: Option<String>,
+    pub sleeve: Option<String>,
+    pub patti: Option<String>,
+    pub more_details: Option<String>,
+}
+
+/// One customer block as it was entered: the measurement snapshot behind the
+/// block plus the orders cut to it. `measurement_id` is the row an edit
+/// rewrites in place (see service::update_invoice).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceEditCustomer {
+    pub existing_customer_id: Uuid,
+    pub customer_name: String,
+    pub customer_mobile_no: String,
+    pub measurement_id: Option<Uuid>,
+    pub measurement: CreateMeasurementInput,
+    pub orders: Vec<InvoiceEditOrder>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceEditProductLine {
+    pub product_id: Option<Uuid>,
+    pub product_name: String,
+    pub quantity: f64,
+    pub unit_price: f64,
+    pub branch_id: Option<Uuid>,
+    pub branch_name: Option<String>,
+    /// Live stock at that branch, for the same reason as the order's.
+    pub stock_quantity: Option<f64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceEditGiftCardLine {
+    pub code: String,
+    pub amount: f64,
+    pub expires_on: Option<NaiveDate>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceEditRedemption {
+    pub code: String,
+    pub amount: f64,
+}
+
+/// Shape of `GET /invoices/:id/edit`: the invoice as input values rather than
+/// as a printed document. `GET /invoices/:id` keeps serving the display shape
+/// — names without ids — which is why this is a separate type and endpoint.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceEdit {
+    pub id: Uuid,
+    /// Sequential and human-readable, unlike `id` — for the edit page title.
+    pub invoice_number: i64,
+    pub date: NaiveDate,
+    pub branch_id: Option<Uuid>,
+    pub branch_name: Option<String>,
+    pub discount: f64,
+    pub discount_unit: String,
+    pub payment_status: String,
+    pub amount_paid: f64,
+    pub payment_type: Option<String>,
+    pub customer_id: Option<Uuid>,
+    pub customers: Vec<InvoiceEditCustomer>,
+    pub products: Vec<InvoiceEditProductLine>,
+    pub gift_cards: Vec<InvoiceEditGiftCardLine>,
+    pub gift_card_redemptions: Vec<InvoiceEditRedemption>,
+}
+
 // One row of GET /invoices. Deserialize is only used to decode the
 // SQL-built JSON aggregate in repository.rs, whose keys are already
 // camelCase, so a single symmetric rename_all works.

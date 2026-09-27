@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            ii.product_id,\n            ii.description,\n            ii.quantity::float8 AS \"quantity!\",\n            ii.unit_price::float8 AS \"unit_price!\",\n            ii.branch_id,\n            b.name AS \"branch_name?\",\n            ps.quantity::float8 AS stock_quantity\n        FROM invoice_items ii\n        LEFT JOIN branch b ON b.id = ii.branch_id\n        LEFT JOIN product_stock ps\n            ON ps.product_id = ii.product_id\n            AND ps.branch_id = ii.branch_id\n        WHERE invoice_id = $1 AND kind = 'product'\n        ORDER BY ii.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "product_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "quantity!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 3,
+        "name": "unit_price!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "branch_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "branch_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "stock_quantity",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      null,
+      null,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "fa4f7dcc9f4127d1933bc152b016aaa1d25532d211d126970069a626ef880512"
+}

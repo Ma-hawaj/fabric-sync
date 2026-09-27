@@ -103,12 +103,17 @@ interface InvoiceSummaryProps {
   /** Rows the pickers handed over, read at render time for the line labels. */
   customerNames: React.MutableRefObject<Map<string, Customer>>
   productNames: React.MutableRefObject<Map<string, Product>>
+  /** Labels for stored ids whose rows aren't loaded yet (edit forms). */
+  locationLabelForId?: (id: string) => string | null
+  customerLabelForId?: (id: string) => string | null
 }
 
 export function InvoiceSummary({
   form,
   customerNames,
   productNames,
+  locationLabelForId,
+  customerLabelForId,
 }: InvoiceSummaryProps) {
   return (
     <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
@@ -130,6 +135,7 @@ export function InvoiceSummary({
                   value: location.id,
                   label: location.name,
                 })}
+                getValueLabel={locationLabelForId}
                 value={field.state.value || null}
                 onValueChange={(value) => field.handleChange(value ?? '')}
                 placeholder="Search branch..."
@@ -157,6 +163,7 @@ export function InvoiceSummary({
                         value: customer.id,
                         label: `${customer.name} — ${customer.mobileNo}`,
                       })}
+                      getValueLabel={customerLabelForId}
                       value={field.state.value || null}
                       onValueChange={(id) => field.handleChange(id ?? '')}
                       placeholder="Search customer..."

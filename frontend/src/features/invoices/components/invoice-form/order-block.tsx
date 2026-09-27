@@ -46,6 +46,10 @@ interface OrderBlockProps {
   customerIndex: number
   orderIndex: number
   orderNumber: number
+  /** The row behind a stored id on an edit form, before anything is re-picked. */
+  initialMaterialForId?: (id: string) => Material | null
+  /** The label for a stored id whose row isn't loaded yet (edit forms). */
+  materialLabelForId?: (id: string) => string | null
   onRemove: () => void
   removable: boolean
 }
@@ -55,15 +59,27 @@ export function OrderBlock({
   customerIndex,
   orderIndex,
   orderNumber,
+  initialMaterialForId,
+  materialLabelForId,
   onRemove,
   removable,
 }: OrderBlockProps) {
   const base = `customers[${customerIndex}].orders[${orderIndex}]`
   // The row behind the stored `materialId`, remembered from the picker. The
   // "made at" options come from the material's own stock rows, which the list
-  // endpoint returns nested — so the whole materials list is not needed.
+  // endpoint returns nested — so the whole materials list is not needed. On an
+  // edit form it starts seeded from the loaded invoice, with live stock at the
+  // stored location, so the current "Made At" resolves without re-picking.
+  const storedMaterialId = (
+    form.state.values as unknown as {
+      customers?: { orders?: { materialId?: string }[] }[]
+    }
+  ).customers?.[customerIndex]?.orders?.[orderIndex]?.materialId
   const [pickedMaterial, setPickedMaterial] = React.useState<Material | null>(
-    null,
+    () =>
+      storedMaterialId
+        ? (initialMaterialForId?.(storedMaterialId) ?? null)
+        : null,
   )
 
   return (
@@ -181,6 +197,7 @@ export function OrderBlock({
                     value: material.id,
                     label: materialOptionLabel(material),
                   })}
+                  getValueLabel={materialLabelForId}
                   value={field.state.value || null}
                   onValueChange={(value) => {
                     field.handleChange(value ?? '')

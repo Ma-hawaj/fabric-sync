@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { EyeIcon, FileDownIcon, CheckIcon } from 'lucide-react'
+import { EyeIcon, FileDownIcon, CheckIcon, PencilIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
@@ -40,6 +40,7 @@ export const getInvoiceColumns = (
   onReceive: (invoice: Invoice) => void,
   onViewDetails: (invoice: Invoice) => void,
   onExportPdf: (invoice: Invoice) => void,
+  onEdit: (invoice: Invoice) => void,
 ): ColumnDef<Invoice, any>[] => [
   {
     accessorKey: 'id',
@@ -217,6 +218,15 @@ export const getInvoiceColumns = (
               label: 'Export PDF',
               icon: FileDownIcon,
               onClick: () => onExportPdf(invoice),
+            },
+            {
+              // Paid invoices are settled history: the backend refuses to
+              // rebuild them, so the action is disabled rather than failing
+              // on save.
+              label: 'Edit',
+              icon: PencilIcon,
+              disabled: isPaid,
+              onClick: () => onEdit(invoice),
             },
             {
               label: isPaid ? 'Received' : 'Mark Received',

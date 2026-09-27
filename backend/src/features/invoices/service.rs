@@ -1,4 +1,6 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+
+use chrono::NaiveDate;
 
 use crate::{
     error::AppError,
@@ -17,11 +19,12 @@ use uuid::Uuid;
 use super::{
     repository,
     types::{
-        CreateInvoiceInput, CreateProductLineInput, CreatedInvoice, DiscountUnit,
-        InvoiceCustomerInput, InvoiceDetail, InvoiceListItem, InvoiceTotalsBreakdown, PaymentType,
-        ReceivedInvoice,
+        CreateGiftCardLineInput, CreateInvoiceInput, CreateOrderInput, CreateProductLineInput,
+        CreatedInvoice, DiscountUnit, GiftCardRedemptionInput, InvoiceCustomerInput, InvoiceDetail,
+        InvoiceEdit, InvoiceListItem, InvoiceTotalsBreakdown, PaymentType, ReceivedInvoice,
     },
 };
+use crate::features::customers::types::CreateMeasurementInput;
 
 pub async fn list_invoices(
     state: &AppState,
@@ -611,6 +614,198 @@ mod tests {
         }));
         assert!(validate(&invoice).is_ok());
     }
+
+    fn measurement_id(n: u128) -> Uuid {
+        Uuid::from_u128(n)
+    }
+
+    #[test]
+    fn measurement_reuse_picks_the_first_exclusive_row() {
+        let old = vec![measurement_id(1), measurement_id(2)];
+        let exclusive: HashSet<Uuid> = [measurement_id(1), measurement_id(2)].into();
+        assert_eq!(
+            plan_measurement_reuse(&old, &exclusive, &HashSet::new()),
+            Some(measurement_id(1))
+        );
+    }
+
+    #[test]
+    fn measurement_reuse_leaves_shared_rows_alone() {
+        // Every old row is also referenced by another invoice: nothing may be
+        // rewritten, so the block falls back to the create rule instead.
+        let old = vec![measurement_id(1)];
+        assert_eq!(
+            plan_measurement_reuse(&old, &HashSet::new(), &HashSet::new()),
+            None
+        );
+    }
+
+    #[test]
+    fn measurement_reuse_skips_rows_claimed_by_an_earlier_block() {
+        // Two edited blocks for the same customer must not rewrite the same
+        // row twice.
+        let old = vec![measurement_id(1), measurement_id(2)];
+        let exclusive: HashSet<Uuid> = [measurement_id(1), measurement_id(2)].into();
+        let reused: HashSet<Uuid> = [measurement_id(1)].into();
+        assert_eq!(
+            plan_measurement_reuse(&old, &exclusive, &reused),
+            Some(measurement_id(2))
+        );
+    }
+
+    #[test]
+    fn measurement_reuse_finds_nothing_when_everything_is_taken() {
+        let old = vec![measurement_id(1)];
+        let exclusive: HashSet<Uuid> = [measurement_id(1)].into();
+        let reused: HashSet<Uuid> = [measurement_id(1)].into();
+        assert_eq!(plan_measurement_reuse(&old, &exclusive, &reused), None);
+    }
+}
+
+/// A measurement snapshot for a new customer block: reuse the latest row when
+/// nothing changed, insert a fresh one otherwise.
+///
+/// An unknown existing_customer_id surfaces as a foreign-key violation on the
+/// insert, which the AppError conversion maps to a 400.
+async fn resolve_measurement_for_create(
+    tx: &mut sqlx::PgTransaction<'_>,
+    customer_id: Uuid,
+    measurement: &CreateMeasurementInput,
+) -> Result<Uuid, AppError> {
+    let latest = customers_repository::latest_measurement(tx, customer_id).await?;
+    match latest {
+        Some((id, ref values)) if measurement_values_equal(values, measurement) => Ok(id),
+        _ => Ok(customers_repository::insert_measurement(tx, customer_id, measurement).await?),
+    }
+}
+
+async fn write_customer_orders(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    measurement_id: Uuid,
+    orders: &[CreateOrderInput],
+) -> Result<(), AppError> {
+    for order in orders {
+        // The decrement is guarded in SQL, so `false` means the
+        // production location either never stocked this material or no
+        // longer holds enough of it. Reading the name for the message
+        // costs an extra query only on that path.
+        let decremented = materials_repository::decrement_stock(
+            tx,
+            order.material_id,
+            order.production_location_id,
+            order.material_amount,
+        )
+        .await?;
+
+        if !decremented {
+            let name = materials_repository::material_name(tx, order.material_id)
+                .await?
+                .ok_or_else(|| {
+                    AppError::BadRequest(format!("no material with id {}", order.material_id))
+                })?;
+
+            return Err(AppError::BadRequest(format!(
+                "not enough {name} in stock at the selected location"
+            )));
+        }
+
+        repository::insert_order(tx, invoice_id, measurement_id, order).await?;
+    }
+
+    Ok(())
+}
+
+async fn write_product_lines(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    products: &[CreateProductLineInput],
+) -> Result<(), AppError> {
+    for line in products {
+        // The decrement is guarded in SQL, so `None` means the location either
+        // never stocked this product or no longer holds enough of it. Reading
+        // the name for the message costs an extra query only on that path.
+        let description = products_repository::decrement_stock(
+            tx,
+            line.product_id,
+            line.branch_id,
+            line.quantity,
+        )
+        .await?;
+
+        let Some(description) = description else {
+            let name = products_repository::product_name(tx, line.product_id)
+                .await?
+                .ok_or_else(|| {
+                    AppError::BadRequest(format!("no product with id {}", line.product_id))
+                })?;
+
+            return Err(AppError::BadRequest(format!(
+                "not enough {name} in stock at the selected location"
+            )));
+        };
+
+        repository::insert_product_item(
+            tx,
+            invoice_id,
+            line,
+            &description,
+            product_line_total(line),
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn write_gift_card_sales(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    customer_id: Option<Uuid>,
+    gift_cards: &[CreateGiftCardLineInput],
+) -> Result<(), AppError> {
+    for card in gift_cards {
+        let code = gift_cards_service::normalize_code(&card.code)?;
+
+        let gift_card_id = gift_cards_repository::insert_gift_card(
+            tx,
+            &code,
+            card.amount,
+            // The card belongs to whoever the invoice is billed to, when the
+            // sale names someone at all.
+            customer_id,
+            card.expires_on,
+        )
+        .await?;
+
+        repository::insert_gift_card_item(
+            tx,
+            invoice_id,
+            gift_card_id,
+            &format!("Gift card {code}"),
+            card.amount,
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn write_redemptions(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    date: NaiveDate,
+    redemptions: &[GiftCardRedemptionInput],
+) -> Result<(), AppError> {
+    for redemption in redemptions {
+        let code = gift_cards_service::normalize_code(&redemption.code)?;
+        let gift_card_id = gift_cards_service::redeem(tx, &code, redemption.amount, date).await?;
+
+        gift_cards_repository::insert_redemption(tx, gift_card_id, invoice_id, redemption.amount)
+            .await?;
+    }
+
+    Ok(())
 }
 
 pub async fn create_invoice(
@@ -628,122 +823,22 @@ pub async fn create_invoice(
 
     for customer in &input.customers {
         let customer_id = resolve_customer_id(&mut tx, customer).await?;
-
-        // An unknown existing_customer_id surfaces here as a foreign-key
-        // violation, which the AppError conversion maps to a 400.
-        let latest = customers_repository::latest_measurement(&mut tx, customer_id).await?;
-        let measurement_id = match latest {
-            Some((id, ref values)) if measurement_values_equal(values, &customer.measurement) => id,
-            _ => {
-                customers_repository::insert_measurement(
-                    &mut tx,
-                    customer_id,
-                    &customer.measurement,
-                )
-                .await?
-            }
-        };
-
-        for order in &customer.orders {
-            // The decrement is guarded in SQL, so `false` means the
-            // production location either never stocked this material or no
-            // longer holds enough of it. Reading the name for the message
-            // costs an extra query only on that path.
-            let decremented = materials_repository::decrement_stock(
-                &mut tx,
-                order.material_id,
-                order.production_location_id,
-                order.material_amount,
-            )
-            .await?;
-
-            if !decremented {
-                let name = materials_repository::material_name(&mut tx, order.material_id)
-                    .await?
-                    .ok_or_else(|| {
-                        AppError::BadRequest(format!("no material with id {}", order.material_id))
-                    })?;
-
-                return Err(AppError::BadRequest(format!(
-                    "not enough {name} in stock at the selected location"
-                )));
-            }
-
-            repository::insert_order(&mut tx, invoice_id, measurement_id, order).await?;
-        }
+        let measurement_id =
+            resolve_measurement_for_create(&mut tx, customer_id, &customer.measurement).await?;
+        write_customer_orders(&mut tx, invoice_id, measurement_id, &customer.orders).await?;
     }
 
-    for line in &input.products {
-        // The decrement is guarded in SQL, so `None` means the location either
-        // never stocked this product or no longer holds enough of it. Reading
-        // the name for the message costs an extra query only on that path.
-        let description = products_repository::decrement_stock(
-            &mut tx,
-            line.product_id,
-            line.branch_id,
-            line.quantity,
-        )
-        .await?;
+    write_product_lines(&mut tx, invoice_id, &input.products).await?;
 
-        let Some(description) = description else {
-            let name = products_repository::product_name(&mut tx, line.product_id)
-                .await?
-                .ok_or_else(|| {
-                    AppError::BadRequest(format!("no product with id {}", line.product_id))
-                })?;
+    write_gift_card_sales(&mut tx, invoice_id, input.customer_id, &input.gift_cards).await?;
 
-            return Err(AppError::BadRequest(format!(
-                "not enough {name} in stock at the selected location"
-            )));
-        };
-
-        repository::insert_product_item(
-            &mut tx,
-            invoice_id,
-            line,
-            &description,
-            product_line_total(line),
-        )
-        .await?;
-    }
-
-    for card in &input.gift_cards {
-        let code = gift_cards_service::normalize_code(&card.code)?;
-
-        let gift_card_id = gift_cards_repository::insert_gift_card(
-            &mut tx,
-            &code,
-            card.amount,
-            // The card belongs to whoever the invoice is billed to, when the
-            // sale names someone at all.
-            input.customer_id,
-            card.expires_on,
-        )
-        .await?;
-
-        repository::insert_gift_card_item(
-            &mut tx,
-            invoice_id,
-            gift_card_id,
-            &format!("Gift card {code}"),
-            card.amount,
-        )
-        .await?;
-    }
-
-    for redemption in &input.gift_card_redemptions {
-        let code = gift_cards_service::normalize_code(&redemption.code)?;
-        let gift_card_id =
-            gift_cards_service::redeem(&mut tx, &code, redemption.amount, input.date).await?;
-
-        gift_cards_repository::insert_redemption(
-            &mut tx,
-            gift_card_id,
-            invoice_id,
-            redemption.amount,
-        )
-        .await?;
-    }
+    write_redemptions(
+        &mut tx,
+        invoice_id,
+        input.date,
+        &input.gift_card_redemptions,
+    )
+    .await?;
 
     tx.commit().await?;
 
@@ -756,6 +851,226 @@ pub async fn create_invoice(
         gift_cards_sold = input.gift_cards.len(),
         gift_cards_redeemed = input.gift_card_redemptions.len(),
         "invoice created"
+    );
+
+    Ok(CreatedInvoice {
+        id: invoice_id,
+        total_price: totals.total,
+        gift_card_redeemed: totals.redeemed,
+    })
+}
+
+/// Reads one invoice as the values it was entered with, for the edit form.
+pub async fn get_invoice_for_edit(
+    state: &AppState,
+    invoice_id: Uuid,
+) -> Result<InvoiceEdit, AppError> {
+    repository::fetch_invoice_edit(state, invoice_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))
+}
+
+/// Picks the old measurement row an edited customer block rewrites in place:
+/// the first of its rows that belongs to this invoice alone and hasn't already
+/// been claimed by an earlier block. A block whose rows are all shared (or
+/// that has no rows yet) gets `None` and falls back to the create rule, so a
+/// shared row is never mutated. Pure, so it can be tested without a database.
+fn plan_measurement_reuse(
+    old_ids: &[Uuid],
+    exclusive: &HashSet<Uuid>,
+    reused: &HashSet<Uuid>,
+) -> Option<Uuid> {
+    old_ids
+        .iter()
+        .find(|id| exclusive.contains(id) && !reused.contains(id))
+        .copied()
+}
+
+/// Rebuilds an invoice from a fresh copy of the create input: the old lines
+/// are torn down (stock restored, tender paid back, sold cards deleted) and
+/// the new lines go through the same writers as creation.
+///
+/// Refused once money or work has moved past the draft stage — a paid invoice,
+/// a collected order, or any recorded stage/assignee/repair — since there is
+/// no longer an untouched sale to rebuild.
+pub async fn update_invoice(
+    state: &AppState,
+    invoice_id: Uuid,
+    input: CreateInvoiceInput,
+) -> Result<CreatedInvoice, AppError> {
+    validate(&input)?;
+
+    let totals = compute_totals(&input);
+
+    let mut tx = state.db().begin().await?;
+
+    let guard = repository::lock_invoice_for_edit(&mut tx, invoice_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
+
+    if guard.payment_status == "paid" || guard.final_payment_type.is_some() {
+        return Err(AppError::BadRequest(
+            "this invoice is paid and cannot be edited".to_string(),
+        ));
+    }
+
+    if repository::invoice_has_received_orders(&mut tx, invoice_id).await? {
+        return Err(AppError::BadRequest(
+            "this invoice has received orders and cannot be edited".to_string(),
+        ));
+    }
+
+    if repository::invoice_has_production_activity(&mut tx, invoice_id).await? {
+        return Err(AppError::BadRequest(
+            "this invoice has production activity and cannot be edited".to_string(),
+        ));
+    }
+
+    // Everything the rebuild is about to tear down.
+    let order_lines = repository::old_order_lines(&mut tx, invoice_id).await?;
+    let product_lines = repository::old_product_lines(&mut tx, invoice_id).await?;
+    let gift_sales = repository::old_gift_card_sales(&mut tx, invoice_id).await?;
+    let redemptions = repository::old_redemptions(&mut tx, invoice_id).await?;
+    let measurement_refs = repository::old_measurement_refs(&mut tx, invoice_id).await?;
+
+    // Gift cards first: lock every card this invoice touched so a till
+    // redemption can't land between the spent-check and the reversal, then
+    // refuse the edit if a card this invoice sold has been spent anywhere —
+    // a spent card belongs to two invoices' histories and can neither be
+    // deleted nor re-issued.
+    let mut card_ids: Vec<Uuid> = gift_sales.iter().map(|sale| sale.gift_card_id).collect();
+    card_ids.extend(redemptions.iter().map(|redemption| redemption.gift_card_id));
+    card_ids.sort();
+    card_ids.dedup();
+    if !card_ids.is_empty() {
+        repository::lock_gift_cards(&mut tx, &card_ids).await?;
+    }
+    for sale in &gift_sales {
+        if repository::sold_card_was_used(&mut tx, sale.gift_card_id).await? {
+            return Err(AppError::BadRequest(format!(
+                "gift card {} has already been used and the invoice cannot be edited",
+                sale.code
+            )));
+        }
+    }
+    for redemption in &redemptions {
+        repository::refund_gift_card(&mut tx, redemption.gift_card_id, redemption.amount).await?;
+    }
+
+    // Hand back what the old lines consumed. The locations are nullable in the
+    // schema for legacy rows; a missing one has no stock row to restore to, so
+    // it is skipped rather than failing the edit.
+    for line in &order_lines {
+        if let Some(branch_id) = line.production_branch_id {
+            repository::restore_material_stock(
+                &mut tx,
+                line.material_id,
+                branch_id,
+                line.material_amount,
+            )
+            .await?;
+        }
+    }
+    for line in &product_lines {
+        if let (Some(product_id), Some(branch_id)) = (line.product_id, line.branch_id) {
+            repository::restore_product_stock(&mut tx, product_id, branch_id, line.quantity)
+                .await?;
+        }
+    }
+
+    // Tear down the old lines. Orders go before measurements (the FK points
+    // from orders at measurements), and the sold gift cards go once the
+    // spent-check above has cleared them.
+    repository::delete_redemptions(&mut tx, invoice_id).await?;
+    repository::delete_orders(&mut tx, invoice_id).await?;
+    repository::delete_items(&mut tx, invoice_id).await?;
+    let sold_ids: Vec<Uuid> = gift_sales.iter().map(|sale| sale.gift_card_id).collect();
+    if !sold_ids.is_empty() {
+        repository::delete_gift_cards(&mut tx, &sold_ids).await?;
+    }
+
+    // Which measurement rows belong to this invoice alone. The old rows are
+    // grouped per customer the way the form's blocks were entered.
+    let mut old_by_customer: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+    for reference in &measurement_refs {
+        old_by_customer
+            .entry(reference.customer_id)
+            .or_default()
+            .push(reference.measurement_id);
+    }
+    let mut exclusive = HashSet::new();
+    for reference in &measurement_refs {
+        if repository::measurement_is_exclusive(&mut tx, reference.measurement_id, invoice_id)
+            .await?
+        {
+            exclusive.insert(reference.measurement_id);
+        }
+    }
+
+    let mut reused: HashSet<Uuid> = HashSet::new();
+    for customer in &input.customers {
+        let customer_id = resolve_customer_id(&mut tx, customer).await?;
+        let old_ids = old_by_customer
+            .get(&customer_id)
+            .cloned()
+            .unwrap_or_default();
+
+        let measurement_id = match plan_measurement_reuse(&old_ids, &exclusive, &reused) {
+            Some(id) => {
+                repository::update_measurement(&mut tx, id, &customer.measurement).await?;
+                reused.insert(id);
+                id
+            }
+            // No exclusive row to rewrite: shared rows stay untouched, and a
+            // block without history falls back to the create rule.
+            None => {
+                resolve_measurement_for_create(&mut tx, customer_id, &customer.measurement).await?
+            }
+        };
+
+        write_customer_orders(&mut tx, invoice_id, measurement_id, &customer.orders).await?;
+    }
+
+    // Old rows this invoice owned alone that no edited block rewrote — removed
+    // blocks, or superseded extras — are deleted rather than left orphaned.
+    // Shared rows are never touched: some other invoice still points at them.
+    let mut orphaned: Vec<Uuid> = measurement_refs
+        .iter()
+        .map(|reference| reference.measurement_id)
+        .filter(|id| exclusive.contains(id) && !reused.contains(id))
+        .collect();
+    orphaned.sort();
+    orphaned.dedup();
+    if !orphaned.is_empty() {
+        repository::delete_measurements(&mut tx, &orphaned).await?;
+    }
+
+    write_product_lines(&mut tx, invoice_id, &input.products).await?;
+
+    write_gift_card_sales(&mut tx, invoice_id, input.customer_id, &input.gift_cards).await?;
+
+    write_redemptions(
+        &mut tx,
+        invoice_id,
+        input.date,
+        &input.gift_card_redemptions,
+    )
+    .await?;
+
+    repository::update_invoice_header(&mut tx, invoice_id, &input, totals.total, totals.redeemed)
+        .await?;
+
+    tx.commit().await?;
+
+    tracing::info!(
+        invoice_id = %invoice_id,
+        total = totals.total,
+        gift_card_redeemed = totals.redeemed,
+        customers = input.customers.len(),
+        product_lines = input.products.len(),
+        gift_cards_sold = input.gift_cards.len(),
+        gift_cards_redeemed = input.gift_card_redemptions.len(),
+        "invoice updated"
     );
 
     Ok(CreatedInvoice {
