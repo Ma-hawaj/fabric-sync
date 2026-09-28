@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, State},
-    response::Html,
+    response::Response,
     Extension, Json,
 };
 use uuid::Uuid;
@@ -36,17 +36,16 @@ pub async fn get_order(
     Ok(Json(service::get_order(&state, order_id).await?))
 }
 
-/// The printable order, as HTML. Fetched rather than navigated to — the client
-/// writes it into an iframe and prints that — so it can carry an Authorization
-/// header once there is one to carry.
+/// The printable order, as a PDF. Fetched rather than navigated to — the
+/// client prints or downloads the bytes — so it can carry an Authorization
+/// header.
 pub async fn order_document(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,
     Path(order_id): Path<Uuid>,
-) -> Result<Html<String>, AppError> {
-    Ok(Html(
-        document::render_order_document(&state, order_id).await?,
-    ))
+) -> Result<Response, AppError> {
+    let (pdf, filename) = document::render_order_pdf(&state, order_id).await?;
+    Ok(crate::document::pdf_response(pdf, &filename))
 }
 
 pub async fn receive_order(

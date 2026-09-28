@@ -27,6 +27,40 @@ pub struct InvoiceBranding {
     pub template_dir: Option<String>,
 }
 
+/// How the HTML documents are turned into PDFs. Rendering is done by a
+/// headless Chromium binary (see `crate::document::render_html_to_pdf`):
+/// pure-Rust PDF crates have no Arabic text shaper, while Chromium reuses the
+/// exact HTML the browser used to print before, so the output is unchanged.
+#[derive(Clone, Debug)]
+pub struct PdfConfig {
+    /// Path to the Chromium binary. Defaults to `chromium`; set
+    /// `CHROMIUM_BIN` (e.g. to `google-chrome` or `chromium-headless-shell`)
+    /// to point elsewhere. The runtime image must have it installed along
+    /// with an Arabic font (Noto Sans Arabic), or every document request
+    /// fails with `AppError::Pdf`.
+    pub chromium_bin: String,
+    /// Seconds before a render is killed. Set `PDF_TIMEOUT_SECS` to tune;
+    /// defaults to 20.
+    pub timeout_secs: u64,
+}
+
+impl PdfConfig {
+    fn from_env() -> Self {
+        let chromium_bin = env::var("CHROMIUM_BIN")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "chromium".to_string());
+        let timeout_secs = env::var("PDF_TIMEOUT_SECS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(20);
+        Self {
+            chromium_bin,
+            timeout_secs,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub port: u16,
@@ -48,6 +82,7 @@ pub struct Config {
     /// data — see `seed::run`.
     pub seed_dev_data: bool,
     pub invoice_branding: InvoiceBranding,
+    pub pdf: PdfConfig,
 }
 
 impl InvoiceBranding {
@@ -116,6 +151,7 @@ impl Config {
             zitadel_users_client_secret,
             seed_dev_data,
             invoice_branding: InvoiceBranding::from_env(),
+            pdf: PdfConfig::from_env(),
         }
     }
 }

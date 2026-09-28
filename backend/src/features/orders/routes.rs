@@ -14,10 +14,9 @@ pub fn router() -> Router<AppState> {
             "/orders/:id",
             get(handlers::get_order).patch(handlers::update_order),
         )
-        // The printable order, as a self-contained HTML page. Separate from the
-        // JSON above because it is rendered server-side: the same markup a
-        // browser prints to PDF today is what an unattended PDF renderer will
-        // be handed later.
+        // The printable order, as a PDF rendered from the self-contained HTML
+        // template by headless Chromium (see document.rs). Separate from the
+        // JSON above because it is rendered server-side.
         .route("/orders/:id/document", get(handlers::order_document))
         .route("/orders/:id/receive", post(handlers::receive_order))
         .route("/orders/:id/stages/:stageId", post(handlers::set_stage))
