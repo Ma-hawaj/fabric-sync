@@ -18,7 +18,7 @@ use crate::{
     state::AppState,
 };
 
-use super::{service, types::OrderDetail};
+use super::{service, types::OrderDetail, types::OrderListItem};
 
 /// The copy of the template compiled into the binary, used unless
 /// `INVOICE_TEMPLATE_DIR` points somewhere else (both documents live in the
@@ -26,6 +26,96 @@ use super::{service, types::OrderDetail};
 const DEFAULT_TEMPLATE: &str = include_str!("../../../templates/order.html");
 
 const TEMPLATE_NAME: &str = "order.html";
+
+/// The order design slots, in the order they render on the document — the same
+/// order as the invoice document, so the two papers read the same way. A
+/// stored value that matches nothing (orders that predate the catalog) prints
+/// as a text-only chip rather than disappearing.
+const SLOT_TITLES: [(&str, &str); 5] = [
+    ("النوع", "Thobe"),
+    ("الياقة", "Collar"),
+    ("الكم", "Sleeve"),
+    ("الجيب", "Pocket"),
+    ("الباتي", "Patti"),
+];
+
+/// Which catalog section a slot's values are drawn from.
+const SLOT_SECTIONS: [&str; 5] = ["thob_type", "neck", "sleeve", "front_pocket", "patti"];
+
+/// One chip: a title, the resolved label and, when a catalog asset exists, a
+/// self-contained `data:` URI for its image.
+#[derive(Serialize)]
+struct DesignChip<'a> {
+    title_ar: &'a str,
+    title_en: &'a str,
+    label: String,
+    image: Option<String>,
+}
+
+fn design_asset(
+    section: &str,
+    slug: &str,
+) -> Option<&'static crate::features::invoices::designs::DesignAsset> {
+    crate::features::invoices::designs::DESIGNS
+        .iter()
+        .find(|asset| asset.section == section && asset.slug == slug)
+}
+
+/// A stored design value, trimmed. Matching is exact against the catalog id;
+/// anything else stays text.
+fn design_value(order: &OrderListItem, slot: usize) -> Option<&str> {
+    let value = match slot {
+        0 => order.thobe_type.as_deref(),
+        1 => order.collar.as_deref(),
+        2 => order.sleeve.as_deref(),
+        3 => order.f_pocket.as_deref(),
+        4 => order.patti.as_deref(),
+        _ => return None,
+    };
+    let value = value?.trim();
+    (!value.is_empty()).then_some(value)
+}
+
+/// The chips for the order, in fixed slot order, so a thobe always prints its
+/// type first regardless of which fields were filled in.
+fn order_designs(order: &OrderListItem) -> Vec<DesignChip<'static>> {
+    SLOT_TITLES
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, (title_ar, title_en))| {
+            let raw = design_value(order, slot)?;
+            let (label, image) = match design_asset(SLOT_SECTIONS[slot], raw) {
+                Some(asset) => (asset.label.to_string(), Some(data_uri(asset.bytes))),
+                None => (raw.to_string(), None),
+            };
+            Some(DesignChip {
+                title_ar,
+                title_en,
+                label,
+                image,
+            })
+        })
+        .collect()
+}
+
+fn data_uri(bytes: &[u8]) -> String {
+    use base64::Engine;
+    format!(
+        "data:image/webp;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    )
+}
+
+/// The free-text line note, trimmed. Not a design slot; printed beneath the
+/// chips.
+fn design_note(order: &OrderListItem) -> Option<String> {
+    order
+        .more_details
+        .as_deref()
+        .map(str::trim)
+        .filter(|note| !note.is_empty())
+        .map(str::to_string)
+}
 
 fn environment(branding: &InvoiceBranding) -> Result<Environment<'static>, AppError> {
     crate::document::template_environment(branding, TEMPLATE_NAME, DEFAULT_TEMPLATE)
@@ -51,6 +141,11 @@ pub async fn render_order_document(
         // Amounts are pre-formatted rather than left to the template, so that
         // editing the design can't accidentally change how money is written.
         amounts => minijinja::Value::from_serialize(formatted_amounts(&detail)),
+        // The design chips and the free-text note, so the order sheet carries
+        // the same made-to-measure specification the invoice document prints
+        // per line — a tailor cutting from this sheet must see every choice.
+        designs => minijinja::Value::from_serialize(order_designs(&detail.order)),
+        design_note => minijinja::Value::from_serialize(design_note(&detail.order)),
         // The thob diagram is the same story: garment, markers, view field
         // lists and the laid-out captions are all computed here, so a redesign
         // can't change how a measurement is written out or overlap two labels.
@@ -632,6 +727,8 @@ mod tests {
                 company => minijinja::Value::from_serialize(branding()),
                 currency => CURRENCY,
                 amounts => minijinja::Value::from_serialize(formatted_amounts(&detail)),
+                designs => minijinja::Value::from_serialize(order_designs(&detail.order)),
+                design_note => minijinja::Value::from_serialize(design_note(&detail.order)),
                 thob_garment => minijinja::Value::from_serialize(thob_garment()),
                 thob_markers => minijinja::Value::from_serialize(thob_markers_map(&fields)),
                 thob_front_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Front, &measurement)),
@@ -665,6 +762,71 @@ mod tests {
         // view (lengthFl, chest, waist, farntPocketLengthByWidth, sidePocket)
         // and 2 on the back (lengthBl, sleeveLength).
         assert_eq!(html.matches("thob-callout").count(), 7);
+    }
+
+    #[test]
+    fn design_chips_follow_the_fixed_slot_order() {
+        let mut order = services_order();
+        order.thobe_type = Some("thobx".to_string());
+        order.collar = Some("3".to_string());
+        order.sleeve = Some("open".to_string());
+        order.f_pocket = Some("round".to_string());
+        order.patti = Some("normal".to_string());
+
+        let chips = order_designs(&order);
+        assert_eq!(
+            chips.iter().map(|c| c.title_en).collect::<Vec<_>>(),
+            vec!["Thobe", "Collar", "Sleeve", "Pocket", "Patti"]
+        );
+        // Catalog slugs resolve to their display labels.
+        assert_eq!(
+            chips.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(),
+            vec!["Thobx", "3", "Open", "Round", "Normal"]
+        );
+    }
+
+    #[test]
+    fn a_catalog_design_carries_a_webp_data_uri() {
+        let mut order = services_order();
+        order.thobe_type = Some("thobx".to_string());
+
+        let chips = order_designs(&order);
+        assert_eq!(chips.len(), 1);
+        assert_eq!(chips[0].label, "Thobx");
+        let image = chips[0].image.as_deref().unwrap();
+        assert!(image.starts_with("data:image/webp;base64,"));
+        assert!(!image.split_once(',').unwrap().1.is_empty());
+    }
+
+    #[test]
+    fn an_uncatalogued_value_prints_as_a_text_only_chip() {
+        // Orders that predate the catalog store human values like "Saudi";
+        // those still have to survive onto the document.
+        let mut order = services_order();
+        order.thobe_type = Some("Saudi".to_string());
+        order.collar = Some("Round".to_string());
+        order.sleeve = Some("Cuff".to_string());
+
+        let chips = order_designs(&order);
+        assert_eq!(chips.len(), 3);
+        for chip in &chips {
+            assert!(chip.image.is_none());
+        }
+        assert_eq!(chips[2].label, "Cuff");
+    }
+
+    #[test]
+    fn blank_values_produce_no_chips_and_blank_notes_produce_no_note() {
+        let mut order = services_order();
+        order.thobe_type = Some("   ".to_string());
+        order.more_details = Some("  ".to_string());
+
+        assert!(order_designs(&order).is_empty());
+        assert_eq!(design_note(&order), None);
+
+        let mut noted = services_order();
+        noted.more_details = Some("  double stitching  ".to_string());
+        assert_eq!(design_note(&noted).as_deref(), Some("double stitching"));
     }
 
     #[test]
@@ -721,6 +883,12 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         material_amount: 3.5,
         price: 100.0,
         status: "pending".to_string(),
+        thobe_type: None,
+        f_pocket: None,
+        collar: None,
+        sleeve: None,
+        patti: None,
+        more_details: None,
         production_location_id: None,
         production_location: None,
         production_location_inferred: false,

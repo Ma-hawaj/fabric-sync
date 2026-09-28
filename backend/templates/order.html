@@ -17,6 +17,8 @@
     amounts   — quantities only: the order sheet is an internal production
                 document, so no money figures are printed; the sole key the
                 template reads is `materialAmount`.
+    designs   — the made-to-measure choices (Thobe / Collar / Sleeve / Pocket / Patti).
+    design_note — the free-text more-details note, or empty.
     thob_garment — the base thob drawing envelopes: outline, collar, placket,
                 chestPocket, mobilePocket, sidePockets, cuffs, centerBackSeam,
                 buttons and sleeveButtons. Every caller (the two views, and the
@@ -331,6 +333,77 @@
         font-size: 9.5px;
       }
 
+      /* One bordered "Design" panel: a heading and then a grid of cells,
+         one per slot (Thobe / Collar / Sleeve / Pocket / Patti). A catalog
+         match fills its cell with a raster; a legacy value that matches
+         nothing fills the label only, so the sheet reads the same shape
+         either way. The panel never splits across pages. */
+      .design-panel {
+        margin-top: 10px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: var(--tint);
+        break-inside: avoid;
+      }
+
+      .design-panel h3 {
+        margin: 0 0 5px;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .design-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+        gap: 4px;
+      }
+
+      .design-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        padding: 3px 2px;
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        background: #fff;
+        text-align: center;
+      }
+
+      .design-cell img,
+      .design-cell-empty {
+        width: 100%;
+        height: 52px;
+        object-fit: contain;
+      }
+
+      .design-copy {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.15;
+      }
+
+      .design-title {
+        font-size: 7.5px;
+        color: var(--muted);
+      }
+
+      .design-name {
+        font-size: 8.5px;
+        font-weight: 600;
+        text-align: center;
+      }
+
+      .design-note {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 9.5px;
+      }
+
       .measurements {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -581,6 +654,35 @@
           </div>
         </dl>
       </div>
+    </section>
+
+    <section class="design-panel">
+      <h3>التصميم · Design</h3>
+      {% if designs %}
+        <div class="design-grid">
+          {% for chip in designs %}
+            <div class="design-cell">
+              {% if chip.image %}
+                <img src="{{ chip.image }}" alt="{{ chip.label }}" />
+              {% else %}
+                <span class="design-cell-empty"></span>
+              {% endif %}
+              <span class="design-copy">
+                <span class="design-title"
+                  >{{ chip.titleAr
+                  }}<span class="en">{{ chip.titleEn }}</span></span
+                >
+                <span class="design-name" dir="ltr">{{ chip.label }}</span>
+              </span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="design-note">لا يوجد تصميم مسجل <span class="en">No design choices recorded</span></div>
+      {% endif %}
+      {% if design_note %}
+        <div class="design-note">{{ design_note }}</div>
+      {% endif %}
     </section>
 
     <h2 class="section-title">المقاسات المسجلة · Measurements</h2>

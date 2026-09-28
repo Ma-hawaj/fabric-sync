@@ -81,6 +81,19 @@ export interface Order {
   price: number
   status: OrderStatus
   /**
+   * The made-to-measure design choices, as stored on the order — the same
+   * values the invoice PDF renders as chips per line. Null when the slot was
+   * left blank. A value that matches no catalog id is a legacy free-text
+   * value (e.g. "Saudi") and still prints as text.
+   */
+  thobeType: string | null
+  fPocket: string | null
+  collar: string | null
+  sleeve: string | null
+  patti: string | null
+  /** Free-text line note, shown beneath the design choices. */
+  moreDetails: string | null
+  /**
    * Where the garment is made. An explicit assignment always wins; absent
    * one, a material stocked at exactly one location is inferred — see
    * productionLocationInferred. Null when neither is available.

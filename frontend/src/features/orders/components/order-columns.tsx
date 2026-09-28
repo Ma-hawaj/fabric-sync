@@ -1,4 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
+import { Link } from '@tanstack/react-router'
 import { ListChecksIcon, CheckIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
@@ -49,9 +50,13 @@ export function getOrderColumns(
         <DataTableColumnHeader column={column} label="Order" />
       ),
       cell: ({ row }) => (
-        <div className="font-mono font-medium">
+        <Link
+          to="/orders/$orderId"
+          params={{ orderId: row.original.id }}
+          className="font-mono font-medium text-info hover:underline"
+        >
           ORD-{row.getValue<number>('orderNumber')}
-        </div>
+        </Link>
       ),
       enableSorting: true,
       enableColumnFilter: true,
@@ -67,9 +72,13 @@ export function getOrderColumns(
         <DataTableColumnHeader column={column} label="Invoice" />
       ),
       cell: ({ row }) => (
-        <div className="font-mono font-medium">
+        <Link
+          to="/invoices/$invoiceId"
+          params={{ invoiceId: row.original.invoiceId }}
+          className="font-mono font-medium text-info hover:underline"
+        >
           INV-{row.getValue<number>('invoiceNumber')}
-        </div>
+        </Link>
       ),
       enableSorting: true,
       enableColumnFilter: true,

@@ -49,6 +49,12 @@ const ORDER: OrderDetail = {
   materialAmount: 3.5,
   price: 100,
   status: 'pending',
+  thobeType: 'thobx',
+  fPocket: 'round',
+  collar: '3',
+  sleeve: 'open',
+  patti: 'normal',
+  moreDetails: 'Double stitching on hem.',
   productionLocationId: null,
   productionLocation: null,
   productionLocationInferred: false,
@@ -223,6 +229,45 @@ describe('OrderDetailPage', () => {
       )
     },
   )
+
+  it('shows every design choice with its catalog label and note', () => {
+    renderPage()
+
+    expect(screen.queryByText('Design')).toBeTruthy()
+    // Catalog ids resolve to their display labels.
+    expect(screen.queryByText('Thobx')).toBeTruthy()
+    expect(screen.queryByText('Round')).toBeTruthy()
+    // Slot titles stay visible so staff can quote each choice back.
+    expect(screen.queryByText('Thobe Type')).toBeTruthy()
+    expect(screen.queryByText('Front Pocket')).toBeTruthy()
+    expect(screen.queryByText('Double stitching on hem.')).toBeTruthy()
+  })
+
+  it('falls back to raw text for design values that predate the catalog', () => {
+    renderDeliveryOrder({
+      thobeType: 'Saudi',
+      fPocket: null,
+      collar: null,
+      sleeve: null,
+      patti: null,
+      moreDetails: null,
+    })
+
+    expect(screen.queryByText('Saudi')).toBeTruthy()
+  })
+
+  it('notes when an order carries no design choices at all', () => {
+    renderDeliveryOrder({
+      thobeType: null,
+      fPocket: null,
+      collar: null,
+      sleeve: null,
+      patti: null,
+      moreDetails: null,
+    })
+
+    expect(screen.queryByText('No design choices recorded.')).toBeTruthy()
+  })
 
   it('blocks a delivery while the receiving branch is unknown', () => {
     renderDeliveryOrder({

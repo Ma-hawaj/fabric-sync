@@ -1,4 +1,4 @@
-mod designs;
+pub(crate) mod designs;
 mod document;
 mod handlers;
 mod routes;
