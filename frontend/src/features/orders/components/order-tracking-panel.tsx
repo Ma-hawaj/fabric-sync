@@ -17,6 +17,7 @@ import { AsyncCombobox } from '@/components/form/async-combobox'
 import { PRODUCTION_FILTERS } from '@/features/locations/lib/location-filters'
 import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
 import { useUsers } from '@/features/users/hooks/use-users'
+import { UserAvatar } from '@/features/users/components/user-avatar'
 import type { Location } from '@/features/locations/types/location'
 import {
   repairStatusLabel,
@@ -327,7 +328,7 @@ function AssigneePicker({
   const setAssignee = useSetAssignee()
 
   const options = React.useMemo(
-    () => users.map((user) => ({ value: user.id, label: user.name })),
+    () => users.map((user) => ({ value: user.id, label: user.name, user })),
     [users],
   )
 
@@ -367,11 +368,26 @@ function AssigneePicker({
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
+        {options.map((option) => {
+          // The trigger mirrors the selected item's content in a ~9rem
+          // clamp, so items stay avatar + name only; email, roles and
+          // groups ride along as a hover tooltip instead.
+          const details = [
+            option.user.email,
+            ...option.user.roles,
+            ...option.user.groups,
+          ].filter(Boolean)
+          return (
+            <SelectItem
+              key={option.value}
+              value={option.value}
+              title={details.length > 0 ? details.join(' · ') : undefined}
+            >
+              <UserAvatar user={option.user} />
+              <span className="truncate">{option.label}</span>
+            </SelectItem>
+          )
+        })}
       </SelectContent>
     </Select>
   )
