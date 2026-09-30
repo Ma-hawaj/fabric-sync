@@ -18,10 +18,9 @@ pub fn router() -> Router<AppState> {
             get(handlers::get_invoice).put(handlers::update_invoice),
         )
         .route("/invoices/:id/edit", get(handlers::get_invoice_for_edit))
-        // The printable document, as a self-contained HTML page. Separate from
-        // the JSON above because it is rendered server-side: the same markup a
-        // browser prints to PDF today is what an unattended PDF renderer will
-        // be handed later.
+        // The printable document, as a PDF rendered from the self-contained
+        // HTML template by headless Chromium (see document.rs). Separate from
+        // the JSON above because it is rendered server-side.
         .route("/invoices/:id/document", get(handlers::invoice_document))
         .route("/invoices/:id/receive", post(handlers::receive_invoice))
         // A till payment taken without collecting anything — an extra advance

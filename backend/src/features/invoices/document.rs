@@ -1,11 +1,10 @@
-//! Renders an invoice as a self-contained HTML document.
+//! Renders an invoice as a PDF document.
 //!
-//! The output is deliberately a complete HTML page rather than a PDF. Arabic
-//! needs a real text shaper, which the pure-Rust PDF crates don't have, and
-//! the browser already is one — so the document is printed to PDF by whatever
-//! renders it. Today that is the user's browser, through an iframe; the same
-//! HTML can later be handed to a headless browser to produce PDFs with nobody
-//! watching, which is why none of this lives in the frontend.
+//! The PDF is produced from a self-contained HTML page (inline styles, inline
+//! QR SVG, `data:` logo/design URIs) by headless Chromium — see
+//! `crate::document::render_html_to_pdf`. HTML is the intermediate rather
+//! than the output because Arabic needs a real text shaper, which the
+//! pure-Rust PDF crates don't have and Chromium already is.
 //!
 //! Nothing in the page is fetched at render time: styles are inline, the QR
 //! code is an inline SVG, and the logo is a `data:` URI.
@@ -175,17 +174,30 @@ fn qr_svg(payload: &str) -> Result<String, AppError> {
         .build())
 }
 
-pub async fn render_invoice_document(
+/// The invoice as PDF bytes plus its download filename (`INV-<number>.pdf`),
+/// rendered from the same HTML the browser used to print before. The
+/// `/invoices/:id/document` endpoint serves exactly this.
+///
+/// The HTML intermediate (`render_detail_html`) stays a separate step so the
+/// template can still be unit-rendered without a Chromium binary installed.
+pub async fn render_invoice_pdf(
     state: &AppState,
     invoice_id: uuid::Uuid,
-) -> Result<String, AppError> {
+) -> Result<(Vec<u8>, String), AppError> {
     let detail = service::get_invoice(state, invoice_id).await?;
-    let branding = state.invoice_branding();
+    let html = render_detail_html(&detail, state.invoice_branding())?;
+    let pdf = crate::document::render_html_to_pdf(html.as_str(), state.pdf_config()).await?;
+    Ok((pdf, format!("INV-{}.pdf", detail.invoice_number)))
+}
 
+fn render_detail_html(
+    detail: &InvoiceDetail,
+    branding: &InvoiceBranding,
+) -> Result<String, AppError> {
     let env = environment(branding)?;
     let template = env.get_template(TEMPLATE_NAME)?;
 
-    let payload = qr_payload(&detail, branding);
+    let payload = qr_payload(detail, branding);
 
     // Design chips and line notes, aligned to detail.lines. Kept out of the
     // serialized invoice (see the `design_values` skip) and passed alongside

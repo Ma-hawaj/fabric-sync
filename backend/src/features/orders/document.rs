@@ -1,10 +1,9 @@
-//! Renders an order as a self-contained HTML document.
+//! Renders an order as a PDF document.
 //!
-//! The same reasoning applies as for the invoice document: HTML rather than a
-//! PDF because Arabic needs a real text shaper and the browser already is one.
-//! The page is printed to PDF by whatever renders it — today the user's
-//! browser through an iframe, later a headless browser with no template
-//! rewrite. Nothing in the page is fetched at render time.
+//! The same reasoning applies as for the invoice document: a self-contained
+//! HTML page rendered to PDF by headless Chromium, because Arabic needs a
+//! real text shaper and Chromium already is one. Nothing in the page is
+//! fetched at render time.
 
 use std::collections::BTreeMap;
 
@@ -124,15 +123,28 @@ fn environment(branding: &InvoiceBranding) -> Result<Environment<'static>, AppEr
     crate::document::template_environment(branding, TEMPLATE_NAME, DEFAULT_TEMPLATE)
 }
 
-pub async fn render_order_document(
+/// The order sheet as PDF bytes plus its download filename
+/// (`ORD-<number>.pdf`), rendered from the same HTML the browser used to
+/// print before. The `/orders/:id/document` endpoint serves exactly this.
+///
+/// The HTML intermediate (`render_detail_html`) stays a separate step so the
+/// template can still be unit-rendered without a Chromium binary installed.
+pub async fn render_order_pdf(
     state: &AppState,
     order_id: uuid::Uuid,
-) -> Result<String, AppError> {
+) -> Result<(Vec<u8>, String), AppError> {
     let detail = service::get_order(state, order_id).await?;
-    let branding = state.invoice_branding();
+    let html = render_detail_html(&detail, state.invoice_branding())?;
+    let pdf = crate::document::render_html_to_pdf(html.as_str(), state.pdf_config()).await?;
+    Ok((pdf, format!("ORD-{}.pdf", detail.order.order_number)))
+}
 
+fn render_detail_html(
+    detail: &OrderDetail,
+    branding: &InvoiceBranding,
+) -> Result<String, AppError> {
     let fields = thob_fields();
-    let measurement = formatted_measurement(&detail);
+    let measurement = formatted_measurement(detail);
 
     let env = environment(branding)?;
     let template = env.get_template(TEMPLATE_NAME)?;

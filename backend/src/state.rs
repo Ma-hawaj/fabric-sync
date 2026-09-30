@@ -1,5 +1,5 @@
 use crate::auth::TokenIntrospection;
-use crate::config::{Config, InvoiceBranding};
+use crate::config::{Config, InvoiceBranding, PdfConfig};
 use crate::features::users::zitadel::ZitadelUserDirectory;
 use sqlx::PgPool;
 
@@ -40,6 +40,10 @@ impl AppState {
 
     pub fn invoice_branding(&self) -> &InvoiceBranding {
         &self.config.invoice_branding
+    }
+
+    pub fn pdf_config(&self) -> &PdfConfig {
+        &self.config.pdf
     }
 
     pub fn zitadel_users(&self) -> &ZitadelUserDirectory {

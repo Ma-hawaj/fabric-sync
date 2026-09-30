@@ -18,6 +18,11 @@ pub enum AppError {
     /// template can be replaced at runtime (INVOICE_TEMPLATE_DIR), so this is
     /// the one 500 an operator can cause — and fix — without a deploy.
     Template(String),
+    /// Rendering the HTML document to PDF via headless Chromium failed
+    /// (missing binary, timeout, non-zero exit). A 500 like `Template`, but
+    /// kept distinct so a broken renderer install is distinguishable from a
+    /// broken template in the logs.
+    Pdf(String),
     /// A per-request call to Zitadel's Users API failed (token exchange,
     /// network error, or an unexpected response shape) — a 500, but distinct
     /// from `Auth`, which is boot-time OIDC-discovery failure only.
@@ -85,6 +90,7 @@ impl IntoResponse for AppError {
             Self::Conflict(message) => (StatusCode::CONFLICT, message),
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             Self::Template(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
+            Self::Pdf(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
             Self::Zitadel(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
         };
 

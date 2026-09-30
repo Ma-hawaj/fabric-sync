@@ -1,16 +1,18 @@
 import { apiClient } from '@/lib/api'
-import { printHtmlDocument } from '@/lib/print-document'
+import { printPdfDocument } from '@/lib/print-document'
 
 /**
- * Prints an order, by way of the document the backend renders for it. The
+ * Prints an order, by way of the PDF the backend renders for it. The
  * rendering happens server-side (see backend `orders/document.rs`), so the
  * request goes through `apiClient` and carries an Authorization header.
  */
 export async function printOrderDocument(orderId: string): Promise<void> {
-  const { data: html } = await apiClient.get<string>(
+  const { data: pdf } = await apiClient.get<Blob>(
     `/orders/${orderId}/document`,
-    { responseType: 'text' },
+    {
+      responseType: 'blob',
+    },
   )
 
-  await printHtmlDocument(html, 'order')
+  await printPdfDocument(pdf, 'order')
 }

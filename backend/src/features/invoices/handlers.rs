@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, State},
-    response::Html,
+    response::Response,
     Extension, Json,
 };
 use uuid::Uuid;
@@ -36,17 +36,16 @@ pub async fn get_invoice(
     Ok(Json(service::get_invoice(&state, invoice_id).await?))
 }
 
-/// The printable invoice, as HTML. Fetched rather than navigated to — the
-/// client writes it into an iframe and prints that — so it can carry an
-/// Authorization header once there is one to carry.
+/// The printable invoice, as a PDF. Fetched rather than navigated to — the
+/// client prints or downloads the bytes — so it can carry an Authorization
+/// header.
 pub async fn invoice_document(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,
     Path(invoice_id): Path<Uuid>,
-) -> Result<Html<String>, AppError> {
-    Ok(Html(
-        document::render_invoice_document(&state, invoice_id).await?,
-    ))
+) -> Result<Response, AppError> {
+    let (pdf, filename) = document::render_invoice_pdf(&state, invoice_id).await?;
+    Ok(crate::document::pdf_response(pdf, &filename))
 }
 
 pub async fn create_invoice(
