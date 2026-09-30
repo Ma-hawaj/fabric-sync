@@ -43,8 +43,11 @@ const SLOT_TITLES: [(&str, &str); 5] = [
 const SLOT_SECTIONS: [&str; 5] = ["thob_type", "neck", "sleeve", "front_pocket", "patti"];
 
 /// One chip: a title, the resolved label and, when a catalog asset exists, a
-/// self-contained `data:` URI for its image.
+/// self-contained `data:` URI for its image. Serialized camelCase — the
+/// template reads `chip.titleAr`/`chip.titleEn`, and a snake_case key would
+/// render as an empty title next to the image.
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct DesignChip<'a> {
     title_ar: &'a str,
     title_en: &'a str,
@@ -827,6 +830,67 @@ mod tests {
         let mut noted = services_order();
         noted.more_details = Some("  double stitching  ".to_string());
         assert_eq!(design_note(&noted).as_deref(), Some("double stitching"));
+    }
+
+    #[test]
+    fn chips_serialize_camelcase_for_the_template() {
+        // The template reads `chip.titleAr`/`chip.titleEn` — a snake_case key
+        // would look the chip up as missing and render an empty title next to
+        // the image, leaving no clue which slot the image belongs to.
+        let mut order = services_order();
+        order.thobe_type = Some("thobx".to_string());
+
+        let value = serde_json::to_value(order_designs(&order)).unwrap();
+        assert_eq!(value[0]["titleAr"], "النوع");
+        assert_eq!(value[0]["titleEn"], "Thobe");
+        assert_eq!(value[0]["label"], "Thobx");
+        assert!(value[0]["image"].as_str().is_some());
+    }
+
+    #[test]
+    fn the_template_names_each_design_slot_beside_its_image() {
+        let env = environment(&branding()).unwrap();
+        let template = env.get_template(TEMPLATE_NAME).unwrap();
+
+        let mut order = services_order();
+        order.thobe_type = Some("thobx".to_string());
+        order.collar = Some("Saudi".to_string());
+        order.more_details = Some("double stitching".to_string());
+        let detail = OrderDetail {
+            order,
+            invoice_number: 7,
+            measurement: tests_support::measurement(),
+        };
+        let fields = thob_fields();
+        let measurement = formatted_measurement(&detail);
+        let html = template
+            .render(context! {
+                order => minijinja::Value::from_serialize(&detail),
+                company => minijinja::Value::from_serialize(branding()),
+                currency => CURRENCY,
+                amounts => minijinja::Value::from_serialize(formatted_amounts(&detail)),
+                designs => minijinja::Value::from_serialize(order_designs(&detail.order)),
+                design_note => minijinja::Value::from_serialize(design_note(&detail.order)),
+                thob_garment => minijinja::Value::from_serialize(thob_garment()),
+                thob_markers => minijinja::Value::from_serialize(thob_markers_map(&fields)),
+                thob_front_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Front, &measurement)),
+                thob_back_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Back, &measurement)),
+                thob_front_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Front, &measurement)),
+                thob_back_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Back, &measurement)),
+            })
+            .unwrap();
+
+        // Each chip names its slot in both languages, so the image is
+        // identifiable even when the stored value itself is cryptic ("3").
+        assert!(html.contains("Thobe"));
+        assert!(html.contains("الياقة"));
+        assert!(html.contains("Collar"));
+        // Catalog matches print their display label with the raster...
+        assert!(html.contains("Thobx"));
+        // ...while legacy values print as text-only chips rather than
+        // disappearing.
+        assert!(html.contains("Saudi"));
+        assert!(html.contains("double stitching"));
     }
 
     #[test]
