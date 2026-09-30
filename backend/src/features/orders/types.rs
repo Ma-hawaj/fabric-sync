@@ -117,6 +117,16 @@ pub struct OrderRow {
     pub material_amount: f64,
     pub price: f64,
     pub status: String,
+    /// The made-to-measure design choices, as stored on `orders` — the same
+    /// columns the invoice document already renders per line. Exposed here so
+    /// the order detail page and the printed order sheet can show them without
+    /// going through the parent invoice.
+    pub thobe_type: Option<String>,
+    pub f_pocket: Option<String>,
+    pub collar: Option<String>,
+    pub sleeve: Option<String>,
+    pub patti: Option<String>,
+    pub more_details: Option<String>,
     pub production_location_id: Option<Uuid>,
     pub production_location: Option<String>,
     pub receiving_location_id: Option<Uuid>,
@@ -198,6 +208,17 @@ pub struct OrderListItem {
     pub material_amount: f64,
     pub price: f64,
     pub status: String,
+    /// The made-to-measure design choices, as stored on `orders` — the same
+    /// values the invoice document renders as chips per line. Carried on the
+    /// list row (not just the detail) so the tracking sheet and the printed
+    /// order sheet read from one shape.
+    pub thobe_type: Option<String>,
+    pub f_pocket: Option<String>,
+    pub collar: Option<String>,
+    pub sleeve: Option<String>,
+    pub patti: Option<String>,
+    /// Free-text line note, printed beneath the design chips on the document.
+    pub more_details: Option<String>,
     /// Where the garment is made. Only when this differs from the receiving
     /// location does a delivery stage apply. An explicit assignment (via PATCH)
     /// always wins; absent one, a material stocked at exactly one location is

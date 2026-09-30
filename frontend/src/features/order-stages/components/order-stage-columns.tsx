@@ -47,7 +47,13 @@ export const getOrderStageColumns = (
       <DataTableColumnHeader column={column} label="Stage" />
     ),
     cell: ({ row }) => (
-      <div className="font-medium">{row.getValue('name')}</div>
+      <Link
+        to="/order-stages/$stageId/edit"
+        params={{ stageId: row.original.id }}
+        className="font-medium text-info hover:underline"
+      >
+        {row.getValue('name')}
+      </Link>
     ),
     enableSorting: true,
     enableColumnFilter: true,

@@ -9,10 +9,19 @@ import {
   FileDownIcon,
   PackageCheckIcon,
   Ruler,
+  Shirt,
   Truck,
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import {
+  FRONT_POCKET,
+  NECK,
+  PATTI,
+  SLEEVE,
+  THOB_TYPE,
+} from '@/features/invoices/data/design-catalog'
+import type { ThobDesignOption } from '@/features/invoices/data/design-catalog'
 import { OrderTrackingPanel } from './components/order-tracking-panel'
 import { LogRepairDialog } from './components/log-repair-dialog'
 import { ReceiveOrderDialog } from './components/receive-order-dialog'
@@ -174,6 +183,13 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       </div>
 
       <section className="space-y-3">
+        <SectionHeading icon={<Shirt className="h-3.5 w-3.5" />}>
+          Design
+        </SectionHeading>
+        <DesignDetails order={order} />
+      </section>
+
+      <section className="space-y-3">
         <SectionHeading icon={<Ruler className="h-3.5 w-3.5" />}>
           Measurements
         </SectionHeading>
@@ -214,6 +230,83 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         order={repairOrderId === order.id ? order : null}
         onOpenChange={(open) => !open && setRepairOrderId(null)}
       />
+    </div>
+  )
+}
+
+// The made-to-measure choices, in the same fixed slot order the invoice
+// document prints them in. A stored value that matches a catalog id shows its
+// illustration; a legacy free-text value (e.g. "Saudi") shows as text only.
+const DESIGN_SLOTS: {
+  label: string
+  value: (order: OrderDetail) => string | null
+  options: ThobDesignOption[]
+}[] = [
+  {
+    label: 'Thobe Type',
+    value: (order) => order.thobeType,
+    options: THOB_TYPE,
+  },
+  { label: 'Collar', value: (order) => order.collar, options: NECK },
+  { label: 'Sleeve', value: (order) => order.sleeve, options: SLEEVE },
+  {
+    label: 'Front Pocket',
+    value: (order) => order.fPocket,
+    options: FRONT_POCKET,
+  },
+  { label: 'Patti', value: (order) => order.patti, options: PATTI },
+]
+
+function DesignDetails({ order }: { order: OrderDetail }) {
+  const slots = DESIGN_SLOTS.map((slot) => {
+    const raw = slot.value(order)?.trim() ?? ''
+    if (!raw) return null
+    const match = slot.options.find((option) => option.id === raw)
+    return { label: slot.label, raw, match: match ?? null }
+  }).filter((slot): slot is NonNullable<typeof slot> => slot !== null)
+  const note = order.moreDetails?.trim() || null
+
+  if (slots.length === 0 && !note) {
+    return (
+      <p className="rounded-xl border border-border/60 bg-card p-4 text-sm text-muted-foreground shadow-sm">
+        No design choices recorded.
+      </p>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
+      {slots.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {slots.map((slot) => (
+            <div
+              key={slot.label}
+              className="flex flex-col items-center gap-1.5 rounded-lg border border-border/60 bg-background p-2 text-center"
+            >
+              {slot.match ? (
+                <img
+                  src={slot.match.image}
+                  alt={slot.match.label}
+                  draggable={false}
+                  className="h-20 w-full object-contain"
+                />
+              ) : null}
+              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {slot.label}
+              </div>
+              <div className="text-sm font-semibold leading-tight">
+                {slot.match ? slot.match.label : slot.raw}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {note && (
+        <p className="mt-3 text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">Note: </span>
+          {note}
+        </p>
+      )}
     </div>
   )
 }

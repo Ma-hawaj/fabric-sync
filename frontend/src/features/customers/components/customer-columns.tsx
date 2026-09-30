@@ -32,7 +32,13 @@ export const getCustomerColumns = (
       <DataTableColumnHeader column={column} label="Name" />
     ),
     cell: ({ row }) => (
-      <div className="font-medium">{row.getValue('name')}</div>
+      <button
+        type="button"
+        onClick={() => onViewDetails(row.original)}
+        className="font-medium text-info hover:underline"
+      >
+        {row.getValue('name')}
+      </button>
     ),
     enableSorting: true,
     enableColumnFilter: true,

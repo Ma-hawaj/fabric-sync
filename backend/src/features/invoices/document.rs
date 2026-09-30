@@ -45,8 +45,11 @@ const SLOT_TITLES: [(&str, &str); 5] = [
 ];
 
 /// One chip: a title, the resolved label and, when a catalog asset exists, a
-/// self-contained `data:` URI for its image.
+/// self-contained `data:` URI for its image. Serialized camelCase — the
+/// template reads `chip.titleAr`/`chip.titleEn`, and a snake_case key would
+/// render as an empty title next to the image.
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct DesignChip<'a> {
     title_ar: &'a str,
     title_en: &'a str,
@@ -439,6 +442,19 @@ mod tests {
         let chips = line_designs(Some(&values(Some("  thobx  "), None, None, None, None)));
         assert_eq!(chips.len(), 1);
         assert!(chips[0].image.is_some());
+    }
+
+    #[test]
+    fn chips_serialize_camelcase_for_the_template() {
+        // The template reads `chip.titleAr`/`chip.titleEn` — a snake_case key
+        // would look the chip up as missing and render an empty title next to
+        // the image, leaving no clue which slot the image belongs to.
+        let chips = line_designs(Some(&values(Some("thobx"), None, None, None, None)));
+        let value = serde_json::to_value(&chips).unwrap();
+        assert_eq!(value[0]["titleAr"], "النوع");
+        assert_eq!(value[0]["titleEn"], "Thobe");
+        assert_eq!(value[0]["label"], "Thobx");
+        assert!(value[0]["image"].as_str().is_some());
     }
 
     #[test]

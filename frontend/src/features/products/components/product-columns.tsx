@@ -25,7 +25,13 @@ export const getProductColumns = (
       <DataTableColumnHeader column={column} label="Name" />
     ),
     cell: ({ row }) => (
-      <div className="font-medium">{row.getValue('name')}</div>
+      <Link
+        to="/products/$productId/edit"
+        params={{ productId: row.original.id }}
+        className="font-medium text-info hover:underline"
+      >
+        {row.getValue('name')}
+      </Link>
     ),
     enableSorting: true,
     enableColumnFilter: true,

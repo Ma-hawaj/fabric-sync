@@ -1,4 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
+import { Link } from '@tanstack/react-router'
 import { EyeIcon, FileDownIcon, CheckIcon, PencilIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
@@ -48,7 +49,13 @@ export const getInvoiceColumns = (
       <DataTableColumnHeader column={column} label="Invoice" />
     ),
     cell: ({ row }) => (
-      <div className="font-mono font-medium">{shortId(row.getValue('id'))}</div>
+      <Link
+        to="/invoices/$invoiceId"
+        params={{ invoiceId: row.original.id }}
+        className="font-mono font-medium text-info hover:underline"
+      >
+        {shortId(row.getValue('id'))}
+      </Link>
     ),
     enableSorting: true,
     enableColumnFilter: true,
