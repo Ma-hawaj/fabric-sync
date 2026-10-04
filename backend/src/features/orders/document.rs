@@ -217,6 +217,7 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
     push_number(&mut values, "lengthFl", m.length_fl);
     push_number(&mut values, "lengthBl", m.length_bl);
     push_number(&mut values, "shoulder", m.shoulder);
+    push_number(&mut values, "shoulderDown", m.shoulder_down);
     push_number(&mut values, "chest", m.chest);
     push_number(&mut values, "chestUp", m.chest_up);
     push_number(&mut values, "waist", m.waist);
@@ -225,9 +226,12 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
     push_number(&mut values, "neck", m.neck);
     push_number(&mut values, "neckWidth", m.neck_width);
     push_number(&mut values, "openHand", m.open_hand);
+    push_number(&mut values, "openHandFolding", m.open_hand_folding);
     push_number(&mut values, "cuffWidth", m.cuff_width);
     push_number(&mut values, "aramHole", m.aram_hole);
     push_number(&mut values, "foWidth", m.fo_width);
+    push_number(&mut values, "bottom", m.bottom);
+    push_number(&mut values, "bottomFolding", m.bottom_folding);
     push_number(&mut values, "frantPocketLength", m.frant_pocket_length);
 
     push_text(
@@ -250,7 +254,7 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
 //
 // Both the frontend (`thob-diagram.tsx` / `thob-sketch.ts` / `measurement-fields.ts`)
 // and this document draw the garment from a file-for-file identical geometry
-// and field split: 11 measurements on the front view, 7 on the back. Change a
+// and field split: 14 measurements on the front view, 8 on the back. Change a
 // marker here and the same edit must land in the frontend, or the printed
 // arrows and the screen arrows will disagree. The caption layout is mirrored
 // from `layoutCaptions` in `thob-diagram.tsx` — captions are placed
@@ -367,7 +371,7 @@ fn field(
     }
 }
 
-/// All 18 measurements, in the same order and with the same geometry as
+/// All 22 measurements, in the same order and with the same geometry as
 /// `MEASUREMENT_FIELDS` on the frontend.
 fn thob_fields() -> Vec<FieldDef> {
     let mut length_fl = marker((60.0, 238.0));
@@ -390,6 +394,12 @@ fn thob_fields() -> Vec<FieldDef> {
         segment(180.0, 58.0, 180.0, 26.0),
         segment(300.0, 58.0, 300.0, 26.0),
     ];
+
+    // How far the shoulder slopes down from the neck — drawn as a short
+    // vertical drop at the shoulder point, next to the shoulder width arrow.
+    let mut shoulder_down = marker((348.0, 70.0));
+    shoulder_down.dims = vec![segment(300.0, 60.0, 300.0, 80.0)];
+    shoulder_down.guides = vec![segment(300.0, 70.0, 330.0, 70.0)];
 
     let mut chest = marker((240.0, 150.0));
     chest.dims = vec![segment(190.0, 150.0, 290.0, 150.0)];
@@ -424,6 +434,12 @@ fn thob_fields() -> Vec<FieldDef> {
     open_hand.dims = vec![segment(119.0, 266.0, 149.0, 282.0)];
     open_hand.guides = vec![segment(134.0, 275.0, 130.0, 296.0)];
 
+    // The fold at the cuff opening — a short arrow across the cuff band,
+    // just above the open-hand marker it pairs with.
+    let mut open_hand_folding = marker((100.0, 252.0));
+    open_hand_folding.dims = vec![segment(126.0, 238.0, 152.0, 251.0)];
+    open_hand_folding.guides = vec![segment(139.0, 244.0, 116.0, 250.0)];
+
     let mut cuff_width = marker((78.0, 212.0));
     cuff_width.shapes = vec![THOB_CUFFS];
 
@@ -452,10 +468,28 @@ fn thob_fields() -> Vec<FieldDef> {
     fo_width.dims = vec![segment(234.0, 192.0, 246.0, 192.0)];
     fo_width.guides = vec![segment(240.0, 196.0, 166.0, 224.0)];
 
+    // Hem width across the bottom of the thob.
+    let mut bottom = marker((240.0, 460.0));
+    bottom.dims = vec![segment(166.0, 430.0, 314.0, 430.0)];
+    bottom.guides = vec![segment(240.0, 430.0, 240.0, 450.0)];
+
+    // The hem fold depth — a short vertical arrow at the right hem corner,
+    // paired with the hem width above.
+    let mut bottom_folding = marker((384.0, 419.0));
+    bottom_folding.dims = vec![segment(314.0, 408.0, 314.0, 430.0)];
+    bottom_folding.guides = vec![segment(314.0, 419.0, 352.0, 419.0)];
+
     vec![
         field("lengthFl", "Front Length", true, ThobView::Front, length_fl),
         field("lengthBl", "Back Length", true, ThobView::Back, length_bl),
         field("shoulder", "Shoulder", true, ThobView::Front, shoulder),
+        field(
+            "shoulderDown",
+            "Shoulder Down",
+            true,
+            ThobView::Front,
+            shoulder_down,
+        ),
         field("chest", "Chest", true, ThobView::Front, chest),
         field("chestUp", "Chest Up", true, ThobView::Front, chest_up),
         field("waist", "Waist", true, ThobView::Front, waist),
@@ -471,6 +505,13 @@ fn thob_fields() -> Vec<FieldDef> {
             sleeve_length,
         ),
         field("openHand", "Open Hand", true, ThobView::Back, open_hand),
+        field(
+            "openHandFolding",
+            "Open Hand Folding",
+            true,
+            ThobView::Back,
+            open_hand_folding,
+        ),
         field("cuffWidth", "Cuff W", true, ThobView::Back, cuff_width),
         field(
             "frantPocketLength",
@@ -501,6 +542,14 @@ fn thob_fields() -> Vec<FieldDef> {
             mobile_pocket_length_by_width,
         ),
         field("foWidth", "Fo Width", true, ThobView::Front, fo_width),
+        field("bottom", "Bottom", true, ThobView::Front, bottom),
+        field(
+            "bottomFolding",
+            "Bottom Folding",
+            true,
+            ThobView::Front,
+            bottom_folding,
+        ),
     ]
 }
 
@@ -985,14 +1034,18 @@ mod tests_support {
             waist: None,
             hips: None,
             shoulder: None,
+            shoulder_down: None,
             sleeve_length: Some(60.0),
             neck: None,
             open_hand: None,
+            open_hand_folding: None,
             chest_up: None,
             cuff_width: None,
             neck_width: None,
             aram_hole: None,
             fo_width: None,
+            bottom: None,
+            bottom_folding: None,
             frant_pocket_length: None,
             farnt_pocket_length_by_width: None,
             side_pocket: None,

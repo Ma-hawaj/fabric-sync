@@ -10,14 +10,18 @@ export interface InvoiceEditMeasurement {
   waist: number | null
   hips: number | null
   shoulder: number | null
+  shoulderDown: number | null
   sleeveLength: number | null
   neck: number | null
   openHand: number | null
+  openHandFolding: number | null
   chestUp: number | null
   cuffWidth: number | null
   neckWidth: number | null
   aramHole: number | null
   foWidth: number | null
+  bottom: number | null
+  bottomFolding: number | null
   frantPocketLength: number | null
   farntPocketLengthByWidth: string | null
   sidePocket: string | null

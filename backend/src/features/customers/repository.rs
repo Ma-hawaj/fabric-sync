@@ -92,17 +92,19 @@ pub async fn insert_measurement(
         r#"
         INSERT INTO measurements (
             customer_id, measurement_date,
-            length_fl, length_bl, chest, waist, hips, shoulder, sleeve_length,
-            neck, open_hand, chest_up, cuff_width, neck_width, aram_hole,
-            fo_width, frant_pocket_length,
+            length_fl, length_bl, chest, waist, hips, shoulder, shoulder_down,
+            sleeve_length, neck, open_hand, open_hand_folding, chest_up,
+            cuff_width, neck_width, aram_hole, fo_width, bottom, bottom_folding,
+            frant_pocket_length,
             farnt_pocket_length_by_width, side_pocket, mobile_pocket_length_by_width
         )
         VALUES (
             $1, $2,
             $3::float8, $4::float8, $5::float8, $6::float8, $7::float8, $8::float8, $9::float8,
-            $10::float8, $11::float8, $12::float8, $13::float8, $14::float8, $15::float8,
-            $16::float8, $17::float8,
-            $18, $19, $20
+            $10::float8, $11::float8, $12::float8, $13::float8, $14::float8,
+            $15::float8, $16::float8, $17::float8, $18::float8, $19::float8, $20::float8,
+            $21::float8,
+            $22, $23, $24
         )
         RETURNING id
         "#,
@@ -114,14 +116,18 @@ pub async fn insert_measurement(
         measurement.waist,
         measurement.hips,
         measurement.shoulder,
+        measurement.shoulder_down,
         measurement.sleeve_length,
         measurement.neck,
         measurement.open_hand,
+        measurement.open_hand_folding,
         measurement.chest_up,
         measurement.cuff_width,
         measurement.neck_width,
         measurement.aram_hole,
         measurement.fo_width,
+        measurement.bottom,
+        measurement.bottom_folding,
         measurement.frant_pocket_length,
         measurement.farnt_pocket_length_by_width,
         measurement.side_pocket,
@@ -142,10 +148,12 @@ pub async fn latest_measurement(
         SELECT
             id, measurement_date,
             length_fl::float8, length_bl::float8, chest::float8, waist::float8,
-            hips::float8, shoulder::float8, sleeve_length::float8,
-            neck::float8, open_hand::float8, chest_up::float8,
+            hips::float8, shoulder::float8, shoulder_down::float8,
+            sleeve_length::float8, neck::float8, open_hand::float8,
+            open_hand_folding::float8, chest_up::float8,
             cuff_width::float8, neck_width::float8, aram_hole::float8,
-            fo_width::float8, frant_pocket_length::float8,
+            fo_width::float8, bottom::float8, bottom_folding::float8,
+            frant_pocket_length::float8,
             farnt_pocket_length_by_width, side_pocket, mobile_pocket_length_by_width
         FROM measurements
         WHERE customer_id = $1
@@ -168,14 +176,18 @@ pub async fn latest_measurement(
                 waist: row.waist,
                 hips: row.hips,
                 shoulder: row.shoulder,
+                shoulder_down: row.shoulder_down,
                 sleeve_length: row.sleeve_length,
                 neck: row.neck,
                 open_hand: row.open_hand,
+                open_hand_folding: row.open_hand_folding,
                 chest_up: row.chest_up,
                 cuff_width: row.cuff_width,
                 neck_width: row.neck_width,
                 aram_hole: row.aram_hole,
                 fo_width: row.fo_width,
+                bottom: row.bottom,
+                bottom_folding: row.bottom_folding,
                 frant_pocket_length: row.frant_pocket_length,
                 farnt_pocket_length_by_width: row.farnt_pocket_length_by_width,
                 side_pocket: row.side_pocket,

@@ -61,7 +61,7 @@ export interface MeasurementField {
   input: MeasurementInput
   /**
    * Which thob silhouette the marker is drawn against. The garment is shown
-   * from the front and the back so no single sketch carries all 18 callouts:
+   * from the front and the back so no single sketch carries all 22 callouts:
    * lengths, circumferences, pockets and the placket live on the front; the
    * back length, the collar, and the whole sleeve cluster on the back.
    */
@@ -133,6 +133,19 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     },
   },
   {
+    name: 'shoulderDown',
+    view: 'front',
+    label: 'Shoulder Down',
+    diagramLabel: 'Shoulder Down',
+    group: 'body',
+    input: NUMBER,
+    marker: {
+      dims: [{ x1: 300, y1: 60, x2: 300, y2: 80 }],
+      guides: [{ x1: 300, y1: 70, x2: 330, y2: 70 }],
+      label: { x: 348, y: 70 },
+    },
+  },
+  {
     name: 'chest',
     view: 'front',
     label: 'Chest',
@@ -178,6 +191,32 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     marker: {
       dims: [{ x1: 175, y1: 320, x2: 305, y2: 320 }],
       label: { x: 240, y: 320 },
+    },
+  },
+  {
+    name: 'bottom',
+    view: 'front',
+    label: 'Bottom',
+    diagramLabel: 'Bottom',
+    group: 'body',
+    input: NUMBER,
+    marker: {
+      dims: [{ x1: 166, y1: 430, x2: 314, y2: 430 }],
+      guides: [{ x1: 240, y1: 430, x2: 240, y2: 450 }],
+      label: { x: 240, y: 460 },
+    },
+  },
+  {
+    name: 'bottomFolding',
+    view: 'front',
+    label: 'Bottom Folding',
+    diagramLabel: 'Bottom Folding',
+    group: 'body',
+    input: NUMBER,
+    marker: {
+      dims: [{ x1: 314, y1: 408, x2: 314, y2: 430 }],
+      guides: [{ x1: 314, y1: 419, x2: 352, y2: 419 }],
+      label: { x: 384, y: 419 },
     },
   },
   {
@@ -244,6 +283,19 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
       dims: [{ x1: 119, y1: 266, x2: 149, y2: 282 }],
       guides: [{ x1: 134, y1: 275, x2: 130, y2: 296 }],
       label: { x: 128, y: 306 },
+    },
+  },
+  {
+    name: 'openHandFolding',
+    view: 'back',
+    label: 'Open Hand Folding',
+    diagramLabel: 'Hand Folding',
+    group: 'body',
+    input: NUMBER,
+    marker: {
+      dims: [{ x1: 126, y1: 238, x2: 152, y2: 251 }],
+      guides: [{ x1: 139, y1: 244, x2: 116, y2: 250 }],
+      label: { x: 100, y: 252 },
     },
   },
   {
@@ -331,6 +383,32 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     },
   },
 ]
+
+/**
+ * Pairs that are entered and read together: the first entry is the primary
+ * measurement, the second its fold/drop. The entry form renders each pair in
+ * one joined box and the sketch highlights both markers together.
+ */
+export const MEASUREMENT_PAIRS: [MeasurementFieldName, MeasurementFieldName][] =
+  [
+    ['shoulder', 'shoulderDown'],
+    ['bottom', 'bottomFolding'],
+    ['openHand', 'openHandFolding'],
+  ]
+
+const PAIR_PARTNER = new Map<MeasurementFieldName, MeasurementFieldName>(
+  MEASUREMENT_PAIRS.flatMap(([a, b]) => [
+    [a, b],
+    [b, a],
+  ]),
+)
+
+/** The other half of a paired measurement, if it has one. */
+export function pairPartner(
+  name: MeasurementFieldName | string,
+): MeasurementFieldName | undefined {
+  return PAIR_PARTNER.get(name as MeasurementFieldName)
+}
 
 /**
  * Shown on the sketch when no field is hovered or focused — enough to read
