@@ -15,9 +15,9 @@ function Home() {
   return (
     <section className="grid gap-6">
       <div>
-        <p className="text-sm font-medium text-muted-foreground">Fabric Sync</p>
+        <p className="text-sm font-medium text-muted-foreground">THOBX</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-normal">
-          Operational workspace for fabric data synchronization
+          Bespoke tailoring workspace
         </h1>
         <p className="mt-3 max-w-2xl text-muted-foreground">
           Sign in with your identity provider account to reach authenticated

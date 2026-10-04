@@ -26,10 +26,10 @@ const TEARDOWN_FALLBACK_MS = 60_000
 const ARROW_LENGTH = 8
 const ARROW_HALF_WIDTH = 3
 
-const ACCENT = '#1d4ed8'
-const INK = '#10151c'
-const MUTED = '#6b7280'
-const RULE = '#d8dee7'
+const ACCENT = '#b28952'
+const INK = '#151110'
+const MUTED = '#6f6459'
+const RULE = '#ddd3c7'
 
 /** Arabic row labels, matching `measurement_labels` in backend/templates/order.html. */
 const MEASUREMENT_LABELS_AR: Record<string, string> = {
@@ -261,9 +261,10 @@ export function generateMeasurementsHtml(
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --ink: ${INK};
+    --brand: #233029;
     --muted: ${MUTED};
     --rule: ${RULE};
-    --tint: #f4f6f9;
+    --tint: #faf4eb;
     --accent: ${ACCENT};
   }
   body {
@@ -292,7 +293,7 @@ export function generateMeasurementsHtml(
     align-items: flex-start;
     gap: 16px;
     padding-bottom: 10px;
-    border-bottom: 2px solid var(--ink);
+    border-bottom: 2px solid var(--brand);
   }
   .company-name {
     margin: 0;

@@ -57,11 +57,14 @@
       }
 
       :root {
-        --ink: #10151c;
-        --muted: #6b7280;
-        --rule: #d8dee7;
-        --tint: #f4f6f9;
-        --accent: #1d4ed8;
+        /* THOBX brand palette (https://thobx.bh): deep-green headers,
+           bronze-gold accents, warm greige rules, cream tints. */
+        --ink: #151110;
+        --brand: #233029;
+        --muted: #6f6459;
+        --rule: #ddd3c7;
+        --tint: #faf4eb;
+        --accent: #b28952;
       }
 
       * {
@@ -107,7 +110,7 @@
         align-items: flex-start;
         gap: 16px;
         padding-bottom: 10px;
-        border-bottom: 2px solid var(--ink);
+        border-bottom: 2px solid var(--brand);
       }
 
       .logo {
@@ -221,8 +224,8 @@
       }
 
       thead th {
-        background: var(--ink);
-        color: #fff;
+        background: var(--brand);
+        color: #f8eadc;
         font-size: 9.5px;
         font-weight: 600;
         text-align: right;
