@@ -40,3 +40,16 @@ pub async fn add_stock(
 ) -> Result<Json<Material>, AppError> {
     Ok(Json(service::add_stock(&state, material_id, input).await?))
 }
+
+/// Takes stock off a material — wastage, samples, or a correction. Refused
+/// when a location doesn't hold enough, so stock can never go negative.
+pub async fn remove_stock(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(material_id): Path<Uuid>,
+    Json(input): Json<AddStockInput>,
+) -> Result<Json<Material>, AppError> {
+    Ok(Json(
+        service::remove_stock(&state, material_id, input).await?,
+    ))
+}

@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { EyeIcon } from 'lucide-react'
+import { EyeIcon, MinusIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
@@ -13,6 +13,7 @@ function totalQuantity(material: Material) {
 export const getInventoryColumns = (
   onViewStock: (material: Material) => void,
   locations: Location[],
+  onRemoveStock: (material: Material) => void,
 ): ColumnDef<Material, any>[] => [
   {
     accessorKey: 'name',
@@ -108,6 +109,16 @@ export const getInventoryColumns = (
             label: 'View Stock',
             icon: EyeIcon,
             onClick: () => onViewStock(row.original),
+          },
+          {
+            // Takes stock off without deleting the material. Disabled when
+            // there is nothing to take — the backend would refuse every
+            // entry.
+            label: 'Remove Stock',
+            icon: MinusIcon,
+            disabled: totalQuantity(row.original) <= 0,
+            onClick: () => onRemoveStock(row.original),
+            separatorBefore: true,
           },
         ]}
       />

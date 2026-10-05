@@ -7,6 +7,7 @@ import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getInventoryColumns } from './components/inventory-columns'
 import { InventoryDetailsSheet } from './components/inventory-details-sheet'
+import { RemoveStockDialog } from './components/remove-stock-dialog'
 import { useAllLocations } from '@/features/locations/hooks/use-locations'
 import { useListParams } from '@/hooks/use-list-params'
 import { useInventory } from './hooks/use-inventory'
@@ -18,9 +19,13 @@ export function InventoryPage() {
   const { data: locations } = useAllLocations()
   const [selectedMaterial, setSelectedMaterial] =
     React.useState<Material | null>(null)
+  const [removeMaterial, setRemoveMaterial] = React.useState<Material | null>(
+    null,
+  )
 
   const columns = React.useMemo(
-    () => getInventoryColumns(setSelectedMaterial, locations),
+    () =>
+      getInventoryColumns(setSelectedMaterial, locations, setRemoveMaterial),
     [locations],
   )
 
@@ -67,6 +72,11 @@ export function InventoryPage() {
       <InventoryDetailsSheet
         material={selectedMaterial}
         onOpenChange={(open) => !open && setSelectedMaterial(null)}
+      />
+
+      <RemoveStockDialog
+        material={removeMaterial}
+        onOpenChange={(open) => !open && setRemoveMaterial(null)}
       />
     </div>
   )
