@@ -382,6 +382,11 @@ function toInvoice(detail: InvoiceDetail): Invoice {
     paymentMethod: detail.paymentMethod,
     giftCardRedeemed: detail.totals.giftCardRedeemed,
     received: detail.received,
+    receivingLocation: detail.branchName,
+    // The detail endpoint carries no production locations (lines carry no
+    // location), so the list's production filter has nothing to reuse here —
+    // the dialog only needs the money and collection state.
+    productionLocations: [],
   }
 }
 

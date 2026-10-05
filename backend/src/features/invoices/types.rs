@@ -528,4 +528,12 @@ pub struct InvoiceListItem {
     /// Gift card tender applied to this invoice. Not part of `amount_paid`:
     /// together they add up to `total_price` on a settled invoice.
     pub gift_card_redeemed: f64,
+    /// Where the customer collects, taken from the invoice's branch. Null when
+    /// the invoice names no branch.
+    pub receiving_location: Option<String>,
+    /// Distinct production locations across the invoice's tailoring lines
+    /// (`orders.production_branch_id`), for the list's production filter. Empty
+    /// on a retail-only invoice, which has no orders.
+    #[sqlx(json)]
+    pub production_locations: Vec<String>,
 }

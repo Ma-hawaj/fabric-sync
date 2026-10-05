@@ -281,6 +281,11 @@ pub async fn fetch_invoice_detail(
 // also emits a flat form — `customer_names` as text, `material_names` as
 // `text[]` — because a JSON array cannot be filtered or sorted on directly and
 // those are exactly the columns the invoices table offers a filter for.
+//
+// Receiving location is the invoice's own branch (`invoices.branch_id`); the
+// production locations are the distinct `orders.production_branch_id` names
+// across its tailoring lines, aggregated the same way materials are (JSON for
+// display, `text[]` for the filter).
 const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
@@ -296,6 +301,10 @@ const SPEC: ListSpec = ListSpec {
                 WHERE o.invoice_id = i.id AND o.status <> 'received'
             ) AS received,
             i.gift_card_redeemed::float8 AS gift_card_redeemed,
+            i.branch_id AS receiving_location_id,
+            recv.name AS receiving_location,
+            COALESCE(agg.production_locations, '[]') AS production_locations,
+            COALESCE(agg.production_location_names, ARRAY[]::text[]) AS production_location_names,
             COALESCE(agg.item_count, 0) + COALESCE(items.item_count, 0) AS item_count,
             COALESCE(
                 agg.customers,
@@ -320,6 +329,7 @@ const SPEC: ListSpec = ListSpec {
             ) AS customer_mobiles,
             COALESCE(agg.material_names, ARRAY[]::text[]) AS material_names
         FROM invoices i
+        LEFT JOIN branch recv ON recv.id = i.branch_id
         LEFT JOIN LATERAL (
             SELECT
                 count(*) AS item_count,
@@ -330,11 +340,14 @@ const SPEC: ListSpec = ListSpec {
                 json_agg(DISTINCT mat.name) AS materials,
                 string_agg(DISTINCT c.name, ', ') AS customer_names,
                 string_agg(DISTINCT c.mobile_no, ', ') AS customer_mobiles,
-                array_agg(DISTINCT mat.name) AS material_names
+                array_agg(DISTINCT mat.name) AS material_names,
+                json_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_locations,
+                array_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_location_names
             FROM orders o
             JOIN measurements m ON m.id = o.measurement_id
             JOIN customers c ON c.id = m.customer_id
             JOIN materials mat ON mat.id = o.material_id
+            LEFT JOIN branch prod ON prod.id = o.production_branch_id
             WHERE o.invoice_id = i.id
         ) agg ON true
         -- Product and gift card lines live in their own table, so they need a
@@ -408,6 +421,14 @@ const SPEC: ListSpec = ListSpec {
             ColumnDef::new("payment_method", ColumnKind::Text),
         ),
         ("received", ColumnDef::new("received", ColumnKind::Bool)),
+        (
+            "receivingLocation",
+            ColumnDef::new("receiving_location", ColumnKind::Text),
+        ),
+        (
+            "productionLocations",
+            ColumnDef::new("production_location_names", ColumnKind::TextArray),
+        ),
     ],
     default_order: "id DESC",
 };
