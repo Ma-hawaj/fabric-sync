@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
+import { RecordPaymentDialog } from './components/record-payment-dialog'
 import { useInvoice } from './hooks/use-invoice'
 import { printInvoiceDocument } from './lib/print-invoice'
 import type { Invoice, InvoiceCustomer } from './types/invoices'
@@ -121,6 +122,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
             Edit
           </Button>
           <ReceiveInvoiceButton invoice={invoice} />
+          <RecordPaymentButton invoice={invoice} />
         </div>
       </div>
 
@@ -322,6 +324,28 @@ function ReceiveInvoiceButton({ invoice }: { invoice: Invoice }) {
         Mark Received
       </Button>
       <ReceiveInvoiceDialog
+        invoice={open ? invoice : null}
+        onOpenChange={(isOpen) => !isOpen && setOpen(false)}
+      />
+    </>
+  )
+}
+
+// Money without collecting anything — an advance now, or the remainder after
+// everything was already collected. Disabled once nothing is left to pay.
+function RecordPaymentButton({ invoice }: { invoice: Invoice }) {
+  const [open, setOpen] = React.useState(false)
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        disabled={invoice.balanceDue <= 0}
+        onClick={() => setOpen(true)}
+      >
+        Record Payment
+      </Button>
+      <RecordPaymentDialog
         invoice={open ? invoice : null}
         onOpenChange={(isOpen) => !isOpen && setOpen(false)}
       />
