@@ -38,6 +38,8 @@ const PAYMENT_STATUS_VARIANT: Record<
 
 export const getInvoiceColumns = (
   materialOptions: { label: string; value: string }[],
+  receivingOptions: { label: string; value: string }[],
+  productionOptions: { label: string; value: string }[],
   onReceive: (invoice: Invoice) => void,
   onViewDetails: (invoice: Invoice) => void,
   onExportPdf: (invoice: Invoice) => void,
@@ -145,6 +147,51 @@ export const getInvoiceColumns = (
       placeholder: 'Filter materials...',
       variant: 'multiSelect',
       options: materialOptions,
+    },
+  },
+  {
+    accessorKey: 'receivingLocation',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Receiving" />
+    ),
+    cell: ({ row }) => (
+      <div>{row.getValue<string | null>('receivingLocation') ?? '—'}</div>
+    ),
+    enableSorting: true,
+    enableColumnFilter: true,
+    meta: {
+      label: 'Receiving',
+      placeholder: 'Filter receiving...',
+      variant: 'multiSelect',
+      options: receivingOptions,
+    },
+  },
+  {
+    accessorKey: 'productionLocations',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Production" />
+    ),
+    cell: ({ row }) => {
+      const locations = row.getValue<string[]>('productionLocations')
+      if (locations.length === 0)
+        return <div className="text-muted-foreground">—</div>
+      return (
+        <div className="flex flex-wrap gap-1">
+          {locations.map((location) => (
+            <Badge key={location} variant="outline">
+              {location}
+            </Badge>
+          ))}
+        </div>
+      )
+    },
+    enableSorting: false,
+    enableColumnFilter: true,
+    meta: {
+      label: 'Production',
+      placeholder: 'Filter production...',
+      variant: 'multiSelect',
+      options: productionOptions,
     },
   },
   {

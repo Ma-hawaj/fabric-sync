@@ -11,6 +11,11 @@ import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
 import { useListParams } from '@/hooks/use-list-params'
 import { useInvoices } from './hooks/use-invoices'
 import { useMaterials } from './hooks/use-materials'
+import { useAllLocations } from '@/features/locations/hooks/use-locations'
+import {
+  orderReceivingLocations,
+  productionLocations as productionLocationOptions,
+} from '@/features/locations/lib/location-filters'
 import { printInvoiceDocument } from './lib/print-invoice'
 import type { Invoice } from './types/invoices'
 
@@ -30,14 +35,27 @@ export function InvoicesPage() {
 
   // The materials filter offers every material, from its own query. Deriving
   // the options from the invoices on screen would, under server-side paging,
-  // offer only the ones the current page happens to mention.
+  // offer only the ones the current page happens to mention. Location filters
+  // work the same way: receiving branches and production (material stock)
+  // locations come from the whole locations list, narrowed by capability.
   const { data: materials } = useMaterials()
+  const { data: locations = [] } = useAllLocations()
   const columns = React.useMemo(() => {
     const names = [
       ...new Set(materials.map((material) => material.name)),
     ].sort()
+    const receiving = orderReceivingLocations(locations).map((location) => ({
+      label: location.name,
+      value: location.name,
+    }))
+    const production = productionLocationOptions(locations).map((location) => ({
+      label: location.name,
+      value: location.name,
+    }))
     return getInvoiceColumns(
       names.map((name) => ({ label: name, value: name })),
+      receiving,
+      production,
       setSelectedInvoice,
       (invoice) =>
         void navigate({
@@ -51,7 +69,7 @@ export function InvoicesPage() {
           params: { invoiceId: invoice.id },
         }),
     )
-  }, [materials, exportPdf, navigate])
+  }, [materials, locations, exportPdf, navigate])
 
   const { searchParams } = useListParams({ columns })
   const {

@@ -40,6 +40,8 @@ const paymentTypeLabels: Record<
 export function getOrderColumns(
   materialOptions: { label: string; value: string }[],
   stageOptions: { label: string; value: string }[],
+  receivingOptions: { label: string; value: string }[],
+  productionOptions: { label: string; value: string }[],
   onReceive: (order: Order) => void,
   onOpen: (order: Order) => void,
 ): ColumnDef<Order, any>[] {
@@ -158,6 +160,49 @@ export function getOrderColumns(
       meta: {
         label: 'Quantity',
         variant: 'number',
+      },
+    },
+    {
+      accessorKey: 'receivingLocation',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Receiving" />
+      ),
+      cell: ({ row }) => (
+        <div>{row.getValue<string | null>('receivingLocation') ?? '—'}</div>
+      ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Receiving',
+        placeholder: 'Filter receiving...',
+        variant: 'multiSelect',
+        options: receivingOptions,
+      },
+    },
+    {
+      accessorKey: 'productionLocation',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Production" />
+      ),
+      cell: ({ row }) => {
+        const location = row.getValue<string | null>('productionLocation')
+        if (!location) return <div className="text-muted-foreground">—</div>
+        return (
+          <div>
+            {location}
+            {row.original.productionLocationInferred && (
+              <span className="text-muted-foreground"> • inferred</span>
+            )}
+          </div>
+        )
+      },
+      enableSorting: true,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Production',
+        placeholder: 'Filter production...',
+        variant: 'multiSelect',
+        options: productionOptions,
       },
     },
     {
