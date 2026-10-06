@@ -42,10 +42,10 @@ describe('CustomerDetailsSheet', () => {
     // keep their grid positions.
     expect(screen.queryByText('Waist')).toBeTruthy()
     expect(screen.queryByText('108')).toBeTruthy()
-    // Body Dimensions has 17 fields and 2 recorded values; Style &
+    // Body Dimensions has 18 fields and 2 recorded values; Style &
     // Finishing is fully recorded. Every other slot holds a placeholder.
     // (The sheet renders in a portal, so query the document body.)
-    expect(document.body.querySelectorAll('[data-empty]').length).toBe(19)
+    expect(document.body.querySelectorAll('[data-empty]').length).toBe(20)
   })
 
   it('draws the thob sketch alongside the measurements', () => {

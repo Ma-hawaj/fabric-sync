@@ -795,6 +795,7 @@ pub async fn fetch_invoice_edit(
             m.fo_width::float8 AS fo_width,
             m.bottom::float8 AS bottom,
             m.bottom_folding::float8 AS bottom_folding,
+            m.full_body::float8 AS full_body,
             m.frant_pocket_length::float8 AS frant_pocket_length,
             m.farnt_pocket_length_by_width,
             m.side_pocket,
@@ -853,6 +854,7 @@ pub async fn fetch_invoice_edit(
             fo_width: row.fo_width,
             bottom: row.bottom,
             bottom_folding: row.bottom_folding,
+            full_body: row.full_body,
             frant_pocket_length: row.frant_pocket_length,
             farnt_pocket_length_by_width: row.farnt_pocket_length_by_width,
             side_pocket: row.side_pocket,
@@ -1336,9 +1338,10 @@ pub async fn update_measurement(
             cuff_width = $15::float8, neck_width = $16::float8,
             aram_hole = $17::float8, fo_width = $18::float8,
             bottom = $19::float8, bottom_folding = $20::float8,
-            frant_pocket_length = $21::float8,
-            farnt_pocket_length_by_width = $22, side_pocket = $23,
-            mobile_pocket_length_by_width = $24
+            full_body = $21::float8,
+            frant_pocket_length = $22::float8,
+            farnt_pocket_length_by_width = $23, side_pocket = $24,
+            mobile_pocket_length_by_width = $25
         WHERE id = $1
         "#,
         measurement_id,
@@ -1361,6 +1364,7 @@ pub async fn update_measurement(
         measurement.fo_width,
         measurement.bottom,
         measurement.bottom_folding,
+        measurement.full_body,
         measurement.frant_pocket_length,
         measurement.farnt_pocket_length_by_width,
         measurement.side_pocket,

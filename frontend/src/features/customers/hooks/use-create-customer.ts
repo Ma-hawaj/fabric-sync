@@ -32,6 +32,7 @@ export function measurementPayload(measurement: MeasurementDraft) {
     foWidth: blankToNull(measurement.foWidth),
     bottom: blankToNull(measurement.bottom),
     bottomFolding: blankToNull(measurement.bottomFolding),
+    fullBody: blankToNull(measurement.fullBody),
     frantPocketLength: blankToNull(measurement.frantPocketLength),
     farntPocketLengthByWidth: blankToNull(measurement.farntPocketLengthByWidth),
     sidePocket: blankToNull(measurement.sidePocket),

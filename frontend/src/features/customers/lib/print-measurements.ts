@@ -43,6 +43,7 @@ const MEASUREMENT_LABELS_AR: Record<string, string> = {
   hips: 'الأوراك',
   bottom: 'الأسفل',
   bottomFolding: 'ثنية الأسفل',
+  fullBody: 'الجسم الكامل',
   sleeveLength: 'طول الكم',
   neck: 'الرقبة',
   neckWidth: 'عرض الرقبة',

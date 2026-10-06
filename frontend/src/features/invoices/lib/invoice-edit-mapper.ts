@@ -41,6 +41,7 @@ function measurementToDraft(
     foWidth: measurement.foWidth ?? '',
     bottom: measurement.bottom ?? '',
     bottomFolding: measurement.bottomFolding ?? '',
+    fullBody: measurement.fullBody ?? '',
     frantPocketLength: measurement.frantPocketLength ?? '',
     farntPocketLengthByWidth: nullToBlank(measurement.farntPocketLengthByWidth),
     sidePocket: nullToBlank(measurement.sidePocket),

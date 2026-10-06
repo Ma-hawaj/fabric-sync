@@ -26,6 +26,7 @@ export interface MeasurementDraft {
   foWidth: NumberInput
   bottom: NumberInput
   bottomFolding: NumberInput
+  fullBody: NumberInput
   frantPocketLength: NumberInput
   farntPocketLengthByWidth: string
   sidePocket: string
@@ -54,6 +55,7 @@ export function createEmptyMeasurement(): MeasurementDraft {
     foWidth: '',
     bottom: '',
     bottomFolding: '',
+    fullBody: '',
     frantPocketLength: '',
     farntPocketLengthByWidth: '',
     sidePocket: '',

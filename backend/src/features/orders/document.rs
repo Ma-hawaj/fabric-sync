@@ -232,6 +232,7 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
     push_number(&mut values, "foWidth", m.fo_width);
     push_number(&mut values, "bottom", m.bottom);
     push_number(&mut values, "bottomFolding", m.bottom_folding);
+    push_number(&mut values, "fullBody", m.full_body);
     push_number(&mut values, "frantPocketLength", m.frant_pocket_length);
 
     push_text(
@@ -254,7 +255,7 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
 //
 // Both the frontend (`thob-diagram.tsx` / `thob-sketch.ts` / `measurement-fields.ts`)
 // and this document draw the garment from a file-for-file identical geometry
-// and field split: 14 measurements on the front view, 8 on the back. Change a
+// and field split: 15 measurements on the front view, 8 on the back. Change a
 // marker here and the same edit must land in the frontend, or the printed
 // arrows and the screen arrows will disagree. The caption layout is mirrored
 // from `layoutCaptions` in `thob-diagram.tsx` — captions are placed
@@ -371,7 +372,7 @@ fn field(
     }
 }
 
-/// All 22 measurements, in the same order and with the same geometry as
+/// All 23 measurements, in the same order and with the same geometry as
 /// `MEASUREMENT_FIELDS` on the frontend.
 fn thob_fields() -> Vec<FieldDef> {
     let mut length_fl = marker((60.0, 238.0));
@@ -479,6 +480,15 @@ fn thob_fields() -> Vec<FieldDef> {
     bottom_folding.dims = vec![segment(314.0, 408.0, 314.0, 430.0)];
     bottom_folding.guides = vec![segment(314.0, 419.0, 352.0, 419.0)];
 
+    // Full body: the shoulder-to-hem run on the right of the garment, kept
+    // clear of the left-side front-length arrow.
+    let mut full_body = marker((332.0, 238.0));
+    full_body.dims = vec![segment(332.0, 46.0, 332.0, 430.0)];
+    full_body.guides = vec![
+        segment(328.0, 46.0, 300.0, 46.0),
+        segment(328.0, 430.0, 314.0, 430.0),
+    ];
+
     vec![
         field("lengthFl", "Front Length", true, ThobView::Front, length_fl),
         field("lengthBl", "Back Length", true, ThobView::Back, length_bl),
@@ -550,6 +560,7 @@ fn thob_fields() -> Vec<FieldDef> {
             ThobView::Front,
             bottom_folding,
         ),
+        field("fullBody", "Full Body", true, ThobView::Front, full_body),
     ]
 }
 
@@ -1046,6 +1057,7 @@ mod tests_support {
             fo_width: None,
             bottom: None,
             bottom_folding: None,
+            full_body: None,
             frant_pocket_length: None,
             farnt_pocket_length_by_width: None,
             side_pocket: None,

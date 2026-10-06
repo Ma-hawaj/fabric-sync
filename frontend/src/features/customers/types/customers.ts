@@ -24,6 +24,7 @@ export interface Measurement {
   foWidth?: number | null
   bottom?: number | null
   bottomFolding?: number | null
+  fullBody?: number | null
   frantPocketLength?: number | null
   farntPocketLengthByWidth?: string | null
   sidePocket?: string | null
