@@ -66,19 +66,26 @@
   "openHand": ("فتحة اليد", "Open Hand"),
   "openHandFolding": ("ثنية فتحة اليد", "Open Hand Folding"),
   "cuffWidth": ("عرض الأسوارة", "Cuff Width"),
-  "aramHole": ("فتحة الإبط", "Armhole"),
+  "cuffling": ("الكفلنج", "Cuffling"),
+  "armHole": ("فتحة الإبط", "Armhole"),
   "foWidth": ("عرض الفو", "FO Width"),
   "fo": ("الفو", "Fo"),
   "bottom": ("الأسفل", "Bottom"),
   "bottomFolding": ("ثنية الأسفل", "Bottom Folding"),
   "fullBody": ("الجسم الكامل", "Full Body"),
-  "frantPocketLength": ("طول الجيب الأمامي", "Front Pocket Length"),
-  "farntPocketLengthByWidth": ("الجيب الأمامي بالعرض", "Front Pocket By Width"),
+  "sleeveHalf": ("نصف الكم", "Sleeve Half"),
+  "button": ("الأزرار", "Button"),
+  "buttonFold": ("ثنية الزر", "Button Fold"),
+  "openFold": ("الثنية المفتوحة", "Open Fold"),
+  "frontPocketLength": ("طول الجيب الأمامي", "Front Pocket Length"),
+  "frontPocketLengthByWidth": ("الجيب الأمامي بالعرض", "Front Pocket By Width"),
   "sidePocket": ("الجيب الجانبي", "Side Pocket"),
+  "sidePocketLength": ("طول الجيب الجانبي", "Side Pocket Length"),
+  "sidePocketLengthByWidth": ("الجيب الجانبي بالعرض", "Side Pocket By Width"),
   "mobilePocketLengthByWidth": ("جيب الجوال بالعرض", "Mobile Pocket By Width")
 } -%}
-{%- set body_measurements = ["lengthFl", "lengthBl", "shoulder", "shoulderDown", "chest", "chestUp", "waist", "hips", "sleeveLength", "neck", "neckWidth", "openHand", "openHandFolding", "cuffWidth", "aramHole", "bottom", "bottomFolding", "fullBody"] -%}
-{%- set pocket_measurements = ["frantPocketLength", "farntPocketLengthByWidth", "sidePocket", "mobilePocketLengthByWidth"] -%}
+{%- set body_measurements = ["lengthFl", "lengthBl", "shoulder", "shoulderDown", "chest", "chestUp", "waist", "hips", "sleeveLength", "sleeveHalf", "neck", "neckWidth", "openHand", "openHandFolding", "cuffWidth", "cuffling", "armHole", "bottom", "bottomFolding", "fullBody", "button", "buttonFold", "openFold"] -%}
+{%- set pocket_measurements = ["frontPocketLength", "frontPocketLengthByWidth", "sidePocket", "sidePocketLength", "sidePocketLengthByWidth", "mobilePocketLengthByWidth"] -%}
 {%- set style_measurements = ["foWidth", "fo"] -%}
 
 {# The thob template: the garment is drawn from the front and the back, so no

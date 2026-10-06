@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            id, measurement_date,\n            length_fl::float8, length_bl::float8, chest::float8, waist::float8,\n            hips::float8, shoulder::float8, shoulder_down::float8,\n            sleeve_length::float8, neck::float8, open_hand::float8,\n            open_hand_folding::float8, chest_up::float8,\n            cuff_width::float8, neck_width::float8, aram_hole::float8,\n            fo_width::float8, fo::float8, bottom::float8, bottom_folding::float8,\n            full_body::float8, frant_pocket_length::float8,\n            farnt_pocket_length_by_width, side_pocket, mobile_pocket_length_by_width\n        FROM measurements\n        WHERE customer_id = $1\n        ORDER BY measurement_date DESC, id DESC\n        LIMIT 1\n        ",
+  "query": "\n        SELECT\n            id, measurement_date,\n            length_fl::float8, length_bl::float8, chest::float8, waist::float8,\n            hips::float8, shoulder::float8, shoulder_down::float8,\n            sleeve_length::float8, neck::float8, open_hand::float8,\n            open_hand_folding::float8, chest_up::float8,\n            cuff_width::float8, cuffling::float8, neck_width::float8, arm_hole::float8,\n            fo_width::float8, fo::float8, bottom::float8, bottom_folding::float8,\n            full_body::float8, sleeve_half::float8, button::float8,\n            button_fold::float8, open_fold::float8, front_pocket_length::float8,\n            front_pocket_length_by_width, side_pocket,\n            side_pocket_length::float8, side_pocket_length_by_width,\n            mobile_pocket_length_by_width\n        FROM measurements\n        WHERE customer_id = $1\n        ORDER BY measurement_date DESC, id DESC\n        LIMIT 1\n        ",
   "describe": {
     "columns": [
       {
@@ -80,56 +80,91 @@
       },
       {
         "ordinal": 15,
-        "name": "neck_width",
+        "name": "cuffling",
         "type_info": "Float8"
       },
       {
         "ordinal": 16,
-        "name": "aram_hole",
+        "name": "neck_width",
         "type_info": "Float8"
       },
       {
         "ordinal": 17,
-        "name": "fo_width",
+        "name": "arm_hole",
         "type_info": "Float8"
       },
       {
         "ordinal": 18,
-        "name": "fo",
+        "name": "fo_width",
         "type_info": "Float8"
       },
       {
         "ordinal": 19,
-        "name": "bottom",
+        "name": "fo",
         "type_info": "Float8"
       },
       {
         "ordinal": 20,
-        "name": "bottom_folding",
+        "name": "bottom",
         "type_info": "Float8"
       },
       {
         "ordinal": 21,
-        "name": "full_body",
+        "name": "bottom_folding",
         "type_info": "Float8"
       },
       {
         "ordinal": 22,
-        "name": "frant_pocket_length",
+        "name": "full_body",
         "type_info": "Float8"
       },
       {
         "ordinal": 23,
-        "name": "farnt_pocket_length_by_width",
-        "type_info": "Text"
+        "name": "sleeve_half",
+        "type_info": "Float8"
       },
       {
         "ordinal": 24,
+        "name": "button",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 25,
+        "name": "button_fold",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 26,
+        "name": "open_fold",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 27,
+        "name": "front_pocket_length",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 28,
+        "name": "front_pocket_length_by_width",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 29,
         "name": "side_pocket",
         "type_info": "Text"
       },
       {
-        "ordinal": 25,
+        "ordinal": 30,
+        "name": "side_pocket_length",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 31,
+        "name": "side_pocket_length_by_width",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 32,
         "name": "mobile_pocket_length_by_width",
         "type_info": "Text"
       }
@@ -163,10 +198,17 @@
       null,
       null,
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
       true,
+      true,
+      null,
       true,
       true
     ]
   },
-  "hash": "a0b50603c1a3b21cd5104502ef7497b23cb43a5a7bf6d8d477781999d34ecd54"
+  "hash": "bdf73c50596506369b28812f52ba76e54b6b88ef3967ba14da796740673d719f"
 }

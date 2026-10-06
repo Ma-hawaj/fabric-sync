@@ -61,7 +61,7 @@ export interface MeasurementField {
   input: MeasurementInput
   /**
    * Which thob silhouette the marker is drawn against. The garment is shown
-   * from the front and the back so no single sketch carries all 24 callouts:
+   * from the front and the back so no single sketch carries all 31 callouts:
    * lengths, circumferences, pockets and the placket live on the front; the
    * back length, the collar, and the whole sleeve cluster on the back.
    */
@@ -265,7 +265,7 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     },
   },
   {
-    name: 'aramHole',
+    name: 'armHole',
     view: 'back',
     label: 'Armhole',
     diagramLabel: 'Armhole',
@@ -286,6 +286,19 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     marker: {
       dims: [{ x1: 317, y1: 55, x2: 371, y2: 247 }],
       label: { x: 370, y: 140 },
+    },
+  },
+  {
+    name: 'sleeveHalf',
+    view: 'back',
+    label: 'Sleeve Half',
+    diagramLabel: 'Sleeve Half',
+    group: 'body',
+    input: NUMBER,
+    marker: {
+      dims: [{ x1: 308, y1: 85, x2: 352, y2: 232 }],
+      guides: [{ x1: 330, y1: 158, x2: 306, y2: 158 }],
+      label: { x: 288, y: 158 },
     },
   },
   {
@@ -326,9 +339,21 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
       label: { x: 78, y: 212 },
     },
   },
+  {
+    name: 'cuffling',
+    view: 'back',
+    label: 'Cuffling',
+    diagramLabel: 'Cuffling',
+    group: 'body',
+    input: NUMBER,
+    marker: {
+      dims: [{ x1: 133, y1: 227, x2: 163, y2: 243 }],
+      label: { x: 96, y: 232 },
+    },
+  },
 
   {
-    name: 'frantPocketLength',
+    name: 'frontPocketLength',
     view: 'front',
     label: 'Front Pocket Length',
     diagramLabel: 'Front Pocket',
@@ -346,7 +371,7 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     },
   },
   {
-    name: 'farntPocketLengthByWidth',
+    name: 'frontPocketLengthByWidth',
     view: 'front',
     label: 'Front Pocket L×W',
     diagramLabel: 'Pocket L×W',
@@ -369,6 +394,32 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
       shapes: [THOB_SIDE_POCKETS],
       guides: [{ x1: 300, y1: 260, x2: 346, y2: 260 }],
       label: { x: 382, y: 260 },
+    },
+  },
+  {
+    name: 'sidePocketLength',
+    view: 'front',
+    label: 'Side Pocket Length',
+    diagramLabel: 'Side Pocket',
+    group: 'pockets',
+    input: NUMBER,
+    marker: {
+      dims: [{ x1: 176, y1: 240, x2: 176, y2: 290 }],
+      guides: [{ x1: 176, y1: 265, x2: 140, y2: 265 }],
+      label: { x: 108, y: 265 },
+    },
+  },
+  {
+    name: 'sidePocketLengthByWidth',
+    view: 'front',
+    label: 'Side Pocket L×W',
+    diagramLabel: 'Side L×W',
+    group: 'pockets',
+    input: TEXT,
+    marker: {
+      shapes: [THOB_SIDE_POCKETS],
+      guides: [{ x1: 178, y1: 280, x2: 140, y2: 300 }],
+      label: { x: 110, y: 308 },
     },
   },
   {
@@ -411,6 +462,45 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
       label: { x: 130, y: 204 },
     },
   },
+  {
+    name: 'button',
+    view: 'front',
+    label: 'Button',
+    diagramLabel: 'Button',
+    group: 'body',
+    input: NUMBER,
+    marker: {
+      dims: [{ x1: 258, y1: 96, x2: 258, y2: 186 }],
+      guides: [{ x1: 258, y1: 141, x2: 290, y2: 141 }],
+      label: { x: 308, y: 141 },
+    },
+  },
+  {
+    name: 'buttonFold',
+    view: 'front',
+    label: 'Button Fold',
+    diagramLabel: 'Button Fold',
+    group: 'body',
+    input: NUMBER,
+    marker: {
+      dims: [{ x1: 258, y1: 190, x2: 258, y2: 204 }],
+      guides: [{ x1: 258, y1: 197, x2: 292, y2: 197 }],
+      label: { x: 310, y: 197 },
+    },
+  },
+  {
+    name: 'openFold',
+    view: 'front',
+    label: 'Open Fold',
+    diagramLabel: 'Open Fold',
+    group: 'body',
+    input: NUMBER,
+    marker: {
+      dims: [{ x1: 200, y1: 400, x2: 200, y2: 414 }],
+      guides: [{ x1: 200, y1: 407, x2: 160, y2: 407 }],
+      label: { x: 140, y: 407 },
+    },
+  },
 ]
 
 /**
@@ -423,6 +513,7 @@ export const MEASUREMENT_PAIRS: [MeasurementFieldName, MeasurementFieldName][] =
     ['shoulder', 'shoulderDown'],
     ['bottom', 'bottomFolding'],
     ['openHand', 'openHandFolding'],
+    ['button', 'buttonFold'],
   ]
 
 const PAIR_PARTNER = new Map<MeasurementFieldName, MeasurementFieldName>(

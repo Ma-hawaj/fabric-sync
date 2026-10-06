@@ -21,7 +21,7 @@ const measurement: Measurement = {
   chest: 42,
   sleeveLength: 25,
   foWidth: 3,
-  farntPocketLengthByWidth: '12×8',
+  frontPocketLengthByWidth: '12×8',
   sidePocket: 'Both',
 }
 

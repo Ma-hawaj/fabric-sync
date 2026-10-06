@@ -72,8 +72,8 @@ INSERT INTO product_stock (id, product_id, branch_id, quantity) VALUES
 INSERT INTO measurements (
     id, customer_id, measurement_date,
     length_fl, length_bl, chest, waist, hips, shoulder, sleeve_length, neck,
-    open_hand, chest_up, cuff_width, neck_width, aram_hole, fo_width,
-    frant_pocket_length, farnt_pocket_length_by_width, side_pocket,
+    open_hand, chest_up, cuff_width, neck_width, arm_hole, fo_width,
+    front_pocket_length, front_pocket_length_by_width, side_pocket,
     mobile_pocket_length_by_width
 ) VALUES
     ('019a0000-0007-7000-8000-000000000001', '019a0000-0002-7000-8000-000000000001', CURRENT_DATE - 240,

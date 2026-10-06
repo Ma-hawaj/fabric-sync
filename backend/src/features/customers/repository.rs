@@ -94,17 +94,22 @@ pub async fn insert_measurement(
             customer_id, measurement_date,
             length_fl, length_bl, chest, waist, hips, shoulder, shoulder_down,
             sleeve_length, neck, open_hand, open_hand_folding, chest_up,
-            cuff_width, neck_width, aram_hole, fo_width, fo, bottom, bottom_folding,
-            full_body, frant_pocket_length,
-            farnt_pocket_length_by_width, side_pocket, mobile_pocket_length_by_width
+            cuff_width, cuffling, neck_width, arm_hole, fo_width, fo, bottom, bottom_folding,
+            full_body, sleeve_half, button, button_fold, open_fold, front_pocket_length,
+            front_pocket_length_by_width, side_pocket,
+            side_pocket_length, side_pocket_length_by_width,
+            mobile_pocket_length_by_width
         )
         VALUES (
             $1, $2,
             $3::float8, $4::float8, $5::float8, $6::float8, $7::float8, $8::float8, $9::float8,
             $10::float8, $11::float8, $12::float8, $13::float8, $14::float8,
             $15::float8, $16::float8, $17::float8, $18::float8, $19::float8, $20::float8,
-            $21::float8, $22::float8, $23::float8,
-            $24, $25, $26
+            $21::float8, $22::float8, $23::float8, $24::float8, $25::float8, $26::float8,
+            $27::float8, $28::float8,
+            $29, $30,
+            $31::float8, $32,
+            $33
         )
         RETURNING id
         "#,
@@ -123,16 +128,23 @@ pub async fn insert_measurement(
         measurement.open_hand_folding,
         measurement.chest_up,
         measurement.cuff_width,
+        measurement.cuffling,
         measurement.neck_width,
-        measurement.aram_hole,
+        measurement.arm_hole,
         measurement.fo_width,
         measurement.fo,
         measurement.bottom,
         measurement.bottom_folding,
         measurement.full_body,
-        measurement.frant_pocket_length,
-        measurement.farnt_pocket_length_by_width,
+        measurement.sleeve_half,
+        measurement.button,
+        measurement.button_fold,
+        measurement.open_fold,
+        measurement.front_pocket_length,
+        measurement.front_pocket_length_by_width,
         measurement.side_pocket,
+        measurement.side_pocket_length,
+        measurement.side_pocket_length_by_width,
         measurement.mobile_pocket_length_by_width,
     )
     .fetch_one(&mut **tx)
@@ -153,10 +165,13 @@ pub async fn latest_measurement(
             hips::float8, shoulder::float8, shoulder_down::float8,
             sleeve_length::float8, neck::float8, open_hand::float8,
             open_hand_folding::float8, chest_up::float8,
-            cuff_width::float8, neck_width::float8, aram_hole::float8,
+            cuff_width::float8, cuffling::float8, neck_width::float8, arm_hole::float8,
             fo_width::float8, fo::float8, bottom::float8, bottom_folding::float8,
-            full_body::float8, frant_pocket_length::float8,
-            farnt_pocket_length_by_width, side_pocket, mobile_pocket_length_by_width
+            full_body::float8, sleeve_half::float8, button::float8,
+            button_fold::float8, open_fold::float8, front_pocket_length::float8,
+            front_pocket_length_by_width, side_pocket,
+            side_pocket_length::float8, side_pocket_length_by_width,
+            mobile_pocket_length_by_width
         FROM measurements
         WHERE customer_id = $1
         ORDER BY measurement_date DESC, id DESC
@@ -185,16 +200,23 @@ pub async fn latest_measurement(
                 open_hand_folding: row.open_hand_folding,
                 chest_up: row.chest_up,
                 cuff_width: row.cuff_width,
+                cuffling: row.cuffling,
                 neck_width: row.neck_width,
-                aram_hole: row.aram_hole,
+                arm_hole: row.arm_hole,
                 fo_width: row.fo_width,
                 fo: row.fo,
                 bottom: row.bottom,
                 bottom_folding: row.bottom_folding,
                 full_body: row.full_body,
-                frant_pocket_length: row.frant_pocket_length,
-                farnt_pocket_length_by_width: row.farnt_pocket_length_by_width,
+                sleeve_half: row.sleeve_half,
+                button: row.button,
+                button_fold: row.button_fold,
+                open_fold: row.open_fold,
+                front_pocket_length: row.front_pocket_length,
+                front_pocket_length_by_width: row.front_pocket_length_by_width,
                 side_pocket: row.side_pocket,
+                side_pocket_length: row.side_pocket_length,
+                side_pocket_length_by_width: row.side_pocket_length_by_width,
                 mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
             },
         )

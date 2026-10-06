@@ -19,16 +19,23 @@ export interface Measurement {
   // Extra Details
   chestUp?: number | null
   cuffWidth?: number | null
+  cuffling?: number | null
   neckWidth?: number | null
-  aramHole?: number | null
+  armHole?: number | null
   foWidth?: number | null
   fo?: number | null
+  sleeveHalf?: number | null
+  button?: number | null
+  buttonFold?: number | null
+  openFold?: number | null
   bottom?: number | null
   bottomFolding?: number | null
   fullBody?: number | null
-  frantPocketLength?: number | null
-  farntPocketLengthByWidth?: string | null
+  frontPocketLength?: number | null
+  frontPocketLengthByWidth?: string | null
   sidePocket?: string | null
+  sidePocketLength?: number | null
+  sidePocketLengthByWidth?: string | null
   mobilePocketLengthByWidth?: string | null
 }
 
