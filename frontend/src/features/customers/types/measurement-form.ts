@@ -24,6 +24,7 @@ export interface MeasurementDraft {
   neckWidth: NumberInput
   aramHole: NumberInput
   foWidth: NumberInput
+  fo: NumberInput
   bottom: NumberInput
   bottomFolding: NumberInput
   fullBody: NumberInput
@@ -53,6 +54,7 @@ export function createEmptyMeasurement(): MeasurementDraft {
     neckWidth: '',
     aramHole: '',
     foWidth: '',
+    fo: '',
     bottom: '',
     bottomFolding: '',
     fullBody: '',

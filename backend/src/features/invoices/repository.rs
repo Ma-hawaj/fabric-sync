@@ -30,6 +30,7 @@ fn order_specification(
     collar: Option<String>,
     sleeve: Option<String>,
     patti: Option<String>,
+    emd: Option<String>,
     more_details: Option<String>,
 ) -> Option<String> {
     let parts: Vec<String> = [
@@ -38,6 +39,7 @@ fn order_specification(
         ("Collar", collar),
         ("Sleeve", sleeve),
         ("Patti", patti),
+        ("EMD", emd),
         ("Note", more_details),
     ]
     .into_iter()
@@ -138,6 +140,7 @@ pub async fn fetch_invoice_detail(
             o.collar,
             o.sleeve,
             o.patti,
+            o.emd,
             o.more_details
         FROM orders o
         JOIN measurements m ON m.id = o.measurement_id
@@ -193,6 +196,7 @@ pub async fn fetch_invoice_detail(
                 sleeve: row.sleeve,
                 f_pocket: row.f_pocket,
                 patti: row.patti,
+                emd: row.emd,
                 more_details: row.more_details,
             };
             InvoiceDetailLine {
@@ -205,6 +209,7 @@ pub async fn fetch_invoice_detail(
                     design_values.collar.clone(),
                     design_values.sleeve.clone(),
                     design_values.patti.clone(),
+                    design_values.emd.clone(),
                     design_values.more_details.clone(),
                 ),
                 customer: Some(InvoiceParty {
@@ -626,10 +631,10 @@ pub async fn insert_order(
         r#"
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
-            thobe_type, f_pocket, collar, sleeve, patti, more_details,
+            thobe_type, f_pocket, collar, sleeve, patti, emd, more_details,
             production_branch_id
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13)
         "#,
         measurement_id,
         order.material_id,
@@ -641,6 +646,7 @@ pub async fn insert_order(
         order.collar,
         order.sleeve,
         order.patti,
+        order.emd,
         order.more_details,
         order.production_location_id,
     )
@@ -793,6 +799,7 @@ pub async fn fetch_invoice_edit(
             m.neck_width::float8 AS neck_width,
             m.aram_hole::float8 AS aram_hole,
             m.fo_width::float8 AS fo_width,
+            m.fo::float8 AS fo,
             m.bottom::float8 AS bottom,
             m.bottom_folding::float8 AS bottom_folding,
             m.full_body::float8 AS full_body,
@@ -813,6 +820,7 @@ pub async fn fetch_invoice_edit(
             o.collar,
             o.sleeve,
             o.patti,
+            o.emd,
             o.more_details
         FROM orders o
         JOIN measurements m ON m.id = o.measurement_id
@@ -852,6 +860,7 @@ pub async fn fetch_invoice_edit(
             neck_width: row.neck_width,
             aram_hole: row.aram_hole,
             fo_width: row.fo_width,
+            fo: row.fo,
             bottom: row.bottom,
             bottom_folding: row.bottom_folding,
             full_body: row.full_body,
@@ -874,6 +883,7 @@ pub async fn fetch_invoice_edit(
             collar: row.collar,
             sleeve: row.sleeve,
             patti: row.patti,
+            emd: row.emd,
             more_details: row.more_details,
         };
 
@@ -1337,11 +1347,12 @@ pub async fn update_measurement(
             open_hand_folding = $13::float8, chest_up = $14::float8,
             cuff_width = $15::float8, neck_width = $16::float8,
             aram_hole = $17::float8, fo_width = $18::float8,
-            bottom = $19::float8, bottom_folding = $20::float8,
-            full_body = $21::float8,
-            frant_pocket_length = $22::float8,
-            farnt_pocket_length_by_width = $23, side_pocket = $24,
-            mobile_pocket_length_by_width = $25
+            fo = $19::float8,
+            bottom = $20::float8, bottom_folding = $21::float8,
+            full_body = $22::float8,
+            frant_pocket_length = $23::float8,
+            farnt_pocket_length_by_width = $24, side_pocket = $25,
+            mobile_pocket_length_by_width = $26
         WHERE id = $1
         "#,
         measurement_id,
@@ -1362,6 +1373,7 @@ pub async fn update_measurement(
         measurement.neck_width,
         measurement.aram_hole,
         measurement.fo_width,
+        measurement.fo,
         measurement.bottom,
         measurement.bottom_folding,
         measurement.full_body,

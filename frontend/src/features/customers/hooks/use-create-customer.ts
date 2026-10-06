@@ -30,6 +30,7 @@ export function measurementPayload(measurement: MeasurementDraft) {
     neckWidth: blankToNull(measurement.neckWidth),
     aramHole: blankToNull(measurement.aramHole),
     foWidth: blankToNull(measurement.foWidth),
+    fo: blankToNull(measurement.fo),
     bottom: blankToNull(measurement.bottom),
     bottomFolding: blankToNull(measurement.bottomFolding),
     fullBody: blankToNull(measurement.fullBody),

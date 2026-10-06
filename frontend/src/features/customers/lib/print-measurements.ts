@@ -52,6 +52,7 @@ const MEASUREMENT_LABELS_AR: Record<string, string> = {
   cuffWidth: 'عرض الأسوارة',
   aramHole: 'فتحة الإبط',
   foWidth: 'عرض الفو',
+  fo: 'الفو',
   frantPocketLength: 'طول الجيب الأمامي',
   farntPocketLengthByWidth: 'الجيب الأمامي بالعرض',
   sidePocket: 'الجيب الجانبي',

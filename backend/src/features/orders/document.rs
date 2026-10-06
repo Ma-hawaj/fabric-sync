@@ -31,16 +31,25 @@ const TEMPLATE_NAME: &str = "order.html";
 /// order as the invoice document, so the two papers read the same way. A
 /// stored value that matches nothing (orders that predate the catalog) prints
 /// as a text-only chip rather than disappearing.
-const SLOT_TITLES: [(&str, &str); 5] = [
+const SLOT_TITLES: [(&str, &str); 6] = [
     ("النوع", "Thobe"),
     ("الياقة", "Collar"),
     ("الكم", "Sleeve"),
     ("الجيب", "Pocket"),
     ("الباتي", "Patti"),
+    ("EMD", "EMD"),
 ];
 
-/// Which catalog section a slot's values are drawn from.
-const SLOT_SECTIONS: [&str; 5] = ["thob_type", "neck", "sleeve", "front_pocket", "patti"];
+/// Which catalog section a slot's values are drawn from. EMD has no catalog
+/// section — its chip always renders text-only.
+const SLOT_SECTIONS: [&str; 6] = [
+    "thob_type",
+    "neck",
+    "sleeve",
+    "front_pocket",
+    "patti",
+    "emd",
+];
 
 /// One chip: a title, the resolved label and, when a catalog asset exists, a
 /// self-contained `data:` URI for its image. Serialized camelCase — the
@@ -73,6 +82,7 @@ fn design_value(order: &OrderListItem, slot: usize) -> Option<&str> {
         2 => order.sleeve.as_deref(),
         3 => order.f_pocket.as_deref(),
         4 => order.patti.as_deref(),
+        5 => order.emd.as_deref(),
         _ => return None,
     };
     let value = value?.trim();
@@ -230,6 +240,7 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
     push_number(&mut values, "cuffWidth", m.cuff_width);
     push_number(&mut values, "aramHole", m.aram_hole);
     push_number(&mut values, "foWidth", m.fo_width);
+    push_number(&mut values, "fo", m.fo);
     push_number(&mut values, "bottom", m.bottom);
     push_number(&mut values, "bottomFolding", m.bottom_folding);
     push_number(&mut values, "fullBody", m.full_body);
@@ -255,7 +266,7 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
 //
 // Both the frontend (`thob-diagram.tsx` / `thob-sketch.ts` / `measurement-fields.ts`)
 // and this document draw the garment from a file-for-file identical geometry
-// and field split: 15 measurements on the front view, 8 on the back. Change a
+// and field split: 16 measurements on the front view, 8 on the back. Change a
 // marker here and the same edit must land in the frontend, or the printed
 // arrows and the screen arrows will disagree. The caption layout is mirrored
 // from `layoutCaptions` in `thob-diagram.tsx` — captions are placed
@@ -372,7 +383,7 @@ fn field(
     }
 }
 
-/// All 23 measurements, in the same order and with the same geometry as
+/// All 24 measurements, in the same order and with the same geometry as
 /// `MEASUREMENT_FIELDS` on the frontend.
 fn thob_fields() -> Vec<FieldDef> {
     let mut length_fl = marker((60.0, 238.0));
@@ -469,6 +480,12 @@ fn thob_fields() -> Vec<FieldDef> {
     fo_width.dims = vec![segment(234.0, 192.0, 246.0, 192.0)];
     fo_width.guides = vec![segment(240.0, 196.0, 166.0, 224.0)];
 
+    // Fo sits just above its width on the placket, sharing the same leader
+    // direction so the two captions stack without overlapping.
+    let mut fo = marker((130.0, 204.0));
+    fo.dims = vec![segment(234.0, 168.0, 246.0, 168.0)];
+    fo.guides = vec![segment(240.0, 172.0, 166.0, 198.0)];
+
     // Hem width across the bottom of the thob.
     let mut bottom = marker((240.0, 460.0));
     bottom.dims = vec![segment(166.0, 430.0, 314.0, 430.0)];
@@ -552,6 +569,7 @@ fn thob_fields() -> Vec<FieldDef> {
             mobile_pocket_length_by_width,
         ),
         field("foWidth", "Fo Width", true, ThobView::Front, fo_width),
+        field("fo", "Fo", true, ThobView::Front, fo),
         field("bottom", "Bottom", true, ThobView::Front, bottom),
         field(
             "bottomFolding",
@@ -835,17 +853,30 @@ mod tests {
         order.sleeve = Some("open".to_string());
         order.f_pocket = Some("round".to_string());
         order.patti = Some("normal".to_string());
+        order.emd = Some("6".to_string());
 
         let chips = order_designs(&order);
         assert_eq!(
             chips.iter().map(|c| c.title_en).collect::<Vec<_>>(),
-            vec!["Thobe", "Collar", "Sleeve", "Pocket", "Patti"]
+            vec!["Thobe", "Collar", "Sleeve", "Pocket", "Patti", "EMD"]
         );
         // Catalog slugs resolve to their display labels.
         assert_eq!(
             chips.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(),
-            vec!["Thobx", "3", "Open", "Round", "Normal"]
+            vec!["Thobx", "3", "Open", "Round", "Normal", "6"]
         );
+    }
+
+    #[test]
+    fn emd_has_no_catalog_section_so_it_prints_text_only() {
+        let mut order = services_order();
+        order.emd = Some("6".to_string());
+
+        let chips = order_designs(&order);
+        assert_eq!(chips.len(), 1);
+        assert_eq!(chips[0].title_en, "EMD");
+        assert_eq!(chips[0].label, "6");
+        assert!(chips[0].image.is_none());
     }
 
     #[test]
@@ -1012,6 +1043,7 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         collar: None,
         sleeve: None,
         patti: None,
+        emd: None,
         more_details: None,
         production_location_id: None,
         production_location: None,
@@ -1055,6 +1087,7 @@ mod tests_support {
             neck_width: None,
             aram_hole: None,
             fo_width: None,
+            fo: None,
             bottom: None,
             bottom_folding: None,
             full_body: None,

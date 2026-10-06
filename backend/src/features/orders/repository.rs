@@ -48,6 +48,7 @@ const SPEC: ListSpec = ListSpec {
             o.collar,
             o.sleeve,
             o.patti,
+            o.emd,
             o.more_details,
             o.production_branch_id AS production_location_id,
             prod.name AS production_location,

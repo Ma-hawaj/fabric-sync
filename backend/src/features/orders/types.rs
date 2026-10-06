@@ -126,6 +126,7 @@ pub struct OrderRow {
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub patti: Option<String>,
+    pub emd: Option<String>,
     pub more_details: Option<String>,
     pub production_location_id: Option<Uuid>,
     pub production_location: Option<String>,
@@ -217,6 +218,7 @@ pub struct OrderListItem {
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub patti: Option<String>,
+    pub emd: Option<String>,
     /// Free-text line note, printed beneath the design chips on the document.
     pub more_details: Option<String>,
     /// Where the garment is made. Only when this differs from the receiving

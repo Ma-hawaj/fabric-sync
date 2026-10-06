@@ -34,14 +34,15 @@ const TEMPLATE_NAME: &str = "invoice.html";
 
 /// The order design slots, in the order they render on the document. The value
 /// in each column is looked up against the catalog; a stored value that
-/// matches nothing (older orders predate the catalog) prints as a text-only
-/// chip rather than disappearing.
-const SLOT_TITLES: [(&str, &str); 5] = [
+/// matches nothing (older orders predate the catalog, and EMD has no catalog
+/// section at all) prints as a text-only chip rather than disappearing.
+const SLOT_TITLES: [(&str, &str); 6] = [
     ("النوع", "Thobe"),
     ("الياقة", "Collar"),
     ("الكم", "Sleeve"),
     ("الجيب", "Pocket"),
     ("الباتي", "Patti"),
+    ("EMD", "EMD"),
 ];
 
 /// One chip: a title, the resolved label and, when a catalog asset exists, a
@@ -74,6 +75,7 @@ fn design_value(values: &OrderDesignValues, slot: usize) -> Option<&str> {
         2 => values.sleeve.as_deref(),
         3 => values.f_pocket.as_deref(),
         4 => values.patti.as_deref(),
+        5 => values.emd.as_deref(),
         _ => return None,
     };
     let value = value?.trim();
@@ -106,8 +108,16 @@ fn line_designs(values: Option<&OrderDesignValues>) -> Vec<DesignChip<'static>> 
         .collect()
 }
 
-/// Which catalog section a slot's values are drawn from.
-const SLOT_SECTIONS: [&str; 5] = ["thob_type", "neck", "sleeve", "front_pocket", "patti"];
+/// Which catalog section a slot's values are drawn from. EMD has no catalog
+/// section — its chip always renders text-only.
+const SLOT_SECTIONS: [&str; 6] = [
+    "thob_type",
+    "neck",
+    "sleeve",
+    "front_pocket",
+    "patti",
+    "emd",
+];
 
 fn data_uri(bytes: &[u8]) -> String {
     format!(
@@ -379,6 +389,7 @@ mod tests {
         sleeve: Option<&str>,
         f_pocket: Option<&str>,
         patti: Option<&str>,
+        emd: Option<&str>,
     ) -> OrderDesignValues {
         OrderDesignValues {
             thobe_type: thobe_type.map(str::to_string),
@@ -386,6 +397,7 @@ mod tests {
             sleeve: sleeve.map(str::to_string),
             f_pocket: f_pocket.map(str::to_string),
             patti: patti.map(str::to_string),
+            emd: emd.map(str::to_string),
             more_details: None,
         }
     }
@@ -398,20 +410,30 @@ mod tests {
             Some("open"),
             Some("round"),
             Some("normal"),
+            Some("6"),
         )));
         assert_eq!(
             chips.iter().map(|c| c.title_en).collect::<Vec<_>>(),
-            vec!["Thobe", "Collar", "Sleeve", "Pocket", "Patti"]
+            vec!["Thobe", "Collar", "Sleeve", "Pocket", "Patti", "EMD"]
         );
         assert_eq!(
             chips.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(),
-            vec!["Thobx", "3", "Open", "Round", "Normal"]
+            vec!["Thobx", "3", "Open", "Round", "Normal", "6"]
         );
     }
 
     #[test]
+    fn emd_has_no_catalog_section_so_it_prints_text_only() {
+        let chips = line_designs(Some(&values(None, None, None, None, None, Some("6"))));
+        assert_eq!(chips.len(), 1);
+        assert_eq!(chips[0].title_en, "EMD");
+        assert_eq!(chips[0].label, "6");
+        assert!(chips[0].image.is_none());
+    }
+
+    #[test]
     fn a_catalog_design_carries_a_webp_data_uri() {
-        let chips = line_designs(Some(&values(Some("thobx"), None, None, None, None)));
+        let chips = line_designs(Some(&values(Some("thobx"), None, None, None, None, None)));
         assert_eq!(chips.len(), 1);
         assert_eq!(chips[0].label, "Thobx");
         let image = chips[0].image.as_deref().unwrap();
@@ -429,6 +451,7 @@ mod tests {
             Some("Cuff"),
             None,
             None,
+            None,
         )));
         assert_eq!(chips.len(), 3);
         for chip in &chips {
@@ -439,7 +462,14 @@ mod tests {
 
     #[test]
     fn surrounding_whitespace_does_not_break_the_catalog_lookup() {
-        let chips = line_designs(Some(&values(Some("  thobx  "), None, None, None, None)));
+        let chips = line_designs(Some(&values(
+            Some("  thobx  "),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )));
         assert_eq!(chips.len(), 1);
         assert!(chips[0].image.is_some());
     }
@@ -449,7 +479,7 @@ mod tests {
         // The template reads `chip.titleAr`/`chip.titleEn` — a snake_case key
         // would look the chip up as missing and render an empty title next to
         // the image, leaving no clue which slot the image belongs to.
-        let chips = line_designs(Some(&values(Some("thobx"), None, None, None, None)));
+        let chips = line_designs(Some(&values(Some("thobx"), None, None, None, None, None)));
         let value = serde_json::to_value(&chips).unwrap();
         assert_eq!(value[0]["titleAr"], "النوع");
         assert_eq!(value[0]["titleEn"], "Thobe");
@@ -459,7 +489,7 @@ mod tests {
 
     #[test]
     fn blank_values_and_retail_lines_produce_no_chips() {
-        let blank = values(Some("   "), None, None, None, None);
+        let blank = values(Some("   "), None, None, None, None, None);
         assert!(line_designs(Some(&blank)).is_empty());
         assert!(line_designs(None).is_empty());
     }

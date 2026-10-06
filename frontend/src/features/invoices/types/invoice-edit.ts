@@ -20,6 +20,7 @@ export interface InvoiceEditMeasurement {
   neckWidth: number | null
   aramHole: number | null
   foWidth: number | null
+  fo: number | null
   bottom: number | null
   bottomFolding: number | null
   fullBody: number | null
@@ -44,6 +45,7 @@ export interface InvoiceEditOrder {
   collar: string | null
   sleeve: string | null
   patti: string | null
+  emd: string | null
   moreDetails: string | null
 }
 

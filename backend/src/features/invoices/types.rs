@@ -63,6 +63,7 @@ pub struct CreateOrderInput {
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub patti: Option<String>,
+    pub emd: Option<String>,
     pub more_details: Option<String>,
 }
 
@@ -198,6 +199,7 @@ pub struct InvoiceEditOrder {
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub patti: Option<String>,
+    pub emd: Option<String>,
     pub more_details: Option<String>,
 }
 
@@ -413,6 +415,7 @@ pub struct OrderDesignValues {
     pub sleeve: Option<String>,
     pub f_pocket: Option<String>,
     pub patti: Option<String>,
+    pub emd: Option<String>,
     /// The free-text line note. Not a design slot; printed beneath the chips.
     pub more_details: Option<String>,
 }

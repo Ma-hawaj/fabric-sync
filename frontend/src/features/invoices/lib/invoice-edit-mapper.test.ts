@@ -37,8 +37,10 @@ function editFixture(): InvoiceEdit {
           neckWidth: null,
           aramHole: null,
           foWidth: null,
+          fo: null,
           bottom: null,
           bottomFolding: null,
+          fullBody: null,
           frantPocketLength: null,
           farntPocketLengthByWidth: null,
           sidePocket: null,
@@ -59,6 +61,7 @@ function editFixture(): InvoiceEdit {
             collar: null,
             sleeve: null,
             patti: null,
+            emd: '6',
             moreDetails: null,
           },
         ],
@@ -120,6 +123,7 @@ describe('mapInvoiceEditToForm', () => {
     expect(order.price).toBe(100)
     expect(order.thobeType).toBe('saudi-classic')
     expect(order.collar).toBe('')
+    expect(order.emd).toBe('6')
   })
 
   it('maps product lines and gift card blocks', () => {

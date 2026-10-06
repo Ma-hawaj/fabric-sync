@@ -31,6 +31,7 @@ pub struct Measurement {
     pub neck_width: Option<f64>,
     pub aram_hole: Option<f64>,
     pub fo_width: Option<f64>,
+    pub fo: Option<f64>,
     pub bottom: Option<f64>,
     pub bottom_folding: Option<f64>,
     pub full_body: Option<f64>,
@@ -73,6 +74,7 @@ pub struct CreateMeasurementInput {
     pub neck_width: Option<f64>,
     pub aram_hole: Option<f64>,
     pub fo_width: Option<f64>,
+    pub fo: Option<f64>,
     pub bottom: Option<f64>,
     pub bottom_folding: Option<f64>,
     pub full_body: Option<f64>,
@@ -125,6 +127,7 @@ mod tests {
             neck_width: None,
             aram_hole: None,
             fo_width: None,
+            fo: None,
             bottom: None,
             bottom_folding: None,
             full_body: None,
@@ -175,11 +178,11 @@ mod tests {
             "hips": null, "shoulder": null, "shoulder_down": null, "sleeve_length": null, "neck": null,
             "open_hand": null, "open_hand_folding": null, "chest_up": null,
             "cuff_width": null, "neck_width": null, "aram_hole": null,
-            "fo_width": null, "bottom": null, "bottom_folding": null, "full_body": null, "frant_pocket_length": null,
+            "fo_width": null, "fo": null, "bottom": null, "bottom_folding": null, "full_body": null, "frant_pocket_length": null,
             "farnt_pocket_length_by_width": "16x14", "side_pocket": null,
             "mobile_pocket_length_by_width": null,
             "cuffling": null, "open_fold": null,
-            "sleeve_haff_button": null, "button_fold": null, "fo": null
+            "sleeve_haff_button": null, "button_fold": null
         }"#;
 
         let measurement: Measurement = serde_json::from_str(postgres_json).unwrap();
@@ -192,6 +195,7 @@ mod tests {
         let api_json = serde_json::to_value(&measurement).unwrap();
         assert_eq!(api_json["lengthFl"], 152.5);
         assert!(api_json["fullBody"].is_null());
+        assert!(api_json["fo"].is_null());
         assert_eq!(
             api_json["customerId"],
             "adcdd125-7101-4e93-ba4d-c9a7fe9fca1f"
