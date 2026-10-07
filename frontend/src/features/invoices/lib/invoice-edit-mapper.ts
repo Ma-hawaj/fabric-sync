@@ -50,7 +50,6 @@ function measurementToDraft(
     fullBody: measurement.fullBody ?? '',
     frontPocketLength: measurement.frontPocketLength ?? '',
     frontPocketLengthByWidth: nullToBlank(measurement.frontPocketLengthByWidth),
-    sidePocket: nullToBlank(measurement.sidePocket),
     sidePocketLength: measurement.sidePocketLength ?? '',
     sidePocketLengthByWidth: nullToBlank(measurement.sidePocketLengthByWidth),
     mobilePocketLengthByWidth: nullToBlank(

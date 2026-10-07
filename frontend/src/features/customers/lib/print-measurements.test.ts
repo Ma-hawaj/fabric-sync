@@ -22,7 +22,7 @@ const measurement: Measurement = {
   sleeveLength: 25,
   foWidth: 3,
   frontPocketLengthByWidth: '12×8',
-  sidePocket: 'Both',
+  sidePocketLength: 9,
 }
 
 describe('generateMeasurementsHtml', () => {
@@ -62,7 +62,7 @@ describe('generateMeasurementsHtml', () => {
     const html = generateMeasurementsHtml(customer, measurement)
 
     expect(html).toContain('12×8 · Pocket L×W')
-    expect(html).toContain('Both · Side Pocket')
+    expect(html).toContain('9 inch · Side Pocket')
   })
 
   it('splits the diagrams into front and back thob panels', () => {
@@ -82,7 +82,7 @@ describe('generateMeasurementsHtml', () => {
     expect(html).toContain('الكتف')
     expect(html).toContain('الصدر')
     expect(html).toContain('طول الكم')
-    expect(html).toContain('الجيب الجانبي')
+    expect(html).toContain('طول الجيب الجانبي')
     expect(html).toContain('عرض الفو')
   })
 })

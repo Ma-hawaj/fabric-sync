@@ -256,7 +256,6 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
         "frontPocketLengthByWidth",
         &m.front_pocket_length_by_width,
     );
-    push_text(&mut values, "sidePocket", &m.side_pocket);
     push_number(&mut values, "sidePocketLength", m.side_pocket_length);
     push_text(
         &mut values,
@@ -277,7 +276,7 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
 //
 // Both the frontend (`thob-diagram.tsx` / `thob-sketch.ts` / `measurement-fields.ts`)
 // and this document draw the garment from a file-for-file identical geometry
-// and field split: 21 measurements on the front view, 10 on the back. Change a
+// and field split: 20 measurements on the front view, 10 on the back. Change a
 // marker here and the same edit must land in the frontend, or the printed
 // arrows and the screen arrows will disagree. The caption layout is mirrored
 // from `layoutCaptions` in `thob-diagram.tsx` — captions are placed
@@ -394,7 +393,7 @@ fn field(
     }
 }
 
-/// All 31 measurements, in the same order and with the same geometry as
+/// All 30 measurements, in the same order and with the same geometry as
 /// `MEASUREMENT_FIELDS` on the frontend.
 fn thob_fields() -> Vec<FieldDef> {
     let mut length_fl = marker((60.0, 238.0));
@@ -463,7 +462,7 @@ fn thob_fields() -> Vec<FieldDef> {
     open_hand.guides = vec![segment(134.0, 275.0, 130.0, 296.0)];
 
     // The fold at the cuff opening — a short arrow across the cuff band,
-    // just above the open-hand marker it pairs with.
+    // just above the open-hand marker.
     let mut open_hand_folding = marker((100.0, 252.0));
     open_hand_folding.dims = vec![segment(126.0, 238.0, 152.0, 251.0)];
     open_hand_folding.guides = vec![segment(139.0, 244.0, 116.0, 250.0)];
@@ -488,10 +487,6 @@ fn thob_fields() -> Vec<FieldDef> {
     let mut front_pocket_length_by_width = marker((108.0, 88.0));
     front_pocket_length_by_width.shapes = vec![THOB_CHEST_POCKET];
     front_pocket_length_by_width.guides = vec![segment(197.0, 120.0, 140.0, 96.0)];
-
-    let mut side_pocket = marker((382.0, 260.0));
-    side_pocket.shapes = vec![THOB_SIDE_POCKETS];
-    side_pocket.guides = vec![segment(300.0, 260.0, 346.0, 260.0)];
 
     // The side pocket's length runs down the left side seam, mirroring the
     // front pocket's length arrow on the chest pocket.
@@ -524,13 +519,13 @@ fn thob_fields() -> Vec<FieldDef> {
     bottom.guides = vec![segment(240.0, 430.0, 240.0, 450.0)];
 
     // The hem fold depth — a short vertical arrow at the right hem corner,
-    // paired with the hem width above.
+    // under the hem width arrow.
     let mut bottom_folding = marker((384.0, 419.0));
     bottom_folding.dims = vec![segment(314.0, 408.0, 314.0, 430.0)];
     bottom_folding.guides = vec![segment(314.0, 419.0, 352.0, 419.0)];
 
     // The button stand runs down the placket, with its fold as a short
-    // arrow at the foot of the stand — paired like bottom/bottomFolding.
+    // arrow at the foot of the stand.
     let mut button = marker((308.0, 141.0));
     button.dims = vec![segment(258.0, 96.0, 258.0, 186.0)];
     button.guides = vec![segment(258.0, 141.0, 290.0, 141.0)];
@@ -608,13 +603,6 @@ fn thob_fields() -> Vec<FieldDef> {
             false,
             ThobView::Front,
             front_pocket_length_by_width,
-        ),
-        field(
-            "sidePocket",
-            "Side Pocket",
-            false,
-            ThobView::Front,
-            side_pocket,
         ),
         field(
             "sidePocketLength",
@@ -871,7 +859,6 @@ mod tests {
         let mut measurement = tests_support::measurement();
         measurement.length_bl = Some(124.0);
         measurement.waist = Some(38.5);
-        measurement.side_pocket = Some("Both".to_string());
         measurement.front_pocket_length_by_width = Some("No 16x14".to_string());
         let detail = OrderDetail {
             order: services_order(),
@@ -905,22 +892,21 @@ mod tests {
         // id prefix.
         assert!(html.contains("ORD-12"));
         // Recorded numeric values ride the captions, whole numbers trimmed,
-        // each paired with its short diagram label.
+        // each with its short diagram label.
         assert!(html.contains("120 inch · Front Length"));
         assert!(html.contains("124 inch · Back Length"));
         assert!(html.contains("60 inch · Sleeve"));
         assert!(html.contains("38.5 inch · Waist"));
-        // Text and select values are already self-describing — no "inch".
-        assert!(html.contains("Both · Side Pocket"));
+        // Text values are already self-describing — no "inch".
         assert!(!html.contains("No inch"));
         // Unrecorded fields are omitted from the diagram: no caption box, no
         // arrow, no stray label on the silhouette.
         assert!(!html.contains("Front Pocket"));
         assert!(!html.contains("Fo Width"));
-        // Exactly the seven recorded fields are called out: 5 on the front
-        // view (lengthFl, chest, waist, frontPocketLengthByWidth, sidePocket)
+        // Exactly the six recorded fields are called out: 4 on the front
+        // view (lengthFl, chest, waist, frontPocketLengthByWidth)
         // and 2 on the back (lengthBl, sleeveLength).
-        assert_eq!(html.matches("thob-callout").count(), 7);
+        assert_eq!(html.matches("thob-callout").count(), 6);
     }
 
     #[test]
@@ -1176,7 +1162,6 @@ mod tests_support {
             open_fold: None,
             front_pocket_length: None,
             front_pocket_length_by_width: None,
-            side_pocket: None,
             side_pocket_length: None,
             side_pocket_length_by_width: None,
             mobile_pocket_length_by_width: None,

@@ -35,7 +35,6 @@ export interface MeasurementDraft {
   fullBody: NumberInput
   frontPocketLength: NumberInput
   frontPocketLengthByWidth: string
-  sidePocket: string
   sidePocketLength: NumberInput
   sidePocketLengthByWidth: string
   mobilePocketLengthByWidth: string
@@ -72,7 +71,6 @@ export function createEmptyMeasurement(): MeasurementDraft {
     fullBody: '',
     frontPocketLength: '',
     frontPocketLengthByWidth: '',
-    sidePocket: '',
     sidePocketLength: '',
     sidePocketLengthByWidth: '',
     mobilePocketLengthByWidth: '',

@@ -16,12 +16,8 @@ import {
   MEASUREMENT_GROUPS,
   MEASUREMENT_UNIT,
   fieldsInGroup,
-  pairPartner,
 } from '../data/measurement-fields'
-import type {
-  MeasurementField,
-  MeasurementGroupId,
-} from '../data/measurement-fields'
+import type { MeasurementField } from '../data/measurement-fields'
 import type { Measurement } from '../types/customers'
 import type { MeasurementDraft } from '../types/measurement-form'
 import { createEmptyMeasurement } from '../types/measurement-form'
@@ -107,37 +103,6 @@ interface MeasurementFieldsProps {
   history: Measurement[]
 }
 
-type FieldRow =
-  | { kind: 'single'; field: MeasurementField }
-  | { kind: 'pair'; first: MeasurementField; second: MeasurementField }
-
-/**
- * Groups one group's fields into singles and joined pairs. A pair renders
- * only when both halves belong to the same group — which all of them do —
- * and the partner is consumed here so it never renders twice.
- */
-function rowsForGroup(groupId: MeasurementGroupId): FieldRow[] {
-  const fields = fieldsInGroup(groupId)
-  const seen = new Set<string>()
-  const rows: FieldRow[] = []
-  for (const field of fields) {
-    if (seen.has(field.name)) continue
-    const partnerName = pairPartner(field.name)
-    const partner = partnerName
-      ? fields.find((f) => f.name === partnerName)
-      : undefined
-    if (partner) {
-      seen.add(field.name)
-      seen.add(partner.name)
-      rows.push({ kind: 'pair', first: field, second: partner })
-    } else {
-      seen.add(field.name)
-      rows.push({ kind: 'single', field })
-    }
-  }
-  return rows
-}
-
 export function MeasurementFields({
   form,
   basePath,
@@ -204,52 +169,25 @@ export function MeasurementFields({
                   {group.title}
                 </h4>
                 <div className="grid grid-cols-2 gap-3">
-                  {rowsForGroup(group.id).map((row) =>
-                    row.kind === 'pair' ? (
-                      <div
-                        key={`${row.first.name}+${row.second.name}`}
-                        className="col-span-2 grid grid-cols-2 gap-3 rounded-lg bg-muted/40 p-3"
-                      >
-                        {[row.first, row.second].map((field) => (
-                          <div
-                            key={field.name}
-                            onMouseEnter={() => setHovered(field.name)}
-                            onMouseLeave={() =>
-                              setHovered((current) =>
-                                current === field.name ? null : current,
-                              )
-                            }
-                            onFocusCapture={() => setFocused(field.name)}
-                            onBlurCapture={() =>
-                              setFocused((current) =>
-                                current === field.name ? null : current,
-                              )
-                            }
-                          >
-                            <FieldInput form={form} base={base} field={field} />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div
-                        key={row.field.name}
-                        onMouseEnter={() => setHovered(row.field.name)}
-                        onMouseLeave={() =>
-                          setHovered((current) =>
-                            current === row.field.name ? null : current,
-                          )
-                        }
-                        onFocusCapture={() => setFocused(row.field.name)}
-                        onBlurCapture={() =>
-                          setFocused((current) =>
-                            current === row.field.name ? null : current,
-                          )
-                        }
-                      >
-                        <FieldInput form={form} base={base} field={row.field} />
-                      </div>
-                    ),
-                  )}
+                  {fieldsInGroup(group.id).map((field) => (
+                    <div
+                      key={field.name}
+                      onMouseEnter={() => setHovered(field.name)}
+                      onMouseLeave={() =>
+                        setHovered((current) =>
+                          current === field.name ? null : current,
+                        )
+                      }
+                      onFocusCapture={() => setFocused(field.name)}
+                      onBlurCapture={() =>
+                        setFocused((current) =>
+                          current === field.name ? null : current,
+                        )
+                      }
+                    >
+                      <FieldInput form={form} base={base} field={field} />
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            id, measurement_date,\n            length_fl::float8, length_bl::float8, chest::float8, waist::float8,\n            hips::float8, shoulder::float8, shoulder_down::float8,\n            sleeve_length::float8, neck::float8, open_hand::float8,\n            open_hand_folding::float8, chest_up::float8,\n            cuff_width::float8, cuffling::float8, neck_width::float8, arm_hole::float8,\n            fo_width::float8, fo::float8, bottom::float8, bottom_folding::float8,\n            full_body::float8, sleeve_half::float8, button::float8,\n            button_fold::float8, open_fold::float8, front_pocket_length::float8,\n            front_pocket_length_by_width, side_pocket,\n            side_pocket_length::float8, side_pocket_length_by_width,\n            mobile_pocket_length_by_width\n        FROM measurements\n        WHERE customer_id = $1\n        ORDER BY measurement_date DESC, id DESC\n        LIMIT 1\n        ",
+  "query": "\n        SELECT\n            id, measurement_date,\n            length_fl::float8, length_bl::float8, chest::float8, waist::float8,\n            hips::float8, shoulder::float8, shoulder_down::float8,\n            sleeve_length::float8, neck::float8, open_hand::float8,\n            open_hand_folding::float8, chest_up::float8,\n            cuff_width::float8, cuffling::float8, neck_width::float8, arm_hole::float8,\n            fo_width::float8, fo::float8, bottom::float8, bottom_folding::float8,\n            full_body::float8, sleeve_half::float8, button::float8,\n            button_fold::float8, open_fold::float8, front_pocket_length::float8,\n            front_pocket_length_by_width,\n            side_pocket_length::float8, side_pocket_length_by_width,\n            mobile_pocket_length_by_width\n        FROM measurements\n        WHERE customer_id = $1\n        ORDER BY measurement_date DESC, id DESC\n        LIMIT 1\n        ",
   "describe": {
     "columns": [
       {
@@ -150,21 +150,16 @@
       },
       {
         "ordinal": 29,
-        "name": "side_pocket",
-        "type_info": "Text"
-      },
-      {
-        "ordinal": 30,
         "name": "side_pocket_length",
         "type_info": "Float8"
       },
       {
-        "ordinal": 31,
+        "ordinal": 30,
         "name": "side_pocket_length_by_width",
         "type_info": "Text"
       },
       {
-        "ordinal": 32,
+        "ordinal": 31,
         "name": "mobile_pocket_length_by_width",
         "type_info": "Text"
       }
@@ -204,11 +199,10 @@
       null,
       null,
       true,
-      true,
       null,
       true,
       true
     ]
   },
-  "hash": "bdf73c50596506369b28812f52ba76e54b6b88ef3967ba14da796740673d719f"
+  "hash": "77176d235f89a0d8f53b1e4e8dde5a1c4efbca1378c22a466f33fd94868a3bf8"
 }

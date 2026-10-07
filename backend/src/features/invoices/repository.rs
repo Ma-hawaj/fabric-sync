@@ -810,7 +810,6 @@ pub async fn fetch_invoice_edit(
             m.open_fold::float8 AS open_fold,
             m.front_pocket_length::float8 AS front_pocket_length,
             m.front_pocket_length_by_width,
-            m.side_pocket,
             m.side_pocket_length::float8 AS side_pocket_length,
             m.side_pocket_length_by_width,
             m.mobile_pocket_length_by_width,
@@ -878,7 +877,6 @@ pub async fn fetch_invoice_edit(
             open_fold: row.open_fold,
             front_pocket_length: row.front_pocket_length,
             front_pocket_length_by_width: row.front_pocket_length_by_width,
-            side_pocket: row.side_pocket,
             side_pocket_length: row.side_pocket_length,
             side_pocket_length_by_width: row.side_pocket_length_by_width,
             mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
@@ -1368,10 +1366,10 @@ pub async fn update_measurement(
             sleeve_half = $24::float8, button = $25::float8,
             button_fold = $26::float8, open_fold = $27::float8,
             front_pocket_length = $28::float8,
-            front_pocket_length_by_width = $29, side_pocket = $30,
-            side_pocket_length = $31::float8,
-            side_pocket_length_by_width = $32,
-            mobile_pocket_length_by_width = $33
+            front_pocket_length_by_width = $29,
+            side_pocket_length = $30::float8,
+            side_pocket_length_by_width = $31,
+            mobile_pocket_length_by_width = $32
         WHERE id = $1
         "#,
         measurement_id,
@@ -1403,7 +1401,6 @@ pub async fn update_measurement(
         measurement.open_fold,
         measurement.front_pocket_length,
         measurement.front_pocket_length_by_width,
-        measurement.side_pocket,
         measurement.side_pocket_length,
         measurement.side_pocket_length_by_width,
         measurement.mobile_pocket_length_by_width,

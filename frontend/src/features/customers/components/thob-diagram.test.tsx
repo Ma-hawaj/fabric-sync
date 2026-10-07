@@ -39,10 +39,13 @@ describe('ThobDiagram', () => {
 
   it('labels a non-numeric field without a unit', () => {
     render(
-      <ThobDiagram activeField="sidePocket" values={{ sidePocket: 'Both' }} />,
+      <ThobDiagram
+        activeField="frontPocketLengthByWidth"
+        values={{ frontPocketLengthByWidth: '16x14' }}
+      />,
     )
 
-    expect(screen.queryByText('Side Pocket · Both')).toBeTruthy()
+    expect(screen.queryByText('Front Pocket L×W · 16x14')).toBeTruthy()
   })
 
   it('falls back to the label alone when the value is blank', () => {

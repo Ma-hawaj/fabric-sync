@@ -60,7 +60,6 @@ const MEASUREMENT_LABELS_AR: Record<string, string> = {
   fo: 'الفو',
   frontPocketLength: 'طول الجيب الأمامي',
   frontPocketLengthByWidth: 'الجيب الأمامي بالعرض',
-  sidePocket: 'الجيب الجانبي',
   sidePocketLength: 'طول الجيب الجانبي',
   sidePocketLengthByWidth: 'الجيب الجانبي بالعرض',
   mobilePocketLengthByWidth: 'جيب الجوال بالعرض',

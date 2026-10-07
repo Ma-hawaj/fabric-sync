@@ -384,19 +384,6 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     },
   },
   {
-    name: 'sidePocket',
-    view: 'front',
-    label: 'Side Pocket',
-    diagramLabel: 'Side Pocket',
-    group: 'pockets',
-    input: { kind: 'select', options: ['None', 'Left', 'Right', 'Both'] },
-    marker: {
-      shapes: [THOB_SIDE_POCKETS],
-      guides: [{ x1: 300, y1: 260, x2: 346, y2: 260 }],
-      label: { x: 382, y: 260 },
-    },
-  },
-  {
     name: 'sidePocketLength',
     view: 'front',
     label: 'Side Pocket Length',
@@ -502,33 +489,6 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
     },
   },
 ]
-
-/**
- * Pairs that are entered and read together: the first entry is the primary
- * measurement, the second its fold/drop. The entry form renders each pair in
- * one joined box and the sketch highlights both markers together.
- */
-export const MEASUREMENT_PAIRS: [MeasurementFieldName, MeasurementFieldName][] =
-  [
-    ['shoulder', 'shoulderDown'],
-    ['bottom', 'bottomFolding'],
-    ['openHand', 'openHandFolding'],
-    ['button', 'buttonFold'],
-  ]
-
-const PAIR_PARTNER = new Map<MeasurementFieldName, MeasurementFieldName>(
-  MEASUREMENT_PAIRS.flatMap(([a, b]) => [
-    [a, b],
-    [b, a],
-  ]),
-)
-
-/** The other half of a paired measurement, if it has one. */
-export function pairPartner(
-  name: MeasurementFieldName | string,
-): MeasurementFieldName | undefined {
-  return PAIR_PARTNER.get(name as MeasurementFieldName)
-}
 
 /**
  * Shown on the sketch when no field is hovered or focused — enough to read

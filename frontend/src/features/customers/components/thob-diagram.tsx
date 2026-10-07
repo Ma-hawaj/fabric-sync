@@ -5,7 +5,6 @@ import {
   RESTING_MARKER_FIELDS,
   fieldsInView,
   measurementField,
-  pairPartner,
 } from '../data/measurement-fields'
 import type {
   DiagramSegment,
@@ -333,19 +332,10 @@ export function ThobDiagram({
 }: ThobDiagramProps) {
   const isBack = view === 'back'
   const active = activeField ? measurementField(activeField) : undefined
-  // A paired measurement lights up together with its partner, so hovering
-  // either half of e.g. shoulder / shoulder-down shows where both are taken.
-  const partner = active
-    ? pairPartner(active.name)
-      ? measurementField(pairPartner(active.name)!)
-      : undefined
-    : undefined
   const shown = showRecorded
     ? fieldsInView(view).filter((field) => isRecorded(values?.[field.name]))
     : active
-      ? partner
-        ? [active, partner]
-        : [active]
+      ? [active]
       : MEASUREMENT_FIELDS.filter((field) =>
           RESTING_MARKER_FIELDS.includes(field.name),
         )

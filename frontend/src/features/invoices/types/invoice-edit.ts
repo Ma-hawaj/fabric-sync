@@ -31,7 +31,6 @@ export interface InvoiceEditMeasurement {
   fullBody: number | null
   frontPocketLength: number | null
   frontPocketLengthByWidth: string | null
-  sidePocket: string | null
   sidePocketLength: number | null
   sidePocketLengthByWidth: string | null
   mobilePocketLengthByWidth: string | null

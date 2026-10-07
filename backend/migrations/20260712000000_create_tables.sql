@@ -97,7 +97,6 @@ CREATE TABLE measurements (
     open_fold NUMERIC(6, 2),
     front_pocket_length NUMERIC(6, 2),
     front_pocket_length_by_width TEXT,
-    side_pocket TEXT,
     side_pocket_length NUMERIC(6, 2),
     side_pocket_length_by_width TEXT,
     mobile_pocket_length_by_width TEXT

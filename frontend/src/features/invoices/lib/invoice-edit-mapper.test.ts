@@ -48,7 +48,6 @@ function editFixture(): InvoiceEdit {
           fullBody: null,
           frontPocketLength: null,
           frontPocketLengthByWidth: null,
-          sidePocket: null,
           sidePocketLength: null,
           sidePocketLengthByWidth: null,
           mobilePocketLengthByWidth: null,
@@ -118,7 +117,7 @@ describe('mapInvoiceEditToForm', () => {
     expect(customer.measurement.lengthFl).toBe(152.5)
     expect(customer.measurement.chest).toBe(108)
     expect(customer.measurement.waist).toBe('')
-    expect(customer.measurement.sidePocket).toBe('')
+    expect(customer.measurement.sidePocketLength).toBe('')
 
     expect(customer.orders).toHaveLength(1)
     const [order] = customer.orders
