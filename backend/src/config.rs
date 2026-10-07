@@ -53,6 +53,12 @@ pub struct Config {
     /// data — see `seed::run`.
     pub seed_dev_data: bool,
     pub invoice_branding: InvoiceBranding,
+    /// Directory the built frontend (`vite build` output) is served from.
+    /// Unset means `./static` next to the server binary — the Dockerfile
+    /// copies the frontend `dist/` there. Missing directory is not an error:
+    /// API routes still work and every other path 404s until a build is
+    /// dropped in (e.g. plain `cargo run` without building the frontend).
+    pub static_dir: String,
 }
 
 impl InvoiceBranding {
@@ -111,6 +117,10 @@ impl Config {
         let seed_dev_data = env::var("SEED_DEV_DATA")
             .map(|value| value == "true" || value == "1")
             .unwrap_or(false);
+        let static_dir = env::var("STATIC_DIR")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "static".to_string());
 
         Self {
             port,
@@ -123,6 +133,7 @@ impl Config {
             authentik_base_url,
             authentik_api_token,
             seed_dev_data,
+            static_dir,
             invoice_branding: InvoiceBranding::from_env(),
         }
     }
