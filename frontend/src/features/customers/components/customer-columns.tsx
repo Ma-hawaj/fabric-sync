@@ -1,8 +1,9 @@
+import { Link } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
 import type { Customer } from '../types/customers'
-import { EyeIcon, PrinterIcon } from 'lucide-react'
+import { EyeIcon, PencilIcon, PrinterIcon } from 'lucide-react'
 
 export const getCustomerColumns = (
   onViewDetails: (customer: Customer) => void,
@@ -75,6 +76,16 @@ export const getCustomerColumns = (
               label: 'View Details',
               icon: EyeIcon,
               onClick: () => onViewDetails(customer),
+            },
+            {
+              label: 'Edit',
+              icon: PencilIcon,
+              render: (
+                <Link
+                  to="/customers/$customerId/edit"
+                  params={{ customerId: customer.id }}
+                />
+              ),
             },
             ...(customer.measurements.length > 0
               ? [

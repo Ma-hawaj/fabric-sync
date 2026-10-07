@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -24,6 +25,7 @@ import {
   Sparkles,
   User,
   Calendar,
+  PencilIcon,
   Receipt,
   PrinterIcon,
 } from 'lucide-react'
@@ -107,6 +109,21 @@ export function CustomerDetailsSheet({
                     Print
                   </Button>
                 )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  nativeButton={false}
+                  render={
+                    <Link
+                      to="/customers/$customerId/edit"
+                      params={{ customerId: customer.id }}
+                    />
+                  }
+                  className="shrink-0"
+                >
+                  <PencilIcon className="mr-1.5 h-4 w-4" />
+                  Edit
+                </Button>
               </div>
             </SheetHeader>
 

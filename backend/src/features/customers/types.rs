@@ -105,6 +105,15 @@ pub struct CreateCustomerInput {
     pub measurement: Option<CreateMeasurementInput>,
 }
 
+/// Every field is optional so a partial update (e.g. just `mobileNo`) stays a
+/// single statement rather than a read-modify-write.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCustomerInput {
+    pub name: Option<String>,
+    pub mobile_no: Option<String>,
+}
+
 // Two snapshots count as "the same measurement" if every measured field
 // matches, regardless of date — used by the invoices feature to skip
 // inserting a new row when nothing actually changed since the customer's

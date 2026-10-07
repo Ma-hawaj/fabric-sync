@@ -35,6 +35,7 @@ import { Route as AuthenticatedProductsProductIdEditRouteImport } from './routes
 import { Route as AuthenticatedOrderStagesStageIdEditRouteImport } from './routes/_authenticated/order-stages/$stageId/edit'
 import { Route as AuthenticatedLocationsLocationIdEditRouteImport } from './routes/_authenticated/locations/$locationId/edit'
 import { Route as AuthenticatedInvoicesInvoiceIdEditRouteImport } from './routes/_authenticated/invoices/$invoiceId/edit'
+import { Route as AuthenticatedCustomersCustomerIdEditRouteImport } from './routes/_authenticated/customers/$customerId/edit'
 
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
@@ -187,6 +188,12 @@ const AuthenticatedInvoicesInvoiceIdEditRoute =
     path: '/edit',
     getParentRoute: () => AuthenticatedInvoicesInvoiceIdRouteRoute,
   } as any)
+const AuthenticatedCustomersCustomerIdEditRoute =
+  AuthenticatedCustomersCustomerIdEditRouteImport.update({
+    id: '/customers/$customerId/edit',
+    path: '/customers/$customerId/edit',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -209,6 +216,7 @@ export interface FileRoutesByFullPath {
   '/order-stages/': typeof AuthenticatedOrderStagesIndexRoute
   '/orders/': typeof AuthenticatedOrdersIndexRoute
   '/products/': typeof AuthenticatedProductsIndexRoute
+  '/customers/$customerId/edit': typeof AuthenticatedCustomersCustomerIdEditRoute
   '/invoices/$invoiceId/edit': typeof AuthenticatedInvoicesInvoiceIdEditRoute
   '/locations/$locationId/edit': typeof AuthenticatedLocationsLocationIdEditRoute
   '/order-stages/$stageId/edit': typeof AuthenticatedOrderStagesStageIdEditRoute
@@ -235,6 +243,7 @@ export interface FileRoutesByTo {
   '/order-stages': typeof AuthenticatedOrderStagesIndexRoute
   '/orders': typeof AuthenticatedOrdersIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
+  '/customers/$customerId/edit': typeof AuthenticatedCustomersCustomerIdEditRoute
   '/invoices/$invoiceId/edit': typeof AuthenticatedInvoicesInvoiceIdEditRoute
   '/locations/$locationId/edit': typeof AuthenticatedLocationsLocationIdEditRoute
   '/order-stages/$stageId/edit': typeof AuthenticatedOrderStagesStageIdEditRoute
@@ -264,6 +273,7 @@ export interface FileRoutesById {
   '/_authenticated/order-stages/': typeof AuthenticatedOrderStagesIndexRoute
   '/_authenticated/orders/': typeof AuthenticatedOrdersIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
+  '/_authenticated/customers/$customerId/edit': typeof AuthenticatedCustomersCustomerIdEditRoute
   '/_authenticated/invoices/$invoiceId/edit': typeof AuthenticatedInvoicesInvoiceIdEditRoute
   '/_authenticated/locations/$locationId/edit': typeof AuthenticatedLocationsLocationIdEditRoute
   '/_authenticated/order-stages/$stageId/edit': typeof AuthenticatedOrderStagesStageIdEditRoute
@@ -293,6 +303,7 @@ export interface FileRouteTypes {
     | '/order-stages/'
     | '/orders/'
     | '/products/'
+    | '/customers/$customerId/edit'
     | '/invoices/$invoiceId/edit'
     | '/locations/$locationId/edit'
     | '/order-stages/$stageId/edit'
@@ -319,6 +330,7 @@ export interface FileRouteTypes {
     | '/order-stages'
     | '/orders'
     | '/products'
+    | '/customers/$customerId/edit'
     | '/invoices/$invoiceId/edit'
     | '/locations/$locationId/edit'
     | '/order-stages/$stageId/edit'
@@ -347,6 +359,7 @@ export interface FileRouteTypes {
     | '/_authenticated/order-stages/'
     | '/_authenticated/orders/'
     | '/_authenticated/products/'
+    | '/_authenticated/customers/$customerId/edit'
     | '/_authenticated/invoices/$invoiceId/edit'
     | '/_authenticated/locations/$locationId/edit'
     | '/_authenticated/order-stages/$stageId/edit'
@@ -543,6 +556,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInvoicesInvoiceIdEditRouteImport
       parentRoute: typeof AuthenticatedInvoicesInvoiceIdRouteRoute
     }
+    '/_authenticated/customers/$customerId/edit': {
+      id: '/_authenticated/customers/$customerId/edit'
+      path: '/customers/$customerId/edit'
+      fullPath: '/customers/$customerId/edit'
+      preLoaderRoute: typeof AuthenticatedCustomersCustomerIdEditRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
@@ -584,6 +604,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedOrderStagesIndexRoute: typeof AuthenticatedOrderStagesIndexRoute
   AuthenticatedOrdersIndexRoute: typeof AuthenticatedOrdersIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
+  AuthenticatedCustomersCustomerIdEditRoute: typeof AuthenticatedCustomersCustomerIdEditRoute
   AuthenticatedLocationsLocationIdEditRoute: typeof AuthenticatedLocationsLocationIdEditRoute
   AuthenticatedOrderStagesStageIdEditRoute: typeof AuthenticatedOrderStagesStageIdEditRoute
   AuthenticatedProductsProductIdEditRoute: typeof AuthenticatedProductsProductIdEditRoute
@@ -610,6 +631,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedOrderStagesIndexRoute: AuthenticatedOrderStagesIndexRoute,
   AuthenticatedOrdersIndexRoute: AuthenticatedOrdersIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
+  AuthenticatedCustomersCustomerIdEditRoute:
+    AuthenticatedCustomersCustomerIdEditRoute,
   AuthenticatedLocationsLocationIdEditRoute:
     AuthenticatedLocationsLocationIdEditRoute,
   AuthenticatedOrderStagesStageIdEditRoute:
