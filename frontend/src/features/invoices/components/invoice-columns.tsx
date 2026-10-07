@@ -73,9 +73,7 @@ export const getInvoiceColumns = (
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Date" />
     ),
-    cell: ({ row }) => (
-      <div>{row.getValue<Date>('date').toLocaleDateString()}</div>
-    ),
+    cell: ({ row }) => <div>{row.getValue<Date>('date').toLocaleString()}</div>,
     enableSorting: true,
     enableColumnFilter: false,
   },

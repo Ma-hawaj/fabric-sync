@@ -78,6 +78,7 @@ export interface InvoiceEditRedemption {
 export interface InvoiceEdit {
   id: string
   invoiceNumber: number
+  /** Server-set creation moment, as an ISO datetime with the time of day. */
   date: string
   /** The promised delivery date — the editable date on the form. */
   targetDate: string

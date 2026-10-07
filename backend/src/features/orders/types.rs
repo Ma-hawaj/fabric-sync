@@ -108,7 +108,7 @@ pub struct OrderRow {
     pub order_number: i64,
     pub invoice_id: Uuid,
     pub invoice_number: i64,
-    pub invoice_date: NaiveDate,
+    pub invoice_date: DateTime<Utc>,
     pub measurement_id: Uuid,
     pub customer_name: String,
     pub customer_mobile: String,
@@ -200,7 +200,7 @@ pub struct OrderListItem {
     /// The parent invoice's number, carried on the list row so the orders
     /// table can show both numbers without a second lookup.
     pub invoice_number: i64,
-    pub invoice_date: NaiveDate,
+    pub invoice_date: DateTime<Utc>,
     pub measurement_id: Uuid,
     pub customer_name: String,
     pub customer_mobile: String,

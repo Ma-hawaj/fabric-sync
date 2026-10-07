@@ -452,8 +452,8 @@ pub async fn insert_invoice(
     input: &CreateInvoiceInput,
     total_price: f64,
     gift_card_redeemed: f64,
-) -> Result<(Uuid, chrono::NaiveDate), sqlx::Error> {
-    // invoice_date is server-set (DEFAULT CURRENT_DATE) and never taken from
+) -> Result<(Uuid, chrono::DateTime<chrono::Utc>), sqlx::Error> {
+    // invoice_date is server-set (DEFAULT now()) and never taken from
     // input — staff promise a target_date instead. Returned so gift card
     // expiry is checked against the actual creation date.
     sqlx::query!(
@@ -488,7 +488,7 @@ pub struct LockedInvoiceTotals {
     pub gift_card_redeemed: f64,
     /// The server-set creation date. Gift card expiry on an edit is checked
     /// against this — the date the sale happened — not the editable target.
-    pub invoice_date: chrono::NaiveDate,
+    pub invoice_date: chrono::DateTime<chrono::Utc>,
 }
 
 pub async fn lock_invoice(

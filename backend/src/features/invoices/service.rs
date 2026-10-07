@@ -1086,7 +1086,7 @@ pub async fn create_invoice(
 
     let mut tx = state.db().begin().await?;
 
-    // invoice_date is server-set (CURRENT_DATE) — the only date staff enter
+    // invoice_date is server-set (DEFAULT now()) — the only date staff enter
     // is the promised target_date. Its actual value comes back here so gift
     // card expiry is checked against the creation date.
     let (invoice_id, invoice_date) =
@@ -1117,7 +1117,8 @@ pub async fn create_invoice(
     write_redemptions(
         &mut tx,
         invoice_id,
-        invoice_date,
+        // Expiry is a calendar date; the sale's moment carries a time.
+        invoice_date.date_naive(),
         &input.gift_card_redemptions,
     )
     .await?;
@@ -1348,7 +1349,7 @@ pub async fn update_invoice(
     write_redemptions(
         &mut tx,
         invoice_id,
-        locked.invoice_date,
+        locked.invoice_date.date_naive(),
         &input.gift_card_redemptions,
     )
     .await?;

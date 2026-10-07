@@ -11,7 +11,7 @@
       {
         "ordinal": 1,
         "name": "invoice_date",
-        "type_info": "Date"
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {

@@ -83,7 +83,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
               Invoice INV-{detail.invoiceNumber}
             </h1>
             <p className="text-muted-foreground">
-              {new Date(invoice.date).toLocaleDateString()}
+              {new Date(invoice.date).toLocaleString()}
               {` · Target ${new Date(invoice.targetDate).toLocaleDateString()}`}
               {detail.branchName ? ` · ${detail.branchName}` : ''}
             </p>

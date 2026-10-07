@@ -68,6 +68,7 @@ export interface InvoicePayment {
 export interface InvoiceDetail {
   id: string
   invoiceNumber: number
+  /** Server-set creation moment, as an ISO datetime with the time of day. */
   date: string
   /** The promised delivery date, editable on the form. */
   targetDate: string

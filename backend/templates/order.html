@@ -13,6 +13,8 @@
   Available:
     order     — GET /orders/:id (see types.rs OrderDetail — the measurement
                 snapshot the garment was cut to rides along on `order.measurement`)
+    invoice_date_time — the parent invoice's creation moment with the time of
+                day, pre-formatted (the raw `order.invoiceDate` is RFC 3339)
     company   — COMPANY_* env vars (see config.rs InvoiceBranding)
     amounts   — quantities only: the order sheet is an internal production
                 document, so no money figures are printed; the sole key the
@@ -596,7 +598,7 @@
         <dl>
           <div class="row">
             <dt>تاريخ الفاتورة<span class="en">Invoice date</span></dt>
-            <dd dir="ltr">{{ order.invoiceDate }}</dd>
+            <dd dir="ltr">{{ invoice_date_time }}</dd>
           </div>
           <div class="row">
             <dt>العميل<span class="en">Customer</span></dt>
@@ -796,7 +798,7 @@
     <div class="closing">
       <footer>
         شكراً لتعاملكم معنا · Thank you for your business
-        <div dir="ltr">ORD-{{ order.orderNumber }} · {{ order.invoiceDate }}</div>
+        <div dir="ltr">ORD-{{ order.orderNumber }} · {{ invoice_date_time }}</div>
       </footer>
     </div>
   </body>

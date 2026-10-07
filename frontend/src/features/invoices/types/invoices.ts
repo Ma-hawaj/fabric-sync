@@ -12,6 +12,7 @@ export interface InvoiceCustomer {
 // most recent one's method.
 export interface Invoice {
   id: string
+  /** Server-set creation moment, as an ISO datetime with the time of day. */
   date: string
   /** The promised delivery date, editable on the form. */
   targetDate: string

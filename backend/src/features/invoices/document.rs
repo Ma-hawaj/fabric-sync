@@ -16,7 +16,7 @@ use serde::Serialize;
 
 use crate::{
     config::InvoiceBranding,
-    document::{format_amount, format_quantity, CURRENCY},
+    document::{format_amount, format_datetime, format_quantity, CURRENCY},
     error::AppError,
     state::AppState,
 };
@@ -210,6 +210,10 @@ pub async fn render_invoice_document(
 
     Ok(template.render(context! {
         invoice => minijinja::Value::from_serialize(&detail),
+        // The invoice's creation moment, with the time of day — kept out of
+        // the serialized invoice (which carries the raw timestamp) and passed
+        // alongside it because the template is the only consumer.
+        invoice_date_time => format_datetime(&detail.date),
         // Deduplicated here rather than in the template: an invoice can carry
         // orders for several people, each line naming its own, and the header
         // wants each of them once.
@@ -355,6 +359,15 @@ mod tests {
     }
 
     #[test]
+    fn datetimes_print_as_date_plus_utc_time() {
+        use chrono::TimeZone;
+        assert_eq!(
+            format_datetime(&chrono::Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap()),
+            "2026-07-30 09:30 UTC"
+        );
+    }
+
+    #[test]
     fn the_qr_payload_is_decodable_base64_carrying_the_five_fields() {
         let decoded = base64::engine::general_purpose::STANDARD
             .decode(qr_payload(&super::tests_support::detail(), &branding()))
@@ -475,7 +488,7 @@ mod tests_support {
         InvoiceDetail {
             id: uuid::Uuid::nil(),
             invoice_number: 1,
-            date: NaiveDate::from_ymd_opt(2026, 7, 30).unwrap(),
+            date: Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),
             target_date: NaiveDate::from_ymd_opt(2026, 8, 6).unwrap(),
             created_at: Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),
             branch_name: None,

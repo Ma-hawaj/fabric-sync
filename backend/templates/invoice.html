@@ -12,6 +12,8 @@
 
   Available:
     invoice    — GET /invoices/:id, camelCase (see types.rs InvoiceDetail)
+    invoice_date_time — the invoice's creation moment with the time of day,
+                 pre-formatted (the raw `invoice.date` timestamp is RFC 3339)
     company    — COMPANY_* env vars (see config.rs InvoiceBranding)
     currency   — currency code, e.g. "BHD"
     amounts    — every money figure, pre-formatted; keyed as documented below
@@ -456,7 +458,7 @@
         <dl>
           <div class="row">
             <dt>التاريخ<span class="en">Date</span></dt>
-            <dd dir="ltr">{{ invoice.date }}</dd>
+            <dd dir="ltr">{{ invoice_date_time }}</dd>
           </div>
           <div class="row">
             <dt>تاريخ التسليم<span class="en">Target date</span></dt>
@@ -670,7 +672,7 @@
 
       <footer>
         شكراً لتعاملكم معنا · Thank you for your business
-        <div dir="ltr">INV-{{ invoice.invoiceNumber }} · {{ invoice.date }}</div>
+        <div dir="ltr">INV-{{ invoice.invoiceNumber }} · {{ invoice_date_time }}</div>
       </footer>
     </div>
   </body>

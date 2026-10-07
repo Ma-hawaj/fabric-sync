@@ -16,7 +16,7 @@
       {
         "ordinal": 2,
         "name": "invoice_date",
-        "type_info": "Date"
+        "type_info": "Timestamptz"
       },
       {
         "ordinal": 3,

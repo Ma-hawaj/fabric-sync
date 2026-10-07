@@ -13,7 +13,7 @@ use serde::Serialize;
 
 use crate::{
     config::InvoiceBranding,
-    document::{format_amount, format_quantity, CURRENCY},
+    document::{format_amount, format_datetime, format_quantity, CURRENCY},
     error::AppError,
     state::AppState,
 };
@@ -139,6 +139,9 @@ pub async fn render_order_document(
 
     Ok(template.render(context! {
         order => minijinja::Value::from_serialize(&detail),
+        // The parent invoice's creation moment, with the time of day —
+        // pre-formatted, since the raw timestamp serializes as RFC 3339.
+        invoice_date_time => format_datetime(&detail.order.invoice_date),
         company => minijinja::Value::from_serialize(branding),
         currency => CURRENCY,
         // Amounts are pre-formatted rather than left to the template, so that
@@ -939,7 +942,8 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         order_number: 12,
         invoice_id: uuid::Uuid::nil(),
         invoice_number: 7,
-        invoice_date: chrono::NaiveDate::from_ymd_opt(2026, 7, 30).unwrap(),
+        invoice_date: chrono::TimeZone::with_ymd_and_hms(&chrono::Utc, 2026, 7, 30, 9, 30, 0)
+            .unwrap(),
         measurement_id: uuid::Uuid::nil(),
         customer_name: "Ahmed".to_string(),
         customer_mobile: "+973 0000".to_string(),
