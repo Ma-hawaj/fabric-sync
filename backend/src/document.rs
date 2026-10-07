@@ -28,6 +28,14 @@ pub(crate) fn format_quantity(value: f64) -> String {
     text.to_string()
 }
 
+/// A timestamp as the printed documents write it: the calendar date plus the
+/// time of day, e.g. "2026-10-07 14:30 UTC". Pre-formatted like the amounts,
+/// so editing a template can't change how a moment is written — serializing
+/// the raw timestamp would print RFC 3339 into the page.
+pub(crate) fn format_datetime(value: &chrono::DateTime<chrono::Utc>) -> String {
+    value.format("%Y-%m-%d %H:%M UTC").to_string()
+}
+
 /// A minijinja environment that loads the named template from
 /// `INVOICE_TEMPLATE_DIR` when it is set, else the copy embedded in the
 /// binary. Both the invoice and the order document live in the same templates

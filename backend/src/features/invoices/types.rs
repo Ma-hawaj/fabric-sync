@@ -139,7 +139,10 @@ pub struct CreatePaymentInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateInvoiceInput {
-    pub date: NaiveDate,
+    /// When the garment is promised for. Required and staff-editable — this is
+    /// what the form's date picker writes. The invoice's own date
+    /// (`invoice_date`) is server-set at creation and never taken from input.
+    pub target_date: NaiveDate,
     #[serde(default)]
     pub branch_id: Option<Uuid>,
     #[serde(default)]
@@ -270,7 +273,9 @@ pub struct InvoiceEdit {
     pub id: Uuid,
     /// Sequential and human-readable, unlike `id` — for the edit page title.
     pub invoice_number: i64,
-    pub date: NaiveDate,
+    pub date: DateTime<Utc>,
+    /// The promised delivery date. Editable, unlike `date`.
+    pub target_date: NaiveDate,
     pub branch_id: Option<Uuid>,
     pub branch_name: Option<String>,
     pub discount: f64,
@@ -460,7 +465,10 @@ pub struct InvoiceTotalsBreakdown {
 pub struct InvoiceRecord {
     pub id: Uuid,
     pub invoice_number: i64,
-    pub date: NaiveDate,
+    /// Server-set at creation, with the time of day — never taken from input.
+    pub date: DateTime<Utc>,
+    /// When the garment is promised for. Staff-editable, unlike `date`.
+    pub target_date: NaiveDate,
     pub created_at: DateTime<Utc>,
     pub branch_name: Option<String>,
     pub buyer: Option<InvoiceParty>,
@@ -485,7 +493,10 @@ pub struct InvoiceDetail {
     /// Sequential and human-readable, unlike `id`. Formatted for display by
     /// the consumer, which is why it stays a number here.
     pub invoice_number: i64,
-    pub date: NaiveDate,
+    pub date: DateTime<Utc>,
+    /// The promised delivery date, editable on the form. `date` above is the
+    /// server-set creation date and is read-only.
+    pub target_date: NaiveDate,
     pub created_at: DateTime<Utc>,
     pub branch_name: Option<String>,
     /// Named directly on a retail sale. A tailoring invoice leaves this unset
@@ -510,7 +521,8 @@ pub struct InvoiceDetail {
 pub struct InvoiceListItem {
     pub id: Uuid,
     #[sqlx(rename = "invoice_date")]
-    pub date: NaiveDate,
+    pub date: DateTime<Utc>,
+    pub target_date: NaiveDate,
     #[sqlx(json)]
     pub customers: Vec<InvoiceListCustomer>,
     pub item_count: i64,

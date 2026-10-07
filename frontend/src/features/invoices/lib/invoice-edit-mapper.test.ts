@@ -7,6 +7,7 @@ function editFixture(): InvoiceEdit {
     id: '0197fdd2-6a67-7000-8000-000000000001',
     invoiceNumber: 42,
     date: '2026-07-19',
+    targetDate: '2026-07-26',
     branchId: '0197fdd2-6a67-7000-8000-000000000005',
     branchName: 'Main Branch',
     discount: 0,
@@ -93,7 +94,7 @@ describe('mapInvoiceEditToForm', () => {
   it('maps the header back onto the form fields', () => {
     const { values } = mapInvoiceEditToForm(editFixture())
 
-    expect(values.date).toBe('2026-07-19')
+    expect(values.targetDate).toBe('2026-07-26')
     expect(values.receivingBranch).toBe('0197fdd2-6a67-7000-8000-000000000005')
     expect(values.productBranch).toBe('0197fdd2-6a67-7000-8000-000000000005')
     // Zeros read as blank, the way a fresh form does — the payload maps

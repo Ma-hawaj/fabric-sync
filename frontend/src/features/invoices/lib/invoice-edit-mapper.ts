@@ -231,7 +231,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
   }))
 
   const values: InvoiceFormValues = {
-    date: edit.date,
+    targetDate: edit.targetDate,
     receivingBranch: edit.branchId ?? '',
     customerId: edit.customerId ?? '',
     productBranch,

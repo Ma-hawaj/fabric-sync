@@ -100,21 +100,21 @@ INSERT INTO measurements (
 -- 830 goods -> 830.00; 1420 less 100 -> 1320.00; 1200 less 10% -> 1080.00;
 -- 1050 -> 1050.00; 1400 -> 1400.00; retail 90 + a 500 card -> 590.00.
 INSERT INTO invoices (
-    id, total_price, invoice_date, branch_id, discount, discount_unit,
+    id, total_price, invoice_date, target_date, branch_id, discount, discount_unit,
     customer_id, gift_card_redeemed
 ) VALUES
     -- 830 goods, no discount -> 830.00, nothing paid yet
-    ('019a0000-0008-7000-8000-000000000001',  830.00, CURRENT_DATE - 12, '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  NULL, 0.00),
+    ('019a0000-0008-7000-8000-000000000001',  830.00, CURRENT_DATE - 12, CURRENT_DATE + 2,  '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  NULL, 0.00),
     -- 1420 goods less a 100 discount -> 1320.00, 500 advance taken in cash
-    ('019a0000-0008-7000-8000-000000000002', 1320.00, CURRENT_DATE - 10, '019a0000-0001-7000-8000-000000000002', 100.00, 'amount',  NULL, 0.00),
+    ('019a0000-0008-7000-8000-000000000002', 1320.00, CURRENT_DATE - 10, CURRENT_DATE + 4,  '019a0000-0001-7000-8000-000000000002', 100.00, 'amount',  NULL, 0.00),
     -- 1200 goods less 10% -> 1080.00, settled: 400 advance then the balance on card
-    ('019a0000-0008-7000-8000-000000000003', 1080.00, CURRENT_DATE - 30, '019a0000-0001-7000-8000-000000000001',  10.00, 'percent', NULL, 0.00),
+    ('019a0000-0008-7000-8000-000000000003', 1080.00, CURRENT_DATE - 30, CURRENT_DATE - 16, '019a0000-0001-7000-8000-000000000001',  10.00, 'percent', NULL, 0.00),
     -- 1050 goods -> 1050.00, 300 advance on card
-    ('019a0000-0008-7000-8000-000000000004', 1050.00, CURRENT_DATE - 6,  '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  NULL, 0.00),
+    ('019a0000-0008-7000-8000-000000000004', 1050.00, CURRENT_DATE - 6,  CURRENT_DATE + 8,  '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  NULL, 0.00),
     -- 1400 goods -> 1400.00, part-settled with a gift card rather than a payment
-    ('019a0000-0008-7000-8000-000000000005', 1400.00, CURRENT_DATE - 3,  '019a0000-0001-7000-8000-000000000002',   0.00, 'amount',  NULL, 200.00),
+    ('019a0000-0008-7000-8000-000000000005', 1400.00, CURRENT_DATE - 3,  CURRENT_DATE + 11, '019a0000-0001-7000-8000-000000000002',   0.00, 'amount',  NULL, 200.00),
     -- Retail only: 90 of goods, plus a 500 gift card sold at face value
-    ('019a0000-0008-7000-8000-000000000006',  590.00, CURRENT_DATE - 1,  '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  '019a0000-0002-7000-8000-000000000006', 0.00);
+    ('019a0000-0008-7000-8000-000000000006',  590.00, CURRENT_DATE - 1,  CURRENT_DATE + 13, '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  '019a0000-0002-7000-8000-000000000006', 0.00);
 
 -- Every payment lives in the ledger: advances at creation, the balance when
 -- an invoice settles. Invoice 01 has none (unpaid), 02 and 04 carry one

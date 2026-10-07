@@ -64,6 +64,7 @@ pub async fn fetch_invoice_detail(
             i.id,
             i.invoice_number,
             i.invoice_date,
+            i.target_date,
             i.created_at,
             i.discount::float8 AS "discount!",
             i.discount_unit,
@@ -255,6 +256,7 @@ pub async fn fetch_invoice_detail(
             id: invoice.id,
             invoice_number: invoice.invoice_number,
             date: invoice.invoice_date,
+            target_date: invoice.target_date,
             created_at: invoice.created_at,
             branch_name: invoice.branch_name,
             buyer: invoice
@@ -296,6 +298,7 @@ const SPEC: ListSpec = ListSpec {
         SELECT
             i.id,
             i.invoice_date,
+            i.target_date,
             pay.status AS payment_status,
             i.total_price::float8 AS total_price,
             pay.paid AS amount_paid,
@@ -394,6 +397,10 @@ const SPEC: ListSpec = ListSpec {
         ("id", ColumnDef::new("id", ColumnKind::Uuid)),
         ("date", ColumnDef::new("invoice_date", ColumnKind::Date)),
         (
+            "targetDate",
+            ColumnDef::new("target_date", ColumnKind::Date),
+        ),
+        (
             "customerName",
             ColumnDef::new("customer_names", ColumnKind::Text),
         ),
@@ -450,19 +457,22 @@ pub async fn insert_invoice(
     input: &CreateInvoiceInput,
     total_price: f64,
     gift_card_redeemed: f64,
-) -> Result<Uuid, sqlx::Error> {
-    sqlx::query_scalar!(
+) -> Result<(Uuid, chrono::DateTime<chrono::Utc>), sqlx::Error> {
+    // invoice_date is server-set (DEFAULT now()) and never taken from
+    // input — staff promise a target_date instead. Returned so gift card
+    // expiry is checked against the actual creation date.
+    sqlx::query!(
         r#"
         INSERT INTO invoices (
-            invoice_date, branch_id, discount, discount_unit,
+            target_date, branch_id, discount, discount_unit,
             total_price, customer_id, gift_card_redeemed
         )
         VALUES (
             $1, $2, $3::float8, $4, $5::float8, $6, $7::float8
         )
-        RETURNING id
+        RETURNING id, invoice_date
         "#,
-        input.date,
+        input.target_date,
         input.branch_id,
         input.discount,
         input.discount_unit.as_str(),
@@ -472,6 +482,7 @@ pub async fn insert_invoice(
     )
     .fetch_one(&mut **tx)
     .await
+    .map(|row| (row.id, row.invoice_date))
 }
 
 /// The invoice's totals with the row locked, so a payment validated against
@@ -480,6 +491,9 @@ pub async fn insert_invoice(
 pub struct LockedInvoiceTotals {
     pub total_price: f64,
     pub gift_card_redeemed: f64,
+    /// The server-set creation date. Gift card expiry on an edit is checked
+    /// against this — the date the sale happened — not the editable target.
+    pub invoice_date: chrono::DateTime<chrono::Utc>,
 }
 
 pub async fn lock_invoice(
@@ -488,7 +502,7 @@ pub async fn lock_invoice(
 ) -> Result<Option<LockedInvoiceTotals>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT total_price::float8 AS "total_price!", gift_card_redeemed::float8 AS "gift_card_redeemed!"
+        SELECT total_price::float8 AS "total_price!", gift_card_redeemed::float8 AS "gift_card_redeemed!", invoice_date
         FROM invoices
         WHERE id = $1
         FOR UPDATE
@@ -501,6 +515,7 @@ pub async fn lock_invoice(
     Ok(row.map(|row| LockedInvoiceTotals {
         total_price: row.total_price,
         gift_card_redeemed: row.gift_card_redeemed,
+        invoice_date: row.invoice_date,
     }))
 }
 
@@ -777,6 +792,7 @@ pub async fn fetch_invoice_edit(
         SELECT
             i.invoice_number,
             i.invoice_date,
+            i.target_date,
             i.branch_id,
             b.name AS "branch_name?",
             i.discount::float8 AS "discount!",
@@ -994,6 +1010,7 @@ pub async fn fetch_invoice_edit(
         id: invoice_id,
         invoice_number: header.invoice_number,
         date: header.invoice_date,
+        target_date: header.target_date,
         branch_id: header.branch_id,
         branch_name: header.branch_name,
         discount: header.discount,
@@ -1442,7 +1459,7 @@ pub async fn update_invoice_header(
     sqlx::query!(
         r#"
         UPDATE invoices
-        SET invoice_date = $2,
+        SET target_date = $2,
             branch_id = $3,
             discount = $4::float8,
             discount_unit = $5,
@@ -1452,7 +1469,7 @@ pub async fn update_invoice_header(
         WHERE id = $1
         "#,
         invoice_id,
-        input.date,
+        input.target_date,
         input.branch_id,
         input.discount,
         input.discount_unit.as_str(),

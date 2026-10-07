@@ -42,6 +42,7 @@ export function InvoiceEditPage({ invoiceId }: { invoiceId: string }) {
       mutation={updateInvoice}
       seeds={mapped.seeds}
       editing
+      invoiceDate={edit.date}
     />
   )
 }

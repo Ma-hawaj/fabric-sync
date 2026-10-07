@@ -25,7 +25,8 @@ vi.mock('@tanstack/react-router', () => ({
 const DETAIL: InvoiceDetail = {
   id: 'inv-1',
   invoiceNumber: 42,
-  date: '2026-07-28',
+  date: '2026-07-28T09:30:00Z',
+  targetDate: '2026-08-04',
   createdAt: '2026-07-28T09:30:00Z',
   branchName: 'Manama Main Branch',
   buyer: null,
@@ -106,6 +107,12 @@ describe('InvoiceDetailPage', () => {
 
     expect(screen.queryByText('Invoice INV-42')).toBeTruthy()
     expect(screen.queryByText(/Manama Main Branch/)).toBeTruthy()
+  })
+
+  it('shows the promised target date next to the creation moment', () => {
+    renderPage(DETAIL)
+
+    expect(screen.queryByText(/Target/)).toBeTruthy()
   })
 
   it('lists every line with its specification and type', () => {
