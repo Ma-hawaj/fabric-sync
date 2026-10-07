@@ -26,6 +26,7 @@ const DETAIL: InvoiceDetail = {
   id: 'inv-1',
   invoiceNumber: 42,
   date: '2026-07-28',
+  targetDate: '2026-08-04',
   createdAt: '2026-07-28T09:30:00Z',
   branchName: 'Manama Main Branch',
   buyer: null,

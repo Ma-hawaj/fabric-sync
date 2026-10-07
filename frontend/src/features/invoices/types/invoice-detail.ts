@@ -69,6 +69,8 @@ export interface InvoiceDetail {
   id: string
   invoiceNumber: number
   date: string
+  /** The promised delivery date, editable on the form. */
+  targetDate: string
   createdAt: string
   branchName: string | null
   /** Named directly only on a retail sale; a tailoring invoice leaves it null. */

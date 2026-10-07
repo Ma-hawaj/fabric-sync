@@ -208,7 +208,10 @@ const paymentDraftSchema = z
 
 export const invoiceFormSchema = z
   .object({
-    date: z.string(),
+    // The promised delivery date. Required: an invoice without one has no
+    // committed pickup. The invoice's own date is server-set and never
+    // validated here.
+    targetDate: z.string().min(1, 'Enter a target date.'),
     receivingBranch: z.string(),
     customerId: z.string(),
     productBranch: z.string(),

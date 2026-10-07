@@ -458,6 +458,10 @@
             <dt>التاريخ<span class="en">Date</span></dt>
             <dd dir="ltr">{{ invoice.date }}</dd>
           </div>
+          <div class="row">
+            <dt>تاريخ التسليم<span class="en">Target date</span></dt>
+            <dd dir="ltr">{{ invoice.targetDate }}</dd>
+          </div>
           {% if invoice.branchName %}
             <div class="row">
               <dt>الفرع<span class="en">Branch</span></dt>

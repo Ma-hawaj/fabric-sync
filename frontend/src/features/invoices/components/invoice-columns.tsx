@@ -80,6 +80,18 @@ export const getInvoiceColumns = (
     enableColumnFilter: false,
   },
   {
+    id: 'targetDate',
+    accessorFn: (invoice) => new Date(invoice.targetDate),
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Target Date" />
+    ),
+    cell: ({ row }) => (
+      <div>{row.getValue<Date>('targetDate').toLocaleDateString()}</div>
+    ),
+    enableSorting: true,
+    enableColumnFilter: false,
+  },
+  {
     id: 'customerName',
     accessorFn: (invoice) => invoice.customers.map((c) => c.name).join(', '),
     header: ({ column }) => (

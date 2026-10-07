@@ -76,6 +76,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         id: invoice.id,
         invoice_number: invoice.invoice_number,
         date: invoice.date,
+        target_date: invoice.target_date,
         created_at: invoice.created_at,
         branch_name: invoice.branch_name,
         buyer: invoice.buyer,
@@ -560,7 +561,7 @@ mod tests {
         customers: Vec<serde_json::Value>,
     ) -> CreateInvoiceInput {
         input(serde_json::json!({
-            "date": "2026-07-19",
+            "targetDate": "2026-07-26",
             "discount": discount,
             "discountUnit": discount_unit,
             "paymentStatus": "unpaid",
@@ -572,7 +573,7 @@ mod tests {
     // lines are whatever is passed in.
     fn retail_invoice(extra: serde_json::Value) -> CreateInvoiceInput {
         let mut base = serde_json::json!({
-            "date": "2026-07-19",
+            "targetDate": "2026-07-26",
             "discountUnit": "amount",
             "paymentStatus": "unpaid",
         });
@@ -1085,7 +1086,10 @@ pub async fn create_invoice(
 
     let mut tx = state.db().begin().await?;
 
-    let invoice_id =
+    // invoice_date is server-set (CURRENT_DATE) — the only date staff enter
+    // is the promised target_date. Its actual value comes back here so gift
+    // card expiry is checked against the creation date.
+    let (invoice_id, invoice_date) =
         repository::insert_invoice(&mut tx, &input, totals.total, totals.redeemed).await?;
 
     for payment in &input.payments {
@@ -1113,7 +1117,7 @@ pub async fn create_invoice(
     write_redemptions(
         &mut tx,
         invoice_id,
-        input.date,
+        invoice_date,
         &input.gift_card_redemptions,
     )
     .await?;
@@ -1192,7 +1196,11 @@ pub async fn update_invoice(
 
     let mut tx = state.db().begin().await?;
 
-    repository::lock_invoice(&mut tx, invoice_id)
+    // invoice_date stays immutable — only target_date (inside input) is
+    // rewritten by update_invoice_header. Expiry is re-checked against the
+    // original creation date, so an edit days later doesn't fail on a card
+    // that was valid at sale time.
+    let locked = repository::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
 
@@ -1340,7 +1348,7 @@ pub async fn update_invoice(
     write_redemptions(
         &mut tx,
         invoice_id,
-        input.date,
+        locked.invoice_date,
         &input.gift_card_redemptions,
     )
     .await?;

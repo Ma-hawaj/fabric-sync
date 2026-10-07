@@ -49,6 +49,12 @@ interface InvoiceFormProps {
   seeds?: InvoiceEditSeeds
   /** Edits rebuild lines around the ledger: money is shown, not taken. */
   editing?: boolean
+  /**
+   * The invoice's server-set creation date, for the gift card expiry hint —
+   * expiry is checked against when the sale happened, not the editable
+   * target. Omitted on create, where the sale is happening today.
+   */
+  invoiceDate?: string
 }
 
 export function InvoiceForm({
@@ -60,6 +66,7 @@ export function InvoiceForm({
   mutation,
   seeds,
   editing = false,
+  invoiceDate,
 }: InvoiceFormProps) {
   const navigate = useNavigate()
   // The summary and the sibling blocks need to label a stored id — the name of
@@ -91,6 +98,11 @@ export function InvoiceForm({
   const [soldFromBranchName, setSoldFromBranchName] = React.useState(
     seeds?.soldFromBranchName ?? '',
   )
+  // Gift card expiry is checked against the sale date, not the promised
+  // target: on create the sale is today, on edit it is the stored invoice
+  // date (matching the backend, which re-checks against that date).
+  const redemptionDate = invoiceDate ?? new Date().toISOString().slice(0, 10)
+
   // Which of the two submit buttons was pressed. A ref rather than state
   // because it is read once inside onSubmit and must not re-render the form.
   const exportAfterSave = React.useRef(false)
@@ -347,21 +359,15 @@ export function InvoiceForm({
           <form.Field name="redemptions">
             {(redemptionsField) => (
               <div className="space-y-3">
-                <form.Subscribe selector={(state: any) => state.values.date}>
-                  {(date: string) => (
-                    <div className="space-y-3">
-                      {redemptionsField.state.value.map((line, index) => (
-                        <RedemptionBlock
-                          key={line.key}
-                          form={form as never}
-                          lineIndex={index}
-                          date={date}
-                          onRemove={() => redemptionsField.removeValue(index)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </form.Subscribe>
+                {redemptionsField.state.value.map((line, index) => (
+                  <RedemptionBlock
+                    key={line.key}
+                    form={form as never}
+                    lineIndex={index}
+                    date={redemptionDate}
+                    onRemove={() => redemptionsField.removeValue(index)}
+                  />
+                ))}
                 <Button
                   variant="outline"
                   size="sm"

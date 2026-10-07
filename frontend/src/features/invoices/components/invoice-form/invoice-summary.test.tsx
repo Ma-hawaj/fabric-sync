@@ -75,7 +75,7 @@ function baseValues(
 ): InvoiceFormValues {
   return {
     ...createEmptyInvoiceForm(),
-    date: '2026-07-18',
+    targetDate: '2026-07-25',
     customers: [],
     ...overrides,
   }

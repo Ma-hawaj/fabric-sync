@@ -31,7 +31,7 @@ function validProductLine() {
 function values(overrides: Partial<InvoiceFormValues> = {}): InvoiceFormValues {
   return {
     ...createEmptyInvoiceForm(),
-    date: '2026-07-18',
+    targetDate: '2026-07-25',
     customers: [],
     ...overrides,
   }
@@ -51,6 +51,20 @@ function firstError(customers: InvoiceCustomerDraft[]) {
 }
 
 describe('invoiceFormSchema', () => {
+  it('requires a target date', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      orders: [validOrder()],
+    }
+    const error = firstErrorFor(
+      values({ customers: [customer], targetDate: '' }),
+    )
+    expect(error?.message).toMatch(/enter a target date/i)
+    expect(error?.path).toEqual(['targetDate'])
+  })
+
   it('passes for a fully filled existing customer with a valid order', () => {
     const customer = {
       ...createEmptyCustomer(),

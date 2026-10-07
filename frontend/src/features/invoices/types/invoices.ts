@@ -13,6 +13,8 @@ export interface InvoiceCustomer {
 export interface Invoice {
   id: string
   date: string
+  /** The promised delivery date, editable on the form. */
+  targetDate: string
   customers: InvoiceCustomer[]
   itemCount: number
   materials: string[]

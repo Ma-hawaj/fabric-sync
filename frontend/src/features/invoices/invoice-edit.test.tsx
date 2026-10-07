@@ -13,6 +13,7 @@ const EDIT_FIXTURE: InvoiceEdit = {
   id: '0197fdd2-6a67-7000-8000-000000000001',
   invoiceNumber: 42,
   date: '2026-07-19',
+  targetDate: '2026-07-26',
   branchId: null,
   branchName: null,
   discount: 10,

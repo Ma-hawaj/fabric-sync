@@ -79,6 +79,8 @@ export interface InvoiceEdit {
   id: string
   invoiceNumber: number
   date: string
+  /** The promised delivery date — the editable date on the form. */
+  targetDate: string
   branchId: string | null
   branchName: string | null
   discount: number
