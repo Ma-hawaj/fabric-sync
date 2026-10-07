@@ -12,7 +12,15 @@ import {
   ComboboxItem,
   ComboboxList,
 } from '@/components/ui/combobox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
+import { Separator } from '@/components/ui/separator'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { CURRENCY } from '@/lib/currency'
@@ -23,6 +31,7 @@ import {
   SLEEVE,
   THOB_TYPE,
 } from '../../data/design-catalog'
+import { EMD_OPTIONS } from '../../data/emd-options'
 import type { Location } from '@/features/locations/types/location'
 import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
 import { GrossVatHint } from './gross-vat-hint'
@@ -33,6 +42,11 @@ import type { InvoiceFormApi } from '../../types/invoice-form'
 function materialOptionLabel(material: Material) {
   return material.sku ? `${material.name} (${material.sku})` : material.name
 }
+
+// The select needs a real value for "no EMD picked"; a blank string means
+// "not entered" on the draft and is sent as null, so it can't double as a
+// selectable item value.
+const EMD_UNSET = '__none__'
 
 interface StockLocationOption extends Location {
   quantity: number
@@ -187,6 +201,55 @@ export function OrderBlock({
           )}
         </form.Field>
 
+        <form.Field name={`${base}.emd` as never}>
+          {(field: any) => {
+            const stored: string = field.state.value ?? ''
+            // A legacy free-text value (e.g. "ZZ") matches no option but
+            // still has to display on an edit form rather than reading blank.
+            const extra =
+              stored && !EMD_OPTIONS.includes(stored) ? [stored] : []
+            return (
+              <div className="space-y-1.5">
+                <Label htmlFor={field.name}>EMD</Label>
+                <Select
+                  items={[
+                    { value: EMD_UNSET, label: 'None' },
+                    ...extra.map((option) => ({
+                      value: option,
+                      label: option,
+                    })),
+                    ...EMD_OPTIONS.map((option) => ({
+                      value: option,
+                      label: option,
+                    })),
+                  ]}
+                  value={stored || EMD_UNSET}
+                  onValueChange={(value: string) =>
+                    field.handleChange(value === EMD_UNSET ? '' : value)
+                  }
+                >
+                  <SelectTrigger id={field.name} className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={EMD_UNSET}>None</SelectItem>
+                    {extra.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                    {EMD_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )
+          }}
+        </form.Field>
+
         <form.Field name={`${base}.moreDetails` as never}>
           {(field: any) => (
             <div className="space-y-1.5">
@@ -204,7 +267,7 @@ export function OrderBlock({
       </div>
 
       <div className="space-y-3">
-        <h4 className="text-sm font-semibold">Material</h4>
+        <Separator />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <form.Field name={`${base}.materialId` as never}>
             {(field: any) => (

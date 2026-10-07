@@ -22,9 +22,9 @@
                    titleAr/titleEn, the catalog label, and an optional image (a
                    data: URI); a stored value that matches no catalog asset has
                    no image — see document.rs line_designs. The block below
-                   renders them as one bordered "Design" panel of cells, one
-                   per slot (Thobe / Collar / Sleeve / Pocket / Patti in that
-                   order)
+                    renders them as one bordered "Design" panel of cells, one
+                    per slot (Thobe / Collar / Sleeve / Pocket / Patti / EMD
+                    in that order)
     line_notes — per line, the free-text more-details note, or empty
 
   Amount keys: subtotal, discountAmount, taxable, vat, giftCardSales, total,
@@ -263,7 +263,8 @@
       }
 
       /* One bordered "Design" panel per line: a heading and then a grid of
-         cells, one per slot (Thobe / Collar / Sleeve / Pocket / Patti). A
+         cells, one per slot (Thobe / Collar / Sleeve / Pocket / Patti /
+         EMD). A
          catalog match fills its cell with a raster; a legacy value that
          matches nothing fills the label only, so every line reads the same
          shape. The panel never splits across pages. */

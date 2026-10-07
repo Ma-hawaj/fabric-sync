@@ -17,7 +17,7 @@
     amounts   — quantities only: the order sheet is an internal production
                 document, so no money figures are printed; the sole key the
                 template reads is `materialAmount`.
-    designs   — the made-to-measure choices (Thobe / Collar / Sleeve / Pocket / Patti).
+    designs   — the made-to-measure choices (Thobe / Collar / Sleeve / Pocket / Patti / EMD).
     design_note — the free-text more-details note, or empty.
     thob_garment — the base thob drawing envelopes: outline, collar, placket,
                 chestPocket, mobilePocket, sidePockets, cuffs, centerBackSeam,
@@ -55,6 +55,7 @@
   "lengthFl": ("الطول (أمام)", "Length (Front)"),
   "lengthBl": ("الطول (خلف)", "Length (Back)"),
   "shoulder": ("الكتف", "Shoulder"),
+  "shoulderDown": ("نزلة الكتف", "Shoulder Down"),
   "chest": ("الصدر", "Chest"),
   "chestUp": ("الصدر (علوي)", "Chest (Upper)"),
   "waist": ("الخصر", "Waist"),
@@ -63,17 +64,28 @@
   "neck": ("الرقبة", "Neck"),
   "neckWidth": ("عرض الرقبة", "Neck Width"),
   "openHand": ("فتحة اليد", "Open Hand"),
+  "openHandFolding": ("ثنية فتحة اليد", "Open Hand Folding"),
   "cuffWidth": ("عرض الأسوارة", "Cuff Width"),
-  "aramHole": ("فتحة الإبط", "Armhole"),
+  "cuffling": ("الكفلنج", "Cuffling"),
+  "armHole": ("فتحة الإبط", "Armhole"),
   "foWidth": ("عرض الفو", "FO Width"),
-  "frantPocketLength": ("طول الجيب الأمامي", "Front Pocket Length"),
-  "farntPocketLengthByWidth": ("الجيب الأمامي بالعرض", "Front Pocket By Width"),
-  "sidePocket": ("الجيب الجانبي", "Side Pocket"),
+  "fo": ("الفو", "Fo"),
+  "bottom": ("الأسفل", "Bottom"),
+  "bottomFolding": ("ثنية الأسفل", "Bottom Folding"),
+  "fullBody": ("الجسم الكامل", "Full Body"),
+  "sleeveHalf": ("نصف الكم", "Sleeve Half"),
+  "button": ("الأزرار", "Button"),
+  "buttonFold": ("ثنية الزر", "Button Fold"),
+  "openFold": ("الثنية المفتوحة", "Open Fold"),
+  "frontPocketLength": ("طول الجيب الأمامي", "Front Pocket Length"),
+  "frontPocketLengthByWidth": ("الجيب الأمامي بالعرض", "Front Pocket By Width"),
+  "sidePocketLength": ("طول الجيب الجانبي", "Side Pocket Length"),
+  "sidePocketLengthByWidth": ("الجيب الجانبي بالعرض", "Side Pocket By Width"),
   "mobilePocketLengthByWidth": ("جيب الجوال بالعرض", "Mobile Pocket By Width")
 } -%}
-{%- set body_measurements = ["lengthFl", "lengthBl", "shoulder", "chest", "chestUp", "waist", "hips", "sleeveLength", "neck", "neckWidth", "openHand", "cuffWidth", "aramHole"] -%}
-{%- set pocket_measurements = ["frantPocketLength", "farntPocketLengthByWidth", "sidePocket", "mobilePocketLengthByWidth"] -%}
-{%- set style_measurements = ["foWidth"] -%}
+{%- set body_measurements = ["lengthFl", "lengthBl", "shoulder", "shoulderDown", "chest", "chestUp", "waist", "hips", "sleeveLength", "sleeveHalf", "neck", "neckWidth", "openHand", "openHandFolding", "cuffWidth", "cuffling", "armHole", "bottom", "bottomFolding", "fullBody", "button", "buttonFold", "openFold"] -%}
+{%- set pocket_measurements = ["frontPocketLength", "frontPocketLengthByWidth", "sidePocketLength", "sidePocketLengthByWidth", "mobilePocketLengthByWidth"] -%}
+{%- set style_measurements = ["foWidth", "fo"] -%}
 
 {# The thob template: the garment is drawn from the front and the back, so no
    single silhouette carries all 18 callouts. All the drawing logic lives in
@@ -334,7 +346,8 @@
       }
 
       /* One bordered "Design" panel: a heading and then a grid of cells,
-         one per slot (Thobe / Collar / Sleeve / Pocket / Patti). A catalog
+         one per slot (Thobe / Collar / Sleeve / Pocket / Patti / EMD). A
+         catalog
          match fills its cell with a raster; a legacy value that matches
          nothing fills the label only, so the sheet reads the same shape
          either way. The panel never splits across pages. */

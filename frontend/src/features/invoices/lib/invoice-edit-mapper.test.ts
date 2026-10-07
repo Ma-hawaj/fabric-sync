@@ -27,17 +27,29 @@ function editFixture(): InvoiceEdit {
           waist: null,
           hips: null,
           shoulder: null,
+          shoulderDown: null,
           sleeveLength: null,
           neck: null,
           openHand: null,
+          openHandFolding: null,
           chestUp: null,
           cuffWidth: null,
+          cuffling: null,
           neckWidth: null,
-          aramHole: null,
+          armHole: null,
           foWidth: null,
-          frantPocketLength: null,
-          farntPocketLengthByWidth: null,
-          sidePocket: null,
+          fo: null,
+          sleeveHalf: null,
+          button: null,
+          buttonFold: null,
+          openFold: null,
+          bottom: null,
+          bottomFolding: null,
+          fullBody: null,
+          frontPocketLength: null,
+          frontPocketLengthByWidth: null,
+          sidePocketLength: null,
+          sidePocketLengthByWidth: null,
           mobilePocketLengthByWidth: null,
         },
         orders: [
@@ -55,6 +67,7 @@ function editFixture(): InvoiceEdit {
             collar: null,
             sleeve: null,
             patti: null,
+            emd: '6',
             moreDetails: null,
           },
         ],
@@ -104,7 +117,7 @@ describe('mapInvoiceEditToForm', () => {
     expect(customer.measurement.lengthFl).toBe(152.5)
     expect(customer.measurement.chest).toBe(108)
     expect(customer.measurement.waist).toBe('')
-    expect(customer.measurement.sidePocket).toBe('')
+    expect(customer.measurement.sidePocketLength).toBe('')
 
     expect(customer.orders).toHaveLength(1)
     const [order] = customer.orders
@@ -116,6 +129,7 @@ describe('mapInvoiceEditToForm', () => {
     expect(order.price).toBe(100)
     expect(order.thobeType).toBe('saudi-classic')
     expect(order.collar).toBe('')
+    expect(order.emd).toBe('6')
   })
 
   it('maps product lines and gift card blocks', () => {

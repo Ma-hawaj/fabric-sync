@@ -378,6 +378,7 @@ fn assemble_order(
         collar: row.collar,
         sleeve: row.sleeve,
         patti: row.patti,
+        emd: row.emd,
         more_details: row.more_details,
         production_location_id,
         production_location,

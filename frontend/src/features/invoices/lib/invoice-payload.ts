@@ -36,6 +36,7 @@ function orderPayload(order: InvoiceOrderDraft) {
     collar: blankToNull(order.collar),
     sleeve: blankToNull(order.sleeve),
     patti: blankToNull(order.patti),
+    emd: blankToNull(order.emd),
     moreDetails: blankToNull(order.moreDetails),
   }
 }

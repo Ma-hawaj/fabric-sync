@@ -26,6 +26,7 @@ const orderDraftSchema = z
     collar: z.string(),
     sleeve: z.string(),
     patti: z.string(),
+    emd: z.string(),
     moreDetails: z.string(),
     materialId: z.string(),
     materialAmount: numberInputSchema,

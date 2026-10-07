@@ -255,6 +255,9 @@ const DESIGN_SLOTS: {
     options: FRONT_POCKET,
   },
   { label: 'Patti', value: (order) => order.patti, options: PATTI },
+  // EMD has no illustrated catalog — its options carry no images, so any
+  // stored value renders as text.
+  { label: 'EMD', value: (order) => order.emd, options: [] },
 ]
 
 function DesignDetails({ order }: { order: OrderDetail }) {

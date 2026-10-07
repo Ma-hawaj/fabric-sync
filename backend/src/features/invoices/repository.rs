@@ -30,6 +30,7 @@ fn order_specification(
     collar: Option<String>,
     sleeve: Option<String>,
     patti: Option<String>,
+    emd: Option<String>,
     more_details: Option<String>,
 ) -> Option<String> {
     let parts: Vec<String> = [
@@ -38,6 +39,7 @@ fn order_specification(
         ("Collar", collar),
         ("Sleeve", sleeve),
         ("Patti", patti),
+        ("EMD", emd),
         ("Note", more_details),
     ]
     .into_iter()
@@ -138,6 +140,7 @@ pub async fn fetch_invoice_detail(
             o.collar,
             o.sleeve,
             o.patti,
+            o.emd,
             o.more_details
         FROM orders o
         JOIN measurements m ON m.id = o.measurement_id
@@ -193,6 +196,7 @@ pub async fn fetch_invoice_detail(
                 sleeve: row.sleeve,
                 f_pocket: row.f_pocket,
                 patti: row.patti,
+                emd: row.emd,
                 more_details: row.more_details,
             };
             InvoiceDetailLine {
@@ -205,6 +209,7 @@ pub async fn fetch_invoice_detail(
                     design_values.collar.clone(),
                     design_values.sleeve.clone(),
                     design_values.patti.clone(),
+                    design_values.emd.clone(),
                     design_values.more_details.clone(),
                 ),
                 customer: Some(InvoiceParty {
@@ -647,10 +652,10 @@ pub async fn insert_order(
         r#"
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
-            thobe_type, f_pocket, collar, sleeve, patti, more_details,
+            thobe_type, f_pocket, collar, sleeve, patti, emd, more_details,
             production_branch_id
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13)
         "#,
         measurement_id,
         order.material_id,
@@ -662,6 +667,7 @@ pub async fn insert_order(
         order.collar,
         order.sleeve,
         order.patti,
+        order.emd,
         order.more_details,
         order.production_location_id,
     )
@@ -804,17 +810,29 @@ pub async fn fetch_invoice_edit(
             m.waist::float8 AS waist,
             m.hips::float8 AS hips,
             m.shoulder::float8 AS shoulder,
+            m.shoulder_down::float8 AS shoulder_down,
             m.sleeve_length::float8 AS sleeve_length,
             m.neck::float8 AS neck,
             m.open_hand::float8 AS open_hand,
+            m.open_hand_folding::float8 AS open_hand_folding,
             m.chest_up::float8 AS chest_up,
             m.cuff_width::float8 AS cuff_width,
+            m.cuffling::float8 AS cuffling,
             m.neck_width::float8 AS neck_width,
-            m.aram_hole::float8 AS aram_hole,
+            m.arm_hole::float8 AS arm_hole,
             m.fo_width::float8 AS fo_width,
-            m.frant_pocket_length::float8 AS frant_pocket_length,
-            m.farnt_pocket_length_by_width,
-            m.side_pocket,
+            m.fo::float8 AS fo,
+            m.bottom::float8 AS bottom,
+            m.bottom_folding::float8 AS bottom_folding,
+            m.full_body::float8 AS full_body,
+            m.sleeve_half::float8 AS sleeve_half,
+            m.button::float8 AS button,
+            m.button_fold::float8 AS button_fold,
+            m.open_fold::float8 AS open_fold,
+            m.front_pocket_length::float8 AS front_pocket_length,
+            m.front_pocket_length_by_width,
+            m.side_pocket_length::float8 AS side_pocket_length,
+            m.side_pocket_length_by_width,
             m.mobile_pocket_length_by_width,
             o.material_id,
             mat.name AS material_name,
@@ -829,6 +847,7 @@ pub async fn fetch_invoice_edit(
             o.collar,
             o.sleeve,
             o.patti,
+            o.emd,
             o.more_details
         FROM orders o
         JOIN measurements m ON m.id = o.measurement_id
@@ -858,17 +877,29 @@ pub async fn fetch_invoice_edit(
             waist: row.waist,
             hips: row.hips,
             shoulder: row.shoulder,
+            shoulder_down: row.shoulder_down,
             sleeve_length: row.sleeve_length,
             neck: row.neck,
             open_hand: row.open_hand,
+            open_hand_folding: row.open_hand_folding,
             chest_up: row.chest_up,
             cuff_width: row.cuff_width,
+            cuffling: row.cuffling,
             neck_width: row.neck_width,
-            aram_hole: row.aram_hole,
+            arm_hole: row.arm_hole,
             fo_width: row.fo_width,
-            frant_pocket_length: row.frant_pocket_length,
-            farnt_pocket_length_by_width: row.farnt_pocket_length_by_width,
-            side_pocket: row.side_pocket,
+            fo: row.fo,
+            bottom: row.bottom,
+            bottom_folding: row.bottom_folding,
+            full_body: row.full_body,
+            sleeve_half: row.sleeve_half,
+            button: row.button,
+            button_fold: row.button_fold,
+            open_fold: row.open_fold,
+            front_pocket_length: row.front_pocket_length,
+            front_pocket_length_by_width: row.front_pocket_length_by_width,
+            side_pocket_length: row.side_pocket_length,
+            side_pocket_length_by_width: row.side_pocket_length_by_width,
             mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
         };
         let order = InvoiceEditOrder {
@@ -885,6 +916,7 @@ pub async fn fetch_invoice_edit(
             collar: row.collar,
             sleeve: row.sleeve,
             patti: row.patti,
+            emd: row.emd,
             more_details: row.more_details,
         };
 
@@ -1343,13 +1375,22 @@ pub async fn update_measurement(
             length_fl = $3::float8, length_bl = $4::float8,
             chest = $5::float8, waist = $6::float8,
             hips = $7::float8, shoulder = $8::float8,
-            sleeve_length = $9::float8, neck = $10::float8,
-            open_hand = $11::float8, chest_up = $12::float8,
-            cuff_width = $13::float8, neck_width = $14::float8,
-            aram_hole = $15::float8, fo_width = $16::float8,
-            frant_pocket_length = $17::float8,
-            farnt_pocket_length_by_width = $18, side_pocket = $19,
-            mobile_pocket_length_by_width = $20
+            shoulder_down = $9::float8, sleeve_length = $10::float8,
+            neck = $11::float8, open_hand = $12::float8,
+            open_hand_folding = $13::float8, chest_up = $14::float8,
+            cuff_width = $15::float8, cuffling = $16::float8,
+            neck_width = $17::float8,
+            arm_hole = $18::float8, fo_width = $19::float8,
+            fo = $20::float8,
+            bottom = $21::float8, bottom_folding = $22::float8,
+            full_body = $23::float8,
+            sleeve_half = $24::float8, button = $25::float8,
+            button_fold = $26::float8, open_fold = $27::float8,
+            front_pocket_length = $28::float8,
+            front_pocket_length_by_width = $29,
+            side_pocket_length = $30::float8,
+            side_pocket_length_by_width = $31,
+            mobile_pocket_length_by_width = $32
         WHERE id = $1
         "#,
         measurement_id,
@@ -1360,17 +1401,29 @@ pub async fn update_measurement(
         measurement.waist,
         measurement.hips,
         measurement.shoulder,
+        measurement.shoulder_down,
         measurement.sleeve_length,
         measurement.neck,
         measurement.open_hand,
+        measurement.open_hand_folding,
         measurement.chest_up,
         measurement.cuff_width,
+        measurement.cuffling,
         measurement.neck_width,
-        measurement.aram_hole,
+        measurement.arm_hole,
         measurement.fo_width,
-        measurement.frant_pocket_length,
-        measurement.farnt_pocket_length_by_width,
-        measurement.side_pocket,
+        measurement.fo,
+        measurement.bottom,
+        measurement.bottom_folding,
+        measurement.full_body,
+        measurement.sleeve_half,
+        measurement.button,
+        measurement.button_fold,
+        measurement.open_fold,
+        measurement.front_pocket_length,
+        measurement.front_pocket_length_by_width,
+        measurement.side_pocket_length,
+        measurement.side_pocket_length_by_width,
         measurement.mobile_pocket_length_by_width,
     )
     .execute(&mut **tx)

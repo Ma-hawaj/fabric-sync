@@ -91,6 +91,7 @@ export interface Order {
   collar: string | null
   sleeve: string | null
   patti: string | null
+  emd: string | null
   /** Free-text line note, shown beneath the design choices. */
   moreDetails: string | null
   /**

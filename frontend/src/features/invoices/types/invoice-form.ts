@@ -19,6 +19,7 @@ export interface InvoiceOrderDraft {
   collar: string
   sleeve: string
   patti: string
+  emd: string
   moreDetails: string
 
   materialId: string
@@ -129,6 +130,7 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     collar: '',
     sleeve: '',
     patti: '',
+    emd: '',
     moreDetails: '',
     materialId: '',
     materialAmount: '',
