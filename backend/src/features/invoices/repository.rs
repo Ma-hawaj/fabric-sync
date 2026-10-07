@@ -30,6 +30,7 @@ fn order_specification(
     collar: Option<String>,
     sleeve: Option<String>,
     patti: Option<String>,
+    emd: Option<String>,
     more_details: Option<String>,
 ) -> Option<String> {
     let parts: Vec<String> = [
@@ -38,6 +39,7 @@ fn order_specification(
         ("Collar", collar),
         ("Sleeve", sleeve),
         ("Patti", patti),
+        ("EMD", emd),
         ("Note", more_details),
     ]
     .into_iter()
@@ -62,6 +64,7 @@ pub async fn fetch_invoice_detail(
             i.id,
             i.invoice_number,
             i.invoice_date,
+            i.target_date,
             i.created_at,
             i.discount::float8 AS "discount!",
             i.discount_unit,
@@ -138,6 +141,7 @@ pub async fn fetch_invoice_detail(
             o.collar,
             o.sleeve,
             o.patti,
+            o.emd,
             o.more_details
         FROM orders o
         JOIN measurements m ON m.id = o.measurement_id
@@ -193,6 +197,7 @@ pub async fn fetch_invoice_detail(
                 sleeve: row.sleeve,
                 f_pocket: row.f_pocket,
                 patti: row.patti,
+                emd: row.emd,
                 more_details: row.more_details,
             };
             InvoiceDetailLine {
@@ -205,6 +210,7 @@ pub async fn fetch_invoice_detail(
                     design_values.collar.clone(),
                     design_values.sleeve.clone(),
                     design_values.patti.clone(),
+                    design_values.emd.clone(),
                     design_values.more_details.clone(),
                 ),
                 customer: Some(InvoiceParty {
@@ -250,6 +256,7 @@ pub async fn fetch_invoice_detail(
             id: invoice.id,
             invoice_number: invoice.invoice_number,
             date: invoice.invoice_date,
+            target_date: invoice.target_date,
             created_at: invoice.created_at,
             branch_name: invoice.branch_name,
             buyer: invoice
@@ -281,11 +288,17 @@ pub async fn fetch_invoice_detail(
 // also emits a flat form — `customer_names` as text, `material_names` as
 // `text[]` — because a JSON array cannot be filtered or sorted on directly and
 // those are exactly the columns the invoices table offers a filter for.
+//
+// Receiving location is the invoice's own branch (`invoices.branch_id`); the
+// production locations are the distinct `orders.production_branch_id` names
+// across its tailoring lines, aggregated the same way materials are (JSON for
+// display, `text[]` for the filter).
 const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
             i.id,
             i.invoice_date,
+            i.target_date,
             pay.status AS payment_status,
             i.total_price::float8 AS total_price,
             pay.paid AS amount_paid,
@@ -296,6 +309,10 @@ const SPEC: ListSpec = ListSpec {
                 WHERE o.invoice_id = i.id AND o.status <> 'received'
             ) AS received,
             i.gift_card_redeemed::float8 AS gift_card_redeemed,
+            i.branch_id AS receiving_location_id,
+            recv.name AS receiving_location,
+            COALESCE(agg.production_locations, '[]') AS production_locations,
+            COALESCE(agg.production_location_names, ARRAY[]::text[]) AS production_location_names,
             COALESCE(agg.item_count, 0) + COALESCE(items.item_count, 0) AS item_count,
             COALESCE(
                 agg.customers,
@@ -320,6 +337,7 @@ const SPEC: ListSpec = ListSpec {
             ) AS customer_mobiles,
             COALESCE(agg.material_names, ARRAY[]::text[]) AS material_names
         FROM invoices i
+        LEFT JOIN branch recv ON recv.id = i.branch_id
         LEFT JOIN LATERAL (
             SELECT
                 count(*) AS item_count,
@@ -330,11 +348,14 @@ const SPEC: ListSpec = ListSpec {
                 json_agg(DISTINCT mat.name) AS materials,
                 string_agg(DISTINCT c.name, ', ') AS customer_names,
                 string_agg(DISTINCT c.mobile_no, ', ') AS customer_mobiles,
-                array_agg(DISTINCT mat.name) AS material_names
+                array_agg(DISTINCT mat.name) AS material_names,
+                json_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_locations,
+                array_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_location_names
             FROM orders o
             JOIN measurements m ON m.id = o.measurement_id
             JOIN customers c ON c.id = m.customer_id
             JOIN materials mat ON mat.id = o.material_id
+            LEFT JOIN branch prod ON prod.id = o.production_branch_id
             WHERE o.invoice_id = i.id
         ) agg ON true
         -- Product and gift card lines live in their own table, so they need a
@@ -376,6 +397,10 @@ const SPEC: ListSpec = ListSpec {
         ("id", ColumnDef::new("id", ColumnKind::Uuid)),
         ("date", ColumnDef::new("invoice_date", ColumnKind::Date)),
         (
+            "targetDate",
+            ColumnDef::new("target_date", ColumnKind::Date),
+        ),
+        (
             "customerName",
             ColumnDef::new("customer_names", ColumnKind::Text),
         ),
@@ -408,6 +433,14 @@ const SPEC: ListSpec = ListSpec {
             ColumnDef::new("payment_method", ColumnKind::Text),
         ),
         ("received", ColumnDef::new("received", ColumnKind::Bool)),
+        (
+            "receivingLocation",
+            ColumnDef::new("receiving_location", ColumnKind::Text),
+        ),
+        (
+            "productionLocations",
+            ColumnDef::new("production_location_names", ColumnKind::TextArray),
+        ),
     ],
     default_order: "id DESC",
 };
@@ -424,19 +457,22 @@ pub async fn insert_invoice(
     input: &CreateInvoiceInput,
     total_price: f64,
     gift_card_redeemed: f64,
-) -> Result<Uuid, sqlx::Error> {
-    sqlx::query_scalar!(
+) -> Result<(Uuid, chrono::DateTime<chrono::Utc>), sqlx::Error> {
+    // invoice_date is server-set (DEFAULT now()) and never taken from
+    // input — staff promise a target_date instead. Returned so gift card
+    // expiry is checked against the actual creation date.
+    sqlx::query!(
         r#"
         INSERT INTO invoices (
-            invoice_date, branch_id, discount, discount_unit,
+            target_date, branch_id, discount, discount_unit,
             total_price, customer_id, gift_card_redeemed
         )
         VALUES (
             $1, $2, $3::float8, $4, $5::float8, $6, $7::float8
         )
-        RETURNING id
+        RETURNING id, invoice_date
         "#,
-        input.date,
+        input.target_date,
         input.branch_id,
         input.discount,
         input.discount_unit.as_str(),
@@ -446,6 +482,7 @@ pub async fn insert_invoice(
     )
     .fetch_one(&mut **tx)
     .await
+    .map(|row| (row.id, row.invoice_date))
 }
 
 /// The invoice's totals with the row locked, so a payment validated against
@@ -454,6 +491,9 @@ pub async fn insert_invoice(
 pub struct LockedInvoiceTotals {
     pub total_price: f64,
     pub gift_card_redeemed: f64,
+    /// The server-set creation date. Gift card expiry on an edit is checked
+    /// against this — the date the sale happened — not the editable target.
+    pub invoice_date: chrono::DateTime<chrono::Utc>,
 }
 
 pub async fn lock_invoice(
@@ -462,7 +502,7 @@ pub async fn lock_invoice(
 ) -> Result<Option<LockedInvoiceTotals>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT total_price::float8 AS "total_price!", gift_card_redeemed::float8 AS "gift_card_redeemed!"
+        SELECT total_price::float8 AS "total_price!", gift_card_redeemed::float8 AS "gift_card_redeemed!", invoice_date
         FROM invoices
         WHERE id = $1
         FOR UPDATE
@@ -475,6 +515,7 @@ pub async fn lock_invoice(
     Ok(row.map(|row| LockedInvoiceTotals {
         total_price: row.total_price,
         gift_card_redeemed: row.gift_card_redeemed,
+        invoice_date: row.invoice_date,
     }))
 }
 
@@ -626,10 +667,10 @@ pub async fn insert_order(
         r#"
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
-            thobe_type, f_pocket, collar, sleeve, patti, more_details,
+            thobe_type, f_pocket, collar, sleeve, patti, emd, more_details,
             production_branch_id
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13)
         "#,
         measurement_id,
         order.material_id,
@@ -641,6 +682,7 @@ pub async fn insert_order(
         order.collar,
         order.sleeve,
         order.patti,
+        order.emd,
         order.more_details,
         order.production_location_id,
     )
@@ -750,6 +792,7 @@ pub async fn fetch_invoice_edit(
         SELECT
             i.invoice_number,
             i.invoice_date,
+            i.target_date,
             i.branch_id,
             b.name AS "branch_name?",
             i.discount::float8 AS "discount!",
@@ -783,17 +826,29 @@ pub async fn fetch_invoice_edit(
             m.waist::float8 AS waist,
             m.hips::float8 AS hips,
             m.shoulder::float8 AS shoulder,
+            m.shoulder_down::float8 AS shoulder_down,
             m.sleeve_length::float8 AS sleeve_length,
             m.neck::float8 AS neck,
             m.open_hand::float8 AS open_hand,
+            m.open_hand_folding::float8 AS open_hand_folding,
             m.chest_up::float8 AS chest_up,
             m.cuff_width::float8 AS cuff_width,
+            m.cuffling::float8 AS cuffling,
             m.neck_width::float8 AS neck_width,
-            m.aram_hole::float8 AS aram_hole,
+            m.arm_hole::float8 AS arm_hole,
             m.fo_width::float8 AS fo_width,
-            m.frant_pocket_length::float8 AS frant_pocket_length,
-            m.farnt_pocket_length_by_width,
-            m.side_pocket,
+            m.fo::float8 AS fo,
+            m.bottom::float8 AS bottom,
+            m.bottom_folding::float8 AS bottom_folding,
+            m.full_body::float8 AS full_body,
+            m.sleeve_half::float8 AS sleeve_half,
+            m.button::float8 AS button,
+            m.button_fold::float8 AS button_fold,
+            m.open_fold::float8 AS open_fold,
+            m.front_pocket_length::float8 AS front_pocket_length,
+            m.front_pocket_length_by_width,
+            m.side_pocket_length::float8 AS side_pocket_length,
+            m.side_pocket_length_by_width,
             m.mobile_pocket_length_by_width,
             o.material_id,
             mat.name AS material_name,
@@ -808,6 +863,7 @@ pub async fn fetch_invoice_edit(
             o.collar,
             o.sleeve,
             o.patti,
+            o.emd,
             o.more_details
         FROM orders o
         JOIN measurements m ON m.id = o.measurement_id
@@ -837,17 +893,29 @@ pub async fn fetch_invoice_edit(
             waist: row.waist,
             hips: row.hips,
             shoulder: row.shoulder,
+            shoulder_down: row.shoulder_down,
             sleeve_length: row.sleeve_length,
             neck: row.neck,
             open_hand: row.open_hand,
+            open_hand_folding: row.open_hand_folding,
             chest_up: row.chest_up,
             cuff_width: row.cuff_width,
+            cuffling: row.cuffling,
             neck_width: row.neck_width,
-            aram_hole: row.aram_hole,
+            arm_hole: row.arm_hole,
             fo_width: row.fo_width,
-            frant_pocket_length: row.frant_pocket_length,
-            farnt_pocket_length_by_width: row.farnt_pocket_length_by_width,
-            side_pocket: row.side_pocket,
+            fo: row.fo,
+            bottom: row.bottom,
+            bottom_folding: row.bottom_folding,
+            full_body: row.full_body,
+            sleeve_half: row.sleeve_half,
+            button: row.button,
+            button_fold: row.button_fold,
+            open_fold: row.open_fold,
+            front_pocket_length: row.front_pocket_length,
+            front_pocket_length_by_width: row.front_pocket_length_by_width,
+            side_pocket_length: row.side_pocket_length,
+            side_pocket_length_by_width: row.side_pocket_length_by_width,
             mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
         };
         let order = InvoiceEditOrder {
@@ -864,6 +932,7 @@ pub async fn fetch_invoice_edit(
             collar: row.collar,
             sleeve: row.sleeve,
             patti: row.patti,
+            emd: row.emd,
             more_details: row.more_details,
         };
 
@@ -941,6 +1010,7 @@ pub async fn fetch_invoice_edit(
         id: invoice_id,
         invoice_number: header.invoice_number,
         date: header.invoice_date,
+        target_date: header.target_date,
         branch_id: header.branch_id,
         branch_name: header.branch_name,
         discount: header.discount,
@@ -1322,13 +1392,22 @@ pub async fn update_measurement(
             length_fl = $3::float8, length_bl = $4::float8,
             chest = $5::float8, waist = $6::float8,
             hips = $7::float8, shoulder = $8::float8,
-            sleeve_length = $9::float8, neck = $10::float8,
-            open_hand = $11::float8, chest_up = $12::float8,
-            cuff_width = $13::float8, neck_width = $14::float8,
-            aram_hole = $15::float8, fo_width = $16::float8,
-            frant_pocket_length = $17::float8,
-            farnt_pocket_length_by_width = $18, side_pocket = $19,
-            mobile_pocket_length_by_width = $20
+            shoulder_down = $9::float8, sleeve_length = $10::float8,
+            neck = $11::float8, open_hand = $12::float8,
+            open_hand_folding = $13::float8, chest_up = $14::float8,
+            cuff_width = $15::float8, cuffling = $16::float8,
+            neck_width = $17::float8,
+            arm_hole = $18::float8, fo_width = $19::float8,
+            fo = $20::float8,
+            bottom = $21::float8, bottom_folding = $22::float8,
+            full_body = $23::float8,
+            sleeve_half = $24::float8, button = $25::float8,
+            button_fold = $26::float8, open_fold = $27::float8,
+            front_pocket_length = $28::float8,
+            front_pocket_length_by_width = $29,
+            side_pocket_length = $30::float8,
+            side_pocket_length_by_width = $31,
+            mobile_pocket_length_by_width = $32
         WHERE id = $1
         "#,
         measurement_id,
@@ -1339,17 +1418,29 @@ pub async fn update_measurement(
         measurement.waist,
         measurement.hips,
         measurement.shoulder,
+        measurement.shoulder_down,
         measurement.sleeve_length,
         measurement.neck,
         measurement.open_hand,
+        measurement.open_hand_folding,
         measurement.chest_up,
         measurement.cuff_width,
+        measurement.cuffling,
         measurement.neck_width,
-        measurement.aram_hole,
+        measurement.arm_hole,
         measurement.fo_width,
-        measurement.frant_pocket_length,
-        measurement.farnt_pocket_length_by_width,
-        measurement.side_pocket,
+        measurement.fo,
+        measurement.bottom,
+        measurement.bottom_folding,
+        measurement.full_body,
+        measurement.sleeve_half,
+        measurement.button,
+        measurement.button_fold,
+        measurement.open_fold,
+        measurement.front_pocket_length,
+        measurement.front_pocket_length_by_width,
+        measurement.side_pocket_length,
+        measurement.side_pocket_length_by_width,
         measurement.mobile_pocket_length_by_width,
     )
     .execute(&mut **tx)
@@ -1368,7 +1459,7 @@ pub async fn update_invoice_header(
     sqlx::query!(
         r#"
         UPDATE invoices
-        SET invoice_date = $2,
+        SET target_date = $2,
             branch_id = $3,
             discount = $4::float8,
             discount_unit = $5,
@@ -1378,7 +1469,7 @@ pub async fn update_invoice_header(
         WHERE id = $1
         "#,
         invoice_id,
-        input.date,
+        input.target_date,
         input.branch_id,
         input.discount,
         input.discount_unit.as_str(),

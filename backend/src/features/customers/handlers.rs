@@ -1,4 +1,8 @@
-use axum::{extract::State, Extension, Json};
+use axum::{
+    extract::{Path, State},
+    Extension, Json,
+};
+use uuid::Uuid;
 
 use crate::{
     auth::AuthenticatedUser,
@@ -9,7 +13,7 @@ use crate::{
 
 use super::{
     service,
-    types::{CreateCustomerInput, Customer},
+    types::{CreateCustomerInput, Customer, UpdateCustomerInput},
 };
 
 pub async fn list_customers(
@@ -30,4 +34,15 @@ pub async fn create_customer(
     Json(input): Json<CreateCustomerInput>,
 ) -> Result<Json<Customer>, AppError> {
     Ok(Json(service::create_customer(&state, input).await?))
+}
+
+pub async fn update_customer(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(customer_id): Path<Uuid>,
+    Json(input): Json<UpdateCustomerInput>,
+) -> Result<Json<Customer>, AppError> {
+    Ok(Json(
+        service::update_customer(&state, customer_id, input).await?,
+    ))
 }

@@ -39,10 +39,13 @@ describe('ThobDiagram', () => {
 
   it('labels a non-numeric field without a unit', () => {
     render(
-      <ThobDiagram activeField="sidePocket" values={{ sidePocket: 'Both' }} />,
+      <ThobDiagram
+        activeField="frontPocketLengthByWidth"
+        values={{ frontPocketLengthByWidth: '16x14' }}
+      />,
     )
 
-    expect(screen.queryByText('Side Pocket · Both')).toBeTruthy()
+    expect(screen.queryByText('Front Pocket L×W · 16x14')).toBeTruthy()
   })
 
   it('falls back to the label alone when the value is blank', () => {
@@ -103,7 +106,7 @@ describe('ThobDiagram', () => {
     expect(screen.queryByTestId('callout-waist')).toBeTruthy()
     // Front-view fields the snapshot didn't capture stay off the silhouette.
     expect(screen.queryByTestId('callout-chest')).toBeNull()
-    expect(screen.queryByTestId('callout-frantPocketLength')).toBeNull()
+    expect(screen.queryByTestId('callout-frontPocketLength')).toBeNull()
     // And no field from the other view renders on the front.
     expect(screen.queryByTestId('callout-lengthBl')).toBeNull()
   })
@@ -128,7 +131,7 @@ describe('ThobDiagram', () => {
       <ThobDiagram
         view="front"
         showRecorded
-        values={{ lengthFl: 120, frantPocketLength: 9 }}
+        values={{ lengthFl: 120, frontPocketLength: 9 }}
       />,
     )
     expect(screen.queryByText('120 inch · Front Length')).toBeTruthy()

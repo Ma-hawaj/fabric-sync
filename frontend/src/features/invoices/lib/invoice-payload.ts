@@ -36,6 +36,7 @@ function orderPayload(order: InvoiceOrderDraft) {
     collar: blankToNull(order.collar),
     sleeve: blankToNull(order.sleeve),
     patti: blankToNull(order.patti),
+    emd: blankToNull(order.emd),
     moreDetails: blankToNull(order.moreDetails),
   }
 }
@@ -83,7 +84,7 @@ function redemptionPayload(redemption: GiftCardRedemptionDraft) {
 // and the backend rebuilds the invoice from it.
 export function invoicePayload(values: InvoiceFormValues) {
   return {
-    date: values.date,
+    targetDate: values.targetDate,
     branchId: values.receivingBranch || null,
     discount: numberOrZero(values.discount),
     discountUnit: values.discountUnit,

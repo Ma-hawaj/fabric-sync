@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::features::customers;
@@ -58,17 +58,6 @@ fn effective_production(
         Some((id, name)) => (Some(*id), Some(name.clone()), true),
         None => (None, None, false),
     }
-}
-
-// Midnight UTC on the given date, used as the starting point for a pass's
-// first stage when there is no earlier stage to chain from. Coarser than a
-// real timestamp — the schema has no created_at to draw on — but it's the
-// closest thing already in the data (invoice_date for the build, reported_on
-// for a repair).
-fn date_start(date: NaiveDate) -> DateTime<Utc> {
-    date.and_hms_opt(0, 0, 0)
-        .expect("midnight is always a valid time")
-        .and_utc()
 }
 
 // Chains each stage's start to the previous stage's finish, so the checklist
@@ -338,7 +327,10 @@ fn assemble_order(
                 production_location_id,
                 row.receiving_location_id,
             ),
-            date_start(row.invoice_date),
+            // The invoice's own creation moment, time included — the closest
+            // thing to a build start the schema has, since `orders` carries
+            // no `created_at`.
+            row.invoice_date,
         ),
         &build_assignments,
     );
@@ -378,6 +370,7 @@ fn assemble_order(
         collar: row.collar,
         sleeve: row.sleeve,
         patti: row.patti,
+        emd: row.emd,
         more_details: row.more_details,
         production_location_id,
         production_location,

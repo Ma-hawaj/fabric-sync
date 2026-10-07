@@ -1,9 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { listResponse } from '@/lib/list-fixtures'
 import { CustomerDetailsSheet } from './customer-details-sheet'
 import type { Customer } from '../types/customers'
+
+// The sheet header links to the edit page; stub Link so the test doesn't
+// need a router.
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}))
 
 const CUSTOMER: Customer = {
   id: 'cust-1',
@@ -42,10 +48,11 @@ describe('CustomerDetailsSheet', () => {
     // keep their grid positions.
     expect(screen.queryByText('Waist')).toBeTruthy()
     expect(screen.queryByText('108')).toBeTruthy()
-    // Body Dimensions has 13 fields and 2 recorded values; Style &
-    // Finishing is fully recorded. Every other slot holds a placeholder.
+    // Body Dimensions has 23 fields and 2 recorded values; Style &
+    // Finishing has 2 fields and 1 recorded value; Pockets has 5 fields
+    // and none recorded. Every other slot holds a placeholder.
     // (The sheet renders in a portal, so query the document body.)
-    expect(document.body.querySelectorAll('[data-empty]').length).toBe(15)
+    expect(document.body.querySelectorAll('[data-empty]').length).toBe(27)
   })
 
   it('draws the thob sketch alongside the measurements', () => {

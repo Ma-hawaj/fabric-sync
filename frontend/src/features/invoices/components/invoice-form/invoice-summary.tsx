@@ -135,7 +135,7 @@ export function InvoiceSummary({
       <h3 className="text-sm font-semibold">Invoice Summary</h3>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextField form={form} name="date" label="Date" />
+        <TextField form={form} name="targetDate" label="Target Date" />
         <form.Field name={'receivingBranch' as never}>
           {(field: any) => (
             <div className="space-y-1">

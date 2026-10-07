@@ -54,6 +54,7 @@ const ORDER: OrderDetail = {
   collar: '3',
   sleeve: 'open',
   patti: 'normal',
+  emd: '6',
   moreDetails: 'Double stitching on hem.',
   productionLocationId: null,
   productionLocation: null,
@@ -237,6 +238,9 @@ describe('OrderDetailPage', () => {
     // Catalog ids resolve to their display labels.
     expect(screen.queryByText('Thobx')).toBeTruthy()
     expect(screen.queryByText('Round')).toBeTruthy()
+    // EMD has no catalog illustrations, so it shows as text.
+    expect(screen.queryByText('EMD')).toBeTruthy()
+    expect(screen.queryByText('6')).toBeTruthy()
     // Slot titles stay visible so staff can quote each choice back.
     expect(screen.queryByText('Thobe Type')).toBeTruthy()
     expect(screen.queryByText('Front Pocket')).toBeTruthy()
@@ -250,6 +254,7 @@ describe('OrderDetailPage', () => {
       collar: null,
       sleeve: null,
       patti: null,
+      emd: null,
       moreDetails: null,
     })
 
@@ -263,6 +268,7 @@ describe('OrderDetailPage', () => {
       collar: null,
       sleeve: null,
       patti: null,
+      emd: null,
       moreDetails: null,
     })
 

@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO measurements (\n            customer_id, measurement_date,\n            length_fl, length_bl, chest, waist, hips, shoulder, shoulder_down,\n            sleeve_length, neck, open_hand, open_hand_folding, chest_up,\n            cuff_width, cuffling, neck_width, arm_hole, fo_width, fo, bottom, bottom_folding,\n            full_body, sleeve_half, button, button_fold, open_fold, front_pocket_length,\n            front_pocket_length_by_width,\n            side_pocket_length, side_pocket_length_by_width,\n            mobile_pocket_length_by_width\n        )\n        VALUES (\n            $1, $2,\n            $3::float8, $4::float8, $5::float8, $6::float8, $7::float8, $8::float8, $9::float8,\n            $10::float8, $11::float8, $12::float8, $13::float8, $14::float8,\n            $15::float8, $16::float8, $17::float8, $18::float8, $19::float8, $20::float8,\n            $21::float8, $22::float8, $23::float8, $24::float8, $25::float8, $26::float8,\n            $27::float8, $28::float8,\n            $29,\n            $30::float8, $31,\n            $32\n        )\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Text",
+        "Float8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b2a3fa4bc970cb26a6eb9d82c29d6b9e53891debd3f5893981411480b45ecc7e"
+}

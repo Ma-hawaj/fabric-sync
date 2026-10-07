@@ -12,7 +12,10 @@ export interface InvoiceCustomer {
 // most recent one's method.
 export interface Invoice {
   id: string
+  /** Server-set creation moment, as an ISO datetime with the time of day. */
   date: string
+  /** The promised delivery date, editable on the form. */
+  targetDate: string
   customers: InvoiceCustomer[]
   itemCount: number
   materials: string[]
@@ -24,4 +27,8 @@ export interface Invoice {
   giftCardRedeemed: number
   /** Goods receipt, separate from money: every order collected. */
   received: boolean
+  /** Where the customer collects, taken from the invoice's branch. */
+  receivingLocation: string | null
+  /** Distinct production locations across the invoice's tailoring lines. */
+  productionLocations: string[]
 }

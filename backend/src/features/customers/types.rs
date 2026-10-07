@@ -21,17 +21,29 @@ pub struct Measurement {
     pub waist: Option<f64>,
     pub hips: Option<f64>,
     pub shoulder: Option<f64>,
+    pub shoulder_down: Option<f64>,
     pub sleeve_length: Option<f64>,
     pub neck: Option<f64>,
     pub open_hand: Option<f64>,
+    pub open_hand_folding: Option<f64>,
     pub chest_up: Option<f64>,
     pub cuff_width: Option<f64>,
+    pub cuffling: Option<f64>,
     pub neck_width: Option<f64>,
-    pub aram_hole: Option<f64>,
+    pub arm_hole: Option<f64>,
     pub fo_width: Option<f64>,
-    pub frant_pocket_length: Option<f64>,
-    pub farnt_pocket_length_by_width: Option<String>,
-    pub side_pocket: Option<String>,
+    pub fo: Option<f64>,
+    pub bottom: Option<f64>,
+    pub bottom_folding: Option<f64>,
+    pub full_body: Option<f64>,
+    pub sleeve_half: Option<f64>,
+    pub button: Option<f64>,
+    pub button_fold: Option<f64>,
+    pub open_fold: Option<f64>,
+    pub front_pocket_length: Option<f64>,
+    pub front_pocket_length_by_width: Option<String>,
+    pub side_pocket_length: Option<f64>,
+    pub side_pocket_length_by_width: Option<String>,
     pub mobile_pocket_length_by_width: Option<String>,
 }
 
@@ -58,17 +70,29 @@ pub struct CreateMeasurementInput {
     pub waist: Option<f64>,
     pub hips: Option<f64>,
     pub shoulder: Option<f64>,
+    pub shoulder_down: Option<f64>,
     pub sleeve_length: Option<f64>,
     pub neck: Option<f64>,
     pub open_hand: Option<f64>,
+    pub open_hand_folding: Option<f64>,
     pub chest_up: Option<f64>,
     pub cuff_width: Option<f64>,
+    pub cuffling: Option<f64>,
     pub neck_width: Option<f64>,
-    pub aram_hole: Option<f64>,
+    pub arm_hole: Option<f64>,
     pub fo_width: Option<f64>,
-    pub frant_pocket_length: Option<f64>,
-    pub farnt_pocket_length_by_width: Option<String>,
-    pub side_pocket: Option<String>,
+    pub fo: Option<f64>,
+    pub bottom: Option<f64>,
+    pub bottom_folding: Option<f64>,
+    pub full_body: Option<f64>,
+    pub sleeve_half: Option<f64>,
+    pub button: Option<f64>,
+    pub button_fold: Option<f64>,
+    pub open_fold: Option<f64>,
+    pub front_pocket_length: Option<f64>,
+    pub front_pocket_length_by_width: Option<String>,
+    pub side_pocket_length: Option<f64>,
+    pub side_pocket_length_by_width: Option<String>,
     pub mobile_pocket_length_by_width: Option<String>,
 }
 
@@ -79,6 +103,15 @@ pub struct CreateCustomerInput {
     pub mobile_no: String,
     #[serde(default)]
     pub measurement: Option<CreateMeasurementInput>,
+}
+
+/// Every field is optional so a partial update (e.g. just `mobileNo`) stays a
+/// single statement rather than a read-modify-write.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCustomerInput {
+    pub name: Option<String>,
+    pub mobile_no: Option<String>,
 }
 
 // Two snapshots count as "the same measurement" if every measured field
@@ -105,17 +138,29 @@ mod tests {
             waist: None,
             hips: None,
             shoulder: None,
+            shoulder_down: None,
             sleeve_length: None,
             neck: None,
             open_hand: None,
+            open_hand_folding: None,
             chest_up: None,
             cuff_width: None,
+            cuffling: None,
             neck_width: None,
-            aram_hole: None,
+            arm_hole: None,
             fo_width: None,
-            frant_pocket_length: None,
-            farnt_pocket_length_by_width: pocket.map(str::to_string),
-            side_pocket: None,
+            fo: None,
+            bottom: None,
+            bottom_folding: None,
+            full_body: None,
+            sleeve_half: None,
+            button: None,
+            button_fold: None,
+            open_fold: None,
+            front_pocket_length: None,
+            front_pocket_length_by_width: pocket.map(str::to_string),
+            side_pocket_length: None,
+            side_pocket_length_by_width: None,
             mobile_pocket_length_by_width: None,
         }
     }
@@ -157,25 +202,29 @@ mod tests {
             "customer_id": "adcdd125-7101-4e93-ba4d-c9a7fe9fca1f",
             "measurement_date": "2026-07-01",
             "length_fl": 152.5, "length_bl": null, "chest": 108.0, "waist": null,
-            "hips": null, "shoulder": null, "sleeve_length": null, "neck": null,
-            "open_hand": null, "chest_up": null,
-            "cuff_width": null, "neck_width": null, "aram_hole": null,
-            "fo_width": null, "frant_pocket_length": null,
-            "farnt_pocket_length_by_width": "16x14", "side_pocket": null,
+            "hips": null, "shoulder": null, "shoulder_down": null, "sleeve_length": null, "neck": null,
+            "open_hand": null, "open_hand_folding": null, "chest_up": null,
+            "cuff_width": null, "cuffling": null, "neck_width": null, "arm_hole": null,
+            "fo_width": null, "fo": null, "bottom": null, "bottom_folding": null, "full_body": null,
+            "sleeve_half": null, "button": null, "button_fold": null, "open_fold": null,
+            "front_pocket_length": null,
+            "front_pocket_length_by_width": "16x14",
+            "side_pocket_length": null, "side_pocket_length_by_width": null,
             "mobile_pocket_length_by_width": null,
-            "cuffling": null, "full_body": null, "open_fold": null,
-            "sleeve_haff_button": null, "button_fold": null, "fo": null
+            "sleeve_half_button": null
         }"#;
 
         let measurement: Measurement = serde_json::from_str(postgres_json).unwrap();
         assert_eq!(
-            measurement.farnt_pocket_length_by_width.as_deref(),
+            measurement.front_pocket_length_by_width.as_deref(),
             Some("16x14")
         );
         assert_eq!(measurement.length_fl, Some(152.5));
 
         let api_json = serde_json::to_value(&measurement).unwrap();
         assert_eq!(api_json["lengthFl"], 152.5);
+        assert!(api_json["fullBody"].is_null());
+        assert!(api_json["fo"].is_null());
         assert_eq!(
             api_json["customerId"],
             "adcdd125-7101-4e93-ba4d-c9a7fe9fca1f"

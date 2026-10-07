@@ -21,12 +21,14 @@ use super::types::{AssignmentRow, OrderRow, ProgressRow, RepairRow, StageRow};
 // frontend); otherwise no progress recorded yet is 'Not started'; otherwise
 // the next stage's name. It intentionally computes its own effective
 // production location (explicit `production_branch_id`, falling back to the
-// single-stock-location inference) via a lateral subquery scoped to this
-// expression alone — the plain `production_location_id`/`production_location`
-// columns below stay the raw explicit-only join, unchanged, because
+// single-stock-location inference) via a lateral subquery — the plain
+// `production_location_id`/`production_location` columns below stay the raw
+// explicit-only join, unchanged, because
 // `service::effective_production` still needs to tell an explicit assignment
 // apart from an inferred one for display (`productionLocationInferred`). The
-// two must not be conflated.
+// two must not be conflated. `effective_production_location` is the same
+// fallback as a displayable column, so the Production filter matches what the
+// table shows rather than only explicitly assigned rows.
 const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
@@ -48,11 +50,18 @@ const SPEC: ListSpec = ListSpec {
             o.collar,
             o.sleeve,
             o.patti,
+            o.emd,
             o.more_details,
             o.production_branch_id AS production_location_id,
             prod.name AS production_location,
             i.branch_id AS receiving_location_id,
             recv.name AS receiving_location,
+            -- What the table shows and filters on: the explicit assignment
+            -- when staff set one, otherwise the single-stock-location
+            -- inference below (the same material location the Made At picker
+            -- draws from). Filtering on the effective value keeps the filter
+            -- consistent with the displayed location.
+            COALESCE(prod.name, inferred.branch_name) AS effective_production_location,
             i.total_price::float8 AS invoice_total_price,
             pay.paid AS invoice_amount_paid,
             pay.status AS invoice_payment_status,
@@ -102,10 +111,12 @@ const SPEC: ListSpec = ListSpec {
             LIMIT 1
         ) method ON true
         -- Single-stock-location inference, scoped to this order's material,
-        -- for the `current_stage` expression only — mirrors
+        -- for the `current_stage` expression and the effective production
+        -- location above — mirrors
         -- `single_stock_locations`/`effective_production` in Rust.
         LEFT JOIN LATERAL (
-            SELECT (array_agg(ms.branch_id))[1] AS branch_id
+            SELECT (array_agg(ms.branch_id))[1] AS branch_id,
+                   (array_agg(b.name))[1] AS branch_name
             FROM material_stock ms
             JOIN branch b ON b.id = ms.branch_id
             WHERE ms.material_id = o.material_id
@@ -180,6 +191,14 @@ const SPEC: ListSpec = ListSpec {
             ColumnDef::new("payment_method", ColumnKind::Text),
         ),
         ("stage", ColumnDef::new("current_stage", ColumnKind::Text)),
+        (
+            "receivingLocation",
+            ColumnDef::new("receiving_location", ColumnKind::Text),
+        ),
+        (
+            "productionLocation",
+            ColumnDef::new("effective_production_location", ColumnKind::Text),
+        ),
     ],
     default_order: "id DESC",
 };

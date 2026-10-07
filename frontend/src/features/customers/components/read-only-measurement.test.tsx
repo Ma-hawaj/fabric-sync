@@ -30,7 +30,7 @@ describe('ReadOnlyMeasurement', () => {
       lengthBl: null,
       chest: null,
       waist: null,
-      sidePocket: null,
+      sidePocketLength: null,
     } as unknown as Measurement
 
     render(<ReadOnlyMeasurement measurement={measurement} />)
@@ -46,13 +46,13 @@ describe('ReadOnlyMeasurement', () => {
         measurement={{
           ...blankMeasurement(),
           lengthFl: 120,
-          sidePocket: 'Both',
+          sidePocketLength: 9,
         }}
       />,
     )
 
     expect(screen.queryByText('Length (Front)')).toBeTruthy()
-    expect(screen.queryByText('Side Pocket')).toBeTruthy()
+    expect(screen.queryByText('Side Pocket Length')).toBeTruthy()
     expect(screen.queryByText('Chest')).toBeNull()
   })
 })

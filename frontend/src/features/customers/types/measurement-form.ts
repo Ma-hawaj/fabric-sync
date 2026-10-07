@@ -14,17 +14,29 @@ export interface MeasurementDraft {
   waist: NumberInput
   hips: NumberInput
   shoulder: NumberInput
+  shoulderDown: NumberInput
   sleeveLength: NumberInput
   neck: NumberInput
   openHand: NumberInput
+  openHandFolding: NumberInput
   chestUp: NumberInput
   cuffWidth: NumberInput
+  cuffling: NumberInput
   neckWidth: NumberInput
-  aramHole: NumberInput
+  armHole: NumberInput
   foWidth: NumberInput
-  frantPocketLength: NumberInput
-  farntPocketLengthByWidth: string
-  sidePocket: string
+  fo: NumberInput
+  sleeveHalf: NumberInput
+  button: NumberInput
+  buttonFold: NumberInput
+  openFold: NumberInput
+  bottom: NumberInput
+  bottomFolding: NumberInput
+  fullBody: NumberInput
+  frontPocketLength: NumberInput
+  frontPocketLengthByWidth: string
+  sidePocketLength: NumberInput
+  sidePocketLengthByWidth: string
   mobilePocketLengthByWidth: string
 }
 
@@ -38,17 +50,29 @@ export function createEmptyMeasurement(): MeasurementDraft {
     waist: '',
     hips: '',
     shoulder: '',
+    shoulderDown: '',
     sleeveLength: '',
     neck: '',
     openHand: '',
+    openHandFolding: '',
     chestUp: '',
     cuffWidth: '',
+    cuffling: '',
     neckWidth: '',
-    aramHole: '',
+    armHole: '',
     foWidth: '',
-    frantPocketLength: '',
-    farntPocketLengthByWidth: '',
-    sidePocket: '',
+    fo: '',
+    sleeveHalf: '',
+    button: '',
+    buttonFold: '',
+    openFold: '',
+    bottom: '',
+    bottomFolding: '',
+    fullBody: '',
+    frontPocketLength: '',
+    frontPocketLengthByWidth: '',
+    sidePocketLength: '',
+    sidePocketLengthByWidth: '',
     mobilePocketLengthByWidth: '',
   }
 }

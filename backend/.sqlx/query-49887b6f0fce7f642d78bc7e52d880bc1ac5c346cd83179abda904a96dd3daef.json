@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE customers\n        SET name = COALESCE($2, name),\n            mobile_no = COALESCE($3, mobile_no)\n        WHERE id = $1\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "49887b6f0fce7f642d78bc7e52d880bc1ac5c346cd83179abda904a96dd3daef"
+}

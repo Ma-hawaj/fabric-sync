@@ -108,7 +108,7 @@ pub struct OrderRow {
     pub order_number: i64,
     pub invoice_id: Uuid,
     pub invoice_number: i64,
-    pub invoice_date: NaiveDate,
+    pub invoice_date: DateTime<Utc>,
     pub measurement_id: Uuid,
     pub customer_name: String,
     pub customer_mobile: String,
@@ -126,6 +126,7 @@ pub struct OrderRow {
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub patti: Option<String>,
+    pub emd: Option<String>,
     pub more_details: Option<String>,
     pub production_location_id: Option<Uuid>,
     pub production_location: Option<String>,
@@ -200,7 +201,7 @@ pub struct OrderListItem {
     /// The parent invoice's number, carried on the list row so the orders
     /// table can show both numbers without a second lookup.
     pub invoice_number: i64,
-    pub invoice_date: NaiveDate,
+    pub invoice_date: DateTime<Utc>,
     pub measurement_id: Uuid,
     pub customer_name: String,
     pub customer_mobile: String,
@@ -217,6 +218,7 @@ pub struct OrderListItem {
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub patti: Option<String>,
+    pub emd: Option<String>,
     /// Free-text line note, printed beneath the design chips on the document.
     pub more_details: Option<String>,
     /// Where the garment is made. Only when this differs from the receiving

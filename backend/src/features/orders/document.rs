@@ -13,7 +13,7 @@ use serde::Serialize;
 
 use crate::{
     config::InvoiceBranding,
-    document::{format_amount, format_quantity, CURRENCY},
+    document::{format_amount, format_datetime, format_quantity, CURRENCY},
     error::AppError,
     state::AppState,
 };
@@ -31,16 +31,25 @@ const TEMPLATE_NAME: &str = "order.html";
 /// order as the invoice document, so the two papers read the same way. A
 /// stored value that matches nothing (orders that predate the catalog) prints
 /// as a text-only chip rather than disappearing.
-const SLOT_TITLES: [(&str, &str); 5] = [
+const SLOT_TITLES: [(&str, &str); 6] = [
     ("النوع", "Thobe"),
     ("الياقة", "Collar"),
     ("الكم", "Sleeve"),
     ("الجيب", "Pocket"),
     ("الباتي", "Patti"),
+    ("EMD", "EMD"),
 ];
 
-/// Which catalog section a slot's values are drawn from.
-const SLOT_SECTIONS: [&str; 5] = ["thob_type", "neck", "sleeve", "front_pocket", "patti"];
+/// Which catalog section a slot's values are drawn from. EMD has no catalog
+/// section — its chip always renders text-only.
+const SLOT_SECTIONS: [&str; 6] = [
+    "thob_type",
+    "neck",
+    "sleeve",
+    "front_pocket",
+    "patti",
+    "emd",
+];
 
 /// One chip: a title, the resolved label and, when a catalog asset exists, a
 /// self-contained `data:` URI for its image. Serialized camelCase — the
@@ -73,6 +82,7 @@ fn design_value(order: &OrderListItem, slot: usize) -> Option<&str> {
         2 => order.sleeve.as_deref(),
         3 => order.f_pocket.as_deref(),
         4 => order.patti.as_deref(),
+        5 => order.emd.as_deref(),
         _ => return None,
     };
     let value = value?.trim();
@@ -139,6 +149,9 @@ pub async fn render_order_document(
 
     Ok(template.render(context! {
         order => minijinja::Value::from_serialize(&detail),
+        // The parent invoice's creation moment, with the time of day —
+        // pre-formatted, since the raw timestamp serializes as RFC 3339.
+        invoice_date_time => format_datetime(&detail.order.invoice_date),
         company => minijinja::Value::from_serialize(branding),
         currency => CURRENCY,
         // Amounts are pre-formatted rather than left to the template, so that
@@ -217,6 +230,7 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
     push_number(&mut values, "lengthFl", m.length_fl);
     push_number(&mut values, "lengthBl", m.length_bl);
     push_number(&mut values, "shoulder", m.shoulder);
+    push_number(&mut values, "shoulderDown", m.shoulder_down);
     push_number(&mut values, "chest", m.chest);
     push_number(&mut values, "chestUp", m.chest_up);
     push_number(&mut values, "waist", m.waist);
@@ -225,17 +239,32 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
     push_number(&mut values, "neck", m.neck);
     push_number(&mut values, "neckWidth", m.neck_width);
     push_number(&mut values, "openHand", m.open_hand);
+    push_number(&mut values, "openHandFolding", m.open_hand_folding);
     push_number(&mut values, "cuffWidth", m.cuff_width);
-    push_number(&mut values, "aramHole", m.aram_hole);
+    push_number(&mut values, "cuffling", m.cuffling);
+    push_number(&mut values, "armHole", m.arm_hole);
     push_number(&mut values, "foWidth", m.fo_width);
-    push_number(&mut values, "frantPocketLength", m.frant_pocket_length);
+    push_number(&mut values, "fo", m.fo);
+    push_number(&mut values, "bottom", m.bottom);
+    push_number(&mut values, "bottomFolding", m.bottom_folding);
+    push_number(&mut values, "fullBody", m.full_body);
+    push_number(&mut values, "sleeveHalf", m.sleeve_half);
+    push_number(&mut values, "button", m.button);
+    push_number(&mut values, "buttonFold", m.button_fold);
+    push_number(&mut values, "openFold", m.open_fold);
+    push_number(&mut values, "frontPocketLength", m.front_pocket_length);
 
     push_text(
         &mut values,
-        "farntPocketLengthByWidth",
-        &m.farnt_pocket_length_by_width,
+        "frontPocketLengthByWidth",
+        &m.front_pocket_length_by_width,
     );
-    push_text(&mut values, "sidePocket", &m.side_pocket);
+    push_number(&mut values, "sidePocketLength", m.side_pocket_length);
+    push_text(
+        &mut values,
+        "sidePocketLengthByWidth",
+        &m.side_pocket_length_by_width,
+    );
     push_text(
         &mut values,
         "mobilePocketLengthByWidth",
@@ -250,7 +279,7 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
 //
 // Both the frontend (`thob-diagram.tsx` / `thob-sketch.ts` / `measurement-fields.ts`)
 // and this document draw the garment from a file-for-file identical geometry
-// and field split: 11 measurements on the front view, 7 on the back. Change a
+// and field split: 20 measurements on the front view, 10 on the back. Change a
 // marker here and the same edit must land in the frontend, or the printed
 // arrows and the screen arrows will disagree. The caption layout is mirrored
 // from `layoutCaptions` in `thob-diagram.tsx` — captions are placed
@@ -367,7 +396,7 @@ fn field(
     }
 }
 
-/// All 18 measurements, in the same order and with the same geometry as
+/// All 30 measurements, in the same order and with the same geometry as
 /// `MEASUREMENT_FIELDS` on the frontend.
 fn thob_fields() -> Vec<FieldDef> {
     let mut length_fl = marker((60.0, 238.0));
@@ -390,6 +419,12 @@ fn thob_fields() -> Vec<FieldDef> {
         segment(180.0, 58.0, 180.0, 26.0),
         segment(300.0, 58.0, 300.0, 26.0),
     ];
+
+    // How far the shoulder slopes down from the neck — drawn as a short
+    // vertical drop at the shoulder point, next to the shoulder width arrow.
+    let mut shoulder_down = marker((348.0, 70.0));
+    shoulder_down.dims = vec![segment(300.0, 60.0, 300.0, 80.0)];
+    shoulder_down.guides = vec![segment(300.0, 70.0, 330.0, 70.0)];
 
     let mut chest = marker((240.0, 150.0));
     chest.dims = vec![segment(190.0, 150.0, 290.0, 150.0)];
@@ -414,35 +449,58 @@ fn thob_fields() -> Vec<FieldDef> {
         segment(258.0, 48.0, 258.0, 30.0),
     ];
 
-    let mut aram_hole = marker((212.0, 101.0));
-    aram_hole.dims = vec![segment(182.0, 65.0, 190.0, 144.0)];
+    let mut arm_hole = marker((212.0, 101.0));
+    arm_hole.dims = vec![segment(182.0, 65.0, 190.0, 144.0)];
 
     let mut sleeve_length = marker((370.0, 140.0));
     sleeve_length.dims = vec![segment(317.0, 55.0, 371.0, 247.0)];
+
+    // The half-sleeve measure runs inside the sleeve, parallel to its length.
+    let mut sleeve_half = marker((288.0, 158.0));
+    sleeve_half.dims = vec![segment(308.0, 85.0, 352.0, 232.0)];
+    sleeve_half.guides = vec![segment(330.0, 158.0, 306.0, 158.0)];
 
     let mut open_hand = marker((128.0, 306.0));
     open_hand.dims = vec![segment(119.0, 266.0, 149.0, 282.0)];
     open_hand.guides = vec![segment(134.0, 275.0, 130.0, 296.0)];
 
+    // The fold at the cuff opening — a short arrow across the cuff band,
+    // just above the open-hand marker.
+    let mut open_hand_folding = marker((100.0, 252.0));
+    open_hand_folding.dims = vec![segment(126.0, 238.0, 152.0, 251.0)];
+    open_hand_folding.guides = vec![segment(139.0, 244.0, 116.0, 250.0)];
+
     let mut cuff_width = marker((78.0, 212.0));
     cuff_width.shapes = vec![THOB_CUFFS];
 
-    let mut frant_pocket_length = marker((110.0, 180.0));
-    frant_pocket_length.dims = vec![segment(180.0, 116.0, 180.0, 158.0)];
-    frant_pocket_length.guides = vec![
+    // The cuffling runs along the left cuff band, just below the cuff-width
+    // callout it belongs to.
+    let mut cuffling = marker((96.0, 232.0));
+    cuffling.dims = vec![segment(133.0, 227.0, 163.0, 243.0)];
+
+    let mut front_pocket_length = marker((110.0, 180.0));
+    front_pocket_length.dims = vec![segment(180.0, 116.0, 180.0, 158.0)];
+    front_pocket_length.guides = vec![
         segment(197.0, 116.0, 180.0, 116.0),
         segment(197.0, 158.0, 180.0, 158.0),
         segment(180.0, 150.0, 130.0, 172.0),
     ];
-    frant_pocket_length.shapes = vec![THOB_CHEST_POCKET];
+    front_pocket_length.shapes = vec![THOB_CHEST_POCKET];
 
-    let mut farnt_pocket_length_by_width = marker((108.0, 88.0));
-    farnt_pocket_length_by_width.shapes = vec![THOB_CHEST_POCKET];
-    farnt_pocket_length_by_width.guides = vec![segment(197.0, 120.0, 140.0, 96.0)];
+    let mut front_pocket_length_by_width = marker((108.0, 88.0));
+    front_pocket_length_by_width.shapes = vec![THOB_CHEST_POCKET];
+    front_pocket_length_by_width.guides = vec![segment(197.0, 120.0, 140.0, 96.0)];
 
-    let mut side_pocket = marker((382.0, 260.0));
-    side_pocket.shapes = vec![THOB_SIDE_POCKETS];
-    side_pocket.guides = vec![segment(300.0, 260.0, 346.0, 260.0)];
+    // The side pocket's length runs down the left side seam, mirroring the
+    // front pocket's length arrow on the chest pocket.
+    let mut side_pocket_length = marker((108.0, 265.0));
+    side_pocket_length.dims = vec![segment(176.0, 240.0, 176.0, 290.0)];
+    side_pocket_length.guides = vec![segment(176.0, 265.0, 140.0, 265.0)];
+
+    // The length-by-width, called out on the seam like the front pocket's.
+    let mut side_pocket_length_by_width = marker((110.0, 308.0));
+    side_pocket_length_by_width.shapes = vec![THOB_SIDE_POCKETS];
+    side_pocket_length_by_width.guides = vec![segment(178.0, 280.0, 140.0, 300.0)];
 
     let mut mobile_pocket_length_by_width = marker((380.0, 222.0));
     mobile_pocket_length_by_width.shapes = vec![THOB_MOBILE_POCKET];
@@ -452,17 +510,65 @@ fn thob_fields() -> Vec<FieldDef> {
     fo_width.dims = vec![segment(234.0, 192.0, 246.0, 192.0)];
     fo_width.guides = vec![segment(240.0, 196.0, 166.0, 224.0)];
 
+    // Fo sits just above its width on the placket, sharing the same leader
+    // direction so the two captions stack without overlapping.
+    let mut fo = marker((130.0, 204.0));
+    fo.dims = vec![segment(234.0, 168.0, 246.0, 168.0)];
+    fo.guides = vec![segment(240.0, 172.0, 166.0, 198.0)];
+
+    // Hem width across the bottom of the thob.
+    let mut bottom = marker((240.0, 460.0));
+    bottom.dims = vec![segment(166.0, 430.0, 314.0, 430.0)];
+    bottom.guides = vec![segment(240.0, 430.0, 240.0, 450.0)];
+
+    // The hem fold depth — a short vertical arrow at the right hem corner,
+    // under the hem width arrow.
+    let mut bottom_folding = marker((384.0, 419.0));
+    bottom_folding.dims = vec![segment(314.0, 408.0, 314.0, 430.0)];
+    bottom_folding.guides = vec![segment(314.0, 419.0, 352.0, 419.0)];
+
+    // The button stand runs down the placket, with its fold as a short
+    // arrow at the foot of the stand.
+    let mut button = marker((308.0, 141.0));
+    button.dims = vec![segment(258.0, 96.0, 258.0, 186.0)];
+    button.guides = vec![segment(258.0, 141.0, 290.0, 141.0)];
+
+    let mut button_fold = marker((310.0, 197.0));
+    button_fold.dims = vec![segment(258.0, 190.0, 258.0, 204.0)];
+    button_fold.guides = vec![segment(258.0, 197.0, 292.0, 197.0)];
+
+    // The open fold sits low on the front panel, clear of the hem arrows.
+    let mut open_fold = marker((140.0, 407.0));
+    open_fold.dims = vec![segment(200.0, 400.0, 200.0, 414.0)];
+    open_fold.guides = vec![segment(200.0, 407.0, 160.0, 407.0)];
+
+    // Full body: the shoulder-to-hem run on the right of the garment, kept
+    // clear of the left-side front-length arrow.
+    let mut full_body = marker((332.0, 238.0));
+    full_body.dims = vec![segment(332.0, 46.0, 332.0, 430.0)];
+    full_body.guides = vec![
+        segment(328.0, 46.0, 300.0, 46.0),
+        segment(328.0, 430.0, 314.0, 430.0),
+    ];
+
     vec![
         field("lengthFl", "Front Length", true, ThobView::Front, length_fl),
         field("lengthBl", "Back Length", true, ThobView::Back, length_bl),
         field("shoulder", "Shoulder", true, ThobView::Front, shoulder),
+        field(
+            "shoulderDown",
+            "Shoulder Down",
+            true,
+            ThobView::Front,
+            shoulder_down,
+        ),
         field("chest", "Chest", true, ThobView::Front, chest),
         field("chestUp", "Chest Up", true, ThobView::Front, chest_up),
         field("waist", "Waist", true, ThobView::Front, waist),
         field("hips", "Hips", true, ThobView::Front, hips),
         field("neck", "Neck", true, ThobView::Back, neck),
         field("neckWidth", "Neck W", true, ThobView::Back, neck_width),
-        field("aramHole", "Armhole", true, ThobView::Back, aram_hole),
+        field("armHole", "Armhole", true, ThobView::Back, arm_hole),
         field(
             "sleeveLength",
             "Sleeve",
@@ -470,28 +576,50 @@ fn thob_fields() -> Vec<FieldDef> {
             ThobView::Back,
             sleeve_length,
         ),
-        field("openHand", "Open Hand", true, ThobView::Back, open_hand),
-        field("cuffWidth", "Cuff W", true, ThobView::Back, cuff_width),
         field(
-            "frantPocketLength",
+            "sleeveHalf",
+            "Sleeve Half",
+            true,
+            ThobView::Back,
+            sleeve_half,
+        ),
+        field("openHand", "Open Hand", true, ThobView::Back, open_hand),
+        field(
+            "openHandFolding",
+            "Open Hand Folding",
+            true,
+            ThobView::Back,
+            open_hand_folding,
+        ),
+        field("cuffWidth", "Cuff W", true, ThobView::Back, cuff_width),
+        field("cuffling", "Cuffling", true, ThobView::Back, cuffling),
+        field(
+            "frontPocketLength",
             "Front Pocket",
             true,
             ThobView::Front,
-            frant_pocket_length,
+            front_pocket_length,
         ),
         field(
-            "farntPocketLengthByWidth",
+            "frontPocketLengthByWidth",
             "Pocket L×W",
             false,
             ThobView::Front,
-            farnt_pocket_length_by_width,
+            front_pocket_length_by_width,
         ),
         field(
-            "sidePocket",
+            "sidePocketLength",
             "Side Pocket",
+            true,
+            ThobView::Front,
+            side_pocket_length,
+        ),
+        field(
+            "sidePocketLengthByWidth",
+            "Side L×W",
             false,
             ThobView::Front,
-            side_pocket,
+            side_pocket_length_by_width,
         ),
         field(
             "mobilePocketLengthByWidth",
@@ -501,6 +629,25 @@ fn thob_fields() -> Vec<FieldDef> {
             mobile_pocket_length_by_width,
         ),
         field("foWidth", "Fo Width", true, ThobView::Front, fo_width),
+        field("fo", "Fo", true, ThobView::Front, fo),
+        field("button", "Button", true, ThobView::Front, button),
+        field(
+            "buttonFold",
+            "Button Fold",
+            true,
+            ThobView::Front,
+            button_fold,
+        ),
+        field("openFold", "Open Fold", true, ThobView::Front, open_fold),
+        field("bottom", "Bottom", true, ThobView::Front, bottom),
+        field(
+            "bottomFolding",
+            "Bottom Folding",
+            true,
+            ThobView::Front,
+            bottom_folding,
+        ),
+        field("fullBody", "Full Body", true, ThobView::Front, full_body),
     ]
 }
 
@@ -715,8 +862,7 @@ mod tests {
         let mut measurement = tests_support::measurement();
         measurement.length_bl = Some(124.0);
         measurement.waist = Some(38.5);
-        measurement.side_pocket = Some("Both".to_string());
-        measurement.farnt_pocket_length_by_width = Some("No 16x14".to_string());
+        measurement.front_pocket_length_by_width = Some("No 16x14".to_string());
         let detail = OrderDetail {
             order: services_order(),
             invoice_number: 7,
@@ -749,22 +895,21 @@ mod tests {
         // id prefix.
         assert!(html.contains("ORD-12"));
         // Recorded numeric values ride the captions, whole numbers trimmed,
-        // each paired with its short diagram label.
+        // each with its short diagram label.
         assert!(html.contains("120 inch · Front Length"));
         assert!(html.contains("124 inch · Back Length"));
         assert!(html.contains("60 inch · Sleeve"));
         assert!(html.contains("38.5 inch · Waist"));
-        // Text and select values are already self-describing — no "inch".
-        assert!(html.contains("Both · Side Pocket"));
+        // Text values are already self-describing — no "inch".
         assert!(!html.contains("No inch"));
         // Unrecorded fields are omitted from the diagram: no caption box, no
         // arrow, no stray label on the silhouette.
         assert!(!html.contains("Front Pocket"));
         assert!(!html.contains("Fo Width"));
-        // Exactly the seven recorded fields are called out: 5 on the front
-        // view (lengthFl, chest, waist, farntPocketLengthByWidth, sidePocket)
+        // Exactly the six recorded fields are called out: 4 on the front
+        // view (lengthFl, chest, waist, frontPocketLengthByWidth)
         // and 2 on the back (lengthBl, sleeveLength).
-        assert_eq!(html.matches("thob-callout").count(), 7);
+        assert_eq!(html.matches("thob-callout").count(), 6);
     }
 
     #[test]
@@ -775,17 +920,30 @@ mod tests {
         order.sleeve = Some("open".to_string());
         order.f_pocket = Some("round".to_string());
         order.patti = Some("normal".to_string());
+        order.emd = Some("6".to_string());
 
         let chips = order_designs(&order);
         assert_eq!(
             chips.iter().map(|c| c.title_en).collect::<Vec<_>>(),
-            vec!["Thobe", "Collar", "Sleeve", "Pocket", "Patti"]
+            vec!["Thobe", "Collar", "Sleeve", "Pocket", "Patti", "EMD"]
         );
         // Catalog slugs resolve to their display labels.
         assert_eq!(
             chips.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(),
-            vec!["Thobx", "3", "Open", "Round", "Normal"]
+            vec!["Thobx", "3", "Open", "Round", "Normal", "6"]
         );
+    }
+
+    #[test]
+    fn emd_has_no_catalog_section_so_it_prints_text_only() {
+        let mut order = services_order();
+        order.emd = Some("6".to_string());
+
+        let chips = order_designs(&order);
+        assert_eq!(chips.len(), 1);
+        assert_eq!(chips[0].title_en, "EMD");
+        assert_eq!(chips[0].label, "6");
+        assert!(chips[0].image.is_none());
     }
 
     #[test]
@@ -939,7 +1097,8 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         order_number: 12,
         invoice_id: uuid::Uuid::nil(),
         invoice_number: 7,
-        invoice_date: chrono::NaiveDate::from_ymd_opt(2026, 7, 30).unwrap(),
+        invoice_date: chrono::TimeZone::with_ymd_and_hms(&chrono::Utc, 2026, 7, 30, 9, 30, 0)
+            .unwrap(),
         measurement_id: uuid::Uuid::nil(),
         customer_name: "Ahmed".to_string(),
         customer_mobile: "+973 0000".to_string(),
@@ -952,6 +1111,7 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         collar: None,
         sleeve: None,
         patti: None,
+        emd: None,
         more_details: None,
         production_location_id: None,
         production_location: None,
@@ -985,17 +1145,29 @@ mod tests_support {
             waist: None,
             hips: None,
             shoulder: None,
+            shoulder_down: None,
             sleeve_length: Some(60.0),
             neck: None,
             open_hand: None,
+            open_hand_folding: None,
             chest_up: None,
             cuff_width: None,
+            cuffling: None,
             neck_width: None,
-            aram_hole: None,
+            arm_hole: None,
             fo_width: None,
-            frant_pocket_length: None,
-            farnt_pocket_length_by_width: None,
-            side_pocket: None,
+            fo: None,
+            bottom: None,
+            bottom_folding: None,
+            full_body: None,
+            sleeve_half: None,
+            button: None,
+            button_fold: None,
+            open_fold: None,
+            front_pocket_length: None,
+            front_pocket_length_by_width: None,
+            side_pocket_length: None,
+            side_pocket_length_by_width: None,
             mobile_pocket_length_by_width: None,
         }
     }
