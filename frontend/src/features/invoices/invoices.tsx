@@ -8,6 +8,7 @@ import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getInvoiceColumns } from './components/invoice-columns'
 import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
+import { RecordPaymentDialog } from './components/record-payment-dialog'
 import { useListParams } from '@/hooks/use-list-params'
 import { useInvoices } from './hooks/use-invoices'
 import { useMaterials } from './hooks/use-materials'
@@ -20,7 +21,10 @@ import { printInvoiceDocument } from './lib/print-invoice'
 import type { Invoice } from './types/invoices'
 
 export function InvoicesPage() {
-  const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(
+  const [receiveInvoice, setReceiveInvoice] = React.useState<Invoice | null>(
+    null,
+  )
+  const [paymentInvoice, setPaymentInvoice] = React.useState<Invoice | null>(
     null,
   )
   const navigate = useNavigate()
@@ -56,7 +60,7 @@ export function InvoicesPage() {
       names.map((name) => ({ label: name, value: name })),
       receiving,
       production,
-      setSelectedInvoice,
+      setReceiveInvoice,
       (invoice) =>
         void navigate({
           to: '/invoices/$invoiceId',
@@ -68,6 +72,7 @@ export function InvoicesPage() {
           to: '/invoices/$invoiceId/edit',
           params: { invoiceId: invoice.id },
         }),
+      setPaymentInvoice,
     )
   }, [materials, locations, exportPdf, navigate])
 
@@ -112,8 +117,12 @@ export function InvoicesPage() {
       )}
 
       <ReceiveInvoiceDialog
-        invoice={selectedInvoice}
-        onOpenChange={(open) => !open && setSelectedInvoice(null)}
+        invoice={receiveInvoice}
+        onOpenChange={(open) => !open && setReceiveInvoice(null)}
+      />
+      <RecordPaymentDialog
+        invoice={paymentInvoice}
+        onOpenChange={(open) => !open && setPaymentInvoice(null)}
       />
     </div>
   )

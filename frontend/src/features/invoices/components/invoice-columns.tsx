@@ -1,6 +1,12 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { Link } from '@tanstack/react-router'
-import { EyeIcon, FileDownIcon, CheckIcon, PencilIcon } from 'lucide-react'
+import {
+  EyeIcon,
+  FileDownIcon,
+  CheckIcon,
+  PencilIcon,
+  WalletIcon,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
@@ -44,6 +50,7 @@ export const getInvoiceColumns = (
   onViewDetails: (invoice: Invoice) => void,
   onExportPdf: (invoice: Invoice) => void,
   onEdit: (invoice: Invoice) => void,
+  onRecordPayment: (invoice: Invoice) => void,
 ): ColumnDef<Invoice, any>[] => [
   {
     accessorKey: 'id',
@@ -310,12 +317,21 @@ export const getInvoiceColumns = (
               onClick: () => onEdit(invoice),
             },
             {
+              // Money without collecting anything: an advance now, or the
+              // remainder after everything was already collected. Disabled
+              // once nothing is left to pay.
+              label: 'Record Payment',
+              icon: WalletIcon,
+              disabled: invoice.balanceDue <= 0,
+              onClick: () => onRecordPayment(invoice),
+              separatorBefore: true,
+            },
+            {
               // Always available: on a paid invoice this just collects the
               // orders without taking money.
               label: 'Mark Received',
               icon: CheckIcon,
               onClick: () => onReceive(invoice),
-              separatorBefore: true,
             },
           ]}
         />
