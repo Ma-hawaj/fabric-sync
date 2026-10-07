@@ -30,6 +30,10 @@ impl AppState {
         self.config.port
     }
 
+    pub fn static_dir(&self) -> &str {
+        &self.config.static_dir
+    }
+
     pub fn token_introspection(&self) -> &TokenIntrospection {
         &self.token_introspection
     }
