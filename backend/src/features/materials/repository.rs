@@ -137,6 +137,47 @@ pub async fn add_stock(
     Ok(())
 }
 
+// Takes stock off, one guarded statement per location — the same atomic
+// check-and-decrement shape as `decrement_stock`, but as a standalone call
+// rather than inside an invoice's transaction. Returns the branch ids the
+// guard refused (no row there, or not enough of it); the caller reports them
+// and the transaction is dropped uncommitted, so a removal is all-or-nothing.
+pub async fn remove_stock(
+    state: &AppState,
+    material_id: Uuid,
+    entries: &[StockEntryInput],
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    let mut tx = state.db().begin().await?;
+
+    let mut refused = Vec::new();
+    for entry in entries {
+        let result = sqlx::query!(
+            r#"
+            UPDATE material_stock
+            SET quantity = quantity - $3::float8
+            WHERE material_id = $1
+              AND branch_id = $2
+              AND quantity >= $3::float8
+            "#,
+            material_id,
+            entry.location_id,
+            entry.quantity,
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            refused.push(entry.location_id);
+        }
+    }
+
+    if refused.is_empty() {
+        tx.commit().await?;
+    }
+
+    Ok(refused)
+}
+
 // Tx-scoped so invoice creation can consume material inside its own
 // transaction, the way products_repository::decrement_stock is shared with
 // invoices.
