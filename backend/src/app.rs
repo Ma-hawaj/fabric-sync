@@ -1,5 +1,8 @@
-use axum::{middleware, Router};
-use tower_http::cors::{Any, CorsLayer};
+use axum::{http::StatusCode, middleware, Router};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    services::{ServeDir, ServeFile},
+};
 
 use crate::{
     auth,
@@ -21,8 +24,14 @@ pub fn router(state: AppState) -> Router {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    Router::new()
-        .merge(health::router())
+    // Every domain API lives under `/api` so the same origin can also serve
+    // the SPA: the frontend is built with `VITE_API_BASE_URL=/api` and calls
+    // `/api/customers` etc., while the static files own every other path.
+    // Nesting (rather than prefixing each feature router) keeps the feature
+    // modules untouched — they keep declaring bare `/customers`-style paths.
+    // The inner fallback keeps unknown `/api/*` paths a 404 instead of
+    // falling through to the SPA's `index.html`.
+    let api = Router::new()
         .merge(
             customers::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
@@ -79,6 +88,24 @@ pub fn router(state: AppState) -> Router {
                 auth::require_auth,
             )),
         )
+        .fallback(|| async { (StatusCode::NOT_FOUND, "not found") });
+
+    // The built SPA (`vite build` output, see STATIC_DIR). Unknown non-API
+    // paths fall back to `index.html` so client-side routing (TanStack
+    // Router) handles them; a missing directory simply 404s everything
+    // except the API (plain `cargo run` without a frontend build).
+    //
+    // This is `fallback`, not `not_found_service`: the latter forces the
+    // response status to 404 (meant for custom not-found pages), while the
+    // SPA entry point must answer 200 for client-side routes.
+    let static_dir = state.static_dir().to_string();
+    let index = format!("{static_dir}/index.html");
+    let spa = ServeDir::new(&static_dir).fallback(ServeFile::new(&index));
+
+    Router::new()
+        .merge(health::router())
+        .nest("/api", api)
+        .fallback_service(spa)
         .layer(cors)
         // Outermost layer: wraps every `require_auth` route layer below (and
         // `/health`, which has none), so it's `Span::current()` for the whole

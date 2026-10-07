@@ -1,0 +1,9 @@
+.git
+.env
+Desion.pdf
+2026 Orders.xlsm
+backend/target
+frontend/node_modules
+frontend/dist
+scripts/fabric-designs/source
+scripts/fabric-designs/review.html
