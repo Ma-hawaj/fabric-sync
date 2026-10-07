@@ -223,3 +223,35 @@ pub async fn create_customer(
 
     Ok(customer_id)
 }
+
+// COALESCE leaves any field the caller omitted untouched, so a partial update
+// stays a single statement rather than a read-modify-write. The full customer
+// (with its measurements JSON) is re-read through the list SPEC afterwards,
+// since `RETURNING` alone can't build that projection.
+pub async fn update_customer(
+    state: &AppState,
+    customer_id: Uuid,
+    name: Option<&str>,
+    mobile_no: Option<&str>,
+) -> Result<Option<Customer>, AppError> {
+    let updated = sqlx::query_scalar!(
+        r#"
+        UPDATE customers
+        SET name = COALESCE($2, name),
+            mobile_no = COALESCE($3, mobile_no)
+        WHERE id = $1
+        RETURNING id
+        "#,
+        customer_id,
+        name,
+        mobile_no,
+    )
+    .fetch_optional(state.db())
+    .await?;
+
+    if updated.is_none() {
+        return Ok(None);
+    }
+
+    get_customer(state, customer_id).await
+}

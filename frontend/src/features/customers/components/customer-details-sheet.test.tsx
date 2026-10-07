@@ -1,9 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { listResponse } from '@/lib/list-fixtures'
 import { CustomerDetailsSheet } from './customer-details-sheet'
 import type { Customer } from '../types/customers'
+
+// The sheet header links to the edit page; stub Link so the test doesn't
+// need a router.
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}))
 
 const CUSTOMER: Customer = {
   id: 'cust-1',
