@@ -24,6 +24,14 @@ pub async fn list_products(
     Ok(Json(service::list_products(&state, &params).await?))
 }
 
+pub async fn get_product(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(product_id): Path<Uuid>,
+) -> Result<Json<Product>, AppError> {
+    Ok(Json(service::get_product(&state, product_id).await?))
+}
+
 pub async fn create_product(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,

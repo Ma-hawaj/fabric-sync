@@ -13,6 +13,8 @@ pub fn router() -> Router<AppState> {
             "/materials",
             get(handlers::list_materials).post(handlers::create_material),
         )
+        .route("/materials/options", get(handlers::material_options))
+        .route("/materials/:id", get(handlers::get_material))
         .route("/materials/:id/stock", post(handlers::add_stock))
         // Taking stock off without deleting the material — wastage, samples,
         // or a correction. Separate from the add above because every entry is

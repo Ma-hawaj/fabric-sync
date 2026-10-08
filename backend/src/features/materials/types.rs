@@ -23,6 +23,17 @@ pub struct Material {
     pub locations: Vec<MaterialLocationStock>,
 }
 
+/// One row of `GET /materials/options` — the minimal shape a picker needs.
+/// Returned unpaginated; the caller searches it client-side.
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterialOption {
+    pub id: Uuid,
+    pub name: String,
+    pub sku: Option<String>,
+    pub unit: String,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StockEntryInput {

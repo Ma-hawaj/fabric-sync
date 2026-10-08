@@ -17,6 +17,19 @@ pub struct Location {
     pub is_active: bool,
 }
 
+/// One row of `GET /locations/options` — the minimal shape a picker needs.
+/// Returned unpaginated and unsorted-by-capability; callers narrow it with
+/// the same capability rules as the full list.
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct LocationOption {
+    pub id: Uuid,
+    pub name: String,
+    pub receives_orders: bool,
+    pub holds_stock: bool,
+    pub is_active: bool,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateLocationInput {

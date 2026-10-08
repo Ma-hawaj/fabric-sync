@@ -28,6 +28,14 @@ pub async fn list_customers(
     Ok(Json(service::list_customers(&state, &params).await?))
 }
 
+pub async fn get_customer(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(customer_id): Path<Uuid>,
+) -> Result<Json<Customer>, AppError> {
+    Ok(Json(service::get_customer(&state, customer_id).await?))
+}
+
 pub async fn create_customer(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,

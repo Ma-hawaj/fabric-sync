@@ -1,7 +1,4 @@
-use axum::{
-    routing::{get, patch},
-    Router,
-};
+use axum::{routing::get, Router};
 
 use crate::state::AppState;
 
@@ -13,5 +10,8 @@ pub fn router() -> Router<AppState> {
             "/customers",
             get(handlers::list_customers).post(handlers::create_customer),
         )
-        .route("/customers/:id", patch(handlers::update_customer))
+        .route(
+            "/customers/:id",
+            get(handlers::get_customer).patch(handlers::update_customer),
+        )
 }

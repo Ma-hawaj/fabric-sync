@@ -7,7 +7,7 @@ import { TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { ApiError } from '@/lib/api'
 import { useCreateLocation } from './hooks/use-create-location'
-import { useAllLocations } from './hooks/use-locations'
+import { useLocation } from './hooks/use-location'
 import { useUpdateLocation } from './hooks/use-update-location'
 import { locationFormSchema } from './lib/location-schema'
 import {
@@ -33,10 +33,7 @@ function usageLabel(
 }
 
 export function LocationFormPage({ locationId }: { locationId?: string }) {
-  const { data: locations, isLoading } = useAllLocations()
-  const existing = locationId
-    ? locations.find((location) => location.id === locationId)
-    : undefined
+  const { data: existing, isLoading, isError } = useLocation(locationId ?? null)
 
   if (locationId && isLoading) {
     return (
@@ -46,7 +43,7 @@ export function LocationFormPage({ locationId }: { locationId?: string }) {
     )
   }
 
-  if (locationId && !existing) {
+  if (locationId && (isError || !existing)) {
     return (
       <div className="text-center text-sm text-muted-foreground py-10">
         That location could not be found.

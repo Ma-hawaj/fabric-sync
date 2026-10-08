@@ -362,6 +362,7 @@ fn assemble_order(
         customer_name: row.customer_name,
         customer_mobile: row.customer_mobile,
         material: row.material,
+        material_sku: row.material_sku,
         material_amount: row.material_amount,
         price: row.price,
         status: row.status,

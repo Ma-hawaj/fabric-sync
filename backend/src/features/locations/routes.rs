@@ -1,7 +1,4 @@
-use axum::{
-    routing::{get, patch},
-    Router,
-};
+use axum::{routing::get, Router};
 
 use crate::state::AppState;
 
@@ -13,5 +10,9 @@ pub fn router() -> Router<AppState> {
             "/locations",
             get(handlers::list_locations).post(handlers::create_location),
         )
-        .route("/locations/:id", patch(handlers::update_location))
+        .route("/locations/options", get(handlers::location_options))
+        .route(
+            "/locations/:id",
+            get(handlers::get_location).patch(handlers::update_location),
+        )
 }

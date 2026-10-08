@@ -24,7 +24,6 @@ import type { InvoiceEditSeeds } from './lib/invoice-edit-mapper'
 import { invoiceFormSchema } from './lib/invoice-schema'
 import { printInvoiceDocument } from './lib/print-invoice'
 import {
-  createEmptyCustomer,
   createEmptyGiftCardLine,
   createEmptyInvoiceForm,
   createEmptyProductLine,
@@ -196,10 +195,6 @@ export function InvoiceForm({
                   form={form as never}
                   customerIndex={index}
                   customerNumber={index + 1}
-                  onCustomerPicked={rememberCustomer}
-                  initialCustomerForId={(id) =>
-                    seeds?.customers.get(id) ?? null
-                  }
                   customerLabelForId={(id) =>
                     seeds?.customerLabels.get(id) ?? null
                   }
@@ -210,20 +205,13 @@ export function InvoiceForm({
                     seeds?.materialLabels.get(id) ?? null
                   }
                   // Removable down to none: an invoice may consist only of
-                  // products or gift cards.
+                  // products or gift cards. Extra blocks only exist on legacy
+                  // multi-customer edits — nothing adds one anymore, the
+                  // invoice has a single customer picked in the summary.
                   removable
                   onRemove={() => customersField.removeValue(index)}
                 />
               ))}
-              <Button
-                variant="outline"
-                type="button"
-                onClick={() => customersField.pushValue(createEmptyCustomer())}
-                className="w-full border-dashed"
-              >
-                <PlusIcon className="h-4 w-4" />
-                Add Customer
-              </Button>
             </div>
           )}
         </form.Field>
@@ -389,6 +377,7 @@ export function InvoiceForm({
           form={form as never}
           customerNames={pickedCustomersRef}
           productNames={pickedProductsRef}
+          onCustomerPicked={rememberCustomer}
           locationLabelForId={(id) => seeds?.locationLabels.get(id) ?? null}
           customerLabelForId={(id) => seeds?.customerLabels.get(id) ?? null}
           paymentsLocked={editing}

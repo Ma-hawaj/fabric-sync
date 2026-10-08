@@ -6,7 +6,7 @@ use crate::{
     state::AppState,
 };
 
-use super::types::{Material, StockEntryInput};
+use super::types::{Material, MaterialOption, StockEntryInput};
 
 // `total_quantity` and `location_names` mirror what the inventory table derives
 // per row in the browser. They are computed by the same `GROUP BY` that builds
@@ -68,6 +68,21 @@ pub async fn get_material(
     material_id: Uuid,
 ) -> Result<Option<Material>, AppError> {
     list::fetch_by_id(state.db(), &SPEC, material_id).await
+}
+
+// Unpaginated id-and-name list for pickers. Plain `query_as` (not the
+// `query_as!` macro) so this adds no compile-time-checked query and needs no
+// `.sqlx` cache entry.
+pub async fn material_options(state: &AppState) -> Result<Vec<MaterialOption>, sqlx::Error> {
+    sqlx::query_as::<_, MaterialOption>(
+        r#"
+        SELECT id, name, sku, unit
+        FROM materials
+        ORDER BY name
+        "#,
+    )
+    .fetch_all(state.db())
+    .await
 }
 
 async fn upsert_stock(
