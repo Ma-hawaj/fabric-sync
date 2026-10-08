@@ -8,7 +8,7 @@ use crate::{
 
 use super::{
     repository,
-    types::{CreateLocationInput, Location, LocationOption, UpdateLocationInput},
+    types::{CreateLocationInput, Location, UpdateLocationInput},
 };
 
 fn normalized_name(name: &str) -> Result<String, AppError> {
@@ -46,10 +46,6 @@ pub async fn get_location(state: &AppState, location_id: Uuid) -> Result<Locatio
     repository::get_location(state, location_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("location {location_id} not found")))
-}
-
-pub async fn location_options(state: &AppState) -> Result<Vec<LocationOption>, AppError> {
-    Ok(repository::location_options(state).await?)
 }
 
 pub async fn create_location(

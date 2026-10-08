@@ -10,7 +10,6 @@ pub fn router() -> Router<AppState> {
             "/locations",
             get(handlers::list_locations).post(handlers::create_location),
         )
-        .route("/locations/options", get(handlers::location_options))
         .route(
             "/locations/:id",
             get(handlers::get_location).patch(handlers::update_location),

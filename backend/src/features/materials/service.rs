@@ -8,7 +8,7 @@ use crate::{
 
 use super::{
     repository,
-    types::{AddStockInput, CreateMaterialInput, Material, MaterialOption, StockEntryInput},
+    types::{AddStockInput, CreateMaterialInput, Material, StockEntryInput},
 };
 
 pub async fn list_materials(
@@ -22,10 +22,6 @@ pub async fn get_material(state: &AppState, material_id: Uuid) -> Result<Materia
     repository::get_material(state, material_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("material {material_id} not found")))
-}
-
-pub async fn material_options(state: &AppState) -> Result<Vec<MaterialOption>, AppError> {
-    Ok(repository::material_options(state).await?)
 }
 
 pub async fn create_material(

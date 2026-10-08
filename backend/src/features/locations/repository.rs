@@ -6,7 +6,7 @@ use crate::{
     state::AppState,
 };
 
-use super::types::{Location, LocationOption};
+use super::types::Location;
 
 // `uses` and `status` exist only to be filtered on: the list page offers them as
 // multi-selects over what are really booleans, so the projection happens here
@@ -62,21 +62,6 @@ pub async fn get_location(
     location_id: Uuid,
 ) -> Result<Option<Location>, AppError> {
     list::fetch_by_id(state.db(), &SPEC, location_id).await
-}
-
-// Unpaginated id-and-name list for pickers. Plain `query_as` (not the
-// `query_as!` macro) so this adds no compile-time-checked query and needs no
-// `.sqlx` cache entry.
-pub async fn location_options(state: &AppState) -> Result<Vec<LocationOption>, sqlx::Error> {
-    sqlx::query_as::<_, LocationOption>(
-        r#"
-        SELECT id, name, receives_orders, holds_stock, is_active
-        FROM branch
-        ORDER BY name
-        "#,
-    )
-    .fetch_all(state.db())
-    .await
 }
 
 pub async fn create_location(

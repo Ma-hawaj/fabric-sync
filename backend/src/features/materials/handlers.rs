@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     service,
-    types::{AddStockInput, CreateMaterialInput, Material, MaterialOption},
+    types::{AddStockInput, CreateMaterialInput, Material},
 };
 
 pub async fn list_materials(
@@ -30,13 +30,6 @@ pub async fn get_material(
     Path(material_id): Path<Uuid>,
 ) -> Result<Json<Material>, AppError> {
     Ok(Json(service::get_material(&state, material_id).await?))
-}
-
-pub async fn material_options(
-    State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
-) -> Result<Json<Vec<MaterialOption>>, AppError> {
-    Ok(Json(service::material_options(&state).await?))
 }
 
 pub async fn create_material(

@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     service,
-    types::{CreateLocationInput, Location, LocationOption, UpdateLocationInput},
+    types::{CreateLocationInput, Location, UpdateLocationInput},
 };
 
 pub async fn list_locations(
@@ -30,13 +30,6 @@ pub async fn get_location(
     Path(location_id): Path<Uuid>,
 ) -> Result<Json<Location>, AppError> {
     Ok(Json(service::get_location(&state, location_id).await?))
-}
-
-pub async fn location_options(
-    State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
-) -> Result<Json<Vec<LocationOption>>, AppError> {
-    Ok(Json(service::location_options(&state).await?))
 }
 
 pub async fn create_location(
