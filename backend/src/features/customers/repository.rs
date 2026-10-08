@@ -11,7 +11,12 @@ use super::types::{CreateMeasurementInput, Customer, Measurement};
 
 // The `GROUP BY` is on the customer's primary key, so the wrapper's `LIMIT`
 // counts customers rather than measurement rows. `last_measured_on` is exposed
-// so the list can be sorted by recency without unpacking the JSON.
+// so the list can be sorted by recency without unpacking the JSON. `invoices`
+// rides along as a correlated aggregate — tailoring invoices through the
+// customer's orders plus retail sales billed to them directly — so one read
+// carries the sheet's whole invoice history with no second request filtered
+// by phone number. Money state reuses the ledger derivation from the invoices
+// feature (paid sum, status, balance floored at zero).
 const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
@@ -24,7 +29,46 @@ const SPEC: ListSpec = ListSpec {
                 json_agg(to_jsonb(m) ORDER BY m.measurement_date DESC, m.id DESC)
                     FILTER (WHERE m.id IS NOT NULL),
                 '[]'
-            ) AS measurements
+            ) AS measurements,
+            COALESCE(
+                (
+                    SELECT json_agg(inv ORDER BY inv."invoiceDate" DESC, inv."invoiceNumber" DESC)
+                    FROM (
+                        SELECT
+                            i.id AS "id",
+                            i.invoice_number AS "invoiceNumber",
+                            i.invoice_date AS "invoiceDate",
+                            i.target_date AS "targetDate",
+                            i.total_price::float8 AS "totalPrice",
+                            pay.status AS "paymentStatus",
+                            GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS "balanceDue"
+                        FROM invoices i
+                        LEFT JOIN LATERAL (
+                            SELECT
+                                COALESCE(SUM(amount), 0)::float8 AS paid,
+                                CASE
+                                    WHEN GREATEST(
+                                        i.total_price - i.gift_card_redeemed - COALESCE(SUM(amount), 0),
+                                        0
+                                    ) = 0 THEN 'paid'
+                                    WHEN COALESCE(SUM(amount), 0) = 0 THEN 'unpaid'
+                                    ELSE 'partial'
+                                END AS status
+                            FROM invoice_payments
+                            WHERE invoice_id = i.id
+                        ) pay ON true
+                        WHERE i.customer_id = c.id
+                           OR EXISTS (
+                               SELECT 1
+                               FROM orders o
+                               JOIN measurements om ON om.id = o.measurement_id
+                               WHERE o.invoice_id = i.id
+                                 AND om.customer_id = c.id
+                           )
+                    ) inv
+                ),
+                '[]'
+            ) AS invoices
         FROM customers c
         LEFT JOIN measurements m ON m.customer_id = c.id
         GROUP BY c.id, c.name, c.mobile_no

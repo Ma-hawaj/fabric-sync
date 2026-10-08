@@ -27,6 +27,7 @@ const EXISTING_CUSTOMERS: Customer[] = [
         chest: 104,
       },
     ],
+    invoices: [],
   },
 ]
 

@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -57,6 +57,25 @@ pub struct Customer {
     // it decodes straight off the row rather than being grouped app-side.
     #[sqlx(json)]
     pub measurements: Vec<Measurement>,
+    // The customer's invoices — tailoring invoices through their orders plus
+    // retail sales billed to them directly. One read carries the sheet's whole
+    // invoice history, so no second request filtered by phone number is needed.
+    #[sqlx(json)]
+    pub invoices: Vec<CustomerInvoiceSummary>,
+}
+
+/// One invoice as embedded on a customer: identity, date, money state —
+/// enough for the sheet's history with a link to the full page.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomerInvoiceSummary {
+    pub id: Uuid,
+    pub invoice_number: i64,
+    pub invoice_date: DateTime<Utc>,
+    pub target_date: NaiveDate,
+    pub total_price: f64,
+    pub payment_status: String,
+    pub balance_due: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

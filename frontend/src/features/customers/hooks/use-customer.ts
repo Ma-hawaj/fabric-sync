@@ -1,29 +1,20 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
-import type { Customer, Measurement } from '../types/customers'
-
-type CustomerDto = Omit<Customer, 'measurements'> & {
-  measurements?: (Omit<Measurement, 'date'> & { date: string })[]
-}
+import { toCustomer } from '../types/customers'
+import type { Customer } from '../types/customers'
 
 async function fetchCustomer(customerId: string): Promise<Customer> {
-  const { data } = await apiClient.get<CustomerDto>(`/customers/${customerId}`)
-  return {
-    ...data,
-    // Dates arrive as ISO strings off the wire; the rest of the app expects
-    // real Dates (the customer sheet renders them the same way).
-    measurements: (data.measurements ?? []).map((measurement) => ({
-      ...measurement,
-      date: new Date(measurement.date),
-    })),
-  }
+  const { data } = await apiClient.get(`/customers/${customerId}`)
+  return toCustomer(data)
 }
 
 /**
- * One customer with its full measurement history. `['customers']` is the
- * list; this keys off `['customers', id]` beneath it — a prefix of the list
- * key, so the same `invalidateQueries({ queryKey: ['customers'] })`
- * mutations already do also refetch this page with no extra wiring.
+ * One customer with its full measurement history and order history. The
+ * response carries everything the customer sheet shows — no second request
+ * filtered by phone number. `['customers']` is the list; this keys off
+ * `['customers', id]` beneath it — a prefix of the list key, so the same
+ * `invalidateQueries({ queryKey: ['customers'] })` mutations already do also
+ * refetch this page with no extra wiring.
  *
  * Pass `null` to hold the query until an id is known (the "new" forms).
  */

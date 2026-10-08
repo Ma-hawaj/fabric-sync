@@ -29,12 +29,14 @@ const CUSTOMERS: Customer[] = [
     name: 'Zainab',
     mobileNo: '456',
     measurements: [],
+    invoices: [],
   },
   {
     id: 'c-2',
     name: 'Aamal',
     mobileNo: '123',
     measurements: [],
+    invoices: [],
   },
 ]
 

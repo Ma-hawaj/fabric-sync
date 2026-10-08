@@ -10,6 +10,7 @@ const customer: Customer = {
   name: 'Ahmed Ali',
   mobileNo: '+973 3300 1234',
   measurements: [],
+  invoices: [],
 }
 
 const measurement: Measurement = {
