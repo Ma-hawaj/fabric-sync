@@ -112,6 +112,17 @@ fn assignable_user(user: AuthentikUser) -> Option<User> {
     })
 }
 
+/// Authentik's paginator reports "no next page" as `next: 0` (see
+/// `authentik.api.pagination.Pagination.get_paginated_response`), not `null`
+/// — so `0` terminates the walk just like a missing field or an echo of the
+/// current page does. Requesting `?page=0` 404s.
+fn next_page(current: u32, next: Option<u32>) -> Option<u32> {
+    match next {
+        Some(n) if n != 0 && n != current => Some(n),
+        _ => None,
+    }
+}
+
 impl AuthentikUserDirectory {
     pub async fn discover(config: &Config) -> Result<Self, String> {
         let api_token = config
@@ -159,9 +170,12 @@ impl AuthentikUserDirectory {
 
             users.extend(response.results.into_iter().filter_map(assignable_user));
 
-            match response.pagination.and_then(|pagination| pagination.next) {
-                Some(next) if next != page => page = next,
-                _ => break,
+            match next_page(
+                page,
+                response.pagination.and_then(|pagination| pagination.next),
+            ) {
+                Some(next) => page = next,
+                None => break,
             }
         }
 
@@ -172,6 +186,14 @@ impl AuthentikUserDirectory {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pagination_stops_on_zero_or_repeat_or_missing_next() {
+        assert_eq!(next_page(1, Some(2)), Some(2));
+        assert_eq!(next_page(1, Some(0)), None);
+        assert_eq!(next_page(1, Some(1)), None);
+        assert_eq!(next_page(2, None), None);
+    }
 
     #[test]
     fn prefers_name_over_username() {
