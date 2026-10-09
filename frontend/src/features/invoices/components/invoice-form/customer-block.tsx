@@ -89,13 +89,24 @@ export function CustomerBlock({
                       ? 'Existing Customer'
                       : '+ New Customer'
                   }
-                  onChange={(label) =>
-                    modeField.handleChange(
-                      (label === 'Existing Customer'
-                        ? 'existing'
-                        : 'new') satisfies CustomerMode,
-                    )
-                  }
+                  onChange={(label) => {
+                    const mode = (
+                      label === 'Existing Customer' ? 'existing' : 'new'
+                    ) satisfies CustomerMode
+                    if (mode === modeField.state.value) return
+                    modeField.handleChange(mode)
+                    if (mode === 'new') {
+                      form.setFieldValue(
+                        `${base}.existingCustomerId` as never,
+                        '' as never,
+                      )
+                      form.setFieldValue(
+                        `${base}.measurement` as never,
+                        measurementFromSnapshot(null) as never,
+                      )
+                      setPicked(null)
+                    }
+                  }}
                   columns={2}
                 />
 
