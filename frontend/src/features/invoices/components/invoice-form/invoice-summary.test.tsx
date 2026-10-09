@@ -64,7 +64,6 @@ function Harness({
         form={form as never}
         customerNames={customerNames}
         productNames={productNames}
-        onCustomerPicked={() => {}}
         paymentsLocked={paymentsLocked}
       />
     </QueryClientProvider>

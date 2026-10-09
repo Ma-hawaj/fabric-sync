@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
 import type { Customer } from '@/features/customers/types/customers'
 import { apiGetMock } from '@/lib/list-fixtures'
+import { typeSearchText } from '@/lib/test-events'
 import { CustomerBlock } from './customer-block'
 import { createEmptyCustomer } from '../../types/invoice-form'
 import type { InvoiceCustomerDraft } from '../../types/invoice-form'
@@ -29,11 +30,18 @@ const EXISTING_CUSTOMERS: Customer[] = [
     ],
     invoices: [],
   },
+  {
+    id: 'cust-2',
+    name: 'Fatima Al-Farsi',
+    mobileNo: '+971-55-9876543',
+    measurements: [],
+    invoices: [],
+  },
 ]
 
-// The block fetches its customer's measurement history by id (the selection
-// itself lives in the invoice summary), so the API mock answers both the
-// by-id read and the pickers' list searches.
+// The customer picker queries the server per keystroke, so the API layer is
+// mocked to serve the search against in-memory rows instead of hitting the
+// network in jsdom.
 const { apiGet } = vi.hoisted(() => ({ apiGet: vi.fn() }))
 vi.mock('@/lib/api', () => ({
   apiClient: { get: apiGet },
@@ -44,16 +52,7 @@ function Harness({ customer }: { customer: InvoiceCustomerDraft }) {
   const form = useForm({
     defaultValues: { customers: [customer] },
   })
-  apiGet.mockImplementation(async (url: string) => {
-    const { pathname } = new URL(url, 'http://localhost')
-    if (pathname.startsWith('/customers/')) {
-      const id = pathname.split('/').pop()
-      return {
-        data: EXISTING_CUSTOMERS.find((row) => row.id === id) ?? null,
-      }
-    }
-    return apiGetMock({ '/customers': EXISTING_CUSTOMERS })(url)
-  })
+  apiGet.mockImplementation(apiGetMock({ '/customers': EXISTING_CUSTOMERS }))
   const client = new QueryClient()
   return (
     <QueryClientProvider client={client}>
@@ -61,6 +60,7 @@ function Harness({ customer }: { customer: InvoiceCustomerDraft }) {
         form={form as never}
         customerIndex={0}
         customerNumber={1}
+        onCustomerPicked={() => {}}
         removable={false}
         onRemove={() => {}}
       />
@@ -68,31 +68,76 @@ function Harness({ customer }: { customer: InvoiceCustomerDraft }) {
   )
 }
 
+function searchInput() {
+  return screen.getByPlaceholderText<HTMLInputElement>(
+    'Search customer by name or phone...',
+  )
+}
+
+// Base UI's Combobox only opens its popup for a click preceded by real
+// pointer/mouse events; fireEvent.click alone looks synthetic and is ignored.
+function openCustomerSearch() {
+  const input = searchInput()
+  fireEvent.pointerDown(input)
+  fireEvent.mouseDown(input)
+  fireEvent.click(input)
+}
+
+async function pickCustomer(name: RegExp | string) {
+  openCustomerSearch()
+  const option = await screen.findByRole('option', { name })
+  fireEvent.click(option)
+}
+
 describe('CustomerBlock', () => {
-  it('renders orders and measurements without its own customer search', () => {
+  it('shows name and phone fields for a new customer', () => {
     render(<Harness customer={createEmptyCustomer()} />)
 
-    // The customer is picked once in the invoice summary — no per-block
-    // picker here.
+    fireEvent.click(screen.getByText('+ New Customer'))
+    expect(screen.getByLabelText('Full Name')).toBeTruthy()
+    expect(screen.getByLabelText('Phone')).toBeTruthy()
     expect(
-      screen.queryByPlaceholderText('Search customer by name or phone...'),
-    ).toBeNull()
-    expect(screen.getByText('Order 1')).toBeTruthy()
-    expect(screen.getByText('Measurements')).toBeTruthy()
+      screen.getByText(
+        'This customer will be created when the invoice is saved.',
+      ),
+    ).toBeTruthy()
   })
 
-  it('loads the picked customer measurement history by id', async () => {
-    render(
-      <Harness
-        customer={{
-          ...createEmptyCustomer(),
-          existingCustomerId: 'cust-1',
-        }}
-      />,
-    )
+  it('filters the customer list by the typed search text', async () => {
+    render(<Harness customer={createEmptyCustomer()} />)
 
-    // History arrives off the by-id read and seeds the snapshot dropdown.
-    expect(await screen.findByText('Start Measurements From')).toBeTruthy()
-    expect(apiGet).toHaveBeenCalledWith('/customers/cust-1')
+    openCustomerSearch()
+    typeSearchText(searchInput(), 'Fatima')
+
+    expect(
+      await screen.findByRole('option', {
+        name: 'Fatima Al-Farsi — +971-55-9876543',
+      }),
+    ).toBeTruthy()
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('option', {
+          name: 'Ahmed Al-Mansoori — +971-50-1234567',
+        }),
+      ).toBeNull(),
+    )
+  })
+
+  it("loads the selected existing customer's current measurement snapshot", async () => {
+    render(<Harness customer={createEmptyCustomer()} />)
+
+    await pickCustomer('Ahmed Al-Mansoori — +971-50-1234567')
+
+    const chestInput = await screen.findByLabelText<HTMLInputElement>('Chest')
+    expect(chestInput.value).toBe('108')
+  })
+
+  it('loads a blank measurement snapshot for a customer with no history', async () => {
+    render(<Harness customer={createEmptyCustomer()} />)
+
+    await pickCustomer('Fatima Al-Farsi — +971-55-9876543')
+
+    const chestInput = await screen.findByLabelText<HTMLInputElement>('Chest')
+    expect(chestInput.value).toBe('')
   })
 })

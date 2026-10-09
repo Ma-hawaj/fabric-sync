@@ -1,8 +1,6 @@
 import * as React from 'react'
-import { NumberField, PhoneField, TextField } from '@/components/form/fields'
+import { NumberField, TextField } from '@/components/form/fields'
 import { AsyncCombobox } from '@/components/form/async-combobox'
-import { SegmentedOptions } from '@/components/form/segmented-options'
-import { FieldError } from '@/components/ui/field'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -13,7 +11,6 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import type { Customer } from '@/features/customers/types/customers'
-import { measurementFromSnapshot } from '@/features/customers/components/measurement-fields'
 import type { Location } from '@/features/locations/types/location'
 import { ORDER_RECEIVING_FILTERS } from '@/features/locations/lib/location-filters'
 import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
@@ -30,7 +27,6 @@ import {
   VAT_RATE,
 } from '../../lib/invoice-pricing'
 import type {
-  CustomerMode,
   DiscountUnit,
   GiftCardRedemptionDraft,
   InvoiceCustomerDraft,
@@ -106,127 +102,11 @@ function buildGiftCardRows(giftCards: InvoiceGiftCardDraft[]): SummaryRow[] {
   }))
 }
 
-function customerOptionLabel(customer: Customer) {
-  return `${customer.name} — ${customer.mobileNo}`
-}
-
-// The customer picker for an invoice with order lines: one control bound to
-// the invoice's single customer block. Picking an existing customer also keeps
-// the invoice-level id in step, so the buyer survives if the orders are later
-// removed and the sale becomes product-only.
-function OrderCustomerPicker({
-  form,
-  customerLabelForId,
-  onCustomerPicked,
-}: {
-  form: InvoiceFormApi
-  customerLabelForId?: (id: string) => string | null
-  onCustomerPicked: (customer: Customer | null) => void
-}) {
-  const base = 'customers[0]'
-
-  return (
-    <div className="space-y-3">
-      <form.Field name={`${base}.mode` as never}>
-        {(modeField: any) => (
-          <>
-            <Label>Customer</Label>
-            <SegmentedOptions
-              options={['Existing Customer', '+ New Customer']}
-              value={
-                modeField.state.value === 'existing'
-                  ? 'Existing Customer'
-                  : '+ New Customer'
-              }
-              onChange={(label) => {
-                const mode = (
-                  label === 'Existing Customer' ? 'existing' : 'new'
-                ) satisfies CustomerMode
-                modeField.handleChange(mode)
-                if (mode === 'new') {
-                  // A new customer has no id yet — clear any stale pick so
-                  // the payload can't name both an existing and a new one.
-                  form.setFieldValue('customerId' as never, '' as never)
-                  form.setFieldValue(
-                    `${base}.existingCustomerId` as never,
-                    '' as never,
-                  )
-                }
-              }}
-              columns={2}
-            />
-
-            {modeField.state.value === 'existing' ? (
-              <form.Field name={`${base}.existingCustomerId` as never}>
-                {(idField: any) => (
-                  <div className="space-y-3">
-                    <AsyncCombobox<Customer>
-                      id={idField.name}
-                      endpoint="/customers"
-                      queryKey="invoice-customer"
-                      searchField={['name', 'mobileNo']}
-                      toOption={(customer) => ({
-                        value: customer.id,
-                        label: customerOptionLabel(customer),
-                      })}
-                      getValueLabel={customerLabelForId}
-                      value={idField.state.value || null}
-                      onValueChange={(id) => {
-                        idField.handleChange(id ?? '')
-                        form.setFieldValue(
-                          'customerId' as never,
-                          (id ?? '') as never,
-                        )
-                      }}
-                      onSelectRow={(customer) => {
-                        onCustomerPicked(customer)
-                        form.setFieldValue(
-                          `${base}.measurement` as never,
-                          measurementFromSnapshot(
-                            customer?.measurements[0] ?? null,
-                          ) as never,
-                        )
-                      }}
-                      placeholder="Search customer by name or phone..."
-                      emptyMessage="No customers found."
-                    />
-                    <FieldError errors={idField.state.meta.errors} />
-                  </div>
-                )}
-              </form.Field>
-            ) : (
-              <div className="space-y-4">
-                <TextField
-                  form={form}
-                  name={`${base}.name`}
-                  label="Full Name"
-                />
-
-                <PhoneField
-                  form={form}
-                  name={`${base}.mobileNo`}
-                  label="Phone"
-                />
-
-                <p className="text-xs text-muted-foreground">
-                  This customer will be created when the invoice is saved.
-                </p>
-              </div>
-            )}
-          </>
-        )}
-      </form.Field>
-    </div>
-  )
-}
-
 interface InvoiceSummaryProps {
   form: InvoiceFormApi
   /** Rows the pickers handed over, read at render time for the line labels. */
   customerNames: React.MutableRefObject<Map<string, Customer>>
   productNames: React.MutableRefObject<Map<string, Product>>
-  /** The picked row, so the form can label this customer's line items. */
-  onCustomerPicked: (customer: Customer | null) => void
   /** Labels for stored ids whose rows aren't loaded yet (edit forms). */
   locationLabelForId?: (id: string) => string | null
   customerLabelForId?: (id: string) => string | null
@@ -242,7 +122,6 @@ export function InvoiceSummary({
   form,
   customerNames,
   productNames,
-  onCustomerPicked,
   locationLabelForId,
   customerLabelForId,
   paymentsLocked = false,
@@ -284,47 +163,36 @@ export function InvoiceSummary({
           )}
         </form.Field>
 
-        {/* The invoice's one customer picker, wherever the customer is billed
-            from. An order invoice bills through its customer block, a
-            product-only one through the invoice-level id — one control drives
-            whichever applies, instead of a separate picker per case. */}
-        <div className="sm:col-span-2">
-          <form.Subscribe selector={(state: any) => state.values.customers}>
-            {(customers: InvoiceCustomerDraft[]) =>
-              customers.length > 0 ? (
-                <OrderCustomerPicker
-                  form={form}
-                  customerLabelForId={customerLabelForId}
-                  onCustomerPicked={onCustomerPicked}
-                />
-              ) : (
-                <form.Field name={'customerId' as never}>
-                  {(field: any) => (
-                    <div className="space-y-1">
-                      <Label htmlFor={field.name}>Customer (optional)</Label>
-                      <AsyncCombobox<Customer>
-                        id={field.name}
-                        endpoint="/customers"
-                        queryKey="invoice-summary-customer"
-                        searchField={['name', 'mobileNo']}
-                        toOption={(customer) => ({
-                          value: customer.id,
-                          label: `${customer.name} — ${customer.mobileNo}`,
-                        })}
-                        getValueLabel={customerLabelForId}
-                        value={field.state.value || null}
-                        onValueChange={(id) => field.handleChange(id ?? '')}
-                        onSelectRow={onCustomerPicked}
-                        placeholder="Search customer..."
-                        emptyMessage="No customers found."
-                      />
-                    </div>
-                  )}
-                </form.Field>
-              )
-            }
-          </form.Subscribe>
-        </div>
+        {/* A tailoring invoice finds its customer through the orders, so this
+            only appears once there are no customer blocks left to do that. */}
+        <form.Subscribe selector={(state: any) => state.values.customers}>
+          {(customers: InvoiceCustomerDraft[]) =>
+            customers.length === 0 && (
+              <form.Field name={'customerId' as never}>
+                {(field: any) => (
+                  <div className="space-y-1">
+                    <Label htmlFor={field.name}>Customer (optional)</Label>
+                    <AsyncCombobox<Customer>
+                      id={field.name}
+                      endpoint="/customers"
+                      queryKey="invoice-summary-customer"
+                      searchField={['name', 'mobileNo']}
+                      toOption={(customer) => ({
+                        value: customer.id,
+                        label: `${customer.name} — ${customer.mobileNo}`,
+                      })}
+                      getValueLabel={customerLabelForId}
+                      value={field.state.value || null}
+                      onValueChange={(id) => field.handleChange(id ?? '')}
+                      placeholder="Search customer..."
+                      emptyMessage="No customers found."
+                    />
+                  </div>
+                )}
+              </form.Field>
+            )
+          }
+        </form.Subscribe>
       </div>
 
       <Separator />
