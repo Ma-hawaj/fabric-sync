@@ -24,6 +24,14 @@ pub async fn list_locations(
     Ok(Json(service::list_locations(&state, &params).await?))
 }
 
+pub async fn get_location(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(location_id): Path<Uuid>,
+) -> Result<Json<Location>, AppError> {
+    Ok(Json(service::get_location(&state, location_id).await?))
+}
+
 pub async fn create_location(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,

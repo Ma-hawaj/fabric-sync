@@ -77,6 +77,8 @@ export interface Order {
   customerName: string
   customerMobile: string
   material: string
+  /** The material's SKU — what the printed order sheet shows instead of the name. */
+  materialSku: string | null
   materialAmount: number
   price: number
   status: OrderStatus

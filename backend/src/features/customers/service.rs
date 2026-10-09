@@ -18,6 +18,12 @@ pub async fn list_customers(
     repository::list_customers(state, params).await
 }
 
+pub async fn get_customer(state: &AppState, customer_id: Uuid) -> Result<Customer, AppError> {
+    repository::get_customer(state, customer_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("customer {customer_id} not found")))
+}
+
 pub async fn create_customer(
     state: &AppState,
     input: CreateCustomerInput,

@@ -46,6 +46,7 @@ const ORDER: OrderDetail = {
   customerName: 'Ahmed Al-Mansoori',
   customerMobile: '+973-3311-2233',
   material: 'Japanese Toray Cotton',
+  materialSku: 'JTC-001',
   materialAmount: 3.5,
   price: 100,
   status: 'pending',

@@ -41,6 +41,7 @@ const SPEC: ListSpec = ListSpec {
             c.name AS customer_name,
             c.mobile_no AS customer_mobile,
             mat.name AS material,
+            mat.sku AS material_sku,
             o.material_id,
             o.material_amount::float8 AS material_amount,
             o.price::float8 AS price,

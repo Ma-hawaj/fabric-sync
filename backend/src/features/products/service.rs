@@ -64,6 +64,12 @@ pub async fn list_products(
     repository::list_products(state, params).await
 }
 
+pub async fn get_product(state: &AppState, product_id: Uuid) -> Result<Product, AppError> {
+    repository::get_product(state, product_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("product {product_id} not found")))
+}
+
 pub async fn create_product(
     state: &AppState,
     input: CreateProductInput,

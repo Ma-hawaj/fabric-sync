@@ -18,6 +18,12 @@ pub async fn list_materials(
     repository::list_materials(state, params).await
 }
 
+pub async fn get_material(state: &AppState, material_id: Uuid) -> Result<Material, AppError> {
+    repository::get_material(state, material_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("material {material_id} not found")))
+}
+
 pub async fn create_material(
     state: &AppState,
     input: CreateMaterialInput,

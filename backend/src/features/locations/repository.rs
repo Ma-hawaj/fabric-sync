@@ -57,6 +57,13 @@ pub async fn list_locations(
     list::fetch_page(state.db(), &SPEC, params).await
 }
 
+pub async fn get_location(
+    state: &AppState,
+    location_id: Uuid,
+) -> Result<Option<Location>, AppError> {
+    list::fetch_by_id(state.db(), &SPEC, location_id).await
+}
+
 pub async fn create_location(
     state: &AppState,
     name: &str,

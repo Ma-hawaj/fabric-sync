@@ -104,6 +104,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
       name: block.customerName,
       mobileNo: block.customerMobileNo,
       measurements: [],
+      invoices: [],
     })
     seeds.customerLabels.set(
       block.existingCustomerId,

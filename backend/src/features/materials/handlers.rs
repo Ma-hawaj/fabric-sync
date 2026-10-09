@@ -24,6 +24,14 @@ pub async fn list_materials(
     Ok(Json(service::list_materials(&state, &params).await?))
 }
 
+pub async fn get_material(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(material_id): Path<Uuid>,
+) -> Result<Json<Material>, AppError> {
+    Ok(Json(service::get_material(&state, material_id).await?))
+}
+
 pub async fn create_material(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,

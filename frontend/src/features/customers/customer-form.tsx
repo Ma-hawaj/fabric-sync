@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { TextField, PhoneField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { MeasurementFields } from './components/measurement-fields'
-import { useAllCustomers } from './hooks/use-customers'
+import { useCustomer } from './hooks/use-customer'
 import { useCreateCustomer } from './hooks/use-create-customer'
 import { useUpdateCustomer } from './hooks/use-update-customer'
 import { customerFormSchema } from './lib/customer-schema'
@@ -17,10 +17,7 @@ import type { Customer } from './types/customers'
 import { ApiError } from '@/lib/api'
 
 export function CustomerFormPage({ customerId }: { customerId?: string }) {
-  const { data: customers, isLoading } = useAllCustomers()
-  const existing = customerId
-    ? customers.find((customer) => customer.id === customerId)
-    : undefined
+  const { data: existing, isLoading, isError } = useCustomer(customerId ?? null)
 
   if (customerId && isLoading) {
     return (
@@ -30,7 +27,7 @@ export function CustomerFormPage({ customerId }: { customerId?: string }) {
     )
   }
 
-  if (customerId && !existing) {
+  if (customerId && (isError || !existing)) {
     return (
       <div className="text-center text-sm text-muted-foreground py-10">
         That customer could not be found.

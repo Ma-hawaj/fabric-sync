@@ -17,6 +17,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import { CURRENCY } from '@/lib/currency'
+import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { printMeasurements } from '../lib/print-measurements'
 import {
@@ -29,7 +31,6 @@ import {
   Receipt,
   PrinterIcon,
 } from 'lucide-react'
-import { useCustomerOrders } from '@/features/orders/hooks/use-orders'
 import { ThobDiagram } from './thob-diagram'
 import { MEASUREMENT_GROUPS, fieldsInGroup } from '../data/measurement-fields'
 import type { Customer } from '../types/customers'
@@ -52,7 +53,7 @@ export function CustomerDetailsSheet({
     setActiveMeasurementId(customer?.measurements[0]?.id ?? null)
   }, [customer])
 
-  const { data: customerOrders } = useCustomerOrders(customer?.mobileNo)
+  const customerInvoices = customer?.invoices ?? []
 
   const activeMeasurement = React.useMemo(() => {
     if (!customer || customer.measurements.length === 0) return null
@@ -130,11 +131,11 @@ export function CustomerDetailsSheet({
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2.5 flex items-center gap-1.5">
                 <Receipt className="h-3.5 w-3.5" />
-                Orders
+                Invoices
               </h3>
-              {customerOrders.length === 0 ? (
+              {customerInvoices.length === 0 ? (
                 <div className="rounded-lg border border-border/60 bg-card p-4 text-center text-sm text-muted-foreground">
-                  No orders on file for this customer.
+                  No invoices on file for this customer.
                 </div>
               ) : (
                 <div className="rounded-xl border border-border/60 bg-card shadow-sm">
@@ -142,20 +143,43 @@ export function CustomerDetailsSheet({
                     <TableHeader>
                       <TableRow>
                         <TableHead>Invoice</TableHead>
-                        <TableHead>Invoice Date</TableHead>
-                        <TableHead>Material</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {customerOrders.map((order) => (
-                        <TableRow key={order.id}>
+                      {customerInvoices.map((invoice) => (
+                        <TableRow key={invoice.id}>
                           <TableCell className="font-medium">
-                            {order.invoiceId}
+                            <Link
+                              to="/invoices/$invoiceId"
+                              params={{ invoiceId: invoice.id }}
+                              className="font-mono text-info hover:underline"
+                            >
+                              INV-{invoice.invoiceNumber}
+                            </Link>
                           </TableCell>
                           <TableCell>
-                            {order.invoiceDate.toLocaleDateString()}
+                            {invoice.invoiceDate.toLocaleDateString()}
                           </TableCell>
-                          <TableCell>{order.material}</TableCell>
+                          <TableCell>
+                            {CURRENCY} {invoice.totalPrice.toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                invoice.paymentStatus === 'paid'
+                                  ? 'default'
+                                  : invoice.paymentStatus === 'partial'
+                                    ? 'secondary'
+                                    : 'destructive'
+                              }
+                              className="capitalize"
+                            >
+                              {invoice.paymentStatus}
+                            </Badge>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

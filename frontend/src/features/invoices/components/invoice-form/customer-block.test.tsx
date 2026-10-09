@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
 import type { Customer } from '@/features/customers/types/customers'
+import { createEmptyMeasurement } from '@/features/customers/types/measurement-form'
 import { apiGetMock } from '@/lib/list-fixtures'
 import { typeSearchText } from '@/lib/test-events'
 import { CustomerBlock } from './customer-block'
@@ -28,12 +29,14 @@ const EXISTING_CUSTOMERS: Customer[] = [
         chest: 104,
       },
     ],
+    invoices: [],
   },
   {
     id: 'cust-2',
     name: 'Fatima Al-Farsi',
     mobileNo: '+971-55-9876543',
     measurements: [],
+    invoices: [],
   },
 ]
 
@@ -62,6 +65,11 @@ function Harness({ customer }: { customer: InvoiceCustomerDraft }) {
         removable={false}
         onRemove={() => {}}
       />
+      <form.Subscribe selector={(state) => state.values.customers[0]}>
+        {(draft) => (
+          <output data-testid="customer-draft">{JSON.stringify(draft)}</output>
+        )}
+      </form.Subscribe>
     </QueryClientProvider>
   )
 }
@@ -137,5 +145,37 @@ describe('CustomerBlock', () => {
 
     const chestInput = await screen.findByLabelText<HTMLInputElement>('Chest')
     expect(chestInput.value).toBe('')
+  })
+
+  it('clears the previous customer and measurement when switching to a new customer', async () => {
+    render(<Harness customer={createEmptyCustomer()} />)
+
+    await pickCustomer('Ahmed Al-Mansoori — +971-50-1234567')
+    expect(screen.getByLabelText<HTMLInputElement>('Chest').value).toBe('108')
+    expect(
+      JSON.parse(screen.getByTestId('customer-draft').textContent).measurement
+        .loadedFromId,
+    ).toBe('meas-current')
+
+    fireEvent.click(screen.getByText('+ New Customer'))
+
+    const draft = JSON.parse(
+      screen.getByTestId('customer-draft').textContent,
+    ) as InvoiceCustomerDraft
+    expect(draft.mode).toBe('new')
+    expect(draft.existingCustomerId).toBe('')
+    expect(draft.measurement).toEqual(createEmptyMeasurement())
+    expect(screen.getByLabelText<HTMLInputElement>('Chest').value).toBe('')
+    expect(screen.queryByLabelText('Start Measurements From')).toBeNull()
+
+    fireEvent.change(screen.getByLabelText('Chest'), {
+      target: { value: '100' },
+    })
+    fireEvent.click(screen.getByText('+ New Customer'))
+    expect(screen.getByLabelText<HTMLInputElement>('Chest').value).toBe('100')
+
+    fireEvent.click(screen.getByText('Existing Customer'))
+    expect(searchInput().value).toBe('')
+    expect(screen.queryByText('Ahmed Al-Mansoori')).toBeNull()
   })
 })

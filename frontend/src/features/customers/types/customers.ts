@@ -44,4 +44,49 @@ export interface Customer {
   nameArabic?: string
   mobileNo: string
   measurements: Measurement[]
+  /** The customer's invoices, newest first — tailoring plus direct retail. */
+  invoices: CustomerInvoiceSummary[]
+}
+
+// One invoice as embedded on a customer: identity, dates and money state.
+// Dates arrive as ISO strings and are parsed to Dates.
+export interface CustomerInvoiceSummary {
+  id: string
+  invoiceNumber: number
+  invoiceDate: Date
+  targetDate: Date
+  totalPrice: number
+  paymentStatus: 'unpaid' | 'partial' | 'paid'
+  balanceDue: number
+}
+
+type CustomerInvoiceSummaryDto = Omit<
+  CustomerInvoiceSummary,
+  'invoiceDate' | 'targetDate'
+> & {
+  invoiceDate: string
+  targetDate: string
+}
+
+type CustomerDto = Omit<Customer, 'measurements' | 'invoices'> & {
+  measurements?: (Omit<Measurement, 'date'> & { date: string })[]
+  invoices?: CustomerInvoiceSummaryDto[]
+}
+
+// Dates arrive as ISO strings off the wire; the rest of the app expects real
+// Dates. Applied to each row, for the list hooks (via `select`) and the
+// by-id hook alike.
+export function toCustomer(dto: CustomerDto): Customer {
+  return {
+    ...dto,
+    measurements: (dto.measurements ?? []).map((measurement) => ({
+      ...measurement,
+      date: new Date(measurement.date),
+    })),
+    invoices: (dto.invoices ?? []).map((invoice) => ({
+      ...invoice,
+      invoiceDate: new Date(invoice.invoiceDate),
+      targetDate: new Date(invoice.targetDate),
+    })),
+  }
 }

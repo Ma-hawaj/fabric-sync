@@ -42,6 +42,12 @@ pub async fn list_locations(
     repository::list_locations(state, params).await
 }
 
+pub async fn get_location(state: &AppState, location_id: Uuid) -> Result<Location, AppError> {
+    repository::get_location(state, location_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("location {location_id} not found")))
+}
+
 pub async fn create_location(
     state: &AppState,
     input: CreateLocationInput,

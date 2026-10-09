@@ -10,7 +10,7 @@ import { ApiError } from '@/lib/api'
 import { StockEntryRow } from '@/features/inventory/components/stock-entry-row'
 import { CURRENCY } from '@/lib/currency'
 import { useCreateProduct } from './hooks/use-create-product'
-import { useAllProducts } from './hooks/use-products'
+import { useProduct } from './hooks/use-product'
 import { useUpdateProduct } from './hooks/use-update-product'
 import { stockEntriesPayload } from './lib/product-payload'
 import { productFormSchema } from './lib/product-schema'
@@ -22,10 +22,7 @@ import {
 import type { Product } from './types/product'
 
 export function ProductFormPage({ productId }: { productId?: string }) {
-  const { data: products, isLoading } = useAllProducts()
-  const existing = productId
-    ? products.find((product) => product.id === productId)
-    : undefined
+  const { data: existing, isLoading, isError } = useProduct(productId ?? null)
 
   if (productId && isLoading) {
     return (
@@ -35,7 +32,7 @@ export function ProductFormPage({ productId }: { productId?: string }) {
     )
   }
 
-  if (productId && !existing) {
+  if (productId && (isError || !existing)) {
     return (
       <div className="text-center text-sm text-muted-foreground py-10">
         That product could not be found.

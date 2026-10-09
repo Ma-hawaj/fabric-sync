@@ -894,6 +894,9 @@ mod tests {
         // The document is titled by the order's own readable number, not an
         // id prefix.
         assert!(html.contains("ORD-12"));
+        // The material prints as its SKU, not its name.
+        assert!(html.contains("CTN-001"));
+        assert!(!html.contains("Cotton"));
         // Recorded numeric values ride the captions, whole numbers trimmed,
         // each with its short diagram label.
         assert!(html.contains("120 inch · Front Length"));
@@ -1103,6 +1106,7 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         customer_name: "Ahmed".to_string(),
         customer_mobile: "+973 0000".to_string(),
         material: "Cotton".to_string(),
+        material_sku: Some("CTN-001".to_string()),
         material_amount: 3.5,
         price: 100.0,
         status: "pending".to_string(),

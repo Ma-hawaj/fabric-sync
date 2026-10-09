@@ -1,15 +1,16 @@
 import { useListQuery } from '@/hooks/use-list-query'
-import type { Customer } from '../types/customers'
+import { toCustomer } from '../types/customers'
 
 const ENDPOINT = '/customers'
 const QUERY_KEY = 'customers'
 const ALL = new URLSearchParams()
 
 export function useCustomers(searchParams: URLSearchParams) {
-  return useListQuery<Customer>({
+  return useListQuery({
     endpoint: ENDPOINT,
     queryKey: QUERY_KEY,
     searchParams,
+    select: toCustomer,
   })
 }
 
@@ -20,9 +21,10 @@ export function useCustomers(searchParams: URLSearchParams) {
  * invalidation refreshes both.
  */
 export function useAllCustomers() {
-  return useListQuery<Customer>({
+  return useListQuery({
     endpoint: ENDPOINT,
     queryKey: QUERY_KEY,
     searchParams: ALL,
+    select: toCustomer,
   })
 }

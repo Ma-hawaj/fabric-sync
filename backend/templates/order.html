@@ -639,8 +639,8 @@
         <h3>الخامة والمقاسات · Material</h3>
         <dl>
           <div class="row">
-            <dt>الخامة<span class="en">Material</span></dt>
-            <dd>{{ order.material }}</dd>
+            <dt>الخامة<span class="en">Material / SKU</span></dt>
+            <dd dir="ltr">{% if order.materialSku %}{{ order.materialSku }}{% else %}{{ order.material }}{% endif %}</dd>
           </div>
           <div class="row">
             <dt>الكمية<span class="en">Quantity</span></dt>

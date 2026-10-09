@@ -53,6 +53,7 @@ function order(overrides: Partial<Order>): Order {
     customerName: 'Abdullah Al-Otaibi',
     customerMobile: '0501234567',
     material: 'Japanese Cotton',
+    materialSku: 'JC-001',
     materialAmount: 3.5,
     price: 450,
     status: 'pending',

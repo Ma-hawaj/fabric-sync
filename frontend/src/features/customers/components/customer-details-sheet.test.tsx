@@ -1,14 +1,32 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { listResponse } from '@/lib/list-fixtures'
 import { CustomerDetailsSheet } from './customer-details-sheet'
 import type { Customer } from '../types/customers'
 
-// The sheet header links to the edit page; stub Link so the test doesn't
-// need a router.
+// The sheet header links to the edit page and each invoice row links to its
+// invoice; stub Link so the tests don't need a router, keeping the href so
+// the links stay assertable.
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  Link: ({
+    children,
+    params,
+  }: {
+    children: React.ReactNode
+    params?: Record<string, string>
+  }) => (
+    <a
+      href={
+        params?.customerId
+          ? `/customers/${params.customerId}/edit`
+          : params?.invoiceId
+            ? `/invoices/${params.invoiceId}`
+            : '#'
+      }
+    >
+      {children}
+    </a>
+  ),
 }))
 
 const CUSTOMER: Customer = {
@@ -25,11 +43,21 @@ const CUSTOMER: Customer = {
       foWidth: 8,
     },
   ],
+  invoices: [
+    {
+      id: 'inv-1',
+      invoiceNumber: 42,
+      invoiceDate: new Date('2026-07-28'),
+      targetDate: new Date('2026-08-04'),
+      totalPrice: 300,
+      paymentStatus: 'partial',
+      balanceDue: 180,
+    },
+  ],
 }
 
 function renderSheet(customer: Customer | null) {
   const client = new QueryClient()
-  client.setQueryData(['orders', ''], listResponse([]))
   return render(
     <QueryClientProvider client={client}>
       <CustomerDetailsSheet customer={customer} onOpenChange={() => {}} />
@@ -62,6 +90,26 @@ describe('CustomerDetailsSheet', () => {
       screen.queryByLabelText(
         'Thob sketch, front view, with measurement guides',
       ),
+    ).toBeTruthy()
+  })
+
+  it('shows the customer invoices with links to their pages', () => {
+    renderSheet(CUSTOMER)
+
+    expect(
+      screen.queryByText('No invoices on file for this customer.'),
+    ).toBeNull()
+    const link = screen.getByRole('link', { name: 'INV-42' })
+    expect(link.getAttribute('href')).toBe('/invoices/inv-1')
+    expect(screen.queryByText('BHD 300.00')).toBeTruthy()
+    expect(screen.queryByText('partial')).toBeTruthy()
+  })
+
+  it('shows an empty state for a customer with no invoices', () => {
+    renderSheet({ ...CUSTOMER, invoices: [] })
+
+    expect(
+      screen.queryByText('No invoices on file for this customer.'),
     ).toBeTruthy()
   })
 })
