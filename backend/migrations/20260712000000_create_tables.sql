@@ -22,7 +22,11 @@ CREATE TABLE materials (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     name TEXT NOT NULL,
     sku TEXT,
-    unit TEXT NOT NULL DEFAULT 'meters'
+    unit TEXT NOT NULL DEFAULT 'meters',
+    -- Fabric family grouping a fabric's colour variants ("Zabrjad 1" and
+    -- "Zabrjad 2" are both family "Zabrjad"), so the inventory table can
+    -- cluster them behind one filter. NULL on rows that need no grouping.
+    family TEXT
 );
 
 -- A material can be stocked at more than one location (branch), so stock is
