@@ -33,6 +33,7 @@ pub async fn create_material(
         &input.name,
         input.sku.as_deref(),
         &input.unit,
+        input.family.as_deref(),
         &input.entries,
     )
     .await?;
