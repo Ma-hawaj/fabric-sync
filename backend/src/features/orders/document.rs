@@ -889,8 +889,8 @@ mod tests {
 
         // The template is the only smoke seat: it runs the thob_callout macro
         // against every field, so a malformed marker map fails right here.
-        assert!(html.contains("واجهة الثوب"));
-        assert!(html.contains("خلف الثوب"));
+        assert!(html.contains("Front of Thob"));
+        assert!(html.contains("Back of Thob"));
         // The document is titled by the order's own readable number, not an
         // id prefix.
         assert!(html.contains("ORD-12"));
@@ -906,9 +906,11 @@ mod tests {
         // Text values are already self-describing — no "inch".
         assert!(!html.contains("No inch"));
         // Unrecorded fields are omitted from the diagram: no caption box, no
-        // arrow, no stray label on the silhouette.
-        assert!(!html.contains("Front Pocket"));
-        assert!(!html.contains("Fo Width"));
+        // arrow, no stray label on the silhouette. Matched with the caption
+        // separator because the measurement table now prints full English
+        // labels ("Front Pocket By Width") that contain the short ones.
+        assert!(!html.contains("· Front Pocket"));
+        assert!(!html.contains("· Fo Width"));
         // Exactly the six recorded fields are called out: 4 on the front
         // view (lengthFl, chest, waist, frontPocketLengthByWidth)
         // and 2 on the back (lengthBl, sleeveLength).
@@ -1041,10 +1043,9 @@ mod tests {
             })
             .unwrap();
 
-        // Each chip names its slot in both languages, so the image is
+        // Each chip names its slot, so the image is
         // identifiable even when the stored value itself is cryptic ("3").
         assert!(html.contains("Thobe"));
-        assert!(html.contains("الياقة"));
         assert!(html.contains("Collar"));
         // Catalog matches print their display label with the raster...
         assert!(html.contains("Thobx"));
@@ -1052,6 +1053,57 @@ mod tests {
         // disappearing.
         assert!(html.contains("Saudi"));
         assert!(html.contains("double stitching"));
+    }
+
+    #[test]
+    fn paired_measurements_share_a_row_despite_gaps_above() {
+        let env = environment(&branding()).unwrap();
+        let template = env.get_template(TEMPLATE_NAME).unwrap();
+
+        // neck_width recorded while sleeve_half (two rows up) is not: neck
+        // must still sit beside neck width instead of sliding up the grid.
+        let mut measurement = tests_support::measurement();
+        measurement.neck = Some(22.0);
+        measurement.neck_width = Some(18.0);
+        measurement.front_pocket_length_by_width = Some("No 16x14".to_string());
+        let detail = OrderDetail {
+            order: services_order(),
+            invoice_number: 7,
+            measurement,
+        };
+        let fields = thob_fields();
+        let measurement = formatted_measurement(&detail);
+        let html = template
+            .render(context! {
+                order => minijinja::Value::from_serialize(&detail),
+                company => minijinja::Value::from_serialize(branding()),
+                currency => CURRENCY,
+                amounts => minijinja::Value::from_serialize(formatted_amounts(&detail)),
+                designs => minijinja::Value::from_serialize(order_designs(&detail.order)),
+                design_note => minijinja::Value::from_serialize(design_note(&detail.order)),
+                thob_garment => minijinja::Value::from_serialize(thob_garment()),
+                thob_markers => minijinja::Value::from_serialize(thob_markers_map(&fields)),
+                thob_front_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Front, &measurement)),
+                thob_back_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Back, &measurement)),
+                thob_front_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Front, &measurement)),
+                thob_back_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Back, &measurement)),
+            })
+            .unwrap();
+
+        // Labels match the entry form, including the L×W pocket fields.
+        assert!(html.contains(">Neck</span>"));
+        assert!(html.contains(">Neck Width</span>"));
+        assert!(html.contains("Front Pocket L×W"));
+        // Neck and neck width share one row: no further row starts between
+        // the two cells. (The stylesheet's own `.m-row` sits before the
+        // body, so the search starts at the neck cell.)
+        let neck = html.find(">Neck</span>").unwrap();
+        let neck_width = html.find(">Neck Width</span>").unwrap();
+        let next_row = neck + html[neck..].find("m-row").unwrap();
+        assert!(neck_width < next_row);
+        // The unrecorded half of the sleeve row renders as a blank
+        // placeholder that holds the column.
+        assert!(html.contains("m-empty"));
     }
 
     #[test]
