@@ -40,54 +40,49 @@
                 on screen ("120 inch · Front Length").
 #}
 {%- set order_status_labels = {
-  "pending": ("قيد التصنيع", "Pending"),
-  "received": ("تم التسليم", "Received")
-} -%}
-{%- set payment_labels = {
-  "benefit": ("بنفت", "Benefit"),
-  "cash": ("نقداً", "Cash"),
-  "card": ("بطاقة", "Card")
-} -%}
-{%- set payment_status_labels = {
-  "paid": ("مدفوعة", "Paid"),
-  "partial": ("مدفوعة جزئياً", "Partially paid"),
-  "unpaid": ("غير مدفوعة", "Unpaid")
+  "pending": "Pending",
+  "received": "Received"
 } -%}
 {%- set measurement_labels = {
-  "lengthFl": ("الطول (أمام)", "Length (Front)"),
-  "lengthBl": ("الطول (خلف)", "Length (Back)"),
-  "shoulder": ("الكتف", "Shoulder"),
-  "shoulderDown": ("نزلة الكتف", "Shoulder Down"),
-  "chest": ("الصدر", "Chest"),
-  "chestUp": ("الصدر (علوي)", "Chest (Upper)"),
-  "waist": ("الخصر", "Waist"),
-  "hips": ("الأوراك", "Hips"),
-  "sleeveLength": ("طول الكم", "Sleeve Length"),
-  "neck": ("الرقبة", "Neck"),
-  "neckWidth": ("عرض الرقبة", "Neck Width"),
-  "openHand": ("فتحة اليد", "Open Hand"),
-  "openHandFolding": ("ثنية فتحة اليد", "Open Hand Folding"),
-  "cuffWidth": ("عرض الأسوارة", "Cuff Width"),
-  "cuffling": ("الكفلنج", "Cuffling"),
-  "armHole": ("فتحة الإبط", "Armhole"),
-  "foWidth": ("عرض الفو", "FO Width"),
-  "fo": ("الفو", "Fo"),
-  "bottom": ("الأسفل", "Bottom"),
-  "bottomFolding": ("ثنية الأسفل", "Bottom Folding"),
-  "fullBody": ("الجسم الكامل", "Full Body"),
-  "sleeveHalf": ("نصف الكم", "Sleeve Half"),
-  "button": ("الأزرار", "Button"),
-  "buttonFold": ("ثنية الزر", "Button Fold"),
-  "openFold": ("الثنية المفتوحة", "Open Fold"),
-  "frontPocketLength": ("طول الجيب الأمامي", "Front Pocket Length"),
-  "frontPocketLengthByWidth": ("الجيب الأمامي بالعرض", "Front Pocket By Width"),
-  "sidePocketLength": ("طول الجيب الجانبي", "Side Pocket Length"),
-  "sidePocketLengthByWidth": ("الجيب الجانبي بالعرض", "Side Pocket By Width"),
-  "mobilePocketLengthByWidth": ("جيب الجوال بالعرض", "Mobile Pocket By Width")
+  "lengthFl": "Length (Front)",
+  "lengthBl": "Length (Back)",
+  "shoulder": "Shoulder",
+  "shoulderDown": "Shoulder Down",
+  "chest": "Chest",
+  "chestUp": "Chest (Upper)",
+  "waist": "Waist",
+  "hips": "Hips",
+  "sleeveLength": "Sleeve Length",
+  "neck": "Neck",
+  "neckWidth": "Neck Width",
+  "openHand": "Open Hand",
+  "openHandFolding": "Open Hand Folding",
+  "cuffWidth": "Cuff Width",
+  "cuffling": "Cuffling",
+  "armHole": "Armhole",
+  "foWidth": "FO Width",
+  "fo": "Fo",
+  "bottom": "Bottom",
+  "bottomFolding": "Bottom Folding",
+  "fullBody": "Full Body",
+  "sleeveHalf": "Sleeve Half",
+  "button": "Button",
+  "buttonFold": "Button Fold",
+  "openFold": "Open Fold",
+  "frontPocketLength": "Front Pocket Length",
+  "frontPocketLengthByWidth": "Front Pocket L×W",
+  "sidePocketLength": "Side Pocket Length",
+  "sidePocketLengthByWidth": "Side Pocket L×W",
+  "mobilePocketLengthByWidth": "Mobile Pocket L×W"
 } -%}
-{%- set body_measurements = ["lengthFl", "lengthBl", "shoulder", "shoulderDown", "chest", "chestUp", "waist", "hips", "sleeveLength", "sleeveHalf", "neck", "neckWidth", "openHand", "openHandFolding", "cuffWidth", "cuffling", "armHole", "bottom", "bottomFolding", "fullBody", "button", "buttonFold", "openFold"] -%}
-{%- set pocket_measurements = ["frontPocketLength", "frontPocketLengthByWidth", "sidePocketLength", "sidePocketLengthByWidth", "mobilePocketLengthByWidth"] -%}
-{%- set style_measurements = ["foWidth", "fo"] -%}
+{# Measurement pairs: each pair renders as one row with fixed columns, so
+   related fields (neck | neck width) stay side by side even when a field
+   further up the list wasn't recorded. A single-element pair is padded
+   with "" — `order.measurement[""]` is undefined and renders as a blank
+   cell that holds the column. #}
+{%- set body_pairs = [["lengthFl", "lengthBl"], ["shoulder", "shoulderDown"], ["chest", "chestUp"], ["waist", "hips"], ["sleeveLength", "sleeveHalf"], ["neck", "neckWidth"], ["openHand", "openHandFolding"], ["cuffWidth", "cuffling"], ["armHole", "bottom"], ["bottomFolding", "fullBody"], ["button", "buttonFold"], ["openFold", ""]] -%}
+{%- set pocket_pairs = [["frontPocketLength", "frontPocketLengthByWidth"], ["sidePocketLength", "sidePocketLengthByWidth"], ["mobilePocketLengthByWidth", ""]] -%}
+{%- set style_pairs = [["foWidth", "fo"]] -%}
 
 {# The thob template: the garment is drawn from the front and the back, so no
    single silhouette carries all 18 callouts. All the drawing logic lives in
@@ -123,23 +118,40 @@
     </g>
   </g>
 {%- endmacro -%}
+{# One measurement cell: the recorded value, or a blank placeholder that
+   holds the column so a pair's second field never slides left when the
+   first wasn't recorded. Value and label arrive as arguments because
+   macros can't see the template context. #}
+{%- macro m_cell(value, label) -%}
+  {% if value is defined and value is not none and value != '' %}
+    <div class="m">
+      <span>{{ label }}</span>
+      <span class="num">{{ value }}</span>
+    </div>
+  {% else %}
+    <span class="m-empty"></span>
+  {% endif %}
+{%- endmacro -%}
 <!doctype html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Order ORD-{{ order.orderNumber }}</title>
     <style>
+      /* A4 with a tight printer-safe margin. The sheet is designed to fit one
+         page: compact type, single-line bilingual labels, small design
+         thumbnails and capped diagram height keep everything on one page for
+         a typical order. */
       @page {
         size: A4;
-        margin: 12mm;
+        margin: 8mm;
       }
 
       :root {
         --ink: #10151c;
         --muted: #6b7280;
         --rule: #d8dee7;
-        --tint: #f4f6f9;
         --accent: #1d4ed8;
       }
 
@@ -149,11 +161,11 @@
 
       body {
         margin: 0;
-        padding: 12mm;
+        padding: 8mm;
         font-family: 'Noto Sans Arabic', 'IBM Plex Sans Arabic', 'Segoe UI',
           Tahoma, Arial, sans-serif;
-        font-size: 11px;
-        line-height: 1.5;
+        font-size: 10px;
+        line-height: 1.35;
         color: var(--ink);
         background: #fff;
         -webkit-print-color-adjust: exact;
@@ -166,51 +178,39 @@
         }
       }
 
-      /* Every label is bilingual: Arabic on top, English beneath it. */
-      .en {
-        display: block;
-        font-size: 0.82em;
-        color: var(--muted);
-        font-weight: 400;
-        direction: ltr;
-        text-align: right;
-      }
+      /* Labels are English-only. */
 
       header {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        gap: 16px;
-        padding-bottom: 10px;
-        border-bottom: 2px solid var(--ink);
+        gap: 10px;
+        padding-bottom: 6px;
+        border-bottom: 1.5px solid var(--ink);
       }
 
       .logo {
-        max-height: 68px;
-        max-width: 190px;
+        max-height: 36px;
+        max-width: 140px;
         object-fit: contain;
       }
 
       .company-name {
         margin: 0;
-        font-size: 19px;
+        font-size: 14px;
         font-weight: 700;
-        line-height: 1.25;
-      }
-
-      .company-name .en {
-        font-size: 13px;
-        color: var(--ink);
+        line-height: 1.2;
       }
 
       .company-meta {
-        margin-top: 5px;
+        margin-top: 2px;
         color: var(--muted);
-        font-size: 10px;
+        font-size: 8.5px;
+        line-height: 1.3;
       }
 
       .company-meta div + div {
-        margin-top: 1px;
+        margin-top: 0;
       }
 
       .doc-title {
@@ -220,20 +220,16 @@
 
       .doc-title h2 {
         margin: 0;
-        font-size: 16px;
+        font-size: 13px;
         font-weight: 700;
         letter-spacing: 0.02em;
-      }
-
-      .doc-title .en {
-        text-align: left;
-        font-size: 11px;
+        white-space: nowrap;
       }
 
       .doc-number {
-        margin-top: 6px;
+        margin-top: 2px;
         font-family: 'SFMono-Regular', Consolas, monospace;
-        font-size: 14px;
+        font-size: 12px;
         font-weight: 700;
         color: var(--accent);
         direction: ltr;
@@ -242,13 +238,13 @@
 
       .doc-number .ord {
         display: block;
-        font-size: 10px;
+        font-size: 9px;
         color: var(--muted);
       }
 
       h2.section-title {
-        margin: 16px 0 6px;
-        font-size: 11px;
+        margin: 6px 0 3px;
+        font-size: 9px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -257,21 +253,21 @@
 
       .panels {
         display: flex;
-        gap: 10px;
-        margin-top: 10px;
+        gap: 6px;
+        margin-top: 6px;
       }
 
       .panel {
         flex: 1;
         border: 1px solid var(--rule);
-        border-radius: 6px;
-        padding: 8px 10px;
-        background: var(--tint);
+        border-radius: 4px;
+        padding: 5px 7px;
+        background: #fff;
       }
 
       .panel h3 {
-        margin: 0 0 5px;
-        font-size: 9px;
+        margin: 0 0 3px;
+        font-size: 8px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -281,11 +277,12 @@
       .row {
         display: flex;
         justify-content: space-between;
-        gap: 10px;
+        align-items: baseline;
+        gap: 8px;
       }
 
       .row + .row {
-        margin-top: 2px;
+        margin-top: 1px;
       }
 
       .row dt {
@@ -305,18 +302,18 @@
 
       table {
         width: 100%;
-        margin-top: 10px;
+        margin-top: 6px;
         border-collapse: collapse;
-        font-size: 10.5px;
+        font-size: 9.5px;
       }
 
       thead th {
         background: var(--ink);
         color: #fff;
-        font-size: 9.5px;
+        font-size: 8.5px;
         font-weight: 600;
         text-align: right;
-        padding: 6px 8px;
+        padding: 3px 5px;
       }
 
       thead {
@@ -328,7 +325,7 @@
       }
 
       tbody td {
-        padding: 5px 8px;
+        padding: 3px 5px;
         border-bottom: 1px solid var(--rule);
         vertical-align: top;
       }
@@ -342,9 +339,9 @@
 
       .note {
         display: block;
-        margin-top: 1px;
+        margin-top: 0;
         color: var(--muted);
-        font-size: 9.5px;
+        font-size: 8px;
       }
 
       /* One bordered "Design" panel: a heading and then a grid of cells,
@@ -352,19 +349,20 @@
          catalog
          match fills its cell with a raster; a legacy value that matches
          nothing fills the label only, so the sheet reads the same shape
-         either way. The panel never splits across pages. */
+         either way. The panel never splits across pages. Thumbnails are kept
+         small so the sheet still fits on a single page. */
       .design-panel {
-        margin-top: 10px;
+        margin-top: 6px;
         border: 1px solid var(--rule);
-        border-radius: 6px;
-        padding: 8px 10px;
-        background: var(--tint);
+        border-radius: 4px;
+        padding: 5px 7px;
+        background: #fff;
         break-inside: avoid;
       }
 
       .design-panel h3 {
-        margin: 0 0 5px;
-        font-size: 9px;
+        margin: 0 0 3px;
+        font-size: 8px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -373,69 +371,80 @@
 
       .design-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
-        gap: 4px;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 3px;
       }
 
       .design-cell {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 2px;
-        padding: 3px 2px;
+        gap: 1px;
+        padding: 2px 1px;
         border: 1px solid var(--rule);
-        border-radius: 4px;
+        border-radius: 3px;
         background: #fff;
         text-align: center;
+        min-width: 0;
       }
 
       .design-cell img,
       .design-cell-empty {
         width: 100%;
-        height: 52px;
+        height: 44px;
         object-fit: contain;
+      }
+
+      .design-cell-empty {
+        display: none;
       }
 
       .design-copy {
         display: flex;
         flex-direction: column;
-        line-height: 1.15;
+        line-height: 1.1;
       }
 
       .design-title {
-        font-size: 7.5px;
+        font-size: 7px;
         color: var(--muted);
+        white-space: nowrap;
       }
 
       .design-name {
-        font-size: 8.5px;
+        font-size: 7.5px;
         font-weight: 600;
         text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
       }
 
       .design-note {
-        margin-top: 6px;
+        margin-top: 3px;
         color: var(--muted);
-        font-size: 9.5px;
+        font-size: 8.5px;
       }
 
       .measurements {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        margin-top: 10px;
+        gap: 6px;
+        margin-top: 6px;
       }
 
       .measurement-group {
         border: 1px solid var(--rule);
-        border-radius: 6px;
-        padding: 8px 10px;
-        background: var(--tint);
+        border-radius: 4px;
+        padding: 5px 7px;
+        background: #fff;
+        break-inside: avoid;
       }
 
       .measurement-group h3 {
-        margin: 0 0 5px;
-        font-size: 9px;
+        margin: 0 0 3px;
+        font-size: 8px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -443,9 +452,15 @@
       }
 
       .measurement-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .m-row {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 4px 12px;
+        gap: 10px;
       }
 
       .measurement-group .m {
@@ -453,12 +468,12 @@
         justify-content: space-between;
         gap: 8px;
         border-bottom: 1px dotted var(--rule);
-        padding-bottom: 2px;
+        padding-bottom: 1px;
       }
 
       .measurement-group .m span:first-child {
         color: var(--muted);
-        font-size: 9.5px;
+        font-size: 8.5px;
       }
 
       .measurement-group .m span:last-child {
@@ -468,20 +483,22 @@
       .thob-sheet {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        margin-top: 10px;
+        gap: 6px;
+        margin-top: 6px;
       }
 
       .thob-panel {
         border: 1px solid var(--rule);
-        border-radius: 6px;
-        padding: 8px 10px;
-        background: var(--tint);
+        border-radius: 4px;
+        padding: 5px 7px;
+        background: #fff;
+        break-inside: avoid;
+        min-width: 0;
       }
 
       .thob-panel h3 {
         margin: 0 0 2px;
-        font-size: 9px;
+        font-size: 8px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -492,6 +509,7 @@
         display: block;
         width: 100%;
         height: auto;
+        max-height: 300px;
       }
 
       .thob-outline {
@@ -564,16 +582,17 @@
 
       .closing {
         break-inside: avoid;
-        margin-top: 10px;
+        margin-top: 6px;
       }
 
       footer {
-        margin-top: 10px;
-        padding-top: 8px;
+        margin-top: 6px;
+        padding-top: 4px;
         border-top: 1px solid var(--rule);
         text-align: center;
         color: var(--muted);
-        font-size: 9.5px;
+        font-size: 8px;
+        line-height: 1.3;
       }
     </style>
   </head>
@@ -583,10 +602,7 @@
         {% if company.logoDataUrl %}
           <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
         {% endif %}
-        <h1 class="company-name">
-          {{ company.nameAr }}
-          <span class="en">{{ company.nameEn }}</span>
-        </h1>
+        <h1 class="company-name">{{ company.nameEn }}</h1>
         <div class="company-meta">
           {% if company.phone %}<div dir="ltr">{{ company.phone }}</div>{% endif %}
           {% if company.email %}<div dir="ltr">{{ company.email }}</div>{% endif %}
@@ -594,10 +610,7 @@
       </div>
 
       <div class="doc-title">
-        <h2>
-          أمر تصنيع
-          <span class="en">Production Order</span>
-        </h2>
+        <h2>Production Order</h2>
         <div class="doc-number">
           INV-{{ order.invoiceNumber }}
           <span class="ord" dir="ltr">ORD-{{ order.orderNumber }}</span>
@@ -607,26 +620,26 @@
 
     <section class="panels">
       <div class="panel">
-        <h3>بيانات الطلب · Order details</h3>
+        <h3>Order details</h3>
         <dl>
           <div class="row">
-            <dt>تاريخ الفاتورة<span class="en">Invoice date</span></dt>
+            <dt>Invoice date</dt>
             <dd dir="ltr">{{ invoice_date_time }}</dd>
           </div>
           <div class="row">
-            <dt>العميل<span class="en">Customer</span></dt>
+            <dt>Customer</dt>
             <dd>{{ order.customerName }}</dd>
           </div>
           <div class="row">
-            <dt>الجوال<span class="en">Mobile</span></dt>
+            <dt>Mobile</dt>
             <dd dir="ltr">{{ order.customerMobile }}</dd>
           </div>
           <div class="row">
-            <dt>الحالة<span class="en">Order status</span></dt>
+            <dt>Order status</dt>
             <dd>
               {%- set status = order_status_labels[order.status] -%}
               {% if status %}
-                {{ status[0] }} <span class="en">{{ status[1] }}</span>
+                {{ status }}
               {% else %}
                 {{ order.status }}
               {% endif %}
@@ -636,34 +649,34 @@
       </div>
 
       <div class="panel">
-        <h3>الخامة والمقاسات · Material</h3>
+        <h3>Material</h3>
         <dl>
           <div class="row">
-            <dt>الخامة<span class="en">Material / SKU</span></dt>
+            <dt>Material / SKU</dt>
             <dd dir="ltr">{% if order.materialSku %}{{ order.materialSku }}{% else %}{{ order.material }}{% endif %}</dd>
           </div>
           <div class="row">
-            <dt>الكمية<span class="en">Quantity</span></dt>
+            <dt>Quantity</dt>
             <dd class="num">{{ amounts.materialAmount }}</dd>
           </div>
           <div class="row">
-            <dt>مكان التصنيع<span class="en">Made at</span></dt>
+            <dt>Made at</dt>
             <dd>
               {% if order.productionLocation %}
                 {{ order.productionLocation }}
-                {% if order.productionLocationInferred %}<span class="note">مستنتج من المخزون</span>{% endif %}
+                {% if order.productionLocationInferred %}<span class="note">Inferred from stock</span>{% endif %}
               {% else %}
-                غير محدد <span class="en">Not assigned</span>
+                Not assigned
               {% endif %}
             </dd>
           </div>
           <div class="row">
-            <dt>مكان الاستلام<span class="en">Collection</span></dt>
+            <dt>Collection</dt>
             <dd>
               {% if order.receivingLocation %}
                 {{ order.receivingLocation }}
               {% else %}
-                غير محدد <span class="en">Not assigned</span>
+                Not assigned
               {% endif %}
             </dd>
           </div>
@@ -672,7 +685,7 @@
     </section>
 
     <section class="design-panel">
-      <h3>التصميم · Design</h3>
+      <h3>Design</h3>
       {% if designs %}
         <div class="design-grid">
           {% for chip in designs %}
@@ -683,28 +696,25 @@
                 <span class="design-cell-empty"></span>
               {% endif %}
               <span class="design-copy">
-                <span class="design-title"
-                  >{{ chip.titleAr
-                  }}<span class="en">{{ chip.titleEn }}</span></span
-                >
+                <span class="design-title">{{ chip.titleEn }}</span>
                 <span class="design-name" dir="ltr">{{ chip.label }}</span>
               </span>
             </div>
           {% endfor %}
         </div>
       {% else %}
-        <div class="design-note">لا يوجد تصميم مسجل <span class="en">No design choices recorded</span></div>
+        <div class="design-note">No design choices recorded</div>
       {% endif %}
       {% if design_note %}
         <div class="design-note">{{ design_note }}</div>
       {% endif %}
     </section>
 
-    <h2 class="section-title">المقاسات المسجلة · Measurements</h2>
+    <h2 class="section-title">Measurements</h2>
     {# One snapshot per order — the measurements the garment was cut to. #}
     <div class="thob-sheet">
       <div class="thob-panel">
-        <h3>واجهة الثوب · Front of Thob</h3>
+        <h3>Front of Thob</h3>
         <svg class="thob-svg" viewBox="0 0 480 500" role="img" aria-label="Front view measurement chart">
           <defs>
             <marker id="thob-arrow-f" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
@@ -732,7 +742,7 @@
         </svg>
       </div>
       <div class="thob-panel">
-        <h3>خلف الثوب · Back of Thob</h3>
+        <h3>Back of Thob</h3>
         <svg class="thob-svg" viewBox="0 0 480 500" role="img" aria-label="Back view measurement chart">
           <defs>
             <marker id="thob-arrow-b" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
@@ -756,52 +766,55 @@
     </div>
     <div class="measurements">
       <div class="measurement-group">
-        <h3>مقاسات الجسم · Body dimensions</h3>
+        <h3>Body dimensions</h3>
         <div class="measurement-grid">
-          {% for field in body_measurements %}
-            {% set m = order.measurement[field] %}
-            {% if m is defined and m is not none and m != '' %}
-              <div class="m">
-                <span>{{ measurement_labels[field][0] }}</span>
-                <span class="num">{{ m }}</span>
+          {% for pair in body_pairs %}
+            {% set m0 = order.measurement[pair[0]] %}
+            {% set m1 = order.measurement[pair[1]] %}
+            {% if (m0 is defined and m0 is not none and m0 != '') or (m1 is defined and m1 is not none and m1 != '') %}
+              <div class="m-row">
+                {{ m_cell(m0, measurement_labels[pair[0]]) }}
+                {{ m_cell(m1, measurement_labels[pair[1]]) }}
               </div>
             {% endif %}
           {% endfor %}
         </div>
       </div>
       <div class="measurement-group">
-        <h3>الجيوب · Pockets</h3>
+        <h3>Pockets</h3>
         <div class="measurement-grid">
-          {% for field in pocket_measurements %}
-            {% set m = order.measurement[field] %}
-            {% if m is defined and m is not none and m != '' %}
-              <div class="m">
-                <span>{{ measurement_labels[field][0] }}</span>
-                <span class="num">{{ m }}</span>
+          {% for pair in pocket_pairs %}
+            {% set m0 = order.measurement[pair[0]] %}
+            {% set m1 = order.measurement[pair[1]] %}
+            {% if (m0 is defined and m0 is not none and m0 != '') or (m1 is defined and m1 is not none and m1 != '') %}
+              <div class="m-row">
+                {{ m_cell(m0, measurement_labels[pair[0]]) }}
+                {{ m_cell(m1, measurement_labels[pair[1]]) }}
               </div>
             {% endif %}
           {% endfor %}
         </div>
       </div>
       <div class="measurement-group">
-        <h3>التفاصيل والإكسسوارات · Style & finishing</h3>
+        <h3>Style & finishing</h3>
         <div class="measurement-grid">
-          {% for field in style_measurements %}
-            {% set m = order.measurement[field] %}
-            {% if m is defined and m is not none and m != '' %}
-              <div class="m">
-                <span>{{ measurement_labels[field][0] }}</span>
-                <span class="num">{{ m }}</span>
+          {% for pair in style_pairs %}
+            {% set m0 = order.measurement[pair[0]] %}
+            {% set m1 = order.measurement[pair[1]] %}
+            {% if (m0 is defined and m0 is not none and m0 != '') or (m1 is defined and m1 is not none and m1 != '') %}
+              <div class="m-row">
+                {{ m_cell(m0, measurement_labels[pair[0]]) }}
+                {{ m_cell(m1, measurement_labels[pair[1]]) }}
               </div>
             {% endif %}
           {% endfor %}
         </div>
       </div>
       <div class="measurement-group">
-        <h3>المقايسة · Recorded</h3>
+        <h3>Recorded</h3>
         <div class="measurement-grid">
           <div class="m">
-            <span>تاريخ المقايسة<span class="en">Measured on</span></span>
+            <span>Measured on</span>
             <span class="num" dir="ltr">{{ order.measurement.date }}</span>
           </div>
         </div>
@@ -810,7 +823,7 @@
 
     <div class="closing">
       <footer>
-        شكراً لتعاملكم معنا · Thank you for your business
+        Thank you for your business
         <div dir="ltr">ORD-{{ order.orderNumber }} · {{ invoice_date_time }}</div>
       </footer>
     </div>
