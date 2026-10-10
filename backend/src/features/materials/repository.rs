@@ -18,7 +18,6 @@ const SPEC: ListSpec = ListSpec {
             m.name,
             m.sku,
             m.unit,
-            m.family,
             COALESCE(sum(ms.quantity), 0)::float8 AS total_quantity,
             COALESCE(
                 array_agg(b.name ORDER BY b.name) FILTER (WHERE ms.id IS NOT NULL),
@@ -38,14 +37,13 @@ const SPEC: ListSpec = ListSpec {
         FROM materials m
         LEFT JOIN material_stock ms ON ms.material_id = m.id
         LEFT JOIN branch b ON b.id = ms.branch_id
-        GROUP BY m.id, m.name, m.sku, m.unit, m.family
+        GROUP BY m.id, m.name, m.sku, m.unit
     "#,
     columns: &[
         ("id", ColumnDef::new("id", ColumnKind::Uuid)),
         ("name", ColumnDef::new("name", ColumnKind::Text)),
         ("sku", ColumnDef::new("sku", ColumnKind::Text)),
         ("unit", ColumnDef::new("unit", ColumnKind::Text)),
-        ("family", ColumnDef::new("family", ColumnKind::Text)),
         (
             "totalQuantity",
             ColumnDef::new("total_quantity", ColumnKind::Number),
@@ -101,21 +99,19 @@ pub async fn create_material(
     name: &str,
     sku: Option<&str>,
     unit: &str,
-    family: Option<&str>,
     entries: &[StockEntryInput],
 ) -> Result<Uuid, sqlx::Error> {
     let mut tx = state.db().begin().await?;
 
     let material_id = sqlx::query_scalar!(
         r#"
-        INSERT INTO materials (name, sku, unit, family)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO materials (name, sku, unit)
+        VALUES ($1, $2, $3)
         RETURNING id
         "#,
         name,
         sku,
         unit,
-        family,
     )
     .fetch_one(&mut *tx)
     .await?;

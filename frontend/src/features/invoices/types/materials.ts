@@ -10,9 +10,6 @@ export interface Material {
   name: string
   sku: string | null
   unit: string
-  // Fabric family shared by a fabric's colour variants; null on
-  // pre-existing rows. Mirrors the inventory type above.
-  family: string | null
   locations: MaterialLocationStock[]
 }
 

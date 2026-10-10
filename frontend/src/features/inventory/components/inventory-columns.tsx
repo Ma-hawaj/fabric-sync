@@ -56,26 +56,6 @@ export const getInventoryColumns = (
     },
   },
   {
-    // Fabric family shared by a fabric's colour variants — filtering here
-    // (e.g. "Zabrjad") clusters every colour of one fabric together.
-    accessorKey: 'family',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Family" />
-    ),
-    cell: ({ row }) => (
-      <div className="text-muted-foreground">
-        {row.getValue('family') ?? '—'}
-      </div>
-    ),
-    enableSorting: true,
-    enableColumnFilter: true,
-    meta: {
-      label: 'Family',
-      placeholder: 'Filter family...',
-      variant: 'text',
-    },
-  },
-  {
     id: 'locations',
     accessorFn: (material) => material.locations.map((l) => l.location),
     header: ({ column }) => (
