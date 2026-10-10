@@ -27,6 +27,12 @@ export interface Invoice {
   giftCardRedeemed: number
   /** Goods receipt, separate from money: every order collected. */
   received: boolean
+  /**
+   * Latest collection across the invoice's tailoring lines, as an ISO
+   * datetime. Null until the first order is received (and on retail-only
+   * invoices, which have no orders).
+   */
+  lastReceivedAt: string | null
   /** Where the customer collects, taken from the invoice's branch. */
   receivingLocation: string | null
   /** Distinct production locations across the invoice's tailoring lines. */

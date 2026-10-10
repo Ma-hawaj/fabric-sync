@@ -83,6 +83,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         payment_status: invoice.payment_status,
         payment_method: invoice.payment_method,
         received: invoice.received,
+        last_received_at: invoice.last_received_at,
         lines: rows.lines,
         redemptions: rows.redemptions,
         payments,

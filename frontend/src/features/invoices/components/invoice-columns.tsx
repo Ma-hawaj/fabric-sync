@@ -269,6 +269,21 @@ export const getInvoiceColumns = (
     enableColumnFilter: false,
   },
   {
+    id: 'lastReceivedAt',
+    accessorFn: (invoice) =>
+      invoice.lastReceivedAt ? new Date(invoice.lastReceivedAt) : null,
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Last Received" />
+    ),
+    cell: ({ row }) => {
+      const lastReceived = row.getValue<Date | null>('lastReceivedAt')
+      if (!lastReceived) return <div className="text-muted-foreground">—</div>
+      return <div>{lastReceived.toLocaleString()}</div>
+    },
+    enableSorting: true,
+    enableColumnFilter: false,
+  },
+  {
     accessorKey: 'totalPrice',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Total Price" />
