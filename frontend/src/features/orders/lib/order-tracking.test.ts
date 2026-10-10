@@ -57,6 +57,7 @@ function order(overrides: Partial<Order>): Order {
     materialAmount: 3.5,
     price: 450,
     status: 'pending',
+    receivedAt: null,
     productionLocationId: 'workshop',
     productionLocation: 'Central Workshop',
     productionLocationInferred: false,

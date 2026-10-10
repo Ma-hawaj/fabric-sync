@@ -366,6 +366,7 @@ fn assemble_order(
         material_amount: row.material_amount,
         price: row.price,
         status: row.status,
+        received_at: row.received_at,
         thobe_type: row.thobe_type,
         f_pocket: row.f_pocket,
         collar: row.collar,

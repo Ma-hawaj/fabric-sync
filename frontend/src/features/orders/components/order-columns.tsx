@@ -244,6 +244,19 @@ export function getOrderColumns(
       },
     },
     {
+      accessorKey: 'receivedAt',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Received At" />
+      ),
+      cell: ({ row }) => {
+        const receivedAt = row.getValue<Date | null>('receivedAt')
+        if (!receivedAt) return <div className="text-muted-foreground">—</div>
+        return <div>{receivedAt.toLocaleString()}</div>
+      },
+      enableSorting: true,
+      enableColumnFilter: false,
+    },
+    {
       id: 'stage',
       accessorFn: currentStageLabel,
       header: ({ column }) => (

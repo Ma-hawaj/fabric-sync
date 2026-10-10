@@ -83,6 +83,11 @@ export interface Order {
   price: number
   status: OrderStatus
   /**
+   * When the customer collected the garment, as an ISO datetime — parsed to
+   * a Date in use-orders.ts for the table. Null while still pending.
+   */
+  receivedAt: Date | null
+  /**
    * The made-to-measure design choices, as stored on the order — the same
    * values the invoice PDF renders as chips per line. Null when the slot was
    * left blank. A value that matches no catalog id is a legacy free-text

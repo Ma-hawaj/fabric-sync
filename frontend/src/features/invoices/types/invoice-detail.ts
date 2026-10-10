@@ -81,6 +81,11 @@ export interface InvoiceDetail {
   paymentMethod: PaymentType | null
   /** Goods receipt, separate from money: every order collected. */
   received: boolean
+  /**
+   * Latest collection across the invoice's tailoring lines, as an ISO
+   * datetime. Null until the first order is received.
+   */
+  lastReceivedAt: string | null
   lines: InvoiceLine[]
   redemptions: InvoiceRedemption[]
   payments: InvoicePayment[]

@@ -526,6 +526,7 @@ mod tests_support {
             payment_status: "paid".to_string(),
             payment_method: None,
             received: true,
+            last_received_at: None,
             lines: Vec::new(),
             redemptions: Vec::new(),
             payments: Vec::new(),

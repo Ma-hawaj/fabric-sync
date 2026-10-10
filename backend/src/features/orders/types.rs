@@ -118,6 +118,9 @@ pub struct OrderRow {
     pub material_amount: f64,
     pub price: f64,
     pub status: String,
+    /// When the customer collected the garment, stamped automatically when
+    /// the order is received. Null while the order is still pending.
+    pub received_at: Option<DateTime<Utc>>,
     /// The made-to-measure design choices, as stored on `orders` — the same
     /// columns the invoice document already renders per line. Exposed here so
     /// the order detail page and the printed order sheet can show them without
@@ -211,6 +214,9 @@ pub struct OrderListItem {
     pub material_amount: f64,
     pub price: f64,
     pub status: String,
+    /// When the customer collected the garment, stamped automatically when
+    /// the order is received. Null while the order is still pending.
+    pub received_at: Option<DateTime<Utc>>,
     /// The made-to-measure design choices, as stored on `orders` — the same
     /// values the invoice document renders as chips per line. Carried on the
     /// list row (not just the detail) so the tracking sheet and the printed

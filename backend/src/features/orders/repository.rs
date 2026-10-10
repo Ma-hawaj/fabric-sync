@@ -46,6 +46,7 @@ const SPEC: ListSpec = ListSpec {
             o.material_amount::float8 AS material_amount,
             o.price::float8 AS price,
             o.status,
+            o.received_at,
             o.thobe_type,
             o.f_pocket,
             o.collar,
@@ -179,6 +180,10 @@ const SPEC: ListSpec = ListSpec {
         ),
         ("price", ColumnDef::new("price", ColumnKind::Number)),
         ("status", ColumnDef::new("status", ColumnKind::Text)),
+        (
+            "receivedAt",
+            ColumnDef::new("received_at", ColumnKind::Date),
+        ),
         (
             "invoicePaymentStatus",
             ColumnDef::new("invoice_payment_status", ColumnKind::Text),

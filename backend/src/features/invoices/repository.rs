@@ -82,6 +82,9 @@ pub async fn fetch_invoice_detail(
                 SELECT 1 FROM orders o
                 WHERE o.invoice_id = i.id AND o.status <> 'received'
             ) AS "received!",
+            -- The latest collection across the invoice's tailoring lines
+            -- (see the list query's `agg` lateral for the same derivation).
+            (SELECT MAX(o.received_at) FROM orders o WHERE o.invoice_id = i.id) AS "last_received_at?",
             i.total_price::float8 AS "total_price!",
             i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
             -- The `?` suffixes are for sqlx: it reads nullability off the
@@ -270,6 +273,7 @@ pub async fn fetch_invoice_detail(
             amount_paid: invoice.amount_paid,
             payment_method: invoice.payment_method,
             received: invoice.received,
+            last_received_at: invoice.last_received_at,
             gift_card_redeemed: invoice.gift_card_redeemed,
         },
         lines,
@@ -308,6 +312,10 @@ const SPEC: ListSpec = ListSpec {
                 SELECT 1 FROM orders o
                 WHERE o.invoice_id = i.id AND o.status <> 'received'
             ) AS received,
+            -- The latest collection across the invoice's tailoring lines.
+            -- NULL until the first order is received (and on retail-only
+            -- invoices, which have no orders at all).
+            agg.last_received_at AS last_received_at,
             i.gift_card_redeemed::float8 AS gift_card_redeemed,
             i.branch_id AS receiving_location_id,
             recv.name AS receiving_location,
@@ -350,7 +358,8 @@ const SPEC: ListSpec = ListSpec {
                 string_agg(DISTINCT c.mobile_no, ', ') AS customer_mobiles,
                 array_agg(DISTINCT mat.name) AS material_names,
                 json_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_locations,
-                array_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_location_names
+                array_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_location_names,
+                MAX(o.received_at) AS last_received_at
             FROM orders o
             JOIN measurements m ON m.id = o.measurement_id
             JOIN customers c ON c.id = m.customer_id
@@ -433,6 +442,10 @@ const SPEC: ListSpec = ListSpec {
             ColumnDef::new("payment_method", ColumnKind::Text),
         ),
         ("received", ColumnDef::new("received", ColumnKind::Bool)),
+        (
+            "lastReceivedAt",
+            ColumnDef::new("last_received_at", ColumnKind::Date),
+        ),
         (
             "receivingLocation",
             ColumnDef::new("receiving_location", ColumnKind::Text),

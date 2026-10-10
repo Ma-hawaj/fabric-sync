@@ -481,6 +481,10 @@ pub struct InvoiceRecord {
     /// Goods receipt, separate from money: true once no order on the invoice
     /// is still pending collection.
     pub received: bool,
+    /// The latest collection time across the invoice's tailoring lines,
+    /// derived as MAX(orders.received_at). Null until the first order is
+    /// received (and on retail-only invoices, which have no orders).
+    pub last_received_at: Option<DateTime<Utc>>,
     pub gift_card_redeemed: f64,
 }
 
@@ -510,6 +514,9 @@ pub struct InvoiceDetail {
     /// is still pending collection. The edit form and the receive actions
     /// both read this rather than inferring it from the payment status.
     pub received: bool,
+    /// The latest collection time across the invoice's tailoring lines.
+    /// Null until the first order is received.
+    pub last_received_at: Option<DateTime<Utc>>,
     pub lines: Vec<InvoiceDetailLine>,
     pub redemptions: Vec<InvoiceRedemptionLine>,
     pub payments: Vec<InvoicePayment>,
@@ -540,6 +547,10 @@ pub struct InvoiceListItem {
     /// Goods receipt, separate from money: true once no order on the invoice
     /// is still pending collection. Backs the list's collection filter.
     pub received: bool,
+    /// The latest collection time across the invoice's tailoring lines.
+    /// Null until the first order is received (and on retail-only invoices,
+    /// which have no orders).
+    pub last_received_at: Option<DateTime<Utc>>,
     /// Gift card tender applied to this invoice. Not part of `amount_paid`:
     /// together they add up to `total_price` on a settled invoice.
     pub gift_card_redeemed: f64,
