@@ -140,6 +140,8 @@ export function InventoryFormPage() {
                     <TextField form={form} name="sku" label="SKU" />
                   </div>
 
+                  <TextField form={form} name="family" label="Family" />
+
                   <form.Field name="unit">
                     {(field) => (
                       <Field data-invalid={field.state.meta.errors.length > 0}>

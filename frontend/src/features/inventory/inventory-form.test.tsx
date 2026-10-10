@@ -17,6 +17,7 @@ const MATERIALS: Material[] = [
     name: 'Cotton Poplin — White',
     sku: 'FB-CTN-WHT-01',
     unit: 'meters',
+    family: 'Cotton Poplin',
     locations: [
       { locationId: 'loc-1', location: 'Main Warehouse', quantity: 100 },
       { locationId: 'loc-2', location: 'Downtown Branch', quantity: 20 },
@@ -27,6 +28,7 @@ const MATERIALS: Material[] = [
     name: 'Wool Blend — Grey',
     sku: null,
     unit: 'meters',
+    family: 'Wool Blend',
     locations: [],
   },
 ]

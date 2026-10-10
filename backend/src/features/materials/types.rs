@@ -19,6 +19,9 @@ pub struct Material {
     pub name: String,
     pub sku: Option<String>,
     pub unit: String,
+    // Fabric family shared by a fabric's colour variants ("Zabrjad 1" and
+    // "Zabrjad 2" are both family "Zabrjad"); NULL on pre-existing rows.
+    pub family: Option<String>,
     #[sqlx(json)]
     pub locations: Vec<MaterialLocationStock>,
 }
@@ -36,6 +39,9 @@ pub struct CreateMaterialInput {
     pub name: String,
     pub sku: Option<String>,
     pub unit: String,
+    // Fabric family grouping this material's colour variants; absent on
+    // older clients, which simply create ungrouped materials.
+    pub family: Option<String>,
     #[serde(default)]
     pub entries: Vec<StockEntryInput>,
 }
