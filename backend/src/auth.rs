@@ -341,6 +341,20 @@ impl AuthenticatedUser {
     pub fn has_role(&self, minimum: Role) -> bool {
         self.roles.iter().any(|role| *role >= minimum)
     }
+
+    /// Rejects callers below `minimum` with 403 — the handler-level companion
+    /// to the [`require_role`] middleware, for routes that need a stricter
+    /// gate than their router's baseline (e.g. admin-only writes).
+    pub fn require_role(&self, minimum: Role) -> Result<(), AppError> {
+        if self.has_role(minimum) {
+            Ok(())
+        } else {
+            Err(AppError::Forbidden(format!(
+                "requires role `{}` or higher",
+                minimum.as_str()
+            )))
+        }
+    }
 }
 
 /// Extracts the bearer token from `request` as an owned string. Synchronous
@@ -384,13 +398,7 @@ pub fn require_role(
 
         Box::pin(async move {
             let user = introspect(&state, &token?).await?;
-
-            if !user.has_role(minimum) {
-                return Err(AppError::Forbidden(format!(
-                    "requires role `{}` or higher",
-                    minimum.as_str()
-                )));
-            }
+            user.require_role(minimum)?;
 
             // Attaches to the request-wide span opened by
             // `request_log::log_request`, which is `Span::current()` here
@@ -444,6 +452,21 @@ mod tests {
     fn no_roles_fails_every_gate() {
         let user = user_with_roles(&[]);
         assert!(!user.has_role(Role::Viewer));
+    }
+
+    #[test]
+    fn require_role_method_resolves_like_has_role() {
+        let admin = user_with_roles(&[Role::Admin]);
+        assert!(admin.require_role(Role::Admin).is_ok());
+        assert!(admin.require_role(Role::Staff).is_ok());
+
+        let staff = user_with_roles(&[Role::Staff]);
+        assert!(staff.require_role(Role::Viewer).is_ok());
+        assert!(staff.require_role(Role::Admin).is_err());
+
+        let nobody = user_with_roles(&[]);
+        let err = nobody.require_role(Role::Viewer).unwrap_err();
+        assert!(matches!(err, AppError::Forbidden(_)));
     }
 
     #[test]

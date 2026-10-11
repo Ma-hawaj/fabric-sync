@@ -4,14 +4,18 @@ import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { useDataTable } from '@/hooks/use-data-table'
 import { Button } from '@/components/ui/button'
+import { RoleGuard } from '@/components/role-guard'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
+import { hasRole, useAuth } from '@/lib/auth'
 import { getOrderStageColumns } from './components/order-stage-columns'
 import { useOrderStages } from './hooks/use-order-stages'
 import { useUpdateOrderStage } from './hooks/use-update-order-stage'
 import type { OrderStage } from './types/order-stage'
 
 export function OrderStagesPage() {
+  const { user } = useAuth()
+  const canEdit = hasRole(user, 'admin')
   const { data: stages = [], isLoading } = useOrderStages()
   const updateStage = useUpdateOrderStage()
 
@@ -36,8 +40,8 @@ export function OrderStagesPage() {
   )
 
   const columns = React.useMemo(
-    () => getOrderStageColumns(toggleActive, updateStage.isPending),
-    [toggleActive, updateStage.isPending],
+    () => getOrderStageColumns(toggleActive, updateStage.isPending, canEdit),
+    [toggleActive, updateStage.isPending, canEdit],
   )
 
   const { table } = useDataTable({
@@ -59,10 +63,12 @@ export function OrderStagesPage() {
             passed through it.
           </p>
         </div>
-        <Button nativeButton={false} render={<Link to="/order-stages/new" />}>
-          <PlusIcon className="h-4 w-4" />
-          Add Stage
-        </Button>
+        <RoleGuard role="admin">
+          <Button nativeButton={false} render={<Link to="/order-stages/new" />}>
+            <PlusIcon className="h-4 w-4" />
+            Add Stage
+          </Button>
+        </RoleGuard>{' '}
       </div>
 
       {isLoading ? (

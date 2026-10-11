@@ -5,7 +5,7 @@ use axum::{
 use uuid::Uuid;
 
 use crate::{
-    auth::AuthenticatedUser,
+    auth::{AuthenticatedUser, Role},
     error::AppError,
     list::{ListParams, Page},
     state::AppState,
@@ -26,17 +26,19 @@ pub async fn list_stages(
 
 pub async fn create_stage(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(input): Json<CreateOrderStageInput>,
 ) -> Result<Json<OrderStage>, AppError> {
+    user.require_role(Role::Admin)?;
     Ok(Json(service::create_stage(&state, input).await?))
 }
 
 pub async fn update_stage(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(stage_id): Path<Uuid>,
     Json(input): Json<UpdateOrderStageInput>,
 ) -> Result<Json<OrderStage>, AppError> {
+    user.require_role(Role::Admin)?;
     Ok(Json(service::update_stage(&state, stage_id, input).await?))
 }
