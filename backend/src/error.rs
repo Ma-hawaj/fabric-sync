@@ -7,6 +7,7 @@ use axum::{
 pub enum AppError {
     Auth(String),
     Unauthorized(String),
+    Forbidden(String),
     Io(std::io::Error),
     Sqlx(sqlx::Error),
     Migration(sqlx::migrate::MigrateError),
@@ -78,6 +79,7 @@ impl IntoResponse for AppError {
         let (status, message) = match self {
             Self::Auth(error) => (StatusCode::INTERNAL_SERVER_ERROR, error),
             Self::Unauthorized(message) => (StatusCode::UNAUTHORIZED, message),
+            Self::Forbidden(message) => (StatusCode::FORBIDDEN, message),
             Self::Io(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
             Self::Sqlx(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
             Self::Migration(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
@@ -99,7 +101,7 @@ impl IntoResponse for AppError {
         // always INFO, so there'd be no way to filter or alert on errors by
         // level. Every AppError gets its own leveled event here instead — a
         // real server fault (5xx) is `error!`, an expected client-caused one
-        // (401/404/409/400) is `warn!`.
+        // (401/403/404/409/400) is `warn!`.
         if status.is_server_error() {
             tracing::error!(status = status.as_u16(), error = %message, "request failed");
         } else {

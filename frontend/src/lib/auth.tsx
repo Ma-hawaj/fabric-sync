@@ -7,10 +7,51 @@ import {
 import type { User } from 'oidc-client-ts'
 import { oidcConfigError, oidcUserManager } from './oidc'
 
+export type Role = 'admin' | 'staff' | 'viewer'
+
+// Low-to-high, so a higher role satisfies a lower role's gate (an `admin`
+// passes a `staff`-or-`viewer` check) — mirrors the hierarchy the backend
+// enforces in `backend/src/auth.rs`'s `Role`.
+const ROLE_ORDER: Role[] = ['viewer', 'staff', 'admin']
+
+const KNOWN_ROLES = new Set<Role>(ROLE_ORDER)
+
+// Authentik surfaces the user's groups through the default `profile` scope
+// mapping as a `groups` string array (group names); the `entitlements`
+// scope mapping adds `roles`/`entitlements` the same way. Any of the three
+// carrying `admin`/`staff`/`viewer` (case-insensitive) grants that app role —
+// other values (e.g. branch groups like "Branch A") are ignored.
+function rolesFromValue(value: unknown): Role[] {
+  if (!Array.isArray(value)) return []
+
+  const roles: Role[] = []
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue
+    const role = entry.toLowerCase() as Role
+    if (KNOWN_ROLES.has(role) && !roles.includes(role)) {
+      roles.push(role)
+    }
+  }
+  return roles
+}
+
+/** Resolves the app roles held by an OIDC profile (ID token + userinfo). */
+export function rolesFromProfile(
+  profile: Record<string, unknown> | undefined,
+): Role[] {
+  const roles = [
+    ...rolesFromValue(profile?.['groups']),
+    ...rolesFromValue(profile?.['roles']),
+    ...rolesFromValue(profile?.['entitlements']),
+  ]
+  return ROLE_ORDER.filter((role) => roles.includes(role))
+}
+
 export type AuthUser = {
   name: string
   email: string
   avatarUrl?: string
+  roles: Role[]
 }
 
 export type AuthState = {
@@ -20,6 +61,13 @@ export type AuthState = {
   error: Error | null
   signIn: (returnTo?: string) => Promise<void>
   signOut: () => void
+}
+
+/** Whether `user` holds `minimum` or a higher role in the hierarchy above. */
+export function hasRole(user: AuthUser | null, minimum: Role): boolean {
+  if (!user) return false
+  const minimumIndex = ROLE_ORDER.indexOf(minimum)
+  return user.roles.some((role) => ROLE_ORDER.indexOf(role) >= minimumIndex)
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -49,6 +97,7 @@ function AuthBridge({ children }: { children: ReactNode }) {
               'Unknown',
             email: profile.email ?? '',
             avatarUrl: profile.picture,
+            roles: rolesFromProfile(profile),
           }
         : null,
       error: configError ? new Error(configError) : (oidc.error ?? null),

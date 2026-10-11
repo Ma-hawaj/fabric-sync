@@ -87,6 +87,8 @@ After the stack is up, create two OAuth2/OIDC providers in the Authentik admin U
 
 Also set `OAUTH_INTROSPECTION_URL=http://localhost:9000/application/o/introspect/` (Authentik's introspection endpoint is global and isn't advertised by per-provider discovery) and leave `OAUTH_RESOURCE_AUDIENCE` unset — if a valid access token gets a 401, that audience check against a claim Authentik may not send is the first suspect.
 
+App roles (`admin`/`staff`/`viewer`, hierarchical) come from Authentik group membership: create groups with exactly those names (Directory > Groups) and assign users to them. Every API route requires at least `staff`, so a user in none of these groups logs in fine but gets 403 on every call. No custom scope mapping is needed — the default `profile` scope already emits the user's groups.
+
 `GET /users` (the order-stage assignee picker) is backed by Authentik's user directory: create a service account (Directory > Users > New, type service account), grant it "View user", and mint a token under its Tokens & App passwords into `AUTHENTIK_API_TOKEN` (see `.env.example`).
 
 ## Backend
@@ -101,6 +103,7 @@ Common variables:
 - `OAUTH_CLIENT_ID` or `OIDC_CLIENT_ID`
 - `OAUTH_CLIENT_SECRET` or `OIDC_CLIENT_SECRET`
 - `OAUTH_INTROSPECTION_URL`
+- `OAUTH_USERINFO_URL` (optional override; defaults to discovery)
 - `OAUTH_RESOURCE_AUDIENCE`
 - `AUTHENTIK_BASE_URL`, default `http://localhost:9000`
 - `AUTHENTIK_API_TOKEN`

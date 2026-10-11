@@ -24,6 +24,9 @@ pub async fn list_customers(
     let _subject = user.subject();
     let _client_id = user.client_id();
     let _scopes = user.scopes();
+    // Reach for `user.roles()` / `user.has_role(...)` here to add a
+    // finer-grained check for a specific route without touching `app.rs`.
+    let _roles = user.roles();
 
     Ok(Json(service::list_customers(&state, &params).await?))
 }
