@@ -2,7 +2,7 @@ use axum::{middleware, Router};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::{
-    auth,
+    auth::{self, Role},
     features::{
         customers, gift_cards, health, invoices, locations, materials, order_stages, orders,
         preferences, products, users,
@@ -26,61 +26,61 @@ pub fn router(state: AppState) -> Router {
         .merge(
             customers::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(
             materials::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(
             locations::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(
             invoices::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(orders::router().route_layer(middleware::from_fn_with_state(
             state.clone(),
-            auth::require_auth,
+            auth::require_role(Role::Staff),
         )))
         .merge(
             products::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(
             gift_cards::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(
             order_stages::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .merge(users::router().route_layer(middleware::from_fn_with_state(
             state.clone(),
-            auth::require_auth,
+            auth::require_role(Role::Staff),
         )))
         .merge(
             preferences::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_auth,
+                auth::require_role(Role::Staff),
             )),
         )
         .layer(cors)
-        // Outermost layer: wraps every `require_auth` route layer below (and
+        // Outermost layer: wraps every `require_role` route layer below (and
         // `/health`, which has none), so it's `Span::current()` for the whole
         // request and can see the final response status regardless of which
         // feature router or middleware produced it. `MatchedPath` is still

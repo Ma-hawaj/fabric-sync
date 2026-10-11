@@ -35,6 +35,11 @@ pub struct Config {
     pub oauth_client_id: String,
     pub oauth_client_secret: Option<String>,
     pub oauth_introspection_url: Option<String>,
+    /// Overrides the OIDC userinfo endpoint the backend falls back to for
+    /// role claims (see `auth::TokenIntrospection`). Unset means OIDC
+    /// discovery off `oauth_issuer_url` — which always advertises one, since
+    /// `userinfo_endpoint` is mandatory in the discovery document.
+    pub oauth_userinfo_url: Option<String>,
     pub oauth_resource_audience: Option<String>,
     /// Base URL of the Authentik instance backing `GET /users` (the server
     /// root, e.g. `http://localhost:9000` — not the per-provider OIDC issuer
@@ -102,6 +107,7 @@ impl Config {
             .or_else(|_| env::var("OIDC_CLIENT_SECRET"))
             .ok();
         let oauth_introspection_url = env::var("OAUTH_INTROSPECTION_URL").ok();
+        let oauth_userinfo_url = env::var("OAUTH_USERINFO_URL").ok();
         let oauth_resource_audience = env::var("OAUTH_RESOURCE_AUDIENCE").ok();
         let authentik_base_url = env::var("AUTHENTIK_BASE_URL")
             .ok()
@@ -119,6 +125,7 @@ impl Config {
             oauth_client_id,
             oauth_client_secret,
             oauth_introspection_url,
+            oauth_userinfo_url,
             oauth_resource_audience,
             authentik_base_url,
             authentik_api_token,

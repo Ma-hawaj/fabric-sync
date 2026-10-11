@@ -5,14 +5,18 @@ import { toast } from 'sonner'
 import { useDataTable } from '@/hooks/use-data-table'
 import { useListParams } from '@/hooks/use-list-params'
 import { Button } from '@/components/ui/button'
+import { RoleGuard } from '@/components/role-guard'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
+import { hasRole, useAuth } from '@/lib/auth'
 import { getLocationColumns } from './components/location-columns'
 import { useLocations } from './hooks/use-locations'
 import { useUpdateLocation } from './hooks/use-update-location'
 import type { Location } from './types/location'
 
 export function LocationsPage() {
+  const { user } = useAuth()
+  const canEdit = hasRole(user, 'admin')
   const updateLocation = useUpdateLocation()
 
   const toggleActive = React.useCallback(
@@ -36,8 +40,8 @@ export function LocationsPage() {
   )
 
   const columns = React.useMemo(
-    () => getLocationColumns(toggleActive, updateLocation.isPending),
-    [toggleActive, updateLocation.isPending],
+    () => getLocationColumns(toggleActive, updateLocation.isPending, canEdit),
+    [toggleActive, updateLocation.isPending, canEdit],
   )
 
   const { searchParams } = useListParams({ columns })
@@ -65,10 +69,12 @@ export function LocationsPage() {
             stock, or both.
           </p>
         </div>
-        <Button nativeButton={false} render={<Link to="/locations/new" />}>
-          <PlusIcon className="h-4 w-4" />
-          Add Location
-        </Button>
+        <RoleGuard role="admin">
+          <Button nativeButton={false} render={<Link to="/locations/new" />}>
+            <PlusIcon className="h-4 w-4" />
+            Add Location
+          </Button>
+        </RoleGuard>
       </div>
 
       {isLoading ? (

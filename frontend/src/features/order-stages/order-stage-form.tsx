@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, FieldLabel } from '@/components/ui/field'
+import { RoleGuard } from '@/components/role-guard'
 import { NumberField, TextField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { ApiError } from '@/lib/api'
@@ -43,8 +44,21 @@ export function OrderStageFormPage({ stageId }: { stageId?: string }) {
   }
 
   // Keyed so the form re-initialises if the underlying stage changes —
-  // defaultValues is only read on the first render.
-  return <OrderStageForm key={existing?.id ?? 'new'} existing={existing} />
+  // defaultValues is only read on the first render. Non-admins never reach
+  // the form through the UI; the guard below covers direct navigation, and
+  // the backend rejects the save with 403 regardless.
+  return (
+    <RoleGuard
+      role="admin"
+      fallback={
+        <div className="text-center text-sm text-muted-foreground py-10">
+          Only admins can add or edit order stages.
+        </div>
+      }
+    >
+      <OrderStageForm key={existing?.id ?? 'new'} existing={existing} />
+    </RoleGuard>
+  )
 }
 
 function OrderStageForm({ existing }: { existing?: OrderStage }) {

@@ -12,7 +12,7 @@ use uuid::Uuid;
 static REQUEST_ID_HEADER: HeaderName = HeaderName::from_static("x-request-id");
 
 /// One canonical log line per request, instead of many scattered ones. This
-/// is the outermost layer in `app.rs` — outside every `require_auth` route
+/// is the outermost layer in `app.rs` — outside every `require_role` route
 /// layer — so the span it opens is `tracing::Span::current()` for the whole
 /// request, and downstream code (auth, `AppError::into_response`, business
 /// logic) can `.record()` onto it rather than emitting its own log line.

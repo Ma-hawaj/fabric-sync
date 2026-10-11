@@ -19,83 +19,12 @@ export function locationUses(location: Location): string[] {
 export const getLocationColumns = (
   onToggleActive: (location: Location) => void,
   isToggling: boolean,
-): ColumnDef<Location, any>[] => [
-  {
-    accessorKey: 'name',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Name" />
-    ),
-    cell: ({ row }) => (
-      <Link
-        to="/locations/$locationId/edit"
-        params={{ locationId: row.original.id }}
-        className="font-medium text-info hover:underline"
-      >
-        {row.getValue('name')}
-      </Link>
-    ),
-    enableSorting: true,
-    enableColumnFilter: true,
-    meta: {
-      label: 'Name',
-      placeholder: 'Filter name...',
-      variant: 'text',
-    },
-  },
-  {
-    id: 'uses',
-    accessorFn: locationUses,
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Used For" />
-    ),
-    cell: ({ row }) => (
-      <div className="flex flex-wrap gap-1">
-        {locationUses(row.original).map((use) => (
-          <Badge key={use} variant="outline">
-            {use}
-          </Badge>
-        ))}
-      </div>
-    ),
-    enableSorting: false,
-    enableColumnFilter: true,
-    meta: {
-      label: 'Used For',
-      placeholder: 'Filter use...',
-      variant: 'multiSelect',
-      options: [
-        { label: RECEIVES_ORDERS_LABEL, value: 'receivesOrders' },
-        { label: HOLDS_STOCK_LABEL, value: 'holdsStock' },
-      ],
-    },
-  },
-  {
-    id: 'status',
-    accessorFn: (location) => [location.isActive ? 'Active' : 'Inactive'],
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Status" />
-    ),
-    cell: ({ row }) =>
-      row.original.isActive ? (
-        <Badge variant="secondary">Active</Badge>
-      ) : (
-        <Badge variant="outline" className="text-muted-foreground">
-          Inactive
-        </Badge>
-      ),
-    enableSorting: false,
-    enableColumnFilter: true,
-    meta: {
-      label: 'Status',
-      placeholder: 'Filter status...',
-      variant: 'multiSelect',
-      options: [
-        { label: 'Active', value: 'active' },
-        { label: 'Inactive', value: 'inactive' },
-      ],
-    },
-  },
-  {
+  // Non-admins get a read-only table: the name renders as plain text and the
+  // actions column (edit + activate/deactivate, both admin-only writes) is
+  // dropped. The backend enforces the same gate; this only hides the UI.
+  canEdit = true,
+): ColumnDef<Location, any>[] => {
+  const actionsColumn: ColumnDef<Location, any> = {
     id: 'actions',
     header: 'Actions',
     enablePinning: true,
@@ -124,5 +53,87 @@ export const getLocationColumns = (
         />
       )
     },
-  },
-]
+  }
+
+  return [
+    {
+      accessorKey: 'name',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Name" />
+      ),
+      cell: ({ row }) =>
+        canEdit ? (
+          <Link
+            to="/locations/$locationId/edit"
+            params={{ locationId: row.original.id }}
+            className="font-medium text-info hover:underline"
+          >
+            {row.getValue('name')}
+          </Link>
+        ) : (
+          <span className="font-medium">{row.getValue('name')}</span>
+        ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Name',
+        placeholder: 'Filter name...',
+        variant: 'text',
+      },
+    },
+    {
+      id: 'uses',
+      accessorFn: locationUses,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Used For" />
+      ),
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1">
+          {locationUses(row.original).map((use) => (
+            <Badge key={use} variant="outline">
+              {use}
+            </Badge>
+          ))}
+        </div>
+      ),
+      enableSorting: false,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Used For',
+        placeholder: 'Filter use...',
+        variant: 'multiSelect',
+        options: [
+          { label: RECEIVES_ORDERS_LABEL, value: 'receivesOrders' },
+          { label: HOLDS_STOCK_LABEL, value: 'holdsStock' },
+        ],
+      },
+    },
+    {
+      id: 'status',
+      accessorFn: (location) => [location.isActive ? 'Active' : 'Inactive'],
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Status" />
+      ),
+      cell: ({ row }) =>
+        row.original.isActive ? (
+          <Badge variant="secondary">Active</Badge>
+        ) : (
+          <Badge variant="outline" className="text-muted-foreground">
+            Inactive
+          </Badge>
+        ),
+      enableSorting: false,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Status',
+        placeholder: 'Filter status...',
+        variant: 'multiSelect',
+        options: [
+          { label: 'Active', value: 'active' },
+          { label: 'Inactive', value: 'inactive' },
+        ],
+      },
+    },
+    ...(canEdit ? [actionsColumn] : []),
+  ]
+}

@@ -5,7 +5,7 @@ use axum::{
 use uuid::Uuid;
 
 use crate::{
-    auth::AuthenticatedUser,
+    auth::{AuthenticatedUser, Role},
     error::AppError,
     list::{ListParams, Page},
     state::AppState,
@@ -34,18 +34,20 @@ pub async fn get_location(
 
 pub async fn create_location(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(input): Json<CreateLocationInput>,
 ) -> Result<Json<Location>, AppError> {
+    user.require_role(Role::Admin)?;
     Ok(Json(service::create_location(&state, input).await?))
 }
 
 pub async fn update_location(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(location_id): Path<Uuid>,
     Json(input): Json<UpdateLocationInput>,
 ) -> Result<Json<Location>, AppError> {
+    user.require_role(Role::Admin)?;
     Ok(Json(
         service::update_location(&state, location_id, input).await?,
     ))
