@@ -21,6 +21,9 @@ export interface InventoryFormValues {
   name: string
   sku: string
   unit: string
+  // Fabric family grouping this material's colour variants; blank means
+  // ungrouped, matching the backend's NULL.
+  family: string
 
   entries: StockEntryDraft[]
 }
@@ -58,6 +61,7 @@ export function createEmptyInventoryForm(): InventoryFormValues {
     name: '',
     sku: '',
     unit: 'meters',
+    family: '',
     entries: [createEmptyStockEntry()],
   }
 }

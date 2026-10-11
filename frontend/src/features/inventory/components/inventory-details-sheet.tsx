@@ -46,7 +46,8 @@ export function InventoryDetailsSheet({
                     {material.name}
                   </SheetTitle>
                   <SheetDescription className="text-muted-foreground mt-0.5">
-                    SKU: {material.sku ?? '—'} &middot; {totalQuantity}{' '}
+                    Family: {material.family ?? '—'} &middot; SKU:{' '}
+                    {material.sku ?? '—'} &middot; {totalQuantity}{' '}
                     {material.unit} total
                   </SheetDescription>
                 </div>

@@ -28,6 +28,7 @@ async function addStock(values: InventoryFormValues): Promise<Material> {
     name: values.name,
     sku: values.sku.trim() || null,
     unit: values.unit,
+    family: values.family.trim() || null,
     entries,
   })
 

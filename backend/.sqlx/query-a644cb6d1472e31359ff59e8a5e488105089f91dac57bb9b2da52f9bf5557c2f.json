@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO materials (name, sku, unit)\n        VALUES ($1, $2, $3)\n        RETURNING id\n        ",
+  "query": "\n        INSERT INTO materials (name, sku, unit, family)\n        VALUES ($1, $2, $3, $4)\n        RETURNING id\n        ",
   "describe": {
     "columns": [
       {
@@ -13,6 +13,7 @@
       "Left": [
         "Text",
         "Text",
+        "Text",
         "Text"
       ]
     },
@@ -20,5 +21,5 @@
       false
     ]
   },
-  "hash": "3b7318ebd518eca9fd2d68ffa44c162cc325735b163eb3dcec8c4bfd913ec24f"
+  "hash": "a644cb6d1472e31359ff59e8a5e488105089f91dac57bb9b2da52f9bf5557c2f"
 }

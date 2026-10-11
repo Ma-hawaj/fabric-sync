@@ -38,6 +38,8 @@ export const inventoryFormSchema = z
     name: z.string(),
     sku: z.string(),
     unit: z.string(),
+    // Optional free text — blank stays blank and is sent as null.
+    family: z.string(),
     entries: z.array(stockEntrySchema).min(1, 'Add at least one location.'),
   })
   .superRefine((value, ctx) => {
