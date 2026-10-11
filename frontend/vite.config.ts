@@ -26,16 +26,14 @@ const config = defineConfig({
     allowedHosts: ['mahawaj.cow-carat.ts.net'],
     proxy: {
       // Same-origin API in dev: `VITE_API_BASE_URL=/api` sends every
-      // apiClient call here, and the rewrite strips the prefix so the
-      // backend sees its bare routes (`/api/orders` -> `/orders`). Keeps
-      // frontend and backend on one origin, so there are no CORS
-      // preflights. Override with BACKEND_URL=... when the backend isn't
-      // on :8000.
+      // apiClient call here, forwarded as-is since the backend serves the
+      // API nested under `/api` (see backend/src/app.rs). Keeps frontend
+      // and backend on one origin, so there are no CORS preflights.
+      // Override with BACKEND_URL=... when the backend isn't on :8000.
       '/api': {
         target: process.env.BACKEND_URL ?? 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
   },
