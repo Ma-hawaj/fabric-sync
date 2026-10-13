@@ -29,9 +29,7 @@ import {
 } from '@/features/locations/hooks/use-default-location'
 import { toast } from 'sonner'
 import {
-  HomeIcon,
   UsersIcon,
-  Grid,
   ShoppingCart,
   ReceiptText,
   PackageIcon,
@@ -49,22 +47,19 @@ import {
 } from 'lucide-react'
 
 const navItems = [
-  { to: '/', label: 'Home', icon: HomeIcon, exact: true },
-  { to: '/dashboard', label: 'Dashboard', icon: Grid, exact: true },
-  { to: '/orders', label: 'Orders', icon: ShoppingCart, exact: false },
+  { to: '/invoices', label: 'Invoices', icon: ReceiptText },
+  { to: '/orders', label: 'Orders', icon: ShoppingCart },
+  { to: '/customers', label: 'Customers', icon: ContactIcon },
+  { to: '/inventory', label: 'Inventory', icon: PackageIcon },
+  { to: '/products', label: 'Products', icon: ShoppingBagIcon },
+  { to: '/gift-cards', label: 'Gift Cards', icon: GiftIcon },
+  { to: '/locations', label: 'Locations', icon: MapPinIcon },
   {
     to: '/order-stages',
     label: 'Order Stages',
     icon: ListChecksIcon,
-    exact: false,
   },
-  { to: '/customers', label: 'Customers', icon: ContactIcon, exact: false },
-  { to: '/inventory', label: 'Inventory', icon: PackageIcon, exact: false },
-  { to: '/products', label: 'Products', icon: ShoppingBagIcon, exact: false },
-  { to: '/gift-cards', label: 'Gift Cards', icon: GiftIcon, exact: false },
-  { to: '/invoices', label: 'Invoices', icon: ReceiptText, exact: false },
-  { to: '/locations', label: 'Locations', icon: MapPinIcon, exact: false },
-  { to: '/users', label: 'Users', icon: UsersIcon, exact: false },
+  { to: '/users', label: 'Users', icon: UsersIcon },
 ] as const
 
 function getInitials(name: string) {
@@ -128,7 +123,7 @@ function UserMenu() {
 
   if (!isAuthenticated || !user) {
     return (
-      <SidebarMenuButton render={<Link to="/dashboard" />}>
+      <SidebarMenuButton render={<Link to="/invoices" />}>
         <LogInIcon />
         <span>Sign in</span>
       </SidebarMenuButton>
@@ -192,7 +187,7 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarHeader className="px-2">
           <Link
-            to="/"
+            to="/invoices"
             className="flex items-center gap-2 rounded-xl px-1 py-1.5 group-data-[collapsible=icon]:justify-center"
           >
             <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
@@ -210,10 +205,8 @@ export function AppSidebar() {
         </SidebarHeader>
         <SidebarSeparator />
         <SidebarMenu>
-          {navItems.map(({ to, label, icon: Icon, exact }) => {
-            const isActive = exact
-              ? pathname === to
-              : pathname === to || pathname.startsWith(`${to}/`)
+          {navItems.map(({ to, label, icon: Icon }) => {
+            const isActive = pathname === to || pathname.startsWith(`${to}/`)
 
             return (
               <SidebarMenuItem key={to}>
