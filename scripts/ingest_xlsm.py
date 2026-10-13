@@ -23,17 +23,21 @@ Mapping decisions worth knowing:
    receipt row. Customer identity is the canonical ``(name, phone)`` pair:
    the normalized phone (8-digit Bahrain numbers stored with the default
    ``+973`` prefix) plus the name collapsed for whitespace and case
-   (``canon_key``). Spelling variants such as 'Ali' vs 'ALI' merge; genuinely
-   different names sharing one phone (family/shared numbers) stay separate
-   customers and are listed in the report for manual review. When the receipt
-   and the referenced ``Measurments`` row name different customers, the
-   measurement's customer owns the order's copy (and its phone is the one
-   kept) unless the user chose receipt-wins for that pair.
+   (``canon_key``). Spelling variants such as 'Ali' vs 'ALI' merge via
+   casefolding; anything else always stays separate — genuinely different
+   names sharing one phone (family/shared numbers) are separate customers,
+   and one name with different numbers is separate customers too. Both cases
+   are listed in the report for manual review but never merged. When the
+   receipt and the referenced ``Measurments`` row name different customers,
+   the measurement's customer always owns the order's copy (its phone is the
+   one kept).
  * Measurement No is a transient lookup key only and is never stored. One
    order row per measurement number listed on a receipt ('6216 & 9179' ->
    two orders), each backed by a fresh measurement snapshot owned by the
-   invoice's customer, with values/design copied from the referenced
-   ``Measurments`` row. Price (Final Amount) is split evenly across those
+   referenced ``Measurments`` row's customer (measurement wins, always —
+   falling back to the invoice's customer only when the sheet row names no
+   identifiable customer), with values/design copied from that row. Price
+   (Final Amount) is split evenly across those
    orders, with the remainder landing on the last one so
    sum(orders.price) == total_price. A thob count larger than the listed
    measurement numbers reuses the first copy (a receipt can describe several
@@ -82,9 +86,9 @@ Mapping decisions worth knowing:
    '- 1' set is used (extras are counted in the report).
  * A standalone measurement row is only stored when its own customer is
    identifiable — unidentifiable orphans are skipped and counted. Per-order
-   copies never need the sheet row's customer: they belong to the invoice's
-   customer, so a referenced row without a name/phone still contributes its
-   values. A receipt with no identifiable customer is skipped as a whole.
+   copies prefer the sheet row's customer but never need it: a referenced
+   row without a name/phone still contributes its values under the invoice's
+   customer. A receipt with no identifiable customer is skipped as a whole.
 
 Idempotent: existing invoice numbers and
 repair keys already in the database are skipped, so a re-run does not
@@ -102,17 +106,12 @@ Run from the repository root, with DATABASE_URL exported (or --database-url):
   python3 scripts/ingest_xlsm.py --dry-run      # workbook only, no DB writes
   python3 scripts/ingest_xlsm.py --branch "Thobx Main"
 
-Ambiguous customer identities (one phone with several name spellings, one
-name with several phones, receipt-vs-measurement customer mismatches) pause
-for an interactive choice when stdin is a TTY. A single number merges the
-whole group; several numbers (e.g. '1 2') group just those variants while
-the rest stay separate, repeating until the group is resolved. Answers are
-saved to ``scripts/ingest_choices.json`` (override with ``--choices-file``)
-and reused on the next run, so each question is asked once.
-``--non-interactive`` (or a non-TTY stdin, e.g. CI) skips prompting and
-keeps the defaults: keep separate customers, measurement wins.
-  python3 scripts/ingest_xlsm.py --dry-run --choices-file /tmp/choices.json
-  python3 scripts/ingest_xlsm.py --non-interactive
+Ambiguous customer identities are never merged and never prompt: one phone
+with several name spellings stays separate customers, one name with several
+phones stays separate customers, and receipt-vs-measurement customer
+mismatches always resolve to the measurement's customer. The historical
+``scripts/ingest_choices.json`` file (and the removed ``--choices-file`` /
+``--non-interactive`` / ``--no-save`` flags) is ignored — it can be deleted.
 """
 
 from __future__ import annotations
@@ -120,7 +119,6 @@ from __future__ import annotations
 import argparse
 import collections
 import datetime as dt
-import json
 import os
 import re
 import sys
@@ -132,9 +130,7 @@ import psycopg2
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKBOOK = ROOT / "2026 Orders.xlsm"
-DEFAULT_CHOICES_PATH = Path(__file__).resolve().with_name("ingest_choices.json")
 DEFAULT_MATERIAL = "General"
-CHOICES_VERSION = 1
 PLACEHOLDER_DATE = dt.datetime(2026, 1, 1, 0, 0, 0)
 DEFAULT_BRANCH = "Main Branch"
 
@@ -337,7 +333,13 @@ def split_price(total: Decimal, count: int) -> list[Decimal]:
 
 
 def load_sheet_rows(wb, name: str):
-    ws = wb[name]
+    try:
+        ws = wb[name]
+    except KeyError:
+        raise SystemExit(
+            f"Sheet {name!r} not found in the workbook. "
+            f"Available sheets: {', '.join(wb.sheetnames)}"
+        )
     it = ws.iter_rows(values_only=True)
     try:
         header = next(it)
@@ -384,483 +386,15 @@ class Report:
         return "\n".join(lines)
 
 
-# ---- interactive customer-identity choices ---------------------------------
-# Ambiguous identities pause for a user decision (see module docstring) and
-# the answer is persisted in a small JSON file so re-runs never ask twice.
-# File schema (CHOICES_VERSION):
-#   {"version": 1,
-#    "phones": {"<phone>": {"decision": "separate"|"merge"|"groups",
-#                            "canonical": "<display name>",          # merge
-#                            "clusters": [{"canonical": "<display name>",  # groups
-#                                          "members": ["<display>", ...]}]}},
-#    "names": {"<casefolded name>": {"decision": "separate"|"merge"|"groups",
-#                                     "canonical_phone": "<phone>",  # merge
-#                                     "clusters": [{"canonical_phone": "<phone>",  # groups
-#                                                   "members": ["<phone>", ...]}]}},
-#    "mismatches": {"<invoice_no>:<meas_no>": {"winner": "receipt"|"measurement"}}}
-# "merge" folds a whole group into one survivor; "groups" folds only the
-# listed subsets (e.g. 2 of 4 spellings) and leaves every unlisted variant
-# separate. Only explicit user decisions are stored — non-interactive
-# defaults (keep separate / receipt wins) stay in memory so the file never
-# fills with thousands of auto-answers.
-
-def _blank_choices() -> dict:
-    return {"version": CHOICES_VERSION, "phones": {}, "names": {}, "mismatches": {}}
-
-
-def load_choices(path: Path) -> dict:
-    choices = _blank_choices()
-    try:
-        with open(path, encoding="utf-8") as fh:
-            raw = json.load(fh)
-    except FileNotFoundError:
-        return choices
-    except (OSError, ValueError) as exc:
-        print(f"warning: ignoring unreadable choices file {path}: {exc}",
-              file=sys.stderr)
-        return choices
-    if not isinstance(raw, dict):
-        print(f"warning: ignoring choices file {path}: not a JSON object",
-              file=sys.stderr)
-        return choices
-    for section in ("phones", "names", "mismatches"):
-        saved = raw.get(section)
-        if isinstance(saved, dict):
-            choices[section] = saved
-    return choices
-
-
-def save_choices(path: Path, choices: dict) -> None:
-    path = Path(path)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(choices, fh, indent=2, sort_keys=True, ensure_ascii=False)
-        fh.write("\n")
-    os.replace(tmp, path)
-
-
-def mismatch_key(invoice_no: int, meas_no: int) -> str:
-    return f"{invoice_no}:{meas_no}"
-
-
-def _phone_cluster_canonical(phone_entry: dict, name_norm: str) -> str | None:
-    """Surviving display name for a variant inside a "groups" phone entry."""
-    if not isinstance(phone_entry, dict) or phone_entry.get("decision") != "groups":
-        return None
-    for cluster in phone_entry.get("clusters", []):
-        if not isinstance(cluster, dict):
-            continue
-        members = cluster.get("members", [])
-        if any(canon_name(m) == name_norm for m in members):
-            return cluster.get("canonical")
-    return None
-
-
-def _name_cluster_canonical_phone(name_entry: dict, phone: str) -> str | None:
-    """Surviving phone for a variant inside a "groups" name entry."""
-    if not isinstance(name_entry, dict) or name_entry.get("decision") != "groups":
-        return None
-    for cluster in name_entry.get("clusters", []):
-        if not isinstance(cluster, dict):
-            continue
-        if phone in (cluster.get("members", [])):
-            return cluster.get("canonical_phone")
-    return None
-
-
-def alias_customer_key(key: tuple[str, str] | None, choices: dict,
-                       ) -> tuple[str, str] | None:
-    """Map a canonical (name, phone) key through saved merge decisions.
-
-    Phone merges apply first, then name merges on the result, so a key that
-    sits in both a merged phone group and a merged name group follows the
-    chain deterministically. Whole-group "merge" and partial "groups"
-    cluster entries are both honoured (unlisted variants stay separate).
-    """
-    if key is None:
-        return None
-    name_norm, phone = key
-    phone_entry = choices.get("phones", {}).get(phone)
-    if isinstance(phone_entry, dict):
-        if (phone_entry.get("decision") == "merge"
-                and phone_entry.get("canonical")):
-            merged = canon_name(phone_entry["canonical"])
-            if merged:
-                name_norm = merged
-        elif phone_entry.get("decision") == "groups":
-            canonical = _phone_cluster_canonical(phone_entry, name_norm)
-            if canonical:
-                merged = canon_name(canonical)
-                if merged:
-                    name_norm = merged
-    name_entry = choices.get("names", {}).get(name_norm)
-    if isinstance(name_entry, dict):
-        if (name_entry.get("decision") == "merge"
-                and name_entry.get("canonical_phone")):
-            merged_phone = norm_phone(name_entry["canonical_phone"])
-            if merged_phone:
-                phone = merged_phone
-        elif name_entry.get("decision") == "groups":
-            canonical_phone = _name_cluster_canonical_phone(name_entry, phone)
-            if canonical_phone:
-                merged_phone = norm_phone(canonical_phone)
-                if merged_phone:
-                    phone = merged_phone
-    return (name_norm, phone)
-
-
-def _prompt_line(prompt: str) -> str | None:
-    """Read one interactive answer; None on EOF (caller falls back to auto)."""
-    try:
-        return input(prompt)
-    except EOFError:
-        return None
-
-
-def _parse_selection(ans: str, count: int) -> list[int] | None:
-    """Parse '1 2' / '1,2' into 0-based indices, or None when invalid."""
-    parts = re.findall(r"\d+", ans)
-    if not parts:
-        return None
-    idx = []
-    for p in parts:
-        n = int(p)
-        if not 1 <= n <= count:
-            return None
-        if (n - 1) not in idx:
-            idx.append(n - 1)
-    return idx
-
-
-def _ask_phone_group(phone: str, names: list[str],
-                     counts: collections.Counter, pos: str) -> dict | None:
-    """Prompt for one phone->names group.
-
-    A single number merges the whole group into that spelling (historical
-    behaviour); several numbers (e.g. '1 2') group just those variants and
-    the prompt repeats for the rest, so 2 of 4 can merge while the others
-    stay separate. Returns a choice entry to store, or {"special": ...}
-    for separate/bulk/quit handling by the caller.
-    """
-    print(f"\n[{pos}] Phone {phone} has {len(names)} name spellings:")
-    for i, name in enumerate(names, 1):
-        print(f"    {i}. {name} ({counts.get(name, 0)} uses)")
-    remaining = list(range(len(names)))
-    clusters: list[dict] = []
-    while True:
-        if len(remaining) <= 1:
-            break
-        ans = _prompt_line(
-            f"  Group whom? Enter numbers (e.g. '1 2'), a single number to "
-            f"merge ALL into it, [s]eparate rest (default), "
-            f"[S]eparate all remaining, [q]uit: ")
-        if ans is None:
-            return "quit"
-        ans = ans.strip()
-        if ans in ("", "s", "S", "q"):
-            if clusters:
-                if ans == "q":
-                    return {"special": "q"}
-                if ans == "S":
-                    return {"special": "S"}
-                return {"decision": "groups", "clusters": clusters}
-            return {"special": ans or "s"}
-        idx = _parse_selection(ans, len(names))
-        if not idx or any(i not in remaining for i in idx):
-            print("  Please enter numbers from the ungrouped list, s, S, or q.")
-            continue
-        if len(idx) == 1:
-            if clusters:
-                # Merge all still-ungrouped variants into the picked one.
-                members = [names[i] for i in remaining]
-                clusters.append({"canonical": names[idx[0]], "members": members})
-                return {"decision": "groups", "clusters": clusters}
-            return {"decision": "merge", "canonical": names[idx[0]]}
-        members = [names[i] for i in idx]
-        print(f"  Group: {', '.join(members)}")
-        while True:
-            pick = _prompt_line(
-                f"  Canonical spelling? Enter 1-{len(names)} "
-                f"(default: {members[0]}), or [c]ancel group: ")
-            if pick is None:
-                return "quit"
-            pick = pick.strip()
-            if pick in ("", "c"):
-                if pick == "c":
-                    canonical = None
-                    break
-                canonical = members[0]
-                break
-            sel = _parse_selection(pick, len(names))
-            if sel and len(sel) == 1 and sel[0] in idx:
-                canonical = names[sel[0]]
-                break
-            print("  Please pick one number from the group, Enter for default, or c.")
-        if canonical is None:
-            continue
-        clusters.append({"canonical": canonical, "members": members})
-        remaining = [i for i in remaining if i not in idx]
-        grouped = ", ".join(
-            f"{c['canonical']} <- {', '.join(m for m in c['members'] if m != c['canonical'])}"
-            for c in clusters)
-        rest = ", ".join(names[i] for i in remaining)
-        print(f"  Grouped so far: {grouped}" + (f"; remaining: {rest}" if rest else ""))
-    if clusters:
-        return {"decision": "groups", "clusters": clusters}
-    return {"special": "s"}
-
-
-def _ask_name_group(norm: str, phones: list[str],
-                    counts: collections.Counter, pos: str) -> dict | None:
-    """Prompt for one name->phones group (mirror of _ask_phone_group)."""
-    print(f"\n[{pos}] Name {norm!r} has {len(phones)} phones:")
-    for i, phone in enumerate(phones, 1):
-        print(f"    {i}. {phone} ({counts.get(phone, 0)} uses)")
-    remaining = list(range(len(phones)))
-    clusters: list[dict] = []
-    while True:
-        if len(remaining) <= 1:
-            break
-        ans = _prompt_line(
-            f"  Group which? Enter numbers (e.g. '1 2'), a single number to "
-            f"merge ALL into it, [s]eparate rest (default), "
-            f"[S]eparate all remaining, [q]uit: ")
-        if ans is None:
-            return "quit"
-        ans = ans.strip()
-        if ans in ("", "s", "S", "q"):
-            if clusters:
-                if ans == "q":
-                    return {"special": "q"}
-                if ans == "S":
-                    return {"special": "S"}
-                return {"decision": "groups", "clusters": clusters}
-            return {"special": ans or "s"}
-        idx = _parse_selection(ans, len(phones))
-        if not idx or any(i not in remaining for i in idx):
-            print("  Please enter numbers from the ungrouped list, s, S, or q.")
-            continue
-        if len(idx) == 1:
-            if clusters:
-                members = [phones[i] for i in remaining]
-                clusters.append({"canonical_phone": phones[idx[0]],
-                                 "members": members})
-                return {"decision": "groups", "clusters": clusters}
-            return {"decision": "merge", "canonical_phone": phones[idx[0]]}
-        members = [phones[i] for i in idx]
-        print(f"  Group: {', '.join(members)}")
-        while True:
-            pick = _prompt_line(
-                f"  Canonical phone? Enter 1-{len(phones)} "
-                f"(default: {members[0]}), or [c]ancel group: ")
-            if pick is None:
-                return "quit"
-            pick = pick.strip()
-            if pick in ("", "c"):
-                if pick == "c":
-                    canonical = None
-                    break
-                canonical = members[0]
-                break
-            sel = _parse_selection(pick, len(phones))
-            if sel and len(sel) == 1 and sel[0] in idx:
-                canonical = phones[sel[0]]
-                break
-            print("  Please pick one number from the group, Enter for default, or c.")
-        if canonical is None:
-            continue
-        clusters.append({"canonical_phone": canonical, "members": members})
-        remaining = [i for i in remaining if i not in idx]
-        grouped = ", ".join(
-            f"{c['canonical_phone']} <- "
-            f"{', '.join(m for m in c['members'] if m != c['canonical_phone'])}"
-            for c in clusters)
-        rest = ", ".join(phones[i] for i in remaining)
-        print(f"  Grouped so far: {grouped}" + (f"; remaining: {rest}" if rest else ""))
-    if clusters:
-        return {"decision": "groups", "clusters": clusters}
-    return {"special": "s"}
-
-
-def _ask_mismatch(inv_no: int, meas_no: int, inv_label: str, src_label: str,
-                  pos: str) -> dict | None:
-    print(f"\n[{pos}] Invoice {inv_no} ({inv_label}) references "
-          f"measurement {meas_no} ({src_label}).")
-    print("  Which customer should own the order's measurement copy?")
-    while True:
-        ans = _prompt_line(
-            "  [m]easurement wins (default), [r]eceipt wins, "
-            "[M]easurement wins for all remaining, [R]eceipt wins for all "
-            "remaining, [q]uit: ")
-        if ans is None:
-            return "quit"
-        ans = ans.strip()
-        if ans in ("", "m"):
-            return {"winner": "measurement"}
-        if ans == "r":
-            return {"winner": "receipt"}
-        if ans == "M":
-            return {"special": "M"}
-        if ans in ("R", "q"):
-            return {"special": ans}
-        print("  Please enter m, r, M, R, or q.")
-
-
-def resolve_customer_choices(ambiguities: dict, choices: dict, report: Report,
-                             *, interactive: bool,
-                             choices_path: Path | None = None,
-                             save: bool = True) -> dict:
-    """Fill defaults for, and interactively resolve, customer ambiguities.
-
-    Missing entries default to the historical behaviour for phones/names
-    (keep separate) and to measurement-wins for receipt-vs-measurement
-    mismatches, without touching the choices file; only explicit user
-    answers are stored. Returns stats for reporting.
-    """
-    choices.setdefault("phones", {})
-    choices.setdefault("names", {})
-    choices.setdefault("mismatches", {})
-    stats = collections.Counter()
-    stats["phones decided (loaded)"] = len(choices["phones"])
-    stats["names decided (loaded)"] = len(choices["names"])
-    stats["mismatches decided (loaded)"] = len(choices["mismatches"])
-
-    def _persist() -> None:
-        if save and choices_path is not None:
-            try:
-                save_choices(choices_path, choices)
-            except OSError as exc:
-                print(f"warning: could not save choices to {choices_path}: "
-                      f"{exc}", file=sys.stderr)
-
-    if not interactive:
-        return stats
-
-    bulk_separate_phones = False
-    phones = sorted(ambiguities.get("phone_groups", {}))
-    total_phones = len([p for p in phones if p not in choices["phones"]])
-    seen = 0
-    for phone in phones:
-        if phone in choices["phones"]:
-            continue
-        if bulk_separate_phones:
-            continue  # default stays separate, deliberately unstored
-        names = sorted(ambiguities["phone_groups"][phone])
-        counts = ambiguities.get("phone_counts", {}).get(phone,
-                                                          collections.Counter())
-        seen += 1
-        answer = _ask_phone_group(phone, names, counts, f"phone {seen}/{total_phones}")
-        if answer == "quit" or (isinstance(answer, dict)
-                                and answer.get("special") == "q"):
-            break
-        if isinstance(answer, dict) and answer.get("special") == "S":
-            bulk_separate_phones = True
-            continue
-        if isinstance(answer, dict) and answer.get("special") == "s":
-            choices["phones"][phone] = {"decision": "separate"}
-            stats["phones kept separate by choice"] += 1
-            _persist()
-            continue
-        if isinstance(answer, dict) and answer.get("decision") == "merge":
-            choices["phones"][phone] = answer
-            stats["phones merged by choice"] += 1
-            _persist()
-        if isinstance(answer, dict) and answer.get("decision") == "groups":
-            choices["phones"][phone] = answer
-            stats["phones partially grouped by choice"] += 1
-            _persist()
-
-    bulk_separate_names = False
-    names_sorted = sorted(ambiguities.get("name_groups", {}))
-    total_names = len([n for n in names_sorted if n not in choices["names"]])
-    seen = 0
-    for norm in names_sorted:
-        if norm in choices["names"]:
-            continue
-        if bulk_separate_names:
-            continue
-        phone_list = sorted(ambiguities["name_groups"][norm])
-        counts = ambiguities.get("name_counts", {}).get(norm,
-                                                        collections.Counter())
-        seen += 1
-        answer = _ask_name_group(norm, phone_list, counts,
-                                 f"name {seen}/{total_names}")
-        if answer == "quit" or (isinstance(answer, dict)
-                                and answer.get("special") == "q"):
-            break
-        if isinstance(answer, dict) and answer.get("special") == "S":
-            bulk_separate_names = True
-            continue
-        if isinstance(answer, dict) and answer.get("special") == "s":
-            choices["names"][norm] = {"decision": "separate"}
-            stats["names kept separate by choice"] += 1
-            _persist()
-            continue
-        if isinstance(answer, dict) and answer.get("decision") == "merge":
-            choices["names"][norm] = answer
-            stats["names merged by choice"] += 1
-            _persist()
-        if isinstance(answer, dict) and answer.get("decision") == "groups":
-            choices["names"][norm] = answer
-            stats["names partially grouped by choice"] += 1
-            _persist()
-
-    # Mismatches that merges already healed need no question.
-    pending = []
-    for item in ambiguities.get("mismatches", []):
-        inv_key = alias_customer_key(
-            canon_key(item["inv_name"], item["inv_phone"]), choices)
-        src_key = alias_customer_key(
-            canon_key(item["src_name"], item["src_phone"]), choices)
-        if inv_key is not None and inv_key == src_key:
-            stats["mismatches healed by merge"] += 1
-            continue
-        if mismatch_key(item["invoice_no"], item["meas_no"]) in choices["mismatches"]:
-            continue
-        pending.append(item)
-    bulk_receipt = False
-    for i, item in enumerate(pending, 1):
-        if bulk_receipt:
-            continue
-        key = mismatch_key(item["invoice_no"], item["meas_no"])
-        answer = _ask_mismatch(
-            item["invoice_no"], item["meas_no"],
-            f"{item['inv_name']}/{item['inv_phone']}",
-            f"{item['src_name']}/{item['src_phone']}",
-            f"mismatch {i}/{len(pending)}")
-        if answer == "quit" or (isinstance(answer, dict)
-                                and answer.get("special") == "q"):
-            break
-        if isinstance(answer, dict) and answer.get("special") == "M":
-            # Measurement wins is the default for the rest: nothing to store.
-            break
-        if isinstance(answer, dict) and answer.get("special") == "R":
-            # Receipt wins is no longer the default, so the rest must be
-            # stored explicitly to keep them on the receipt owner.
-            for rest in pending[i - 1:]:
-                choices["mismatches"][mismatch_key(
-                    rest["invoice_no"], rest["meas_no"])] = {
-                        "winner": "receipt"}
-                stats["mismatches receipt wins by choice"] += 1
-            _persist()
-            bulk_receipt = True
-            continue
-        if isinstance(answer, dict) and answer.get("winner") == "receipt":
-            choices["mismatches"][key] = {"winner": "receipt"}
-            stats["mismatches receipt wins by choice"] += 1
-            _persist()
-            continue
-        if isinstance(answer, dict) and answer.get("winner") == "measurement":
-            choices["mismatches"][key] = answer
-            stats["mismatches measurement wins by choice"] += 1
-            _persist()
-
-    for key, value in stats.items():
-        if value and key not in ("phones decided (loaded)",
-                                 "names decided (loaded)",
-                                 "mismatches decided (loaded)"):
-            report.count(f"choices: {key}", value)
-    return stats
+# ---- customer-identity policy (no merging, no prompts) ----------------------
+# Customer identity is the canonical (name, phone) pair, full stop:
+#  * one phone with several name spellings -> separate customers, always;
+#  * one name with several phones          -> separate customers, always;
+#  * receipt vs measurement naming different customers -> the measurement's
+#    customer owns the order's copy (its phone is the one kept), always.
+# There is no interactive merging and no choices file: an earlier version of
+# this script asked and persisted answers in scripts/ingest_choices.json;
+# that file is now ignored and can be deleted.
 
 
 def read_workbook(path: Path, report: Report) -> dict:
@@ -999,27 +533,22 @@ def read_workbook(path: Path, report: Report) -> dict:
                      if not m["referenced"] and m["key"] is None))
 
     # ---- customer verification (workbook side, no DB needed) --------------
-    # One invoice = one customer, and names merge only on phone +
-    # normalized-name equality. Everything that does NOT merge is reported
+    # One invoice = one customer, and identity is the (name, phone) pair with
+    # no merging, ever: one phone with several names and one name with several
+    # phones both stay separate customers. Everything ambiguous is reported
     # here so a human can confirm the script did not split or join wrongly.
-    # The same groups are returned as structured ambiguities so the caller
-    # can prompt for merge/owner decisions (see resolve_customer_choices).
+    # Receipt-vs-measurement mismatches always resolve to the measurement's
+    # customer (its phone is the one kept).
     phone_to_names: dict[str, set[str]] = {}
     name_to_phones: dict[str, set[str]] = {}
-    phone_counts: dict[str, collections.Counter] = {}
-    name_counts: dict[str, collections.Counter] = {}
     for inv in invoices:
         if inv["name"] and inv["phone"]:
             phone_to_names.setdefault(inv["phone"], set()).add(inv["name"])
             name_to_phones.setdefault(inv["name"].casefold(), set()).add(inv["phone"])
-            phone_counts.setdefault(inv["phone"], collections.Counter())[inv["name"]] += 1
-            name_counts.setdefault(inv["name"].casefold(), collections.Counter())[inv["phone"]] += 1
     for m in measurements:
         if m["name"] and m["phone"]:
             phone_to_names.setdefault(m["phone"], set()).add(m["name"])
             name_to_phones.setdefault(m["name"].casefold(), set()).add(m["phone"])
-            phone_counts.setdefault(m["phone"], collections.Counter())[m["name"]] += 1
-            name_counts.setdefault(m["name"].casefold(), collections.Counter())[m["phone"]] += 1
     for phone, names in phone_to_names.items():
         if len(names) > 1:
             report.anomaly("customers: one phone, several names (kept separate)",
@@ -1030,7 +559,6 @@ def read_workbook(path: Path, report: Report) -> dict:
                             f"{cname} -> {sorted(phones)[:4]}")
     inv_by_number = {inv["invoice_number"]: inv for inv in invoices}
     source_by_no = {m["measurement_no"]: m for m in measurements}
-    mismatch_items: list[dict] = []
     for no, inv_nos in meas_to_invoices.items():
         src = source_by_no.get(no)
         if src is None or src["key"] is None:
@@ -1041,31 +569,17 @@ def read_workbook(path: Path, report: Report) -> dict:
             if inv_key is None:
                 continue
             if inv_key != src["key"]:
-                mismatch_items.append({
-                    "invoice_no": inv_no,
-                    "meas_no": no,
-                    "inv_name": inv["name"],
-                    "inv_phone": inv["phone"],
-                    "src_name": src["name"],
-                    "src_phone": src["phone"],
-                })
                 report.anomaly(
                     "customers: receipt vs measurement mismatch (measurement wins)",
                     f"invoice {inv_no} ({inv['name']}/{inv['phone']})"
                     f" vs no {no} ({src['name']}/{src['phone']})",
                 )
-    ambiguities = {
-        "phone_groups": {p: sorted(n) for p, n in phone_to_names.items()
-                         if len(n) > 1},
-        "name_groups": {n: sorted(p) for n, p in name_to_phones.items()
-                        if len(p) > 1},
-        "phone_counts": phone_counts,
-        "name_counts": name_counts,
-        "mismatches": mismatch_items,
-    }
 
     # ---- Repairing (2026 only): order_repairs -------------------------------
-    rows, idx = load_sheet_rows(wb, "Repairing")
+    # Tolerate the misspelled sheet name ("Reparing") found in some copies of
+    # the workbook; the canonical spelling wins when both exist.
+    repair_sheet = "Repairing" if "Repairing" in wb.sheetnames else "Reparing"
+    rows, idx = load_sheet_rows(wb, repair_sheet)
     repairs = []
     for r in rows:
         date = get(r, idx, "RECEIPT DATE")
@@ -1093,9 +607,6 @@ def read_workbook(path: Path, report: Report) -> dict:
         # Transient join key (never stored): measurement no -> receipt
         # numbers listing it. Per-order copies and repairs resolve through it.
         "meas_to_invoices": meas_to_invoices,
-        # Structured customer-identity ambiguities for interactive
-        # resolution (phone/name groups + receipt-vs-measurement pairs).
-        "ambiguities": ambiguities,
     }
 
 
@@ -1284,10 +795,8 @@ def has_stored_values(m: dict) -> bool:
 
 
 def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
-                   choices: dict | None = None,
                    material_name: str = DEFAULT_MATERIAL) -> None:
     state = load_db_state(conn)
-    choices = choices if choices is not None else _blank_choices()
     with conn.cursor() as cur:
         # ---- materials ------------------------------------------------------
         # Sheet material names are ignored: every order points at one
@@ -1308,48 +817,21 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             placeholder_material_id = str(row[0])
             report.count(f"materials reused: {material_name}")
 
-        # ---- customers (canonical phone + fuzzy name) -----------------------
-        # First-seen display spelling wins per canonical key; genuinely
-        # different names sharing one phone stay separate (see the workbook
-        # verification in read_workbook), unless the user merged them via a
-        # saved choice (phones/names sections): merged keys collapse onto
-        # one surviving customer. Referenced measurement rows lend
-        # only their values to per-order copies, so their sheet customer
-        # becomes no customer row of its own.
+        # ---- customers (canonical (name, phone), never merged) --------------
+        # First-seen display spelling wins per canonical key. One phone with
+        # several names and one name with several phones always stay separate
+        # customers (see the workbook verification in read_workbook).
+        # Referenced measurement rows get their own customer row too:
+        # per-order copies below are owned by the measurement's customer
+        # (measurement wins, always), so that customer must exist.
         display: dict[tuple[str, str], tuple[str, str]] = {}
         for inv in workbook["invoices"]:
             key = canon_key(inv["name"], inv["phone"])
             if key and key not in display:
                 display[key] = (inv["name"], inv["phone"])
         for m in workbook["measurements"]:
-            if not m["referenced"] and m["key"] and m["key"] not in display:
+            if m["key"] and m["key"] not in display:
                 display[m["key"]] = (m["name"], m["phone"])
-        # Collapse merged identities onto their survivor. The survivor's
-        # display name is the user's chosen spelling; its phone is the
-        # aliased (possibly remapped) phone. Whole-group "merge" and
-        # partial "groups" clusters are both honoured.
-        if choices.get("phones") or choices.get("names"):
-            raw_count = len(display)
-            aliased_display: dict[tuple[str, str], tuple[str, str]] = {}
-            for raw_key, (dname, dphone) in display.items():
-                akey = alias_customer_key(raw_key, choices)
-                if akey not in aliased_display:
-                    disp_name = dname
-                    pentry = choices.get("phones", {}).get(raw_key[1])
-                    if isinstance(pentry, dict):
-                        if (pentry.get("decision") == "merge"
-                                and norm_name(pentry.get("canonical"))):
-                            disp_name = norm_name(pentry.get("canonical"))
-                        elif pentry.get("decision") == "groups":
-                            canonical = _phone_cluster_canonical(
-                                pentry, raw_key[0])
-                            if canonical and norm_name(canonical):
-                                disp_name = norm_name(canonical)
-                    aliased_display[akey] = (disp_name, akey[1])
-            display = aliased_display
-            if len(display) != raw_count:
-                report.count("customers merged away by choice",
-                             raw_count - len(display))
         db_customers: dict[tuple[str, str], str] = {}
         for name, mobile, id_ in state["customer_rows"]:
             key = canon_key(name, mobile)
@@ -1394,7 +876,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             if m["key"] is None:
                 report.count("measurements orphan skipped (no customer, unreferenced)")
                 continue
-            akey = alias_customer_key(m["key"], choices)
+            akey = m["key"]
             if akey not in customer_ids:
                 report.anomaly("measurements orphan skipped (no customer, unreferenced)",
                                m["measurement_no"])
@@ -1433,13 +915,11 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
         for inv_no, order_ids in state["orders_by_invoice"].items():
             order_by_invoice[inv_no].extend(order_ids)
         steps = 0
-        mismatch_decisions = choices.get("mismatches", {})
         for inv in workbook["invoices"]:
             if inv["invoice_number"] in state["invoice_numbers"]:
                 report.count("invoices already present (skipped)")
                 continue
-            inv_key = alias_customer_key(canon_key(inv["name"], inv["phone"]),
-                                         choices)
+            inv_key = canon_key(inv["name"], inv["phone"])
             if inv_key is None or inv_key not in customer_ids:
                 report.anomaly("invoices skipped (no identifiable customer)",
                                inv["invoice_number"])
@@ -1502,11 +982,11 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             if not inv["meas_nos"]:
                 report.count("invoices left without orders (no measurement)")
                 continue
-            # One snapshot per listed number, owned by the measurement row's
-            # customer by default — or by the invoice's customer when the
-            # user chose "receipt wins" for that pair. On a phone conflict
-            # between the receipt and the sheet row, the measurement number
-            # is therefore the one kept.
+            # One snapshot per listed number, always owned by the measurement
+            # row's customer. On a phone conflict between the receipt and
+            # the sheet row, the measurement phone is therefore the one kept.
+            # Only a referenced row without an identifiable customer falls
+            # back to the receipt owner (its values still contribute).
             copies: list[tuple] = []  # (measurement_id, source row)
             for no in inv["meas_nos"]:
                 src = source_by_no.get(no)
@@ -1519,18 +999,14 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                         "orders skipped (measurement row has no usable values)", no)
                     continue
                 owner_key = inv_key
-                winner = mismatch_decisions.get(
-                    mismatch_key(inv["invoice_number"], no), {}).get(
-                        "winner", "measurement")
-                if winner == "measurement":
-                    src_key = alias_customer_key(src["key"], choices)
-                    if src_key is not None and src_key in customer_ids:
-                        owner_key = src_key
-                        report.count("orders owned by measurement customer")
-                    else:
-                        report.anomaly(
-                            "orders kept receipt owner (measurement owner unknown)",
-                            no)
+                src_key = src["key"]
+                if src_key is not None and src_key in customer_ids:
+                    owner_key = src_key
+                    report.count("orders owned by measurement customer")
+                else:
+                    report.anomaly(
+                        "orders kept receipt owner (measurement owner unknown)",
+                        no)
                 cur.execute(
                     f"INSERT INTO measurements {MEASUREMENT_COLUMNS} "
                     f"VALUES {MEASUREMENT_PLACEHOLDERS} RETURNING id",
@@ -1672,45 +1148,13 @@ def main() -> int:
                              "(created if missing; sheet names are ignored)")
     parser.add_argument("--dry-run", action="store_true",
                         help="read the workbook only; write nothing")
-    parser.add_argument("--choices-file", default=str(DEFAULT_CHOICES_PATH),
-                        help="JSON file storing interactive customer-identity "
-                             "decisions (default: scripts/ingest_choices.json)")
-    parser.add_argument("--non-interactive", action="store_true",
-                        help="never prompt; keep historical defaults "
-                             "(separate customers, receipt wins)")
-    parser.add_argument("--no-save", action="store_true",
-                        help="prompt without writing the choices file")
     args = parser.parse_args()
 
     report = Report()
     workbook = read_workbook(Path(args.workbook), report)
     print(report.summary("workbook"))
 
-    choices_path = Path(args.choices_file)
-    choices = load_choices(choices_path)
-    interactive = not args.non_interactive and sys.stdin.isatty()
-    if not interactive and not args.non_interactive:
-        print("stdin is not a TTY — running non-interactively "
-              "(defaults kept, nothing asked).")
-    try:
-        resolve_customer_choices(
-            workbook.get("ambiguities", {}), choices, report,
-            interactive=interactive, choices_path=choices_path,
-            save=not args.no_save)
-    except KeyboardInterrupt:
-        if not args.no_save:
-            try:
-                save_choices(choices_path, choices)
-            except OSError:
-                pass
-            print(f"\nInterrupted — decisions so far saved to {choices_path}.")
-        raise SystemExit(130)
     if args.dry_run:
-        print(report.summary("choices"))
-        print(f"Choices file: {choices_path} "
-              f"({len(choices.get('phones', {}))} phones, "
-              f"{len(choices.get('names', {}))} names, "
-              f"{len(choices.get('mismatches', {}))} mismatches stored).")
         print("Dry-run complete — no database writes performed.")
         return 0
 
@@ -1732,7 +1176,7 @@ def main() -> int:
                 )
                 branch_id = cur.fetchone()[0]
             report.count(f"branch created: {created_name}")
-        perform_insert(conn, workbook, branch_id, report, choices,
+        perform_insert(conn, workbook, branch_id, report,
                        material_name=args.material)
         conn.commit()
     except Exception:
