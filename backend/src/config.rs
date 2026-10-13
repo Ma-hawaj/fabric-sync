@@ -108,7 +108,9 @@ impl Config {
             .or_else(|_| env::var("OIDC_CLIENT_SECRET"))
             .ok();
         let oauth_introspection_url = env::var("OAUTH_INTROSPECTION_URL").ok();
-        let oauth_resource_audience = env::var("OAUTH_RESOURCE_AUDIENCE").ok();
+        let oauth_resource_audience = env::var("OAUTH_RESOURCE_AUDIENCE")
+            .ok()
+            .filter(|value| !value.trim().is_empty());
         let authentik_base_url = env::var("AUTHENTIK_BASE_URL")
             .ok()
             .filter(|value| !value.trim().is_empty())

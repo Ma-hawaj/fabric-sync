@@ -1,0 +1,78 @@
+# Production stack: the single ghcr image (see Dockerfile +
+# .github/workflows/docker.yml):
+#   ghcr.io/ma-hawaj/fabric-sync:<tag>   (latest, main, sha-<short>, or v*.*.*)
+#
+# One service serves everything: the backend serves the built SPA and the
+# JSON API on the same origin (:8000/, :8000/api/*, :8000/health), so there
+# is no CORS and no frontend/backend split to wire up.
+#
+# Postgres is NOT in this file — it uses your Dokploy-managed database via
+# its internal host (reachable because the app is attached to Dokploy's
+# shared `dokploy-network`, which is also how Dokploy's domain routing
+# reaches the app).
+#
+# Deploy with Dokploy:
+#   1. Dokploy > Compose > point it at this repo, compose file path
+#      `docker-compose.prod.yml`.
+#   2. Fill in the env vars below in the service's Environment tab.
+#   3. In the Domains tab, attach your public domain to the `app` service
+#      (port 8000).
+#   4. Deploy. To upgrade, set IMAGE_TAG to a new tag and Redeploy.
+#      Migrations run automatically at app startup.
+#
+# NOTE: the SPA's OIDC settings (VITE_OIDC_*) are baked into the image at
+# build time via the repo's Actions vars, not read from this file. The
+# redirect URIs registered on your SPA provider must match the Dokploy
+# domain exactly (with trailing slash). If the domain changes, re-run the
+# Docker workflow (workflow_dispatch) with updated VITE_OIDC_* vars.
+
+name: fabric-sync-prod
+
+services:
+  app:
+    image: ghcr.io/ma-hawaj/fabric-sync:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - ${APP_PUBLISHED_PORT:-8000}:8000
+    networks:
+      - dokploy-network
+    environment:
+      # Fixed at 8000: the image's baked HEALTHCHECK probes localhost:8000.
+      PORT: 8000
+      STATIC_DIR: /app/static
+      # Your Dokploy Postgres. All four must be set in the Environment tab —
+      # there are deliberately no defaults here, so a missing var fails the
+      # deploy loudly instead of booting against an empty host. NOTE: keep
+      # the password URL-safe (letters/digits) or URL-encode it.
+      DATABASE_URL: postgres://${POSTGRES_ADMIN_USER:?set POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD:?set POSTGRES_ADMIN_PASSWORD}@${POSTGRES_HOST:?set POSTGRES_HOST}:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      OAUTH_ISSUER_URL: ${OAUTH_ISSUER_URL}
+      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID}
+      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET}
+      # Authentik's introspection endpoint is global, not per-provider, and
+      # isn't advertised by per-provider discovery — set explicitly.
+      OAUTH_INTROSPECTION_URL: ${OAUTH_INTROSPECTION_URL}
+      # Leave unset unless verified (see .env.example).
+      OAUTH_RESOURCE_AUDIENCE: ${OAUTH_RESOURCE_AUDIENCE:-}
+      # Base URL of the Authentik instance backing GET /users (server root,
+      # not the per-provider issuer path).
+      AUTHENTIK_BASE_URL: ${AUTHENTIK_BASE_URL}
+      # Static API token of a service account with "View user" (see
+      # .env.example). Required — the app refuses to boot without it.
+      AUTHENTIK_API_TOKEN: ${AUTHENTIK_API_TOKEN}
+      SEED_DEV_DATA: ${SEED_DEV_DATA:-false}
+      RUST_LOG: ${RUST_LOG:-info}
+      COMPANY_NAME_EN: ${COMPANY_NAME_EN:-Fabric Sync}
+      COMPANY_NAME_AR: ${COMPANY_NAME_AR:-}
+      COMPANY_VAT_NUMBER: ${COMPANY_VAT_NUMBER:-}
+      COMPANY_CR_NUMBER: ${COMPANY_CR_NUMBER:-}
+      COMPANY_ADDRESS_EN: ${COMPANY_ADDRESS_EN:-}
+      COMPANY_ADDRESS_AR: ${COMPANY_ADDRESS_AR:-}
+      COMPANY_PHONE: ${COMPANY_PHONE:-}
+      COMPANY_EMAIL: ${COMPANY_EMAIL:-}
+      COMPANY_LOGO_DATA_URL: ${COMPANY_LOGO_DATA_URL:-}
+    # Liveness comes from the image's own HEALTHCHECK
+    # (wget localhost:8000/health expecting {"status":"ok"}).
+
+networks:
+  dokploy-network:
+    external: true
