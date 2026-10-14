@@ -440,7 +440,12 @@ def read_workbook(path: Path, report: Report) -> dict:
         if invoice["invoice_number"] is None:
             report.anomaly("New: dated row without invoice number", r[0])
             continue
-        invoice["invoice_number"] = int(invoice["invoice_number"])
+        try:
+            invoice["invoice_number"] = int(invoice["invoice_number"])
+        except (TypeError, ValueError, OverflowError):
+            report.anomaly("New: invalid invoice number skipped",
+                           invoice["invoice_number"])
+            continue
         if invoice["final"] is None:
             invoice["final"] = parse_money(get(r, idx, "INCL. VAT AMT")) or Decimal("0")
         invoices.append(invoice)
@@ -460,7 +465,13 @@ def read_workbook(path: Path, report: Report) -> dict:
     # ---- Measurments: customers + measurements ------------------------------
     rows, idx = load_sheet_rows(wb, "Measurments")
     kept: dict[int, tuple] = {}
-    for no, r in ((int(get(r, idx, "Measurement No")), r) for r in rows):
+    for r in rows:
+        raw_no = get(r, idx, "Measurement No")
+        try:
+            no = int(raw_no)
+        except (TypeError, ValueError, OverflowError):
+            report.anomaly("Measurments: invalid measurement number skipped", raw_no)
+            continue
         if no not in kept:
             kept[no] = r
             continue
@@ -862,9 +873,10 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
         source_by_no = {m["measurement_no"]: m for m in workbook["measurements"]}
 
         # Standalone history: sheet rows no 2026 receipt references, imported
-        # once each under their own sheet customer (after choice aliasing).
+        # once each under their own sheet customer.
         # Referenced rows enter only via per-order copies owned by the
-        # invoice's customer (or the measurement's, when the user chose so).
+        # measurement's customer, falling back to the invoice's customer
+        # only when the sheet row has no identifiable customer.
         standalone_to_add = []
         standalone_keys: dict[int, tuple] = {}
         for m in workbook["measurements"]:
