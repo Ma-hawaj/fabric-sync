@@ -164,8 +164,14 @@ describe('ThobDiagram', () => {
 
 describe('measurement field data', () => {
   it('covers every measurement on the draft', () => {
+    // Type and fit live on the draft but outside the diagram catalog: plain
+    // selects with no sketch callout, rendered by MeasurementFields itself.
     const drafted = Object.keys(createEmptyMeasurement()).filter(
-      (key) => key !== 'loadedFromId' && key !== 'date',
+      (key) =>
+        key !== 'loadedFromId' &&
+        key !== 'date' &&
+        key !== 'type' &&
+        key !== 'fit',
     )
 
     expect(MEASUREMENT_FIELDS.map((field) => field.name).sort()).toEqual(

@@ -60,6 +60,12 @@ export function ReadOnlyMeasurement({
       <p className="text-sm text-muted-foreground">
         Measured {measurement.date.toLocaleDateString()} — the cut-to spec for
         this order.
+        {(measurement.type ?? measurement.fit) && (
+          <>
+            {' '}
+            ({[measurement.type, measurement.fit].filter(Boolean).join(' · ')})
+          </>
+        )}
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         {THOB_VIEWS.map((view) => (

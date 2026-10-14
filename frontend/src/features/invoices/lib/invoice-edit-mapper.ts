@@ -23,6 +23,8 @@ function measurementToDraft(
   return {
     loadedFromId: measurementId,
     date: measurement.date,
+    type: nullToBlank(measurement.type),
+    fit: nullToBlank(measurement.fit),
     lengthFl: measurement.lengthFl ?? '',
     lengthBl: measurement.lengthBl ?? '',
     chest: measurement.chest ?? '',
@@ -42,8 +44,6 @@ function measurementToDraft(
     foWidth: measurement.foWidth ?? '',
     fo: measurement.fo ?? '',
     sleeveHalf: measurement.sleeveHalf ?? '',
-    button: measurement.button ?? '',
-    buttonFold: measurement.buttonFold ?? '',
     openFold: measurement.openFold ?? '',
     bottom: measurement.bottom ?? '',
     bottomFolding: measurement.bottomFolding ?? '',

@@ -14,6 +14,8 @@ function blankToNull<T>(value: T | ''): T | null {
 export function measurementPayload(measurement: MeasurementDraft) {
   return {
     date: measurement.date,
+    type: blankToNull(measurement.type),
+    fit: blankToNull(measurement.fit),
     lengthFl: blankToNull(measurement.lengthFl),
     lengthBl: blankToNull(measurement.lengthBl),
     chest: blankToNull(measurement.chest),
@@ -33,8 +35,6 @@ export function measurementPayload(measurement: MeasurementDraft) {
     foWidth: blankToNull(measurement.foWidth),
     fo: blankToNull(measurement.fo),
     sleeveHalf: blankToNull(measurement.sleeveHalf),
-    button: blankToNull(measurement.button),
-    buttonFold: blankToNull(measurement.buttonFold),
     openFold: blankToNull(measurement.openFold),
     bottom: blankToNull(measurement.bottom),
     bottomFolding: blankToNull(measurement.bottomFolding),

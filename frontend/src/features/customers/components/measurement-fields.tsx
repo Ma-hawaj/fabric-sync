@@ -20,7 +20,11 @@ import {
 import type { MeasurementField } from '../data/measurement-fields'
 import type { Measurement } from '../types/customers'
 import type { MeasurementDraft } from '../types/measurement-form'
-import { createEmptyMeasurement } from '../types/measurement-form'
+import {
+  MEASUREMENT_FITS,
+  MEASUREMENT_TYPES,
+  createEmptyMeasurement,
+} from '../types/measurement-form'
 
 export function snapshotLabel(
   snapshot: Measurement,
@@ -50,6 +54,12 @@ export function measurementFromSnapshot(
       // signature: each field's own type is narrower than the union.
       if (value !== undefined) draft[name as string] = value
     }
+    // Type and fit live on the draft but outside the diagram catalog (plain
+    // selects, no sketch callouts), so they don't ride the loop above.
+    // A legacy snapshot predates them and arrives null — blank, for the form
+    // to require before saving.
+    draft.type = snapshot.type ?? ''
+    draft.fit = snapshot.fit ?? ''
   }
 
   return draft
@@ -163,6 +173,28 @@ export function MeasurementFields({
       <div className="@container">
         <div className="grid gap-5 @2xl:grid-cols-[minmax(16rem,35%)_1fr]">
           <div className="order-2 space-y-5 @2xl:order-1">
+            {/* Record-level choices, not lengths: what was measured and how
+                to cut it. Plain selects with no sketch callout — they
+                describe the record rather than a point on the garment. */}
+            <div className="space-y-2.5">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Record Details
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <SelectField
+                  form={form}
+                  name={`${base}.type`}
+                  label="Type"
+                  options={MEASUREMENT_TYPES}
+                />
+                <SelectField
+                  form={form}
+                  name={`${base}.fit`}
+                  label="Fit"
+                  options={MEASUREMENT_FITS}
+                />
+              </div>
+            </div>
             {MEASUREMENT_GROUPS.map((group) => (
               <div key={group.id} className="space-y-2.5">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">

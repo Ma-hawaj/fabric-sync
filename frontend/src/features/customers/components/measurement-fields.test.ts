@@ -43,6 +43,20 @@ describe('measurementFromSnapshot', () => {
     expect(draft.loadedFromId).toBeNull()
     expect(draft.chest).toBe('')
   })
+
+  it('carries the record type and fit across, blanking legacy snapshots', () => {
+    const draft = measurementFromSnapshot(
+      makeSnapshot({ type: 'thobe', fit: 'loose' }),
+    )
+    expect(draft.type).toBe('thobe')
+    expect(draft.fit).toBe('loose')
+
+    const legacy = measurementFromSnapshot(
+      makeSnapshot({ type: undefined, fit: undefined }),
+    )
+    expect(legacy.type).toBe('')
+    expect(legacy.fit).toBe('')
+  })
 })
 
 describe('snapshotLabel', () => {

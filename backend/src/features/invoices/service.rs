@@ -5,7 +5,10 @@ use chrono::NaiveDate;
 use crate::{
     error::AppError,
     features::{
-        customers::{repository as customers_repository, types::measurement_values_equal},
+        customers::{
+            repository as customers_repository,
+            types::{measurement_values_equal, validate_measurement},
+        },
         gift_cards::{repository as gift_cards_repository, service as gift_cards_service},
         materials::repository as materials_repository,
         products::repository as products_repository,
@@ -447,6 +450,8 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
                 "each invoice customer needs at least one order".to_string(),
             ));
         }
+
+        validate_measurement(&customer.measurement)?;
     }
 
     for line in &input.products {
@@ -538,7 +543,7 @@ mod tests {
     fn customer(orders: Vec<serde_json::Value>) -> serde_json::Value {
         serde_json::json!({
             "existingCustomerId": "0197fdd2-6a67-7000-8000-000000000002",
-            "measurement": { "date": "2026-07-19" },
+            "measurement": { "date": "2026-07-19", "type": "body", "fit": "medium" },
             "orders": orders,
         })
     }
@@ -775,6 +780,28 @@ mod tests {
     fn rejects_customer_with_no_orders() {
         let invoice = invoice(0.0, "amount", vec![customer(vec![])]);
         assert!(validate(&invoice).is_err());
+    }
+
+    #[test]
+    fn rejects_a_measurement_without_a_type_or_fit() {
+        for measurement in [
+            serde_json::json!({ "date": "2026-07-19", "fit": "medium" }),
+            serde_json::json!({ "date": "2026-07-19", "type": "sample" }),
+            serde_json::json!({ "date": "2026-07-19", "type": "shirt", "fit": "medium" }),
+            serde_json::json!({ "date": "2026-07-19", "type": "body", "fit": "tight" }),
+        ] {
+            let invoice = invoice(
+                0.0,
+                "amount",
+                vec![serde_json::json!({
+                    "existingCustomerId": "0197fdd2-6a67-7000-8000-000000000002",
+                    "measurement": measurement,
+                    "orders": [order(100.0)],
+                })],
+            );
+            let error = validate(&invoice).unwrap_err();
+            assert!(matches!(error, AppError::BadRequest(_)), "{measurement}");
+        }
     }
 
     #[test]

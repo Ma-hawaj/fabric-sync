@@ -102,14 +102,18 @@ CREATE TABLE measurements (
     bottom_folding NUMERIC(6, 2),
     full_body NUMERIC(6, 2),
     sleeve_half NUMERIC(6, 2),
-    button NUMERIC(6, 2),
-    button_fold NUMERIC(6, 2),
     open_fold NUMERIC(6, 2),
     front_pocket_length NUMERIC(6, 2),
     front_pocket_length_by_width TEXT,
     side_pocket_length NUMERIC(6, 2),
     side_pocket_length_by_width TEXT,
-    mobile_pocket_length_by_width TEXT
+    mobile_pocket_length_by_width TEXT,
+    -- Record-level choices rather than lengths: what was measured (the
+    -- customer's body, an existing thobe, a sample) and how to cut it.
+    -- Nullable so rows written before these existed keep reading — every
+    -- new write has to set them (see validate_measurement).
+    type TEXT CHECK (type IN ('body', 'thobe', 'sample')),
+    fit TEXT CHECK (fit IN ('loose', 'fit', 'medium'))
 );
 
 CREATE TABLE orders (
