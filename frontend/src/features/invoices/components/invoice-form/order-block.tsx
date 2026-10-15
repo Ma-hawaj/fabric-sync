@@ -15,26 +15,17 @@ import {
   ComboboxItem,
   ComboboxList,
 } from '@/components/ui/combobox'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Separator } from '@/components/ui/separator'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { CURRENCY } from '@/lib/currency'
 import {
-  FRONT_POCKET,
-  NECK,
-  PATTI,
-  SLEEVE,
-  THOB_TYPE,
-} from '../../data/design-catalog'
-import { EMD_OPTIONS } from '../../data/emd-options'
+  selectCategoryOptions,
+  useDesignOptions,
+  designOptionImageSrc,
+} from '@/features/design-options/hooks/use-design-options'
+import type { DesignOption } from '@/features/design-options/types/design-option'
 import type { Location } from '@/features/locations/types/location'
 import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
 import { GrossVatHint } from './gross-vat-hint'
@@ -46,10 +37,79 @@ function materialOptionLabel(material: Material) {
   return material.sku ? `${material.name} (${material.sku})` : material.name
 }
 
-// The select needs a real value for "no EMD picked"; a blank string means
-// "not entered" on the draft and is sent as null, so it can't double as a
-// selectable item value.
-const EMD_UNSET = '__none__'
+// A stored value that matches no catalog option (legacy free text like
+// "Saudi") can't be shown selected, but it still prints as text on the
+// documents — so it stays put with a note rather than being wiped.
+function UnknownDesignValue({
+  value,
+  onClear,
+}: {
+  value: string
+  onClear: () => void
+}) {
+  return (
+    <p className="text-xs text-muted-foreground">
+      Saved value &ldquo;{value}&rdquo; is not in the catalog.{' '}
+      <button
+        type="button"
+        className="underline hover:text-foreground"
+        onClick={onClear}
+      >
+        Clear it
+      </button>{' '}
+      or keep it — it still prints as text.
+    </p>
+  )
+}
+
+function CatalogGrid({
+  form,
+  name,
+  category,
+  options,
+  columns = 3,
+}: {
+  form: InvoiceFormApi
+  name: string
+  category: string
+  options: DesignOption[]
+  columns?: number
+}) {
+  const items = [
+    ...(category === 'emd'
+      ? [{ id: '', label: 'None', image: null }]
+      : []),
+    ...selectCategoryOptions(options, category).map((option) => ({
+      id: option.slug,
+      label: option.label,
+      image: designOptionImageSrc(option),
+    })),
+  ]
+  return (
+    <form.Field name={name as never}>
+      {(field: any) => {
+        const stored: string = field.state.value ?? ''
+        const known = stored === '' || items.some((item) => item.id === stored)
+        return (
+          <div className="space-y-1.5">
+            <DesignOptionGrid
+              options={items}
+              value={stored}
+              onChange={field.handleChange}
+              columns={columns}
+            />
+            {!known && (
+              <UnknownDesignValue
+                value={stored}
+                onClear={() => field.handleChange('')}
+              />
+            )}
+          </div>
+        )
+      }}
+    </form.Field>
+  )
+}
 
 interface StockLocationOption extends Location {
   quantity: number
@@ -139,6 +199,10 @@ export function OrderBlock({
     customerIndex,
     orderIndex,
   ])
+  // The whole design catalog, shared across every order block on the form —
+  // one cached request for all six pickers, however many orders there are.
+  const { data: designOptions = [], isLoading: designLoading } =
+    useDesignOptions()
 
   return (
     <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
@@ -153,123 +217,73 @@ export function OrderBlock({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <form.Field name={`${base}.thobeType` as never}>
-          {(field: any) => (
-            <div className="space-y-1.5">
-              <Label>Thob Type</Label>
-              <DesignOptionGrid
-                options={THOB_TYPE}
-                value={field.state.value}
-                onChange={field.handleChange}
-              />
-            </div>
-          )}
-        </form.Field>
+        <div className="space-y-1.5">
+          <Label>Thob Type</Label>
+          <CatalogGrid
+            form={form}
+            name={`${base}.thobeType`}
+            category="thob_type"
+            options={designOptions}
+          />
+        </div>
 
-        <form.Field name={`${base}.fPocket` as never}>
-          {(field: any) => (
-            <div className="space-y-1.5">
-              <Label>Front Pocket</Label>
-              <DesignOptionGrid
-                options={FRONT_POCKET}
-                value={field.state.value}
-                onChange={field.handleChange}
-                columns={2}
-              />
-            </div>
-          )}
-        </form.Field>
+        <div className="space-y-1.5">
+          <Label>Front Pocket</Label>
+          <CatalogGrid
+            form={form}
+            name={`${base}.fPocket`}
+            category="front_pocket"
+            options={designOptions}
+            columns={2}
+          />
+        </div>
 
-        <form.Field name={`${base}.collar` as never}>
-          {(field: any) => (
-            <div className="space-y-1.5">
-              <Label>Collar</Label>
-              <DesignOptionGrid
-                options={NECK}
-                value={field.state.value}
-                onChange={field.handleChange}
-              />
-            </div>
-          )}
-        </form.Field>
+        <div className="space-y-1.5">
+          <Label>Collar</Label>
+          <CatalogGrid
+            form={form}
+            name={`${base}.collar`}
+            category="neck"
+            options={designOptions}
+          />
+        </div>
 
-        <form.Field name={`${base}.sleeve` as never}>
-          {(field: any) => (
-            <div className="space-y-1.5">
-              <Label>Sleeve</Label>
-              <DesignOptionGrid
-                options={SLEEVE}
-                value={field.state.value}
-                onChange={field.handleChange}
-              />
-            </div>
-          )}
-        </form.Field>
+        <div className="space-y-1.5">
+          <Label>Sleeve</Label>
+          <CatalogGrid
+            form={form}
+            name={`${base}.sleeve`}
+            category="sleeve"
+            options={designOptions}
+          />
+        </div>
 
-        <form.Field name={`${base}.patti` as never}>
-          {(field: any) => (
-            <div className="space-y-1.5">
-              <Label>Patti (Front Strip)</Label>
-              <DesignOptionGrid
-                options={PATTI}
-                value={field.state.value}
-                onChange={field.handleChange}
-                columns={2}
-              />
-            </div>
-          )}
-        </form.Field>
+        <div className="space-y-1.5">
+          <Label>Patti (Front Strip)</Label>
+          <CatalogGrid
+            form={form}
+            name={`${base}.patti`}
+            category="patti"
+            options={designOptions}
+            columns={2}
+          />
+        </div>
 
-        <form.Field name={`${base}.emd` as never}>
-          {(field: any) => {
-            const stored: string = field.state.value ?? ''
-            // A legacy free-text value (e.g. "ZZ") matches no option but
-            // still has to display on an edit form rather than reading blank.
-            const extra =
-              stored && !EMD_OPTIONS.includes(stored) ? [stored] : []
-            return (
-              <div className="space-y-1.5">
-                <Label htmlFor={field.name}>EMD</Label>
-                <Select
-                  items={[
-                    { value: EMD_UNSET, label: 'None' },
-                    ...extra.map((option) => ({
-                      value: option,
-                      label: option,
-                    })),
-                    ...EMD_OPTIONS.map((option) => ({
-                      value: option,
-                      label: option,
-                    })),
-                  ]}
-                  value={stored || EMD_UNSET}
-                  onValueChange={(value: string | null) =>
-                    field.handleChange(
-                      value === EMD_UNSET || value == null ? '' : value,
-                    )
-                  }
-                >
-                  <SelectTrigger id={field.name} className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={EMD_UNSET}>None</SelectItem>
-                    {extra.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                    {EMD_OPTIONS.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )
-          }}
-        </form.Field>
+        <div className="space-y-1.5">
+          <Label>EMD</Label>
+          <CatalogGrid
+            form={form}
+            name={`${base}.emd`}
+            category="emd"
+            options={designOptions}
+          />
+        </div>
+
+        {designLoading && (
+          <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-3">
+            Loading design options...
+          </p>
+        )}
 
         <form.Field name={`${base}.moreDetails` as never}>
           {(field: any) => (

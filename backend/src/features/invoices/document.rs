@@ -13,11 +13,13 @@
 use base64::Engine;
 use minijinja::{context, Environment};
 use serde::Serialize;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     config::InvoiceBranding,
     document::{format_amount, format_datetime, format_quantity, CURRENCY},
     error::AppError,
+    features::design_options::{service as design_catalog, types::DesignAsset as CatalogAsset},
     state::AppState,
 };
 
@@ -59,11 +61,40 @@ struct DesignChip<'a> {
 }
 
 /// The catalog assets live in a generated module whose paths are rows; the
-/// lookup is small enough to keep here next to the renderer.
-fn design_asset(section: &str, slug: &str) -> Option<&'static designs::DesignAsset> {
+/// lookup is small enough to keep here next to the renderer. This is the
+/// fallback behind the database catalog: seeded rows carry no illustration
+/// yet, so until staff upload one the compiled-in picture keeps printing.
+fn static_asset(section: &str, slug: &str) -> Option<&'static designs::DesignAsset> {
     designs::DESIGNS
         .iter()
         .find(|asset| asset.section == section && asset.slug == slug)
+}
+
+/// A stored design value resolved to its display label plus illustration. The
+/// database row wins (staff-renamed labels, newly uploaded pictures); a row
+/// without an upload yet keeps its label but falls back to the compiled-in
+/// picture; anything else stays text — a legacy free-text value like "Saudi"
+/// or an EMD value with no catalog entry still prints.
+fn resolve_design(
+    category: &str,
+    raw: &str,
+    catalog: &HashMap<(String, String), CatalogAsset>,
+) -> (String, Option<String>) {
+    if let Some(asset) = catalog.get(&(category.to_string(), raw.to_string())) {
+        let image = asset
+            .image
+            .as_deref()
+            .map(|bytes| data_uri(&asset.image_mime, bytes))
+            .or_else(|| static_asset(category, raw).map(|old| data_uri("image/webp", old.bytes)));
+        return (asset.label.clone(), image);
+    }
+    match static_asset(category, raw) {
+        Some(asset) => (
+            asset.label.to_string(),
+            Some(data_uri("image/webp", asset.bytes)),
+        ),
+        None => (raw.to_string(), None),
+    }
 }
 
 /// A stored design value, trimmed. Matching is exact against the catalog id;
@@ -82,9 +113,34 @@ fn design_value(values: &OrderDesignValues, slot: usize) -> Option<&str> {
     (!value.is_empty()).then_some(value)
 }
 
+/// Every stored design value on one line, as `(category, slug)` pairs with
+/// blanks dropped — the invoice resolves all of them in one batched query.
+fn design_pairs(values: &OrderDesignValues) -> Vec<(String, String)> {
+    [
+        ("thob_type", &values.thobe_type),
+        ("neck", &values.collar),
+        ("sleeve", &values.sleeve),
+        ("front_pocket", &values.f_pocket),
+        ("patti", &values.patti),
+        ("emd", &values.emd),
+    ]
+    .into_iter()
+    .filter_map(|(category, value)| {
+        value
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| (category.to_string(), value.to_string()))
+    })
+    .collect()
+}
+
 /// The chips for one line, in fixed slot order, so a thobe always prints its
 /// type first regardless of which fields were filled in.
-fn line_designs(values: Option<&OrderDesignValues>) -> Vec<DesignChip<'static>> {
+fn line_designs(
+    values: Option<&OrderDesignValues>,
+    catalog: &HashMap<(String, String), CatalogAsset>,
+) -> Vec<DesignChip<'static>> {
     let Some(values) = values else {
         return Vec::new();
     };
@@ -94,10 +150,7 @@ fn line_designs(values: Option<&OrderDesignValues>) -> Vec<DesignChip<'static>> 
         .enumerate()
         .filter_map(|(slot, (title_ar, title_en))| {
             let raw = design_value(values, slot)?;
-            let (label, image) = match design_asset(SLOT_SECTIONS[slot], raw) {
-                Some(asset) => (asset.label.to_string(), Some(data_uri(asset.bytes))),
-                None => (raw.to_string(), None),
-            };
+            let (label, image) = resolve_design(SLOT_SECTIONS[slot], raw, catalog);
             Some(DesignChip {
                 title_ar,
                 title_en,
@@ -108,8 +161,9 @@ fn line_designs(values: Option<&OrderDesignValues>) -> Vec<DesignChip<'static>> 
         .collect()
 }
 
-/// Which catalog section a slot's values are drawn from. EMD has no catalog
-/// section — its chip always renders text-only.
+/// Which catalog category a slot's values are drawn from. A slot whose value
+/// matches no row (or a row with no upload yet, as EMD starts out) renders a
+/// text-only chip rather than disappearing.
 const SLOT_SECTIONS: [&str; 6] = [
     "thob_type",
     "neck",
@@ -119,9 +173,9 @@ const SLOT_SECTIONS: [&str; 6] = [
     "emd",
 ];
 
-fn data_uri(bytes: &[u8]) -> String {
+fn data_uri(mime: &str, bytes: &[u8]) -> String {
     format!(
-        "data:image/webp;base64,{}",
+        "data:{mime};base64,{}",
         base64::engine::general_purpose::STANDARD.encode(bytes)
     )
 }
@@ -200,11 +254,19 @@ pub async fn render_invoice_document(
 
     // Design chips and line notes, aligned to detail.lines. Kept out of the
     // serialized invoice (see the `design_values` skip) and passed alongside
-    // it because the template is the only consumer.
+    // it because the template is the only consumer. The catalog rows behind
+    // every stored design value resolve in one batched query.
+    let pairs: HashSet<(String, String)> = detail
+        .lines
+        .iter()
+        .filter_map(|line| line.design_values.as_ref())
+        .flat_map(design_pairs)
+        .collect();
+    let catalog = design_catalog::lookup_map(state, &pairs).await?;
     let line_designs: Vec<Vec<DesignChip>> = detail
         .lines
         .iter()
-        .map(|line| line_designs(line.design_values.as_ref()))
+        .map(|line| line_designs(line.design_values.as_ref(), &catalog))
         .collect();
     let line_notes: Vec<Option<String>> = detail
         .lines
@@ -315,6 +377,32 @@ mod tests {
     use super::*;
     use crate::features::invoices::types::OrderDesignValues;
 
+    /// An empty catalog, so the lookup falls back to the compiled-in one —
+    /// what the documents behaved like before the database catalog existed.
+    fn empty_catalog() -> HashMap<(String, String), CatalogAsset> {
+        HashMap::new()
+    }
+
+    fn catalog_with(asset: CatalogAsset) -> HashMap<(String, String), CatalogAsset> {
+        HashMap::from([((asset.category.clone(), asset.slug.clone()), asset)])
+    }
+
+    fn catalog_asset(
+        category: &str,
+        slug: &str,
+        label: &str,
+        image: Option<Vec<u8>>,
+        image_mime: &str,
+    ) -> CatalogAsset {
+        CatalogAsset {
+            category: category.to_string(),
+            slug: slug.to_string(),
+            label: label.to_string(),
+            image,
+            image_mime: image_mime.to_string(),
+        }
+    }
+
     fn branding() -> InvoiceBranding {
         InvoiceBranding {
             name_en: "Fabric Sync".to_string(),
@@ -424,14 +512,17 @@ mod tests {
 
     #[test]
     fn chips_follow_the_fixed_slot_order() {
-        let chips = line_designs(Some(&values(
-            Some("thobx"),
-            Some("3"),
-            Some("open"),
-            Some("round"),
-            Some("normal"),
-            Some("6"),
-        )));
+        let chips = line_designs(
+            Some(&values(
+                Some("thobx"),
+                Some("3"),
+                Some("open"),
+                Some("round"),
+                Some("normal"),
+                Some("6"),
+            )),
+            &empty_catalog(),
+        );
         assert_eq!(
             chips.iter().map(|c| c.title_en).collect::<Vec<_>>(),
             vec!["Thobe", "Collar", "Sleeve", "Pocket", "Patti", "EMD"]
@@ -443,8 +534,11 @@ mod tests {
     }
 
     #[test]
-    fn emd_has_no_catalog_section_so_it_prints_text_only() {
-        let chips = line_designs(Some(&values(None, None, None, None, None, Some("6"))));
+    fn emd_without_an_uploaded_illustration_prints_text_only() {
+        let chips = line_designs(
+            Some(&values(None, None, None, None, None, Some("6"))),
+            &empty_catalog(),
+        );
         assert_eq!(chips.len(), 1);
         assert_eq!(chips[0].title_en, "EMD");
         assert_eq!(chips[0].label, "6");
@@ -453,7 +547,10 @@ mod tests {
 
     #[test]
     fn a_catalog_design_carries_a_webp_data_uri() {
-        let chips = line_designs(Some(&values(Some("thobx"), None, None, None, None, None)));
+        let chips = line_designs(
+            Some(&values(Some("thobx"), None, None, None, None, None)),
+            &empty_catalog(),
+        );
         assert_eq!(chips.len(), 1);
         assert_eq!(chips[0].label, "Thobx");
         let image = chips[0].image.as_deref().unwrap();
@@ -465,14 +562,17 @@ mod tests {
     fn an_uncatalogued_value_prints_as_a_text_only_chip() {
         // The dev seed predates the catalog and stores human values like
         // "Saudi"; those still have to survive onto the document.
-        let chips = line_designs(Some(&values(
-            Some("Saudi"),
-            Some("Round"),
-            Some("Cuff"),
-            None,
-            None,
-            None,
-        )));
+        let chips = line_designs(
+            Some(&values(
+                Some("Saudi"),
+                Some("Round"),
+                Some("Cuff"),
+                None,
+                None,
+                None,
+            )),
+            &empty_catalog(),
+        );
         assert_eq!(chips.len(), 3);
         for chip in &chips {
             assert!(chip.image.is_none());
@@ -482,14 +582,10 @@ mod tests {
 
     #[test]
     fn surrounding_whitespace_does_not_break_the_catalog_lookup() {
-        let chips = line_designs(Some(&values(
-            Some("  thobx  "),
-            None,
-            None,
-            None,
-            None,
-            None,
-        )));
+        let chips = line_designs(
+            Some(&values(Some("  thobx  "), None, None, None, None, None)),
+            &empty_catalog(),
+        );
         assert_eq!(chips.len(), 1);
         assert!(chips[0].image.is_some());
     }
@@ -499,7 +595,10 @@ mod tests {
         // The template reads `chip.titleAr`/`chip.titleEn` — a snake_case key
         // would look the chip up as missing and render an empty title next to
         // the image, leaving no clue which slot the image belongs to.
-        let chips = line_designs(Some(&values(Some("thobx"), None, None, None, None, None)));
+        let chips = line_designs(
+            Some(&values(Some("thobx"), None, None, None, None, None)),
+            &empty_catalog(),
+        );
         let value = serde_json::to_value(&chips).unwrap();
         assert_eq!(value[0]["titleAr"], "النوع");
         assert_eq!(value[0]["titleEn"], "Thobe");
@@ -510,8 +609,70 @@ mod tests {
     #[test]
     fn blank_values_and_retail_lines_produce_no_chips() {
         let blank = values(Some("   "), None, None, None, None, None);
-        assert!(line_designs(Some(&blank)).is_empty());
-        assert!(line_designs(None).is_empty());
+        assert!(line_designs(Some(&blank), &empty_catalog()).is_empty());
+        assert!(line_designs(None, &empty_catalog()).is_empty());
+    }
+
+    #[test]
+    fn a_database_row_overrides_the_compiled_in_label_and_image() {
+        // Staff renamed the option and uploaded a PNG: the printout follows
+        // the row, including the mime in the data URI.
+        let catalog = catalog_with(catalog_asset(
+            "thob_type",
+            "thobx",
+            "Renamed",
+            Some(b"\x89PNG\r\n\x1a\nbytes".to_vec()),
+            "image/png",
+        ));
+        let chips = line_designs(
+            Some(&values(Some("thobx"), None, None, None, None, None)),
+            &catalog,
+        );
+        assert_eq!(chips.len(), 1);
+        assert_eq!(chips[0].label, "Renamed");
+        let image = chips[0].image.as_deref().unwrap();
+        assert!(image.starts_with("data:image/png;base64,"));
+    }
+
+    #[test]
+    fn a_database_row_without_an_upload_keeps_the_compiled_in_picture() {
+        // Seeded rows carry no bytes yet: the staff label prints, and the
+        // illustration falls back to the compiled-in picture for the slug.
+        let catalog = catalog_with(catalog_asset(
+            "thob_type",
+            "thobx",
+            "Renamed",
+            None,
+            "image/webp",
+        ));
+        let chips = line_designs(
+            Some(&values(Some("thobx"), None, None, None, None, None)),
+            &catalog,
+        );
+        assert_eq!(chips.len(), 1);
+        assert_eq!(chips[0].label, "Renamed");
+        let image = chips[0].image.as_deref().unwrap();
+        assert!(image.starts_with("data:image/webp;base64,"));
+    }
+
+    #[test]
+    fn design_pairs_collect_every_stored_value_once_per_slot() {
+        let pairs = design_pairs(&values(
+            Some(" thobx "),
+            Some(""),
+            None,
+            Some("round"),
+            Some("   "),
+            Some("6"),
+        ));
+        assert_eq!(
+            pairs,
+            vec![
+                ("thob_type".to_string(), "thobx".to_string()),
+                ("front_pocket".to_string(), "round".to_string()),
+                ("emd".to_string(), "6".to_string()),
+            ]
+        );
     }
 }
 

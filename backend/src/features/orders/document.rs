@@ -7,6 +7,7 @@
 //! rewrite. Nothing in the page is fetched at render time.
 
 use std::collections::BTreeMap;
+use std::collections::{HashMap, HashSet};
 
 use minijinja::{context, Environment};
 use serde::Serialize;
@@ -15,6 +16,7 @@ use crate::{
     config::InvoiceBranding,
     document::{format_amount, format_date, format_datetime, format_quantity, CURRENCY},
     error::AppError,
+    features::design_options::{service as design_catalog, types::DesignAsset as CatalogAsset},
     state::AppState,
 };
 
@@ -40,8 +42,9 @@ const SLOT_TITLES: [(&str, &str); 6] = [
     ("EMD", "EMD"),
 ];
 
-/// Which catalog section a slot's values are drawn from. EMD has no catalog
-/// section — its chip always renders text-only.
+/// Which catalog category a slot's values are drawn from. A slot whose value
+/// matches no row (or a row with no upload yet, as EMD starts out) renders a
+/// text-only chip rather than disappearing.
 const SLOT_SECTIONS: [&str; 6] = [
     "thob_type",
     "neck",
@@ -64,13 +67,40 @@ struct DesignChip<'a> {
     image: Option<String>,
 }
 
-fn design_asset(
+fn static_asset(
     section: &str,
     slug: &str,
 ) -> Option<&'static crate::features::invoices::designs::DesignAsset> {
     crate::features::invoices::designs::DESIGNS
         .iter()
         .find(|asset| asset.section == section && asset.slug == slug)
+}
+
+/// A stored design value resolved to its display label plus illustration. The
+/// database row wins (staff-renamed labels, newly uploaded pictures); a row
+/// without an upload yet keeps its label but falls back to the compiled-in
+/// picture; anything else stays text — a legacy free-text value like "Saudi"
+/// still prints.
+fn resolve_design(
+    category: &str,
+    raw: &str,
+    catalog: &HashMap<(String, String), CatalogAsset>,
+) -> (String, Option<String>) {
+    if let Some(asset) = catalog.get(&(category.to_string(), raw.to_string())) {
+        let image = asset
+            .image
+            .as_deref()
+            .map(|bytes| data_uri(&asset.image_mime, bytes))
+            .or_else(|| static_asset(category, raw).map(|old| data_uri("image/webp", old.bytes)));
+        return (asset.label.clone(), image);
+    }
+    match static_asset(category, raw) {
+        Some(asset) => (
+            asset.label.to_string(),
+            Some(data_uri("image/webp", asset.bytes)),
+        ),
+        None => (raw.to_string(), None),
+    }
 }
 
 /// A stored design value, trimmed. Matching is exact against the catalog id;
@@ -89,18 +119,40 @@ fn design_value(order: &OrderListItem, slot: usize) -> Option<&str> {
     (!value.is_empty()).then_some(value)
 }
 
+/// Every stored design value on the order, as `(category, slug)` pairs with
+/// blanks dropped — the document resolves all of them in one batched query.
+fn design_pairs(order: &OrderListItem) -> Vec<(String, String)> {
+    [
+        ("thob_type", &order.thobe_type),
+        ("neck", &order.collar),
+        ("sleeve", &order.sleeve),
+        ("front_pocket", &order.f_pocket),
+        ("patti", &order.patti),
+        ("emd", &order.emd),
+    ]
+    .into_iter()
+    .filter_map(|(category, value)| {
+        value
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| (category.to_string(), value.to_string()))
+    })
+    .collect()
+}
+
 /// The chips for the order, in fixed slot order, so a thobe always prints its
 /// type first regardless of which fields were filled in.
-fn order_designs(order: &OrderListItem) -> Vec<DesignChip<'static>> {
+fn order_designs(
+    order: &OrderListItem,
+    catalog: &HashMap<(String, String), CatalogAsset>,
+) -> Vec<DesignChip<'static>> {
     SLOT_TITLES
         .iter()
         .enumerate()
         .filter_map(|(slot, (title_ar, title_en))| {
             let raw = design_value(order, slot)?;
-            let (label, image) = match design_asset(SLOT_SECTIONS[slot], raw) {
-                Some(asset) => (asset.label.to_string(), Some(data_uri(asset.bytes))),
-                None => (raw.to_string(), None),
-            };
+            let (label, image) = resolve_design(SLOT_SECTIONS[slot], raw, catalog);
             Some(DesignChip {
                 title_ar,
                 title_en,
@@ -111,10 +163,10 @@ fn order_designs(order: &OrderListItem) -> Vec<DesignChip<'static>> {
         .collect()
 }
 
-fn data_uri(bytes: &[u8]) -> String {
+fn data_uri(mime: &str, bytes: &[u8]) -> String {
     use base64::Engine;
     format!(
-        "data:image/webp;base64,{}",
+        "data:{mime};base64,{}",
         base64::engine::general_purpose::STANDARD.encode(bytes)
     )
 }
@@ -143,6 +195,10 @@ pub async fn render_order_document(
     let timezone = state.timezone()?;
     let thob_values = formatted_measurement(&detail);
 
+    // The catalog rows behind every stored design value, in one batched query.
+    let pairs: HashSet<(String, String)> = design_pairs(&detail.order).into_iter().collect();
+    let catalog = design_catalog::lookup_map(state, &pairs).await?;
+
     let env = environment(branding)?;
     let template = env.get_template(TEMPLATE_NAME)?;
     Ok(template.render(context! {
@@ -161,7 +217,7 @@ pub async fn render_order_document(
         // The design chips and the free-text note, so the order sheet carries
         // the same made-to-measure specification the invoice document prints
         // per line — a tailor cutting from this sheet must see every choice.
-        designs => minijinja::Value::from_serialize(order_designs(&detail.order)),
+        designs => minijinja::Value::from_serialize(order_designs(&detail.order, &catalog)),
         design_note => minijinja::Value::from_serialize(design_note(&detail.order)),
         // The thobe sheet: fixed slot geometry shared with the frontend
         // (`thob-diagram.tsx` THOBE_VALUE_SLOTS). Values print as plain
@@ -619,6 +675,12 @@ fn thobe_arrows() -> Vec<&'static str> {
 mod tests {
     use super::*;
 
+    /// An empty catalog, so the lookup falls back to the compiled-in one —
+    /// what the documents behaved like before the database catalog existed.
+    fn empty_catalog() -> HashMap<(String, String), CatalogAsset> {
+        HashMap::new()
+    }
+
     fn branding() -> InvoiceBranding {
         InvoiceBranding {
             name_en: "Fabric Sync".to_string(),
@@ -705,7 +767,7 @@ mod tests {
                 company => minijinja::Value::from_serialize(branding),
                 currency => CURRENCY,
                 amounts => minijinja::Value::from_serialize(formatted_amounts(detail)),
-                designs => minijinja::Value::from_serialize(order_designs(&detail.order)),
+                designs => minijinja::Value::from_serialize(order_designs(&detail.order, &empty_catalog())),
                 design_note => minijinja::Value::from_serialize(design_note(&detail.order)),
                 thob_viewbox => THOB_VIEWBOX,
                 thob_slots => minijinja::Value::from_serialize(thobe_slots()),
@@ -793,7 +855,7 @@ mod tests {
         order.patti = Some("normal".to_string());
         order.emd = Some("6".to_string());
 
-        let chips = order_designs(&order);
+        let chips = order_designs(&order, &empty_catalog());
         assert_eq!(
             chips.iter().map(|c| c.title_en).collect::<Vec<_>>(),
             vec!["Thobe", "Collar", "Sleeve", "Pocket", "Patti", "EMD"]
@@ -806,11 +868,11 @@ mod tests {
     }
 
     #[test]
-    fn emd_has_no_catalog_section_so_it_prints_text_only() {
+    fn emd_without_an_uploaded_illustration_prints_text_only() {
         let mut order = services_order();
         order.emd = Some("6".to_string());
 
-        let chips = order_designs(&order);
+        let chips = order_designs(&order, &empty_catalog());
         assert_eq!(chips.len(), 1);
         assert_eq!(chips[0].title_en, "EMD");
         assert_eq!(chips[0].label, "6");
@@ -822,7 +884,7 @@ mod tests {
         let mut order = services_order();
         order.thobe_type = Some("thobx".to_string());
 
-        let chips = order_designs(&order);
+        let chips = order_designs(&order, &empty_catalog());
         assert_eq!(chips.len(), 1);
         assert_eq!(chips[0].label, "Thobx");
         let image = chips[0].image.as_deref().unwrap();
@@ -839,7 +901,7 @@ mod tests {
         order.collar = Some("Round".to_string());
         order.sleeve = Some("Cuff".to_string());
 
-        let chips = order_designs(&order);
+        let chips = order_designs(&order, &empty_catalog());
         assert_eq!(chips.len(), 3);
         for chip in &chips {
             assert!(chip.image.is_none());
@@ -848,12 +910,36 @@ mod tests {
     }
 
     #[test]
+    fn a_database_row_overrides_the_compiled_in_label_and_image() {
+        // Staff renamed the option and uploaded a PNG: the printout follows
+        // the row, including the mime in the data URI.
+        let catalog = HashMap::from([(
+            ("sleeve".to_string(), "open".to_string()),
+            CatalogAsset {
+                category: "sleeve".to_string(),
+                slug: "open".to_string(),
+                label: "Renamed".to_string(),
+                image: Some(b"\x89PNG\r\n\x1a\nbytes".to_vec()),
+                image_mime: "image/png".to_string(),
+            },
+        )]);
+        let mut order = services_order();
+        order.sleeve = Some("open".to_string());
+
+        let chips = order_designs(&order, &catalog);
+        assert_eq!(chips.len(), 1);
+        assert_eq!(chips[0].label, "Renamed");
+        let image = chips[0].image.as_deref().unwrap();
+        assert!(image.starts_with("data:image/png;base64,"));
+    }
+
+    #[test]
     fn blank_values_produce_no_chips_and_blank_notes_produce_no_note() {
         let mut order = services_order();
         order.thobe_type = Some("   ".to_string());
         order.more_details = Some("  ".to_string());
 
-        assert!(order_designs(&order).is_empty());
+        assert!(order_designs(&order, &empty_catalog()).is_empty());
         assert_eq!(design_note(&order), None);
 
         let mut noted = services_order();
@@ -869,7 +955,7 @@ mod tests {
         let mut order = services_order();
         order.thobe_type = Some("thobx".to_string());
 
-        let value = serde_json::to_value(order_designs(&order)).unwrap();
+        let value = serde_json::to_value(order_designs(&order, &empty_catalog())).unwrap();
         assert_eq!(value[0]["titleAr"], "النوع");
         assert_eq!(value[0]["titleEn"], "Thobe");
         assert_eq!(value[0]["label"], "Thobx");

@@ -15,13 +15,12 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  FRONT_POCKET,
-  NECK,
-  PATTI,
-  SLEEVE,
-  THOB_TYPE,
-} from '@/features/invoices/data/design-catalog'
-import type { ThobDesignOption } from '@/features/invoices/data/design-catalog'
+  designOptionImageSrc,
+  selectCategoryOptions,
+  useDesignOptions,
+} from '@/features/design-options/hooks/use-design-options'
+import { designCategoryLabel } from '@/features/design-options/lib/design-option-categories'
+import type { DesignOption } from '@/features/design-options/types/design-option'
 import { OrderTrackingPanel } from './components/order-tracking-panel'
 import { LogRepairDialog } from './components/log-repair-dialog'
 import { ReceiveOrderDialog } from './components/receive-order-dialog'
@@ -242,37 +241,36 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
 }
 
 // The made-to-measure choices, in the same fixed slot order the invoice
-// document prints them in. A stored value that matches a catalog id shows its
-// illustration; a legacy free-text value (e.g. "Saudi") shows as text only.
+// document prints them in. A stored value that matches a catalog slug shows
+// its illustration when one was uploaded; a legacy free-text value (e.g.
+// "Saudi") shows as text only.
 const DESIGN_SLOTS: {
-  label: string
+  category: string
   value: (order: OrderDetail) => string | null
-  options: ThobDesignOption[]
 }[] = [
-  {
-    label: 'Thobe Type',
-    value: (order) => order.thobeType,
-    options: THOB_TYPE,
-  },
-  { label: 'Collar', value: (order) => order.collar, options: NECK },
-  { label: 'Sleeve', value: (order) => order.sleeve, options: SLEEVE },
-  {
-    label: 'Front Pocket',
-    value: (order) => order.fPocket,
-    options: FRONT_POCKET,
-  },
-  { label: 'Patti', value: (order) => order.patti, options: PATTI },
-  // EMD has no illustrated catalog — its options carry no images, so any
-  // stored value renders as text.
-  { label: 'EMD', value: (order) => order.emd, options: [] },
+  { category: 'thob_type', value: (order) => order.thobeType },
+  { category: 'neck', value: (order) => order.collar },
+  { category: 'sleeve', value: (order) => order.sleeve },
+  { category: 'front_pocket', value: (order) => order.fPocket },
+  { category: 'patti', value: (order) => order.patti },
+  { category: 'emd', value: (order) => order.emd },
 ]
 
 function DesignDetails({ order }: { order: OrderDetail }) {
+  const { data: options = [] } = useDesignOptions()
   const slots = DESIGN_SLOTS.map((slot) => {
     const raw = slot.value(order)?.trim() ?? ''
     if (!raw) return null
-    const match = slot.options.find((option) => option.id === raw)
-    return { label: slot.label, raw, match: match ?? null }
+    const match =
+      selectCategoryOptions(options, slot.category).find(
+        (option: DesignOption) => option.slug === raw,
+      ) ?? null
+    return {
+      label: designCategoryLabel(slot.category),
+      raw,
+      match,
+      image: match ? designOptionImageSrc(match) : null,
+    }
   }).filter((slot): slot is NonNullable<typeof slot> => slot !== null)
   const note = order.moreDetails?.trim() || null
 
@@ -293,10 +291,10 @@ function DesignDetails({ order }: { order: OrderDetail }) {
               key={slot.label}
               className="flex flex-col items-center gap-1.5 rounded-lg border border-border/60 bg-background p-2 text-center"
             >
-              {slot.match ? (
+              {slot.image ? (
                 <img
-                  src={slot.match.image}
-                  alt={slot.match.label}
+                  src={slot.image}
+                  alt={slot.match?.label ?? slot.raw}
                   draggable={false}
                   className="h-20 w-full object-contain"
                 />
