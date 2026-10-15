@@ -20,6 +20,7 @@ import { useUsers } from '@/features/users/hooks/use-users'
 import { UserAvatar } from '@/features/users/components/user-avatar'
 import type { Location } from '@/features/locations/types/location'
 import {
+  isRepairFinished,
   repairStatusLabel,
   stageBadgeVariant,
   stageLockedReason,
@@ -30,11 +31,15 @@ import { useSetAssignee } from '../hooks/use-set-assignee'
 import { useSetOrderStage } from '../hooks/use-set-order-stage'
 import { useUpdateOrder } from '../hooks/use-update-order'
 import { useUpdateRepair } from '../hooks/use-update-repair'
+import { printRepairDocument } from '../lib/print-repair'
+import { ReceiveRepairDialog } from './receive-repair-dialog'
+import { FixRepairMeasurementDialog } from './fix-repair-measurement-dialog'
 import type {
   Order,
   OrderDetail,
   OrderRepair,
   OrderStageEntry,
+  RepairListItem,
 } from '../types/orders'
 
 // Base UI's Select reserves the empty string, so "nobody assigned" needs a
@@ -426,8 +431,33 @@ function RepairsSection({
 
 function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
   const updateRepair = useUpdateRepair()
-  const isFinished =
-    repair.status === 'completed' || repair.status === 'cancelled'
+  const [receiveOpen, setReceiveOpen] = React.useState(false)
+  const [fixOpen, setFixOpen] = React.useState(false)
+  const [isPrinting, setIsPrinting] = React.useState(false)
+  const finished = isRepairFinished(repair.status)
+
+  // The global dialogs work on the flat RepairListItem shape — build one from
+  // the order + repair riding along here.
+  const asListItem = (item: OrderRepair): RepairListItem => ({
+    id: item.id,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    invoiceId: order.invoiceId,
+    invoiceNumber: order.invoiceNumber,
+    customerName: order.customerName,
+    customerMobile: order.customerMobile,
+    material: order.material,
+    reason: item.reason,
+    reportedOn: item.reportedOn,
+    charge: item.charge,
+    status: item.status,
+    completedAt: item.completedAt,
+    receivedAt: item.receivedAt,
+    receivedAmount: item.receivedAmount,
+    receivedPaymentType: item.receivedPaymentType,
+    fixedMeasurementId: item.fixedMeasurementId,
+    notes: item.notes,
+  })
 
   const setStatus = async (status: OrderRepair['status']) => {
     const pending = updateRepair.mutateAsync({
@@ -447,6 +477,18 @@ function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
     }
   }
 
+  const handlePrint = () => {
+    setIsPrinting(true)
+    const pending = printRepairDocument(order.id, repair.id).finally(() =>
+      setIsPrinting(false),
+    )
+    toast.promise(pending, {
+      loading: 'Preparing the repair receipt...',
+      success: 'Receipt ready — choose "Save as PDF" to download it.',
+      error: 'Could not prepare this receipt. Please try again.',
+    })
+  }
+
   return (
     <div className="space-y-3 rounded-xl border border-border/60 bg-card p-4">
       <div className="flex items-start justify-between gap-2">
@@ -457,48 +499,103 @@ function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
             {repair.charge > 0 &&
               ` — ${currencyFormatter.format(repair.charge)}`}
           </p>
+          {repair.status === 'received' && (
+            <p className="text-xs text-muted-foreground">
+              Handed over
+              {repair.receivedAt
+                ? ` ${new Date(repair.receivedAt).toLocaleDateString()}`
+                : ''}
+              {repair.receivedAmount > 0 &&
+                ` — ${currencyFormatter.format(repair.receivedAmount)}${repair.receivedPaymentType ? ` (${repair.receivedPaymentType})` : ''}`}
+            </p>
+          )}
+          {repair.fixedMeasurementId && (
+            <p className="text-xs text-muted-foreground">
+              Measurement fix recorded for future orders.
+            </p>
+          )}
           {repair.notes && (
             <p className="mt-1 text-xs text-muted-foreground">{repair.notes}</p>
           )}
         </div>
-        <Badge variant={isFinished ? 'outline' : 'secondary'}>
+        <Badge variant={finished ? 'outline' : 'secondary'}>
           {repairStatusLabel(repair.status)}
         </Badge>
       </div>
 
-      {!isFinished && (
-        <div className="flex justify-end gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 w-auto px-2"
-            disabled={updateRepair.isPending}
-            onClick={() => void setStatus('cancelled')}
-          >
-            Cancel Repair
-          </Button>
-          {repair.status === 'open' && (
+      <div className="flex flex-wrap justify-end gap-1">
+        {!finished && (
+          <>
             <Button
               size="sm"
               variant="ghost"
               className="h-8 w-auto px-2"
               disabled={updateRepair.isPending}
-              onClick={() => void setStatus('in_progress')}
+              onClick={() => void setStatus('cancelled')}
             >
-              Start
+              Cancel Repair
             </Button>
-          )}
+            {repair.status === 'open' && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-auto px-2"
+                disabled={updateRepair.isPending}
+                onClick={() => void setStatus('in_progress')}
+              >
+                Start
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 w-auto px-2"
+              disabled={updateRepair.isPending}
+              onClick={() => void setStatus('completed')}
+            >
+              Complete
+            </Button>
+          </>
+        )}
+        {repair.status === 'completed' && (
           <Button
             size="sm"
             variant="ghost"
             className="h-8 w-auto px-2"
-            disabled={updateRepair.isPending}
-            onClick={() => void setStatus('completed')}
+            onClick={() => setReceiveOpen(true)}
           >
-            Complete
+            Receive
           </Button>
-        </div>
-      )}
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 w-auto px-2"
+          onClick={() => setFixOpen(true)}
+        >
+          {repair.fixedMeasurementId
+            ? 'Update Measurements'
+            : 'Record Measurements'}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 w-auto px-2"
+          disabled={isPrinting}
+          onClick={handlePrint}
+        >
+          Receipt
+        </Button>
+      </div>
+
+      <ReceiveRepairDialog
+        repair={receiveOpen ? asListItem(repair) : null}
+        onOpenChange={(open) => !open && setReceiveOpen(false)}
+      />
+      <FixRepairMeasurementDialog
+        repair={fixOpen ? asListItem(repair) : null}
+        onOpenChange={(open) => !open && setFixOpen(false)}
+      />
     </div>
   )
 }

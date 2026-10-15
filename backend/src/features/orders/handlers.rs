@@ -13,10 +13,11 @@ use crate::{
 };
 
 use super::{
-    document, service,
+    document, repair_document, service,
     types::{
         AssignStageInput, CreateRepairInput, OrderDetail, OrderListItem, ReceiveOrderInput,
-        SetStageInput, UpdateOrderInput, UpdateRepairInput,
+        ReceiveRepairInput, RepairListItem, RepairMeasurementFixInput, SetStageInput,
+        UpdateOrderInput, UpdateRepairInput,
     },
 };
 
@@ -108,5 +109,54 @@ pub async fn update_repair(
 ) -> Result<Json<OrderListItem>, AppError> {
     Ok(Json(
         service::update_repair(&state, order_id, repair_id, input).await?,
+    ))
+}
+
+pub async fn list_all_repairs(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+) -> Result<Json<Vec<RepairListItem>>, AppError> {
+    Ok(Json(service::list_all_repairs(&state).await?))
+}
+
+pub async fn receive_repair(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path((order_id, repair_id)): Path<(Uuid, Uuid)>,
+    Json(input): Json<ReceiveRepairInput>,
+) -> Result<Json<OrderListItem>, AppError> {
+    Ok(Json(
+        service::receive_repair(
+            &state,
+            order_id,
+            repair_id,
+            input.amount,
+            input.payment_type,
+        )
+        .await?,
+    ))
+}
+
+pub async fn set_repair_measurement(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path((order_id, repair_id)): Path<(Uuid, Uuid)>,
+    Json(input): Json<RepairMeasurementFixInput>,
+) -> Result<Json<OrderListItem>, AppError> {
+    Ok(Json(
+        service::set_repair_measurement(&state, order_id, repair_id, input.measurement).await?,
+    ))
+}
+
+/// The printable repair slip, as HTML. Same pattern as the order document:
+/// fetched through `apiClient` and printed from an iframe, so it can carry an
+/// Authorization header.
+pub async fn repair_document(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path((order_id, repair_id)): Path<(Uuid, Uuid)>,
+) -> Result<Html<String>, AppError> {
+    Ok(Html(
+        repair_document::render_repair_document(&state, order_id, repair_id).await?,
     ))
 }

@@ -25,9 +25,22 @@ pub fn router() -> Router<AppState> {
             "/orders/:id/stages/:stageId/assignee",
             put(handlers::set_assignee),
         )
+        .route("/repairs", get(handlers::list_all_repairs))
         .route("/orders/:id/repairs", post(handlers::create_repair))
         .route(
             "/orders/:id/repairs/:repairId",
             patch(handlers::update_repair),
+        )
+        .route(
+            "/orders/:id/repairs/:repairId/receive",
+            post(handlers::receive_repair),
+        )
+        .route(
+            "/orders/:id/repairs/:repairId/measurement",
+            put(handlers::set_repair_measurement),
+        )
+        .route(
+            "/orders/:id/repairs/:repairId/document",
+            get(handlers::repair_document),
         )
 }

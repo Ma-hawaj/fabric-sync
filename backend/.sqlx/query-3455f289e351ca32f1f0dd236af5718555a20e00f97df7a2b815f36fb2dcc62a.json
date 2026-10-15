@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT m.customer_id\n        FROM orders o\n        JOIN measurements m ON m.id = o.measurement_id\n        WHERE o.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "customer_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3455f289e351ca32f1f0dd236af5718555a20e00f97df7a2b815f36fb2dcc62a"
+}
