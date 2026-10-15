@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE design_options\n        SET label = COALESCE($2, label),\n            sort_order = COALESCE($3, sort_order),\n            is_active = COALESCE($4, is_active),\n            image = CASE WHEN $5 THEN $6 ELSE image END,\n            image_mime = CASE WHEN $5 THEN COALESCE($7, image_mime) ELSE image_mime END\n        WHERE id = $1\n        RETURNING id, category, slug, label, sort_order, is_active,\n            (image IS NOT NULL) AS \"has_image!\",\n            ('/design-options/' || id::text || '/image') AS \"image_url!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "category",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "slug",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "label",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "sort_order",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "is_active",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "has_image!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "image_url!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4",
+        "Bool",
+        "Bool",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "1cd7b7344bcef5a580af2715383922695a5a23cb0b04ada61711c1953015fe63"
+}
