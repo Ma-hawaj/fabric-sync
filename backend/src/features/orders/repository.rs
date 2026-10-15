@@ -391,6 +391,10 @@ pub async fn list_repairs(
             charge::float8 AS "charge!",
             status,
             completed_at,
+            received_at,
+            received_amount::float8 AS "received_amount!",
+            received_payment_type,
+            fixed_measurement_id,
             notes
         FROM order_repairs
         WHERE order_id = ANY($1)
@@ -400,6 +404,173 @@ pub async fn list_repairs(
     )
     .fetch_all(state.db())
     .await
+}
+
+/// Every repair with its order context, for the global `/repairs` tracking
+/// page. One query rather than one per order — the page filters and sorts
+/// without joining client-side.
+pub async fn list_all_repairs(
+    state: &AppState,
+) -> Result<Vec<super::types::RepairListItem>, AppError> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT
+            r.id,
+            r.order_id,
+            o.order_number,
+            o.invoice_id,
+            i.invoice_number,
+            c.name AS customer_name,
+            c.mobile_no AS customer_mobile,
+            mat.name AS material,
+            r.reason,
+            r.reported_on,
+            r.charge::float8 AS "charge!",
+            r.status,
+            r.completed_at,
+            r.received_at,
+            r.received_amount::float8 AS "received_amount!",
+            r.received_payment_type,
+            r.fixed_measurement_id,
+            r.notes
+        FROM order_repairs r
+        JOIN orders o ON o.id = r.order_id
+        JOIN invoices i ON i.id = o.invoice_id
+        JOIN measurements m ON m.id = o.measurement_id
+        JOIN customers c ON c.id = m.customer_id
+        JOIN materials mat ON mat.id = o.material_id
+        ORDER BY r.reported_on DESC, r.id DESC
+        "#,
+    )
+    .fetch_all(state.db())
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| super::types::RepairListItem {
+            id: row.id,
+            order_id: row.order_id,
+            order_number: row.order_number,
+            invoice_id: row.invoice_id,
+            invoice_number: row.invoice_number,
+            customer_name: row.customer_name,
+            customer_mobile: row.customer_mobile,
+            material: row.material,
+            reason: row.reason,
+            reported_on: row.reported_on,
+            charge: row.charge,
+            status: row.status,
+            completed_at: row.completed_at,
+            received_at: row.received_at,
+            received_amount: row.received_amount,
+            received_payment_type: row.received_payment_type,
+            fixed_measurement_id: row.fixed_measurement_id,
+            notes: row.notes,
+        })
+        .collect())
+}
+
+/// The repair row locked. The service refuses a receive on a repair that is
+/// not completed through this: a retry would otherwise record the handover
+/// payment twice.
+pub struct LockedRepair {
+    pub status: String,
+}
+
+pub async fn lock_repair(
+    tx: &mut sqlx::PgTransaction<'_>,
+    repair_id: Uuid,
+) -> Result<Option<LockedRepair>, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        SELECT status
+        FROM order_repairs
+        WHERE id = $1
+        FOR UPDATE
+        "#,
+        repair_id,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    Ok(row.map(|row| LockedRepair { status: row.status }))
+}
+
+/// Marks the repair received and records the money taken at handover. The
+/// caller holds the row locked (see `lock_repair`) and has refused anything
+/// that is not `completed`.
+pub async fn mark_repair_received(
+    tx: &mut sqlx::PgTransaction<'_>,
+    repair_id: Uuid,
+    received_at: DateTime<Utc>,
+    amount: f64,
+    payment_type: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE order_repairs
+        SET status = 'received',
+            received_at = $2,
+            received_amount = $3::float8,
+            received_payment_type = $4
+        WHERE id = $1
+        "#,
+        repair_id,
+        received_at,
+        amount,
+        payment_type,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn set_repair_fixed_measurement(
+    tx: &mut sqlx::PgTransaction<'_>,
+    repair_id: Uuid,
+    measurement_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE order_repairs
+        SET fixed_measurement_id = $2
+        WHERE id = $1
+        "#,
+        repair_id,
+        measurement_id,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+/// The customer behind a repair's order. The order's own measurement snapshot
+/// never moves — the fix inserts a new row instead.
+pub struct RepairOrderContext {
+    pub customer_id: Uuid,
+}
+
+pub async fn repair_order_context(
+    state: &AppState,
+    order_id: Uuid,
+) -> Result<Option<RepairOrderContext>, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        SELECT m.customer_id
+        FROM orders o
+        JOIN measurements m ON m.id = o.measurement_id
+        WHERE o.id = $1
+        "#,
+        order_id,
+    )
+    .fetch_optional(state.db())
+    .await?;
+
+    Ok(row.map(|row| RepairOrderContext {
+        customer_id: row.customer_id,
+    }))
 }
 
 /// The order's invoice with the row locked. The service refuses a pickup on

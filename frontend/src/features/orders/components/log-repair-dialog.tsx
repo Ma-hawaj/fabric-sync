@@ -72,8 +72,8 @@ export function LogRepairDialog({ order, onOpenChange }: LogRepairDialogProps) {
             </DialogHeader>
 
             <p className="text-sm text-muted-foreground">
-              The repair gets its own pass through the stage checklist, so
-              earlier repairs on this order stay on record.
+              The repair is tracked by its own record and status, so earlier
+              repairs on this order stay on record.
             </p>
 
             <div className="space-y-1">

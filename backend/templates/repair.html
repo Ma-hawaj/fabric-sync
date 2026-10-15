@@ -1,0 +1,276 @@
+{#
+  The repair slip. Edit this file to change how a printed repair receipt looks.
+
+  Set INVOICE_TEMPLATE_DIR to the templates directory and the changes show up
+  on the next request, with no rebuild. Unset, the copy compiled into the
+  binary is used instead (see src/features/orders/repair_document.rs).
+
+  Everything must stay self-contained — inline styles, a `data:` logo URI.
+  The page is printed from an iframe with no origin of its own to resolve
+  relative URLs against, and will later be rendered by a headless browser that
+  may have no network access.
+
+  Available:
+    repair   — one OrderRepair (see orders/types.rs): reason, reportedOn,
+               charge, status, completedAt, receivedAt, receivedAmount,
+               receivedPaymentType, fixedMeasurementId, notes
+    order    — GET /orders/:id (OrderDetail, flattened): orderNumber,
+               customerName, customerMobile, material, invoiceNumber, …
+    reported_on — the repair's reported date, pre-formatted (YYYY-MM-DD)
+    completed_at / received_at — timestamps, pre-formatted, or empty
+    company  — COMPANY_* env vars (see config.rs InvoiceBranding)
+    currency — "BHD"
+    amounts  — pre-formatted money: charge, receivedAmount
+    measurement_changes — before→after diff for the fix: field, label,
+               before, after (only changed fields; empty when no fix)
+    has_fix  — true once a measurement fix has been recorded
+#}
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Repair receipt ORD-{{ order.orderNumber }}</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 10mm;
+      }
+
+      :root {
+        --ink: #10151c;
+        --muted: #6b7280;
+        --rule: #d8dee7;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 10mm;
+        font-family: 'Noto Sans Arabic', 'IBM Plex Sans Arabic', 'Segoe UI',
+          Tahoma, Arial, sans-serif;
+        font-size: 11px;
+        line-height: 1.4;
+        color: var(--ink);
+        background: #fff;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      @media print {
+        body {
+          padding: 0;
+        }
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+        padding-bottom: 8px;
+        border-bottom: 1.5px solid var(--ink);
+      }
+
+      .logo {
+        max-height: 40px;
+        max-width: 150px;
+        object-fit: contain;
+      }
+
+      .company-name {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .company-meta {
+        margin: 2px 0 0;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .doc-title {
+        text-align: end;
+      }
+
+      .doc-title h1 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .doc-title p {
+        margin: 2px 0 0;
+        color: var(--muted);
+      }
+
+      section {
+        margin-top: 12px;
+      }
+
+      h2 {
+        margin: 0 0 6px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+
+      dl {
+        margin: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 16px;
+      }
+
+      dt {
+        color: var(--muted);
+      }
+
+      dd {
+        margin: 0;
+        font-weight: 600;
+        text-align: end;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 5px 8px;
+        border: 1px solid var(--rule);
+        text-align: start;
+      }
+
+      th {
+        background: #f3f4f6;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .num {
+        text-align: end;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .notes {
+        padding: 8px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        white-space: pre-wrap;
+      }
+
+      footer {
+        margin-top: 24px;
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .sign {
+        flex: 1;
+        padding-top: 24px;
+        border-top: 1px solid var(--ink);
+        text-align: center;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        {% if company.logoDataUrl %}
+          <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
+        {% endif %}
+        <p class="company-name">{{ company.nameEn }} · {{ company.nameAr }}</p>
+        <p class="company-meta">
+          {{ company.addressEn }}{% if company.phone %} · {{ company.phone }}{% endif %}
+        </p>
+      </div>
+      <div class="doc-title">
+        <h1>Repair receipt · إيصال إصلاح</h1>
+        <p>ORD-{{ order.orderNumber }} · INV-{{ order.invoiceNumber }}</p>
+      </div>
+    </header>
+
+    <section>
+      <h2>Customer · العميل</h2>
+      <dl>
+        <dt>Name</dt>
+        <dd>{{ order.customerName }}</dd>
+        <dt>Mobile</dt>
+        <dd>{{ order.customerMobile }}</dd>
+        <dt>Material</dt>
+        <dd>{{ order.material }}</dd>
+        <dt>Status</dt>
+        <dd>{{ repair.status }}</dd>
+      </dl>
+    </section>
+
+    <section>
+      <h2>Repair · الإصلاح</h2>
+      <dl>
+        <dt>Reason</dt>
+        <dd>{{ repair.reason }}</dd>
+        <dt>Reported</dt>
+        <dd>{{ reported_on }}</dd>
+        <dt>Completed</dt>
+        <dd>{{ completed_at or '—' }}</dd>
+        <dt>Received</dt>
+        <dd>{{ received_at or '—' }}</dd>
+        <dt>Charge ({{ currency }})</dt>
+        <dd class="num">{{ amounts.charge }}</dd>
+        <dt>Collected ({{ currency }})</dt>
+        <dd class="num">{{ amounts.receivedAmount }}{% if repair.receivedPaymentType %} · {{ repair.receivedPaymentType }}{% endif %}</dd>
+      </dl>
+      {% if repair.notes %}
+        <div style="height: 8px"></div>
+        <div class="notes">{{ repair.notes }}</div>
+      {% endif %}
+    </section>
+
+    <section>
+      <h2>Measurement fixes · تعديلات القياس</h2>
+      {% if measurement_changes | length == 0 %}
+        <p style="color: var(--muted); margin: 0;">
+          {% if has_fix %}
+            The recorded fix matches the original snapshot — no values changed.
+          {% else %}
+            No measurement changes recorded for this repair.
+          {% endif %}
+        </p>
+      {% else %}
+        <table>
+          <thead>
+            <tr>
+              <th>Measurement</th>
+              <th class="num">Before</th>
+              <th class="num">After</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for change in measurement_changes %}
+              <tr>
+                <td>{{ change.label }}</td>
+                <td class="num">{{ change.before }}</td>
+                <td class="num">{{ change.after }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </section>
+
+    <footer>
+      <div class="sign">Staff signature · توقيع الموظف</div>
+      <div class="sign">Customer signature · توقيع العميل</div>
+    </footer>
+  </body>
+</html>

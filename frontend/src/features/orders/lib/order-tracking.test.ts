@@ -3,6 +3,7 @@ import {
   COMPLETED,
   NOT_STARTED,
   currentStageLabel,
+  isRepairFinished,
   isStageLocked,
   openRepairCount,
   repairStatusLabel,
@@ -85,6 +86,10 @@ function repair(overrides: Partial<OrderRepair>): OrderRepair {
     charge: 0,
     status: 'open',
     completedAt: null,
+    receivedAt: null,
+    receivedAmount: 0,
+    receivedPaymentType: null,
+    fixedMeasurementId: null,
     notes: null,
     ...overrides,
   }
@@ -209,6 +214,7 @@ describe('openRepairCount', () => {
       repair({ id: 'b', status: 'in_progress' }),
       repair({ id: 'c', status: 'completed' }),
       repair({ id: 'd', status: 'cancelled' }),
+      repair({ id: 'e', status: 'received' }),
     ]
     expect(openRepairCount(order({ repairs }))).toBe(2)
   })
@@ -222,6 +228,17 @@ describe('repairStatusLabel', () => {
   it('renders the stored snake_case status readably', () => {
     expect(repairStatusLabel('in_progress')).toBe('In progress')
     expect(repairStatusLabel('open')).toBe('Open')
+    expect(repairStatusLabel('received')).toBe('Received')
+  })
+})
+
+describe('isRepairFinished', () => {
+  it('treats completed, cancelled and received as finished', () => {
+    expect(isRepairFinished('completed')).toBe(true)
+    expect(isRepairFinished('cancelled')).toBe(true)
+    expect(isRepairFinished('received')).toBe(true)
+    expect(isRepairFinished('open')).toBe(false)
+    expect(isRepairFinished('in_progress')).toBe(false)
   })
 })
 
