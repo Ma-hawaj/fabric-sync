@@ -33,11 +33,12 @@ const TEMPLATE_NAME: &str = "order.html";
 /// order as the invoice document, so the two papers read the same way. A
 /// stored value that matches nothing (orders that predate the catalog) prints
 /// as a text-only chip rather than disappearing.
-const SLOT_TITLES: [(&str, &str); 6] = [
+const SLOT_TITLES: [(&str, &str); 7] = [
     ("النوع", "Thobe"),
     ("الياقة", "Collar"),
     ("الكم", "Sleeve"),
     ("الجيب", "Pocket"),
+    ("الجيب الجانبي", "Side Pocket"),
     ("الباتي", "Patti"),
     ("EMD", "EMD"),
 ];
@@ -45,11 +46,12 @@ const SLOT_TITLES: [(&str, &str); 6] = [
 /// Which catalog category a slot's values are drawn from. A slot whose value
 /// matches no row (or a row with no upload yet, as EMD starts out) renders a
 /// text-only chip rather than disappearing.
-const SLOT_SECTIONS: [&str; 6] = [
+const SLOT_SECTIONS: [&str; 7] = [
     "thob_type",
     "neck",
     "sleeve",
     "front_pocket",
+    "side_pocket",
     "patti",
     "emd",
 ];
@@ -111,8 +113,9 @@ fn design_value(order: &OrderListItem, slot: usize) -> Option<&str> {
         1 => order.collar.as_deref(),
         2 => order.sleeve.as_deref(),
         3 => order.f_pocket.as_deref(),
-        4 => order.patti.as_deref(),
-        5 => order.emd.as_deref(),
+        4 => order.s_pocket.as_deref(),
+        5 => order.patti.as_deref(),
+        6 => order.emd.as_deref(),
         _ => return None,
     };
     let value = value?.trim();
@@ -127,6 +130,7 @@ fn design_pairs(order: &OrderListItem) -> Vec<(String, String)> {
         ("neck", &order.collar),
         ("sleeve", &order.sleeve),
         ("front_pocket", &order.f_pocket),
+        ("side_pocket", &order.s_pocket),
         ("patti", &order.patti),
         ("emd", &order.emd),
     ]
@@ -852,18 +856,27 @@ mod tests {
         order.collar = Some("3".to_string());
         order.sleeve = Some("open".to_string());
         order.f_pocket = Some("round".to_string());
+        order.s_pocket = Some("2".to_string());
         order.patti = Some("normal".to_string());
         order.emd = Some("6".to_string());
 
         let chips = order_designs(&order, &empty_catalog());
         assert_eq!(
             chips.iter().map(|c| c.title_en).collect::<Vec<_>>(),
-            vec!["Thobe", "Collar", "Sleeve", "Pocket", "Patti", "EMD"]
+            vec![
+                "Thobe",
+                "Collar",
+                "Sleeve",
+                "Pocket",
+                "Side Pocket",
+                "Patti",
+                "EMD"
+            ]
         );
         // Catalog slugs resolve to their display labels.
         assert_eq!(
             chips.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(),
-            vec!["Thobx", "3", "Open", "Round", "Normal", "6"]
+            vec!["Thobx", "3", "Open", "Round", "2", "Normal", "6"]
         );
     }
 
@@ -1088,6 +1101,7 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         received_at: None,
         thobe_type: None,
         f_pocket: None,
+        s_pocket: None,
         collar: None,
         sleeve: None,
         patti: None,

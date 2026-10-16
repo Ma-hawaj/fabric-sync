@@ -128,6 +128,7 @@ pub struct OrderRow {
     /// going through the parent invoice.
     pub thobe_type: Option<String>,
     pub f_pocket: Option<String>,
+    pub s_pocket: Option<String>,
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub patti: Option<String>,
@@ -225,6 +226,7 @@ pub struct OrderListItem {
     /// order sheet read from one shape.
     pub thobe_type: Option<String>,
     pub f_pocket: Option<String>,
+    pub s_pocket: Option<String>,
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub patti: Option<String>,

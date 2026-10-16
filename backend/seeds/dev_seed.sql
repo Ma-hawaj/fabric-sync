@@ -133,7 +133,7 @@ INSERT INTO invoice_payments (id, invoice_id, order_id, amount, payment_type, pa
 -- delivery stage is reported as not applicable), and 11 and 12 have no
 -- production location assigned yet.
 --
--- The five design columns hold the DESIGN CATALOG SLUGS (see the
+-- The six design columns hold the DESIGN CATALOG SLUGS (see the
 -- `design_options` table, managed at /design-options), not free text — the
 -- printed invoice looks each one up against the catalog and embeds the
 -- matching illustration; a value that matches nothing prints without a

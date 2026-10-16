@@ -1,9 +1,15 @@
 // One row of GET /design-options — a single choice inside one of the fixed
-// order design slots (thobe type, collar, sleeve, front pocket, patti, EMD).
-// The slots themselves are still fixed order columns; only the options are
-// rows, which is why staff can add and retire these without a deploy.
+// order design slots (thobe type, collar, sleeve, front/side pocket, patti,
+// EMD). The slots themselves are still fixed order columns; only the options
+// are rows, which is why staff can add and retire these without a deploy.
 export type DesignCategory =
-  'thob_type' | 'neck' | 'sleeve' | 'front_pocket' | 'patti' | 'emd'
+  | 'thob_type'
+  | 'neck'
+  | 'sleeve'
+  | 'front_pocket'
+  | 'side_pocket'
+  | 'patti'
+  | 'emd'
 
 export interface DesignOption {
   id: string

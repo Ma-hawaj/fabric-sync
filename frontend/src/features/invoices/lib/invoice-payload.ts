@@ -38,6 +38,7 @@ function orderPayload(order: InvoiceOrderDraft) {
     price: numberOrZero(order.price),
     thobeType: blankToNull(order.thobeType),
     fPocket: blankToNull(order.fPocket),
+    sPocket: blankToNull(order.sPocket),
     collar: blankToNull(order.collar),
     sleeve: blankToNull(order.sleeve),
     patti: blankToNull(order.patti),

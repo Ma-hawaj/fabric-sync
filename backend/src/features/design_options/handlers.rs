@@ -65,6 +65,7 @@ pub async fn get_image(
     // The mime comes from the constrained set the service accepts on write;
     // anything else falls back to a generic binary type rather than failing.
     let content_type = match mime.as_str() {
+        "image/svg+xml" => "image/svg+xml",
         "image/webp" => "image/webp",
         "image/png" => "image/png",
         "image/jpeg" => "image/jpeg",

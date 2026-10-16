@@ -6,7 +6,15 @@ import { z } from 'zod'
 // carries its data URL through.
 export const designOptionFormSchema = z.object({
   category: z.enum(
-    ['thob_type', 'neck', 'sleeve', 'front_pocket', 'patti', 'emd'],
+    [
+      'thob_type',
+      'neck',
+      'sleeve',
+      'front_pocket',
+      'side_pocket',
+      'patti',
+      'emd',
+    ],
     { message: 'Pick a design category.' },
   ),
   slug: z

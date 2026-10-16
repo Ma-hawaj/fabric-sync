@@ -38,7 +38,7 @@ pub struct CreateDesignOptionInput {
     pub label: String,
     #[serde(default)]
     pub sort_order: Option<i32>,
-    /// An optional `data:image/<webp|png|jpeg>;base64,...` URL. Sent as JSON
+    /// An optional `data:image/<svg|webp|png|jpeg>;base64,...` URL. Sent as JSON
     /// rather than multipart so no extra extractor is needed.
     #[serde(default)]
     pub image_data_url: Option<String>,

@@ -16,6 +16,7 @@ export interface InvoiceOrderDraft {
 
   thobeType: string
   fPocket: string
+  sPocket: string
   collar: string
   sleeve: string
   patti: string
@@ -129,6 +130,7 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     key: crypto.randomUUID(),
     thobeType: '',
     fPocket: '',
+    sPocket: '',
     collar: '',
     sleeve: '',
     patti: '',

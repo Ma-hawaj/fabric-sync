@@ -11,13 +11,15 @@ use super::{
 
 /// The fixed order design slots, matching the `orders` columns and the
 /// catalog sections: `neck` is the collar, `front_pocket` the `fPocket` field,
-/// `thob_type` the `thobeType` field. New slots are a schema change, not a
-/// row — only the options inside these are dynamic.
-pub const CATEGORIES: [&str; 6] = [
+/// `side_pocket` the `sPocket` field, `thob_type` the `thobeType` field. New
+/// slots are a schema change, not a row — only the options inside these are
+/// dynamic.
+pub const CATEGORIES: [&str; 7] = [
     "thob_type",
     "neck",
     "sleeve",
     "front_pocket",
+    "side_pocket",
     "patti",
     "emd",
 ];
@@ -95,14 +97,20 @@ async fn next_sort_order(state: &AppState, category: &str) -> Result<i32, AppErr
     Ok(row.next)
 }
 
-/// Decodes a `data:image/<webp|png|jpeg>;base64,...` URL into bytes plus mime.
-/// The magic bytes are checked against the claimed type so a mislabeled upload
-/// can't land a PNG in a webp-only pipeline later.
+/// Decodes a `data:image/<svg|webp|png|jpeg>;base64,...` URL into bytes plus
+/// mime. The magic bytes are checked against the claimed type so a mislabeled
+/// upload can't land a PNG in a webp-only pipeline later. SVG is sniffed as
+/// text (`<svg` after an optional XML prolog and whitespace) rather than by
+/// magic bytes; it renders through `<img>` and print `data:` URIs exactly
+/// like the rasters, so vectors can replace illustrations option by option
+/// with no pipeline change.
 fn decode_image_data_url(data_url: &str) -> Result<(Vec<u8>, String), AppError> {
-    let invalid =
-        || AppError::BadRequest("design image must be a webp, png or jpeg data URL".to_string());
+    let invalid = || {
+        AppError::BadRequest("design image must be a svg, webp, png or jpeg data URL".to_string())
+    };
     let (prefix, encoded) = data_url.split_once(',').ok_or_else(invalid)?;
     let mime = match prefix.trim() {
+        "data:image/svg+xml;base64" => "image/svg+xml",
         "data:image/webp;base64" => "image/webp",
         "data:image/png;base64" => "image/png",
         "data:image/jpeg;base64" => "image/jpeg",
@@ -116,6 +124,7 @@ fn decode_image_data_url(data_url: &str) -> Result<(Vec<u8>, String), AppError> 
         ));
     }
     let magic_ok = match mime {
+        "image/svg+xml" => is_svg(&bytes),
         "image/webp" => bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP",
         "image/png" => bytes.len() >= 8 && &bytes[0..8] == b"\x89PNG\r\n\x1a\n",
         _ => bytes.len() >= 3 && &bytes[0..3] == b"\xFF\xD8\xFF",
@@ -124,6 +133,25 @@ fn decode_image_data_url(data_url: &str) -> Result<(Vec<u8>, String), AppError> 
         return Err(invalid());
     }
     Ok((bytes, mime.to_string()))
+}
+
+/// Sniffs an SVG document: optional whitespace, an optional `<?xml ...?>`
+/// prolog, then `<svg`. Anything else (HTML, other XML) is rejected, and
+/// scripts inside are inert anyway — illustrations only ever render through
+/// `<img>` and print `data:` URIs, never inline markup.
+fn is_svg(bytes: &[u8]) -> bool {
+    let text = match std::str::from_utf8(bytes) {
+        Ok(text) => text,
+        Err(_) => return false,
+    };
+    let mut rest = text.trim_start();
+    if let Some(after_prolog) = rest
+        .strip_prefix("<?xml")
+        .and_then(|prolog| prolog.find("?>").map(|end| &prolog[end + 2..]))
+    {
+        rest = after_prolog.trim_start();
+    }
+    rest.starts_with("<svg")
 }
 
 pub async fn list_options(
@@ -243,7 +271,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalized_category_accepts_only_the_six_slots() {
+    fn normalized_category_accepts_only_the_seven_slots() {
         for category in CATEGORIES {
             assert_eq!(normalized_category(category).unwrap(), category);
         }
@@ -323,5 +351,36 @@ mod tests {
         );
         let error = decode_image_data_url(&format!("data:image/jpeg;base64,{big}")).unwrap_err();
         assert!(matches!(error, AppError::BadRequest(_)));
+    }
+
+    #[test]
+    fn decode_image_data_url_accepts_svg_with_or_without_a_prolog() {
+        for svg in [
+            "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>",
+            "  <?xml version=\"1.0\"?>\n<svg></svg>",
+        ] {
+            let encoded =
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, svg.as_bytes());
+            let (decoded, mime) =
+                decode_image_data_url(&format!("data:image/svg+xml;base64,{encoded}")).unwrap();
+            assert_eq!(decoded, svg.as_bytes());
+            assert_eq!(mime, "image/svg+xml");
+        }
+    }
+
+    #[test]
+    fn decode_image_data_url_rejects_non_svg_markup_claimed_as_svg() {
+        // HTML and non-svg XML are not illustrations, and binary is not text.
+        for payload in [
+            "<html><body>hi</body></html>".as_bytes().to_vec(),
+            b"<?xml version=\"1.0\"?><note>hi</note>".to_vec(),
+            b"\x89PNG\r\n\x1a\nrest".to_vec(),
+        ] {
+            let encoded =
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &payload);
+            let error =
+                decode_image_data_url(&format!("data:image/svg+xml;base64,{encoded}")).unwrap_err();
+            assert!(matches!(error, AppError::BadRequest(_)));
+        }
     }
 }
