@@ -143,8 +143,8 @@ export const THOBE_VALUE_SLOTS: ValueSlot[] = [
   },
   {
     id: 'shoulderB',
-    key: 'shoulderDown',
-    label: 'Shoulder Down',
+    key: 'shoulder',
+    label: 'Shoulder',
     x: 433,
     y: 48,
     size: 18,

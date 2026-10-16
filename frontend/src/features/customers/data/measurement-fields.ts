@@ -36,11 +36,12 @@ const TEXT: MeasurementInput = { kind: 'text' }
 
 // Field names match the thobe diagram slots (`thob-diagram.tsx`
 // `THOBE_VALUE_SLOTS`) wherever the drawing has a slot for them: frontHeight,
-// backHeight, neckSize, hip, armhole, bottomFold, frontPocketLength, sidePocket
-// and cuffSize are the renamed keys. Fields with no slot on the drawing
-// (shoulder, openHandFolding, sidePocketLengthByWidth,
-// mobilePocketLengthByWidth) still render in the form and print in the
-// measurement grid — table-only by design.
+// backHeight, neckSize, hip, armhole, bottomFold, frontPocketLength,
+// sidePocket and cuffSize are the renamed keys, and the back shoulder slot
+// reads the plain shoulder width. Fields with no slot on the drawing
+// (openHandFolding, sidePocketLengthByWidth, mobilePocketLengthByWidth)
+// still render in the form and print in the measurement grid — table-only
+// by design.
 export const MEASUREMENT_FIELDS: MeasurementField[] = [
   { name: 'frontHeight', label: 'Front Height', group: 'body', input: NUMBER },
   { name: 'backHeight', label: 'Back Height', group: 'body', input: NUMBER },

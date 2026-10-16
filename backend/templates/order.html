@@ -26,8 +26,8 @@
     design_note — the free-text more-details note, or empty.
     thob_viewbox — the sheet's viewBox, shared with the frontend thobe sheet.
     thob_slots — value slots in sheet order: id, key (into `thob_values`),
-                label, x, y, size. `shoulderDown` reads twice (front and back)
-                off the one stored field.
+                label, x, y, size. The front shoulder slot reads the drop and
+                the back one the plain shoulder width.
     thob_values — every recorded measurement as a display string, keyed by
                 camelCase field name; unrecorded fields are absent, so their
                 slots render nothing.

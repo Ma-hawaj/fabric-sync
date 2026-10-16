@@ -327,8 +327,8 @@ struct ThobeEllipse {
 }
 
 /// Every value slot on the sheet, in the same order and with the same
-/// coordinates as `THOBE_VALUE_SLOTS` on the frontend. `shoulderDown` reads
-/// twice (front and back) off the one stored field.
+/// coordinates as `THOBE_VALUE_SLOTS` on the frontend. The front shoulder
+/// slot reads the drop and the back one the plain shoulder width.
 fn thobe_slots() -> Vec<ThobeSlot> {
     let slot =
         |id: &'static str, key: &'static str, label: &'static str, x: f64, y: f64, size: f64| {
@@ -397,14 +397,7 @@ fn thobe_slots() -> Vec<ThobeSlot> {
             18.0,
         ),
         slot("neckWidth", "neckWidth", "Neck Width", 630.0, 20.0, 18.0),
-        slot(
-            "shoulderB",
-            "shoulderDown",
-            "Shoulder Down",
-            433.0,
-            48.0,
-            18.0,
-        ),
+        slot("shoulderB", "shoulder", "Shoulder", 433.0, 48.0, 18.0),
         slot("armhole", "armhole", "Armhole", 713.0, 50.0, 18.0),
         slot("fullBody", "fullBody", "Full Body", 567.5, 93.0, 17.0),
         slot("chest", "chest", "Chest", 520.0, 134.0, 20.0),

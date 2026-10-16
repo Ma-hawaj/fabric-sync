@@ -34,11 +34,18 @@ describe('ThobDiagram', () => {
     )
   })
 
-  it('draws shoulderDown on both the front and the back', () => {
-    render(<ThobDiagram values={{ shoulderDown: 8 }} />)
+  it('draws shoulderDown on the front and shoulder on the back', () => {
+    render(<ThobDiagram values={{ shoulderDown: 8, shoulder: 18 }} />)
 
     expect(screen.queryByTestId('value-shoulderF')).toBeTruthy()
     expect(screen.queryByTestId('value-shoulderB')).toBeTruthy()
+  })
+
+  it('leaves the back shoulder slot empty when only shoulderDown is recorded', () => {
+    render(<ThobDiagram values={{ shoulderDown: 8 }} />)
+
+    expect(screen.queryByTestId('value-shoulderF')).toBeTruthy()
+    expect(screen.queryByTestId('value-shoulderB')).toBeNull()
   })
 
   it('draws the yoke circle only when fullBody is recorded', () => {
