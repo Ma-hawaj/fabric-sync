@@ -97,7 +97,15 @@ function thobeSheetSvg(measurement: Measurement): string {
     const extra = p.grey ? ' stroke="#999" stroke-width="0.8"' : ''
     svg += `<path class="thob-garment" d="${p.d}"${extra} />`
   }
-  for (const e of THOBE_BACK_ELLIPSES) svg += ellipseSvg(e)
+  for (const e of THOBE_BACK_ELLIPSES) {
+    // The yoke circle doubles as the full-body callout anchor — drawn only
+    // when that value was recorded.
+    if (e.when) {
+      const v = values[e.when]
+      if (v === undefined || v === null || v === '') continue
+    }
+    svg += ellipseSvg(e)
+  }
   for (const p of THOBE_BACK_PATHS) {
     const extra = p.dashed ? ' stroke-dasharray="6 3" stroke-width="1"' : ''
     svg += `<path class="thob-garment" d="${p.d}"${extra} />`

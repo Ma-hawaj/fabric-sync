@@ -318,6 +318,10 @@ struct ThobeEllipse {
     transform: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stroke_width: Option<f64>,
+    /// Render this ellipse only when the named slot has a recorded value —
+    /// e.g. the yoke circle doubles as the full-body callout anchor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    show_when: Option<&'static str>,
 }
 
 /// Every value slot on the sheet, in the same order and with the same
@@ -482,6 +486,7 @@ fn thobe_front_ellipses() -> Vec<ThobeEllipse> {
             ry: 24.5,
             transform: None,
             stroke_width: None,
+            show_when: None,
         },
         ThobeEllipse {
             cx: 213.5,
@@ -490,6 +495,7 @@ fn thobe_front_ellipses() -> Vec<ThobeEllipse> {
             ry: 11.5,
             transform: None,
             stroke_width: None,
+            show_when: None,
         },
         ThobeEllipse {
             cx: 65.75,
@@ -498,6 +504,7 @@ fn thobe_front_ellipses() -> Vec<ThobeEllipse> {
             ry: 7.5,
             transform: Some("rotate(16 65.75 305.5)"),
             stroke_width: None,
+            show_when: None,
         },
         ThobeEllipse {
             cx: 362.9,
@@ -506,6 +513,7 @@ fn thobe_front_ellipses() -> Vec<ThobeEllipse> {
             ry: 7.5,
             transform: Some("rotate(-16.2 362.9 306.25)"),
             stroke_width: None,
+            show_when: None,
         },
     ]
 }
@@ -545,6 +553,7 @@ fn thobe_back_ellipses() -> Vec<ThobeEllipse> {
             ry: 13.0,
             transform: None,
             stroke_width: Some(1.0),
+            show_when: Some("fullBody"),
         },
         ThobeEllipse {
             cx: 423.6,
@@ -553,6 +562,7 @@ fn thobe_back_ellipses() -> Vec<ThobeEllipse> {
             ry: 7.5,
             transform: Some("rotate(17.8 423.6 305.5)"),
             stroke_width: None,
+            show_when: None,
         },
         ThobeEllipse {
             cx: 709.75,
@@ -561,6 +571,7 @@ fn thobe_back_ellipses() -> Vec<ThobeEllipse> {
             ry: 7.5,
             transform: Some("rotate(-16.5 709.75 307.5)"),
             stroke_width: None,
+            show_when: None,
         },
     ]
 }
@@ -712,9 +723,10 @@ mod tests {
         // One sheet, front and back together.
         assert!(html.contains("Thobe Sheet"));
         assert!(html.contains("0 -32 800 667"));
-        // Every ellipse (collars, cuffs, yoke) carries the garment class —
+        // Every drawn ellipse (collars, cuffs) carries the garment class —
         // without it SVG falls back to a solid black fill on the paper.
-        assert_eq!(html.matches("<ellipse class=\"thob-garment\"").count(), 7);
+        // Six here: the yoke is gated on fullBody, which isn't recorded.
+        assert_eq!(html.matches("<ellipse class=\"thob-garment\"").count(), 6);
         // The document is titled by the order's own readable number, not an
         // id prefix.
         assert!(html.contains("ORD-12"));
@@ -734,6 +746,26 @@ mod tests {
         // all. (Cuff Size appears nowhere else on the page: the measurement
         // table only lists recorded fields.)
         assert!(!html.contains("<title>Cuff Size</title>"));
+        // The yoke circle doubles as the full-body anchor: hidden until that
+        // value is recorded...
+        assert!(!html.contains("cx=\"567.5\""));
+
+        // ...and drawn with it, alongside the other six ellipses.
+        let mut bodied = tests_support::measurement();
+        bodied.full_body = Some(150.0);
+        let bodied_detail = OrderDetail {
+            order: services_order(),
+            invoice_number: 7,
+            measurement: bodied,
+        };
+        let bodied_html = test_render(&bodied_detail, &branding());
+        assert!(bodied_html.contains("cx=\"567.5\""));
+        assert_eq!(
+            bodied_html
+                .matches("<ellipse class=\"thob-garment\"")
+                .count(),
+            7
+        );
     }
 
     #[test]

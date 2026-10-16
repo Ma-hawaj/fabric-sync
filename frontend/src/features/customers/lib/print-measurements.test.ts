@@ -59,6 +59,9 @@ describe('generateMeasurementsHtml', () => {
     expect(html).toContain('>48</text>')
     expect(html).toContain('>42</text>')
     expect(html).toContain('12×8')
+    // The yoke circle doubles as the full-body anchor: hidden here since
+    // fullBody wasn't recorded.
+    expect(html).not.toContain('cx="567.5" cy="88"')
   })
 
   it('skips unrecorded fields on the sheet', () => {

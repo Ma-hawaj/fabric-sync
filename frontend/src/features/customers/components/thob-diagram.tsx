@@ -227,6 +227,8 @@ export interface GarmentEllipse {
   rotate?: { angle: number; cx: number; cy: number }
   strokeWidth?: number
   grey?: boolean
+  /** Render only when the named slot has a recorded value. */
+  when?: string
 }
 
 /** Front silhouette strokes (collar, shoulders, sleeves, body, placket, pocket). */
@@ -296,7 +298,9 @@ export const THOBE_BACK_PATHS: GarmentPath[] = [
 ]
 
 export const THOBE_BACK_ELLIPSES: GarmentEllipse[] = [
-  { cx: 567.5, cy: 88, rx: 62, ry: 13, strokeWidth: 1 },
+  // The yoke circle doubles as the full-body callout anchor — drawn only
+  // when that value was recorded.
+  { cx: 567.5, cy: 88, rx: 62, ry: 13, strokeWidth: 1, when: 'fullBody' },
   {
     cx: 423.6,
     cy: 305.5,
@@ -377,6 +381,10 @@ export function ThobDiagram({
   className,
 }: ThobDiagramProps) {
   const m = values as Record<string, string | number | null | undefined>
+  const isRecorded = (key: string) => {
+    const v = m[key]
+    return v !== undefined && v !== null && v !== ''
+  }
   const common = {
     fill: 'none',
     stroke,
@@ -431,17 +439,19 @@ export function ThobDiagram({
 
       {/* ===================== BACK ===================== */}
       <g {...common}>
-        {THOBE_BACK_ELLIPSES.map((e, i) => (
-          <ellipse
-            key={i}
-            cx={e.cx}
-            cy={e.cy}
-            rx={e.rx}
-            ry={e.ry}
-            strokeWidth={e.strokeWidth}
-            transform={ellipseTransform(e)}
-          />
-        ))}
+        {THOBE_BACK_ELLIPSES.filter((e) => !e.when || isRecorded(e.when)).map(
+          (e, i) => (
+            <ellipse
+              key={i}
+              cx={e.cx}
+              cy={e.cy}
+              rx={e.rx}
+              ry={e.ry}
+              strokeWidth={e.strokeWidth}
+              transform={ellipseTransform(e)}
+            />
+          ),
+        )}
         {THOBE_BACK_PATHS.map((p, i) => (
           <path
             key={i}

@@ -41,6 +41,15 @@ describe('ThobDiagram', () => {
     expect(screen.queryByTestId('value-shoulderB')).toBeTruthy()
   })
 
+  it('draws the yoke circle only when fullBody is recorded', () => {
+    // Four front ellipses plus two back cuffs without it.
+    const { container, rerender } = render(<ThobDiagram values={{}} />)
+    expect(container.querySelectorAll('ellipse')).toHaveLength(6)
+
+    rerender(<ThobDiagram values={{ fullBody: 150 }} />)
+    expect(container.querySelectorAll('ellipse')).toHaveLength(7)
+  })
+
   it('shows the placeholder for missing values when one is given', () => {
     render(<ThobDiagram values={{}} placeholder="__" />)
 

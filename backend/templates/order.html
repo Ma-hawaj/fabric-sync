@@ -31,7 +31,10 @@
     thob_front_paths / thob_back_paths — silhouette strokes: d, grey (faint
                 stitch), dashed.
     thob_front_ellipses / thob_back_ellipses — collar, cuffs and yoke:
-                cx, cy, rx, ry, optional transform and stroke_width.
+                cx, cy, rx, ry, optional transform and stroke_width. A back
+                ellipse with show_when renders only when that slot has a
+                recorded value (the yoke circle doubles as the full-body
+                callout anchor).
     thob_dims — thin dimension/leader lines; thob_arrows — their filled heads.
 #}
 {%- set order_status_labels = {
@@ -373,7 +376,9 @@
 
       .design-cell img {
         width: 100%;
-        height: 88px;
+        /* About a fifth of the sheet height, so five stacked choices stay
+           in balance with the diagram beside them. */
+        height: 100px;
         object-fit: contain;
       }
 
@@ -678,7 +683,11 @@
               <path class="thob-garment" d="{{ p.d }}"{% if p.grey %} stroke="#999" stroke-width="0.8"{% endif %} />
             {%- endfor %}
             {%- for e in thob_back_ellipses %}
-              {{ thobe_ellipse(e) }}
+              {%- if not e.show_when %}
+                {{ thobe_ellipse(e) }}
+              {%- elif thob_values[e.show_when] is defined and thob_values[e.show_when] is not none and thob_values[e.show_when] != '' %}
+                {{ thobe_ellipse(e) }}
+              {%- endif %}
             {%- endfor %}
             {%- for p in thob_back_paths %}
               <path class="thob-garment" d="{{ p.d }}"{% if p.dashed %} stroke-dasharray="6 3" stroke-width="1"{% endif %} />
