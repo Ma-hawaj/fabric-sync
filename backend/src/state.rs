@@ -46,6 +46,13 @@ impl AppState {
         &self.config.invoice_branding
     }
 
+    /// The zone printed documents write dates in, validated at boot.
+    pub fn timezone(&self) -> Result<chrono_tz::Tz, crate::error::AppError> {
+        self.config
+            .timezone()
+            .map_err(crate::error::AppError::Config)
+    }
+
     pub fn authentik_users(&self) -> &AuthentikUserDirectory {
         &self.authentik_users
     }

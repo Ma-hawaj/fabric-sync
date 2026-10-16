@@ -13,7 +13,7 @@ use serde::Serialize;
 
 use crate::{
     config::InvoiceBranding,
-    document::{format_amount, format_datetime, format_quantity, CURRENCY},
+    document::{format_amount, format_date, format_datetime, format_quantity, CURRENCY},
     error::AppError,
     state::AppState,
 };
@@ -140,17 +140,19 @@ pub async fn render_order_document(
 ) -> Result<String, AppError> {
     let detail = service::get_order(state, order_id).await?;
     let branding = state.invoice_branding();
-    // Pre-formatted display strings (whole numbers trimmed), so the sheet
-    // slots and the measurement table share one formatting.
+    let timezone = state.timezone()?;
     let thob_values = formatted_measurement(&detail);
 
     let env = environment(branding)?;
     let template = env.get_template(TEMPLATE_NAME)?;
     Ok(template.render(context! {
         order => minijinja::Value::from_serialize(&detail),
-        // The parent invoice's creation moment, with the time of day —
-        // pre-formatted, since the raw timestamp serializes as RFC 3339.
-        invoice_date_time => format_datetime(&detail.order.invoice_date),
+        // The parent invoice's creation moment with the time of day, and the
+        // measurement date — pre-formatted day-first in the shop's timezone,
+        // since the raw timestamp serializes as RFC 3339 and the raw date as
+        // year-first ISO.
+        invoice_date_time => format_datetime(&detail.order.invoice_date, timezone),
+        measured_on => format_date(&detail.measurement.date),
         company => minijinja::Value::from_serialize(branding),
         currency => CURRENCY,
         // Amounts are pre-formatted rather than left to the template, so that
@@ -685,10 +687,13 @@ mod tests {
     fn test_render(detail: &OrderDetail, branding: &InvoiceBranding) -> String {
         let env = environment(branding).unwrap();
         let template = env.get_template(TEMPLATE_NAME).unwrap();
+        let timezone = chrono_tz::Asia::Bahrain;
         let thob_values = formatted_measurement(detail);
         template
             .render(context! {
                 order => minijinja::Value::from_serialize(detail),
+                invoice_date_time => format_datetime(&detail.order.invoice_date, timezone),
+                measured_on => format_date(&detail.measurement.date),
                 company => minijinja::Value::from_serialize(branding),
                 currency => CURRENCY,
                 amounts => minijinja::Value::from_serialize(formatted_amounts(detail)),

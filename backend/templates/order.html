@@ -14,7 +14,10 @@
     order     — GET /orders/:id (see types.rs OrderDetail — the measurement
                 snapshot the garment was cut to rides along on `order.measurement`)
     invoice_date_time — the parent invoice's creation moment with the time of
-                day, pre-formatted (the raw `order.invoiceDate` is RFC 3339)
+                day, pre-formatted day-first in the shop's timezone
+                (TIMEZONE, e.g. "30-07-2026 12:30 +03").
+    measured_on — the measurement date, pre-formatted day-first
+                ("30-07-2026").
     company   — COMPANY_* env vars (see config.rs InvoiceBranding)
     amounts   — quantities only: the order sheet is an internal production
                 document, so no money figures are printed; the sole key the
@@ -790,7 +793,7 @@
         <div class="measurement-grid">
           <div class="m">
             <span>Measured on</span>
-            <span class="num" dir="ltr">{{ order.measurement.date }}</span>
+            <span class="num" dir="ltr">{{ measured_on }}</span>
           </div>
         </div>
       </div>

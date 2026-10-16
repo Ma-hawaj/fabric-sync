@@ -28,12 +28,27 @@ pub(crate) fn format_quantity(value: f64) -> String {
     text.to_string()
 }
 
-/// A timestamp as the printed documents write it: the calendar date plus the
-/// time of day, e.g. "2026-10-07 14:30 UTC". Pre-formatted like the amounts,
-/// so editing a template can't change how a moment is written — serializing
-/// the raw timestamp would print RFC 3339 into the page.
-pub(crate) fn format_datetime(value: &chrono::DateTime<chrono::Utc>) -> String {
-    value.format("%Y-%m-%d %H:%M UTC").to_string()
+/// A timestamp as the printed documents write it: the calendar date in the
+/// shop's timezone plus the time of day, day-first, e.g. "30-07-2026 12:30
+/// +03". Pre-formatted like the amounts, so editing a template can't change
+/// how a moment is written — serializing the raw timestamp would print UTC
+/// RFC 3339 into the page.
+pub(crate) fn format_datetime(
+    value: &chrono::DateTime<chrono::Utc>,
+    timezone: chrono_tz::Tz,
+) -> String {
+    value
+        .with_timezone(&timezone)
+        .format("%d-%m-%Y %H:%M %Z")
+        .to_string()
+}
+
+/// A bare calendar date as the printed documents write it, day-first:
+/// "30-07-2026". Dates carry no zone, so there is nothing to convert — this
+/// only fixes the field order off the year-first ISO the raw value
+/// serializes as.
+pub(crate) fn format_date(value: &chrono::NaiveDate) -> String {
+    value.format("%d-%m-%Y").to_string()
 }
 
 /// A minijinja environment that loads the named template from
@@ -55,4 +70,41 @@ pub(crate) fn template_environment(
     }
 
     Ok(env)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn datetimes_print_day_first_in_the_shop_timezone() {
+        let moment = chrono::Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap();
+        // 09:30 UTC is 12:30 in Bahrain (+03, no daylight saving).
+        assert_eq!(
+            format_datetime(&moment, chrono_tz::Asia::Bahrain),
+            "30-07-2026 12:30 +03"
+        );
+    }
+
+    #[test]
+    fn datetimes_follow_whichever_zone_is_configured() {
+        let moment = chrono::Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap();
+        assert_eq!(
+            format_datetime(&moment, chrono_tz::UTC),
+            "30-07-2026 09:30 UTC"
+        );
+    }
+
+    #[test]
+    fn dates_print_day_first() {
+        let date = chrono::NaiveDate::from_ymd_opt(2026, 7, 30).unwrap();
+        assert_eq!(format_date(&date), "30-07-2026");
+    }
+
+    #[test]
+    fn an_unknown_timezone_name_is_rejected() {
+        assert!("Mars/Olympus".parse::<chrono_tz::Tz>().is_err());
+        assert!("Asia/Bahrain".parse::<chrono_tz::Tz>().is_ok());
+    }
 }

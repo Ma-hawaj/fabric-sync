@@ -13,7 +13,8 @@
   Available:
     invoice    — GET /invoices/:id, camelCase (see types.rs InvoiceDetail)
     invoice_date_time — the invoice's creation moment with the time of day,
-                 pre-formatted (the raw `invoice.date` timestamp is RFC 3339)
+                 pre-formatted day-first in the shop's timezone (TIMEZONE,
+                 e.g. "30-07-2026 12:30 +03")
     company    — COMPANY_* env vars (see config.rs InvoiceBranding)
     currency   — currency code, e.g. "BHD"
     amounts    — every money figure, pre-formatted; keyed as documented below
