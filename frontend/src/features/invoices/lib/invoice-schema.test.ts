@@ -59,7 +59,21 @@ function firstError(customers: InvoiceCustomerDraft[]) {
 }
 
 describe('invoiceFormSchema', () => {
-  it('requires a target date', () => {
+  it('passes without a target date', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      orders: [validOrder()],
+    }
+    expect(
+      invoiceFormSchema.safeParse(
+        values({ customers: [customer], targetDate: '' }),
+      ).success,
+    ).toBe(true)
+  })
+
+  it('rejects a malformed target date', () => {
     const customer = {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
@@ -67,9 +81,9 @@ describe('invoiceFormSchema', () => {
       orders: [validOrder()],
     }
     const error = firstErrorFor(
-      values({ customers: [customer], targetDate: '' }),
+      values({ customers: [customer], targetDate: 'not-a-date' }),
     )
-    expect(error?.message).toMatch(/enter a target date/i)
+    expect(error?.message).toMatch(/valid date/i)
     expect(error?.path).toEqual(['targetDate'])
   })
 

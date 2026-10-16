@@ -236,10 +236,15 @@ const paymentDraftSchema = z
 
 export const invoiceFormSchema = z
   .object({
-    // The promised delivery date. Required: an invoice without one has no
-    // committed pickup. The invoice's own date is server-set and never
-    // validated here.
-    targetDate: z.string().min(1, 'Enter a target date.'),
+    // The promised delivery date, if one was promised at all. Blank means
+    // no committed pickup; the invoice's own date is server-set and never
+    // validated here. The picker only writes valid ISO dates, so this
+    // just guards against a malformed string.
+    targetDate: z
+      .string()
+      .refine((value) => value === '' || !Number.isNaN(Date.parse(value)), {
+        message: 'Enter a valid date.',
+      }),
     receivingBranch: z.string(),
     customerId: z.string(),
     productBranch: z.string(),

@@ -70,8 +70,8 @@ export interface InvoiceDetail {
   invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */
   date: string
-  /** The promised delivery date, editable on the form. */
-  targetDate: string
+  /** The promised delivery date, editable on the form. Null when none was promised. */
+  targetDate: string | null
   createdAt: string
   branchName: string | null
   /** Named directly only on a retail sale; a tailoring invoice leaves it null. */

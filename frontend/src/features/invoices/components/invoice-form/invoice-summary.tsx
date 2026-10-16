@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { NumberField, TextField } from '@/components/form/fields'
+import { DateField, NumberField } from '@/components/form/fields'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import { Label } from '@/components/ui/label'
 import {
@@ -135,7 +135,12 @@ export function InvoiceSummary({
       <h3 className="text-sm font-semibold">Invoice Summary</h3>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextField form={form} name="targetDate" label="Target Date" />
+        <DateField
+          form={form}
+          name="targetDate"
+          label="Target Date (optional)"
+          placeholder="Pick a target date"
+        />
         <form.Field name={'receivingBranch' as never}>
           {(field: any) => (
             <div className="space-y-1">

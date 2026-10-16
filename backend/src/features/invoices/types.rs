@@ -139,10 +139,11 @@ pub struct CreatePaymentInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateInvoiceInput {
-    /// When the garment is promised for. Required and staff-editable — this is
-    /// what the form's date picker writes. The invoice's own date
+    /// When the garment is promised for. Optional and staff-editable — this
+    /// is what the form's date picker writes. The invoice's own date
     /// (`invoice_date`) is server-set at creation and never taken from input.
-    pub target_date: NaiveDate,
+    #[serde(default)]
+    pub target_date: Option<NaiveDate>,
     #[serde(default)]
     pub branch_id: Option<Uuid>,
     #[serde(default)]
@@ -274,8 +275,8 @@ pub struct InvoiceEdit {
     /// Sequential and human-readable, unlike `id` — for the edit page title.
     pub invoice_number: i64,
     pub date: DateTime<Utc>,
-    /// The promised delivery date. Editable, unlike `date`.
-    pub target_date: NaiveDate,
+    /// The promised delivery date, if one was set. Editable, unlike `date`.
+    pub target_date: Option<NaiveDate>,
     pub branch_id: Option<Uuid>,
     pub branch_name: Option<String>,
     pub discount: f64,
@@ -467,8 +468,9 @@ pub struct InvoiceRecord {
     pub invoice_number: i64,
     /// Server-set at creation, with the time of day — never taken from input.
     pub date: DateTime<Utc>,
-    /// When the garment is promised for. Staff-editable, unlike `date`.
-    pub target_date: NaiveDate,
+    /// When the garment is promised for, if one was set. Staff-editable,
+    /// unlike `date`.
+    pub target_date: Option<NaiveDate>,
     pub created_at: DateTime<Utc>,
     pub branch_name: Option<String>,
     pub buyer: Option<InvoiceParty>,
@@ -498,9 +500,9 @@ pub struct InvoiceDetail {
     /// the consumer, which is why it stays a number here.
     pub invoice_number: i64,
     pub date: DateTime<Utc>,
-    /// The promised delivery date, editable on the form. `date` above is the
-    /// server-set creation date and is read-only.
-    pub target_date: NaiveDate,
+    /// The promised delivery date, if one was set — editable on the form.
+    /// `date` above is the server-set creation date and is read-only.
+    pub target_date: Option<NaiveDate>,
     pub created_at: DateTime<Utc>,
     pub branch_name: Option<String>,
     /// Named directly on a retail sale. A tailoring invoice leaves this unset
@@ -529,7 +531,7 @@ pub struct InvoiceListItem {
     pub id: Uuid,
     #[sqlx(rename = "invoice_date")]
     pub date: DateTime<Utc>,
-    pub target_date: NaiveDate,
+    pub target_date: Option<NaiveDate>,
     #[sqlx(json)]
     pub customers: Vec<InvoiceListCustomer>,
     pub item_count: i64,

@@ -526,7 +526,7 @@ mod tests_support {
             id: uuid::Uuid::nil(),
             invoice_number: 1,
             date: Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),
-            target_date: NaiveDate::from_ymd_opt(2026, 8, 6).unwrap(),
+            target_date: Some(NaiveDate::from_ymd_opt(2026, 8, 6).unwrap()),
             created_at: Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),
             branch_name: None,
             buyer: None,

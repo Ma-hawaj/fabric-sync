@@ -57,9 +57,9 @@ CREATE TABLE invoices (
     -- Server-set at creation and immutable afterwards: staff never enter this.
     -- What they do promise is target_date below, the editable delivery date.
     invoice_date TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- When the garment is promised for. Required and staff-editable, unlike
-    -- invoice_date above.
-    target_date DATE NOT NULL,
+    -- When the garment is promised for, if at all. Staff-editable, unlike
+    -- invoice_date above; blank means no committed pickup.
+    target_date DATE,
     branch_id UUID REFERENCES branch(id),
     discount NUMERIC(10, 2) NOT NULL DEFAULT 0,
     discount_unit TEXT NOT NULL DEFAULT 'amount' CHECK (discount_unit IN ('amount', 'percent')),
