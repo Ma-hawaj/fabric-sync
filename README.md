@@ -67,27 +67,26 @@ Frontend:
 
 ## Local Infrastructure
 
-`docker-compose.yml` runs a local Authentik instance (OAuth2/OIDC issuer) and the Postgres database, following the [official Authentik compose reference](https://docs.goauthentik.io/install-config/install/docker-compose/) with one change: the app and Authentik share a single Postgres server (separate `fabric_sync` and `authentik` databases) instead of running a second Postgres:
+`docker-compose.yml` runs a local Zitadel instance (OAuth2/OIDC issuer) and the Postgres database, adapted from the [official Zitadel compose reference](https://github.com/zitadel/zitadel/tree/main/deploy/compose):
 
 ```bash
 cp .env.example .env
 docker compose up -d --wait
 ```
 
-- Authentik admin UI: `http://localhost:9000/if/admin/` (first boot shows the initial-setup flow that creates the `akadmin` superuser)
+- Zitadel console: `http://localhost:8080/ui/console`
 - Postgres: `postgres://postgres:postgres@localhost:5432/fabric_sync` (matches the backend's default `DATABASE_URL`)
 
-Migrating from the old Zitadel stack needs a fresh volume (`docker compose down && docker volume rm fabric-sync_postgres-data`).
+Migrating from the Authentik stack needs a fresh volume (`docker compose down && docker volume rm fabric-sync_postgres-data`).
 
-After the stack is up, create two OAuth2/OIDC providers in the Authentik admin UI, under Applications > Providers:
+After the stack is up, create two OAuth applications in the Zitadel console, in the same project:
 
-- **Backend introspection provider** — confidential client type (e.g. name `fabric-sync-api`, no redirect URIs needed). Copy its client ID/secret into `OAUTH_CLIENT_ID`/`OAUTH_CLIENT_SECRET` for the backend.
-- **Frontend SPA provider** — public client type, PKCE (e.g. name `fabric-sync`). Add a redirect URI and post-logout redirect URI for every origin the dev server is opened from (e.g. `http://localhost:3000/` and the Tailscale URL — must match `VITE_OIDC_REDIRECT_URI`/`VITE_OIDC_POST_LOGOUT_REDIRECT_URI` verbatim), and copy its client ID into `VITE_OIDC_CLIENT_ID` for the frontend. Its slug goes into `OAUTH_ISSUER_URL` / `VITE_OIDC_AUTHORITY` (e.g. `http://localhost:9000/application/o/fabric-sync/`).
-- **Federation (required)** — on the SPA provider, add the introspection provider under "Federated OAuth2/OpenID Providers". Authentik only lets a confidential provider introspect tokens issued by itself or a federated provider, so without this every API call 401s.
+- **Backend introspection client** — confidential (has a client secret). Copy its client ID/secret into `OAUTH_CLIENT_ID`/`OAUTH_CLIENT_SECRET` for the backend.
+- **Frontend SPA client** — public, PKCE, no client secret. Set its redirect URI and post-logout redirect URI to `http://localhost:3000/` (must match `VITE_OIDC_REDIRECT_URI`/`VITE_OIDC_POST_LOGOUT_REDIRECT_URI`), and copy its client ID into `VITE_OIDC_CLIENT_ID` for the frontend.
 
-Also set `OAUTH_INTROSPECTION_URL=http://localhost:9000/application/o/introspect/` (Authentik's introspection endpoint is global and isn't advertised by per-provider discovery) and leave `OAUTH_RESOURCE_AUDIENCE` unset — if a valid access token gets a 401, that audience check against a claim Authentik may not send is the first suspect.
+If a valid access token gets a 401 from the backend unexpectedly, check the `aud` claim Zitadel puts on tokens issued to the SPA client against whatever `OAUTH_RESOURCE_AUDIENCE` is set to — either add the backend's client ID as an audience in Zitadel, or leave `OAUTH_RESOURCE_AUDIENCE` unset locally.
 
-`GET /users` (the order-stage assignee picker) is backed by Authentik's user directory: create a service account (Directory > Users > New, type service account), grant it "View user", and mint a token under its Tokens & App passwords into `AUTHENTIK_API_TOKEN` (see `.env.example`).
+`GET /users` (the order-stage assignee picker) is backed by Zitadel's user directory: create a machine user (Users > New > Machine user, e.g. `fabric-sync-backend`), add a client secret into `ZITADEL_USERS_CLIENT_SECRET` (with its ID in `ZITADEL_USERS_CLIENT_ID`), and grant it the "Org User Manager" (`ORG_USER_MANAGER`) role under Organization > Managers (see `.env.example`). For the Roles column, also grant it user-grant read — without that, roles come back empty and the backend logs a warning.
 
 ## Backend
 
@@ -102,8 +101,8 @@ Common variables:
 - `OAUTH_CLIENT_SECRET` or `OIDC_CLIENT_SECRET`
 - `OAUTH_INTROSPECTION_URL`
 - `OAUTH_RESOURCE_AUDIENCE`
-- `AUTHENTIK_BASE_URL`, default `http://localhost:9000`
-- `AUTHENTIK_API_TOKEN`
+- `ZITADEL_USERS_CLIENT_ID`
+- `ZITADEL_USERS_CLIENT_SECRET`
 
 Run the backend:
 
@@ -152,14 +151,14 @@ npm run check
 
 Routes are defined in `frontend/src/routes`. Protected frontend routes (under `_authenticated/`) redirect straight to the identity provider's hosted login (Authorization Code + PKCE, via `react-oidc-context`/`oidc-client-ts`) when there is no active session — there is no local `/login` page. The access token is held in `sessionStorage` for the tab's lifetime and attached as a bearer token to every backend API call.
 
-Copy `frontend/.env.example` to `frontend/.env` and set the OIDC vars for your identity provider (config is generic/OIDC-standard, so any provider works, not just Authentik):
+Copy `frontend/.env.example` to `frontend/.env` and set the OIDC vars for your identity provider (config is generic/OIDC-standard, so any provider works, not just Zitadel):
 
-- `VITE_OIDC_AUTHORITY` — issuer URL (for Authentik, the full provider path including the slug, e.g. `http://localhost:9000/application/o/fabric-sync/`)
-- `VITE_OIDC_CLIENT_ID` — the frontend SPA provider's ID (see "Local Infrastructure" above)
+- `VITE_OIDC_AUTHORITY` — issuer URL (`http://localhost:8080` for local Zitadel)
+- `VITE_OIDC_CLIENT_ID` — the frontend SPA client's ID (see "Local Infrastructure" above)
 - `VITE_OIDC_REDIRECT_URI` / `VITE_OIDC_POST_LOGOUT_REDIRECT_URI`, default `http://localhost:3000/`
 - `VITE_OIDC_SCOPE`, default `openid profile email`
 
-API calls are same-origin in dev: `VITE_API_BASE_URL=/api` sends them through the Vite dev-server proxy (`/api` → the backend, prefix rewritten away — see `BACKEND_URL` in `frontend/vite.config.ts`), so frontend and backend share one URL with no CORS involved. The IdP rides the same proxy: `VITE_OIDC_AUTHORITY` points at `<vite-origin>/application/o/<slug>/` (`/application/o` → Authentik, path untouched — see `AUTHENTIK_URL` in `frontend/vite.config.ts`), so discovery, login, and logout never leave the dev-server origin either. To bypass the proxies and hit the backends directly instead:
+API calls are same-origin in dev: `VITE_API_BASE_URL=/api` sends them through the Vite dev-server proxy (`/api` → the backend as-is, since the backend serves the API nested under `/api` — see `BACKEND_URL` in `frontend/vite.config.ts`), so frontend and backend share one URL with no CORS involved. The IdP is hit directly. To bypass the proxy and hit the backend directly instead:
 
 ```bash
 cd frontend
