@@ -73,7 +73,7 @@ INSERT INTO measurements (
     id, customer_id, measurement_date,
     front_height, back_height, chest, waist, hip, shoulder, sleeve_length, neck_size,
     open_hand, chest_up, cuff_width, neck_width, armhole, fo_width,
-    pocket_length, front_pocket_length_by_width,
+    front_pocket_length, front_pocket_length_by_width,
     mobile_pocket_length_by_width
 ) VALUES
     ('019a0000-0007-7000-8000-000000000001', '019a0000-0002-7000-8000-000000000001', CURRENT_DATE - 240,
