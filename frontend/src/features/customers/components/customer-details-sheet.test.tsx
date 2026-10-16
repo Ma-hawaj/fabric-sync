@@ -75,7 +75,7 @@ describe('CustomerDetailsSheet', () => {
     // Waist was not recorded, but its slot stays so the recorded fields
     // keep their grid positions.
     expect(screen.queryByText('Waist')).toBeTruthy()
-    expect(screen.queryByText('108')).toBeTruthy()
+    expect(screen.queryAllByText('108').length).toBeGreaterThan(0)
     // Body Dimensions has 21 fields and 2 recorded values; Style &
     // Finishing has 2 fields and 1 recorded value; Pockets has 5 fields
     // and none recorded. Every other slot holds a placeholder.
@@ -102,14 +102,10 @@ describe('CustomerDetailsSheet', () => {
     expect(screen.queryByText('Record Details')).toBeNull()
   })
 
-  it('draws the thob sketch alongside the measurements', () => {
+  it('draws the thobe sheet alongside the measurements', () => {
     renderSheet(CUSTOMER)
 
-    expect(
-      screen.queryByLabelText(
-        'Thob sketch, front view, with measurement guides',
-      ),
-    ).toBeTruthy()
+    expect(screen.queryByLabelText('Thobe measurements')).toBeTruthy()
   })
 
   it('shows the customer invoices with links to their pages', () => {

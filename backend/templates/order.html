@@ -21,55 +21,50 @@
                 template reads is `materialAmount`.
     designs   — the made-to-measure choices (Thobe / Collar / Sleeve / Pocket / Patti / EMD).
     design_note — the free-text more-details note, or empty.
-    thob_garment — the base thob drawing envelopes: outline, collar, placket,
-                chestPocket, mobilePocket, sidePockets, cuffs, centerBackSeam,
-                buttons and sleeveButtons. Every caller (the two views, and the
-                callout shapes) reads from here — edit it once, both panels move.
-    thob_markers — per-measurement geometry, keyed by field name: dims
-                (double-headed arrows), guides (leader lines), shapes (garment
-                parts re-drawn in the accent colour), dots, and label (where the
-                caption is anchored).
-    thob_front_fields / thob_back_fields — the field names for the view whose
-                values the measurement snapshot actually recorded, in diagram
-                order; loop over these to call out every marker.
-    thob_front_captions / thob_back_captions — per-field laid-out caption boxes,
-                keyed by field name: x, y, w and the finished text. Positions
-                come from the Rust layout (mirroring thob-diagram.tsx), so the
-                printed labels never overlap. Only recorded fields appear —
-                an unmeasured field gets no box and no arrow, on the paper or
-                on screen ("120 inch · Front Length").
+    thob_viewbox — the sheet's viewBox, shared with the frontend thobe sheet.
+    thob_slots — value slots in sheet order: id, key (into `thob_values`),
+                label, x, y, size. `shoulderDown` reads twice (front and back)
+                off the one stored field.
+    thob_values — every recorded measurement as a display string, keyed by
+                camelCase field name; unrecorded fields are absent, so their
+                slots render nothing.
+    thob_front_paths / thob_back_paths — silhouette strokes: d, grey (faint
+                stitch), dashed.
+    thob_front_ellipses / thob_back_ellipses — collar, cuffs and yoke:
+                cx, cy, rx, ry, optional transform and stroke_width.
+    thob_dims — thin dimension/leader lines; thob_arrows — their filled heads.
 #}
 {%- set order_status_labels = {
   "pending": "Pending",
   "received": "Received"
 } -%}
 {%- set measurement_labels = {
-  "lengthFl": "Length (Front)",
-  "lengthBl": "Length (Back)",
+  "frontHeight": "Front Height",
+  "backHeight": "Back Height",
   "shoulder": "Shoulder",
   "shoulderDown": "Shoulder Down",
   "chest": "Chest",
   "chestUp": "Chest (Upper)",
   "waist": "Waist",
-  "hips": "Hips",
+  "hip": "Hip",
   "sleeveLength": "Sleeve Length",
-  "neck": "Neck",
+  "neckSize": "Neck Size",
   "neckWidth": "Neck Width",
   "openHand": "Open Hand",
   "openHandFolding": "Open Hand Folding",
   "cuffWidth": "Cuff Width",
-  "cuffling": "Cuffling",
-  "armHole": "Armhole",
+  "cuffSize": "Cuff Size",
+  "armhole": "Armhole",
   "foWidth": "FO Width",
   "fo": "Fo",
   "bottom": "Bottom",
-  "bottomFolding": "Bottom Folding",
+  "bottomFold": "Bottom Fold",
   "fullBody": "Full Body",
   "sleeveHalf": "Sleeve Half",
   "openFold": "Open Fold",
   "frontPocketLength": "Front Pocket Length",
-  "frontPocketLengthByWidth": "Front Pocket L×W",
-  "sidePocketLength": "Side Pocket Length",
+  "frontPocketLengthByWidth": "Pocket L×W",
+  "sidePocket": "Side Pocket",
   "sidePocketLengthByWidth": "Side Pocket L×W",
   "mobilePocketLengthByWidth": "Mobile Pocket L×W",
   "type": "Type",
@@ -80,43 +75,16 @@
    further up the list wasn't recorded. A single-element pair is padded
    with "" — `order.measurement[""]` is undefined and renders as a blank
    cell that holds the column. #}
-{%- set body_pairs = [["lengthFl", "lengthBl"], ["shoulder", "shoulderDown"], ["chest", "chestUp"], ["waist", "hips"], ["sleeveLength", "sleeveHalf"], ["neck", "neckWidth"], ["openHand", "openHandFolding"], ["cuffWidth", "cuffling"], ["armHole", "bottom"], ["bottomFolding", "fullBody"], ["openFold", ""]] -%}
-{%- set pocket_pairs = [["frontPocketLength", "frontPocketLengthByWidth"], ["sidePocketLength", "sidePocketLengthByWidth"], ["mobilePocketLengthByWidth", ""]] -%}
+{%- set body_pairs = [["frontHeight", "backHeight"], ["shoulder", "shoulderDown"], ["chest", "chestUp"], ["waist", "hip"], ["sleeveLength", "sleeveHalf"], ["neckSize", "neckWidth"], ["openHand", "openHandFolding"], ["cuffWidth", "cuffSize"], ["armhole", "bottom"], ["bottomFold", "fullBody"], ["openFold", ""]] -%}
+{%- set pocket_pairs = [["frontPocketLength", "frontPocketLengthByWidth"], ["sidePocket", "sidePocketLengthByWidth"], ["mobilePocketLengthByWidth", ""]] -%}
 {%- set style_pairs = [["foWidth", "fo"], ["type", "fit"]] -%}
 
-{# The thob template: the garment is drawn from the front and the back, so no
-   single silhouette carries all 18 callouts. All the drawing logic lives in
-   document.rs and arrives here as data (thob_garment, thob_markers, the view
-   field lists and the laid-out captions) — the template has nothing to
-   compute, it only renders. See the context description at the top of this
-   file for the shapes of each bundle. #}
-{%- macro thob_callout(marker, caption, arrow_id) -%}
-  <g class="thob-callout">
-    {%- if marker.shapes -%}
-      {%- for shape in marker.shapes -%}
-        <path class="thob-shape" d="{{ shape }}" />
-      {%- endfor -%}
-    {%- endif -%}
-    {%- if marker.dots -%}
-      {%- for dot in marker.dots -%}
-        <circle class="thob-dot" cx="{{ dot.cx }}" cy="{{ dot.cy }}" r="2.5" />
-      {%- endfor -%}
-    {%- endif -%}
-    {%- if marker.guides -%}
-      {%- for guide in marker.guides -%}
-        <line class="thob-guide" x1="{{ guide.x1 }}" y1="{{ guide.y1 }}" x2="{{ guide.x2 }}" y2="{{ guide.y2 }}" />
-      {%- endfor -%}
-    {%- endif -%}
-    {%- if marker.dims -%}
-      {%- for dim in marker.dims -%}
-        <line class="thob-dim" x1="{{ dim.x1 }}" y1="{{ dim.y1 }}" x2="{{ dim.x2 }}" y2="{{ dim.y2 }}" marker-start="url(#{{ arrow_id }})" marker-end="url(#{{ arrow_id }})" />
-      {%- endfor -%}
-    {%- endif -%}
-    <g class="thob-caption">
-      <rect x="{{ caption.x }}" y="{{ caption.y }}" width="{{ caption.w }}" height="20" rx="4" />
-      <text x="{{ caption.x + caption.w / 2 }}" y="{{ caption.y + 14 }}" class="thob-caption-text">{{ caption.text }}</text>
-    </g>
-  </g>
+{# The thobe sheet: front and back silhouettes in one SVG with every recorded
+   value at its slot. All the drawing data arrives from document.rs (paths,
+   ellipses, dims, arrows, slots) — the template only renders. A slot whose
+   value the snapshot didn't record renders nothing. #}
+{%- macro thobe_ellipse(e) -%}
+  <ellipse cx="{{ e.cx }}" cy="{{ e.cy }}" rx="{{ e.rx }}" ry="{{ e.ry }}"{% if e.transform %} transform="{{ e.transform }}"{% endif %}{% if e.stroke_width %} stroke-width="{{ e.stroke_width }}"{% endif %} />
 {%- endmacro -%}
 {# One measurement cell: the recorded value, or a blank placeholder that
    holds the column so a pair's second field never slides left when the
@@ -481,9 +449,6 @@
       }
 
       .thob-sheet {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 6px;
         margin-top: 6px;
       }
 
@@ -508,76 +473,33 @@
       .thob-svg {
         display: block;
         width: 100%;
+        max-width: 460px;
         height: auto;
-        max-height: 300px;
+        max-height: 320px;
+        margin: 0 auto;
       }
 
-      .thob-outline {
-        fill: #fff;
+      .thob-garment {
+        fill: none;
         stroke: var(--ink);
-        stroke-width: 1.5;
+        stroke-width: 1.2;
         stroke-linejoin: round;
-      }
-
-      .thob-detail {
-        fill: none;
-        stroke: var(--muted);
-        stroke-width: 1;
-        stroke-linejoin: round;
-      }
-
-      .thob-seam {
-        fill: none;
-        stroke: var(--muted);
-        stroke-width: 0.8;
-        stroke-dasharray: 4 3;
-        stroke-linejoin: round;
-      }
-
-      .thob-button {
-        fill: var(--ink);
-      }
-
-      /* Only the active callout's copy of a garment feature lights up in the
-         accent colour; the base drawing above stays muted. */
-      .thob-guide {
-        fill: none;
-        stroke: var(--accent);
-        stroke-width: 0.8;
         stroke-linecap: round;
       }
 
       .thob-dim {
         fill: none;
-        stroke: var(--accent);
-        stroke-width: 1.1;
+        stroke: var(--ink);
+        stroke-width: 1;
       }
 
-      .thob-shape {
-        fill: none;
-        stroke: var(--accent);
-        stroke-width: 1.1;
-        stroke-linejoin: round;
-      }
-
-      .thob-dot {
-        fill: var(--accent);
-      }
-
-      .thob-caption rect {
-        fill: #fff;
-        stroke: var(--rule);
-      }
-
-      .thob-caption text {
-        font-family: inherit;
-        text-anchor: middle;
-      }
-
-      .thob-caption-text {
-        font-size: 8.5px;
-        font-weight: 600;
+      .thob-arrow {
         fill: var(--ink);
+      }
+
+      .thob-value {
+        font-weight: 600;
+        fill: #000;
       }
 
       .closing {
@@ -714,53 +636,42 @@
     {# One snapshot per order — the measurements the garment was cut to. #}
     <div class="thob-sheet">
       <div class="thob-panel">
-        <h3>Front of Thob</h3>
-        <svg class="thob-svg" viewBox="0 0 480 500" role="img" aria-label="Front view measurement chart">
-          <defs>
-            <marker id="thob-arrow-f" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-              <path d="M 0 0 L 8 4 L 0 8 Z" fill="#1d4ed8" />
-            </marker>
-          </defs>
+        <h3>Thobe Sheet</h3>
+        <svg class="thob-svg" viewBox="{{ thob_viewbox }}" role="img" aria-label="Thobe measurement sheet">
           <g>
-            <path class="thob-outline" d="{{ thob_garment.outline }}" />
-            <path class="thob-detail" d="{{ thob_garment.collar }}" />
-            <path class="thob-detail" d="{{ thob_garment.placket }}" />
-            <path class="thob-seam" d="{{ thob_garment.mobilePocket }}" />
-            <path class="thob-detail" d="{{ thob_garment.chestPocket }}" />
-            <path class="thob-detail" d="{{ thob_garment.sidePockets }}" />
-            <path class="thob-detail" d="{{ thob_garment.cuffs }}" />
-            {%- for button in thob_garment.buttons %}
-              <circle class="thob-button" cx="{{ button.cx }}" cy="{{ button.cy }}" r="2.5" />
+            {%- for e in thob_front_ellipses %}
+              {{ thobe_ellipse(e) }}
             {%- endfor %}
-            {%- for button in thob_garment.sleeveButtons %}
-              <circle class="thob-button" cx="{{ button.cx }}" cy="{{ button.cy }}" r="2.5" />
+            {%- for p in thob_front_paths %}
+              <path class="thob-garment" d="{{ p.d }}"{% if p.grey %} stroke="#999" stroke-width="0.8"{% endif %} />
+            {%- endfor %}
+            {%- for e in thob_back_ellipses %}
+              {{ thobe_ellipse(e) }}
+            {%- endfor %}
+            {%- for p in thob_back_paths %}
+              <path class="thob-garment" d="{{ p.d }}"{% if p.dashed %} stroke-dasharray="6 3" stroke-width="1"{% endif %} />
             {%- endfor %}
           </g>
-          {%- for field in thob_front_fields %}
-            {{ thob_callout(thob_markers[field], thob_front_captions[field], "thob-arrow-f") }}
-          {%- endfor %}
-        </svg>
-      </div>
-      <div class="thob-panel">
-        <h3>Back of Thob</h3>
-        <svg class="thob-svg" viewBox="0 0 480 500" role="img" aria-label="Back view measurement chart">
-          <defs>
-            <marker id="thob-arrow-b" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-              <path d="M 0 0 L 8 4 L 0 8 Z" fill="#1d4ed8" />
-            </marker>
-          </defs>
           <g>
-            <path class="thob-outline" d="{{ thob_garment.outline }}" />
-            <path class="thob-detail" d="{{ thob_garment.collar }}" />
-            <path class="thob-detail" d="{{ thob_garment.cuffs }}" />
-            <path class="thob-seam" d="{{ thob_garment.centerBackSeam }}" />
-            {%- for button in thob_garment.sleeveButtons %}
-              <circle class="thob-button" cx="{{ button.cx }}" cy="{{ button.cy }}" r="2.5" />
+            {%- for d in thob_dims %}
+              <path class="thob-dim" d="{{ d }}" />
+            {%- endfor %}
+            {%- for d in thob_arrows %}
+              <path class="thob-arrow" d="{{ d }}" />
             {%- endfor %}
           </g>
-          {%- for field in thob_back_fields %}
-            {{ thob_callout(thob_markers[field], thob_back_captions[field], "thob-arrow-b") }}
-          {%- endfor %}
+          <g font-family="Arial, sans-serif">
+            {%- for slot in thob_slots %}
+              {% set value = thob_values[slot.key] %}
+              {% if value is defined and value is not none and value != '' %}
+                <g>
+                  <title>{{ slot.label }}</title>
+                  <text x="{{ slot.x }}" y="{{ slot.y }}" font-size="{{ slot.size }}" text-anchor="middle" fill="none" stroke="#fff" stroke-width="3.5" stroke-linejoin="round">{{ value }}</text>
+                  <text x="{{ slot.x }}" y="{{ slot.y }}" font-size="{{ slot.size }}" text-anchor="middle" class="thob-value">{{ value }}</text>
+                </g>
+              {% endif %}
+            {%- endfor %}
+          </g>
         </svg>
       </div>
     </div>

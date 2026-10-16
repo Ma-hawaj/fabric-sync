@@ -17,13 +17,13 @@ const measurement: Measurement = {
   id: 'm-1',
   customerId: 'cust-1',
   date: new Date('2026-08-26'),
-  lengthFl: 48,
+  frontHeight: 48,
   shoulder: 18,
   chest: 42,
   sleeveLength: 25,
   foWidth: 3,
   frontPocketLengthByWidth: '12×8',
-  sidePocketLength: 9,
+  sidePocket: 9,
 }
 
 describe('generateMeasurementsHtml', () => {
@@ -49,31 +49,23 @@ describe('generateMeasurementsHtml', () => {
     expect(html).toContain('المقايسة · Recorded')
   })
 
-  it('renders numeric measurements as value + label captions', () => {
+  it('draws the recorded values on a single thobe sheet', () => {
     const html = generateMeasurementsHtml(customer, measurement)
 
-    expect(html).toContain('48 inch · Front Length')
-    expect(html).toContain('18 inch · Shoulder')
-    expect(html).toContain('42 inch · Chest')
-    expect(html).toContain('25 inch · Sleeve')
-    expect(html).toContain('3 inch · Fo Width')
+    expect((html.match(/viewBox="0 -32 800 667"/g) ?? []).length).toBe(1)
+    expect(html).toContain('ورقة الثوب · Thobe Sheet')
+    expect(html).toContain('aria-label="Thobe measurement sheet"')
+    // Values print as plain numbers at their slots, with no unit.
+    expect(html).toContain('>48</text>')
+    expect(html).toContain('>42</text>')
+    expect(html).toContain('12×8')
   })
 
-  it('renders text/select measurements without the unit', () => {
+  it('skips unrecorded fields on the sheet', () => {
     const html = generateMeasurementsHtml(customer, measurement)
 
-    expect(html).toContain('12×8 · Pocket L×W')
-    expect(html).toContain('9 inch · Side Pocket')
-  })
-
-  it('splits the diagrams into front and back thob panels', () => {
-    const html = generateMeasurementsHtml(customer, measurement)
-
-    expect((html.match(/viewBox="0 0 480 500"/g) ?? []).length).toBe(2)
-    expect(html).toContain('واجهة الثوب · Front of Thob')
-    expect(html).toContain('خلف الثوب · Back of Thob')
-    expect(html).toContain('aria-label="Front view measurement chart"')
-    expect(html).toContain('aria-label="Back view measurement chart"')
+    // Waist was never recorded: no slot value for it on the sheet.
+    expect(html).not.toContain('>96</text>')
   })
 
   it('labels the grid rows in Arabic, like the order document', () => {

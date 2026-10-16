@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import {
   Select,
   SelectContent,
@@ -119,12 +118,6 @@ export function MeasurementFields({
   history,
 }: MeasurementFieldsProps) {
   const base = basePath
-  // Hover wins over focus so pointing at one field while another is focused
-  // shows what the pointer is on, and dropping the pointer falls back to the
-  // focused field rather than clearing the sketch.
-  const [hovered, setHovered] = useState<string | null>(null)
-  const [focused, setFocused] = useState<string | null>(null)
-  const activeField = hovered ?? focused
 
   return (
     <div className="space-y-4">
@@ -202,23 +195,12 @@ export function MeasurementFields({
                 </h4>
                 <div className="grid grid-cols-2 gap-3">
                   {fieldsInGroup(group.id).map((field) => (
-                    <div
+                    <FieldInput
                       key={field.name}
-                      onMouseEnter={() => setHovered(field.name)}
-                      onMouseLeave={() =>
-                        setHovered((current) =>
-                          current === field.name ? null : current,
-                        )
-                      }
-                      onFocusCapture={() => setFocused(field.name)}
-                      onBlurCapture={() =>
-                        setFocused((current) =>
-                          current === field.name ? null : current,
-                        )
-                      }
-                    >
-                      <FieldInput form={form} base={base} field={field} />
-                    </div>
+                      form={form}
+                      base={base}
+                      field={field}
+                    />
                   ))}
                 </div>
               </div>
@@ -230,17 +212,11 @@ export function MeasurementFields({
               selector={(state: any) => readAt(state.values, base)}
             >
               {(values: MeasurementValues | undefined) => (
-                <ThobDiagram
-                  activeField={activeField}
-                  values={values}
-                  onSelectField={(name) =>
-                    document.getElementById(`${base}.${name}`)?.focus()
-                  }
-                />
+                <ThobDiagram values={values} />
               )}
             </form.Subscribe>
             <p className="mt-1 text-center text-xs text-muted-foreground">
-              Hover or focus a field to see where it is measured.
+              Entered values appear on the thobe sheet.
             </p>
           </aside>
         </div>

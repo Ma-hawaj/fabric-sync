@@ -47,7 +47,6 @@ export function CustomerDetailsSheet({
   const [activeMeasurementId, setActiveMeasurementId] = React.useState<
     string | null
   >(null)
-  const [hoveredField, setHoveredField] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     setActiveMeasurementId(customer?.measurements[0]?.id ?? null)
@@ -263,8 +262,6 @@ export function CustomerDetailsSheet({
                                   value={
                                     activeMeasurement[field.name] ?? undefined
                                   }
-                                  onHover={() => setHoveredField(field.name)}
-                                  onLeave={() => setHoveredField(null)}
                                 />
                               ))}
                             </StyleSection>
@@ -273,13 +270,9 @@ export function CustomerDetailsSheet({
                       </div>
 
                       <aside className="order-1 h-fit rounded-xl border border-border/60 bg-card p-3 shadow-sm @2xl:order-2 @2xl:sticky @2xl:top-4">
-                        <ThobDiagram
-                          activeField={hoveredField}
-                          values={activeMeasurement}
-                          onSelectField={(name) => setHoveredField(name)}
-                        />
+                        <ThobDiagram values={activeMeasurement} />
                         <p className="mt-1 text-center text-xs text-muted-foreground">
-                          Hover a measurement to locate it on the thob.
+                          Recorded values on the thobe sheet.
                         </p>
                       </aside>
                     </div>
@@ -297,13 +290,9 @@ export function CustomerDetailsSheet({
 function MetricItem({
   label,
   value,
-  onHover,
-  onLeave,
 }: {
   label: string
   value?: string | number
-  onHover?: () => void
-  onLeave?: () => void
 }) {
   const empty = value === undefined || value === ''
   return (
@@ -312,9 +301,6 @@ function MetricItem({
         'flex flex-col border-b border-border/30 pb-2 transition-colors',
         !empty && 'hover:border-info/60',
       )}
-      // No diagram callout for a value that was never recorded.
-      onMouseEnter={empty ? undefined : onHover}
-      onMouseLeave={empty ? undefined : onLeave}
     >
       <span className="text-xs text-muted-foreground font-medium">{label}</span>
       <span

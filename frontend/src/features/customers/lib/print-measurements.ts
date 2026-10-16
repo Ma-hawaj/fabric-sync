@@ -1,30 +1,21 @@
-import {
-  MEASUREMENT_GROUPS,
-  fieldsInGroup,
-  fieldsInView,
-} from '../data/measurement-fields'
+import { MEASUREMENT_GROUPS, fieldsInGroup } from '../data/measurement-fields'
 import type { MeasurementField } from '../data/measurement-fields'
-import { layoutCaptions } from '../components/thob-diagram'
 import {
-  THOB_BUTTONS,
-  THOB_CENTER_BACK_SEAM,
-  THOB_CHEST_POCKET,
-  THOB_COLLAR,
-  THOB_CUFFS,
-  THOB_MOBILE_POCKET,
-  THOB_OUTLINE,
-  THOB_PLACKET,
-  THOB_SIDE_POCKETS,
-  THOB_SLEEVE_BUTTONS,
-  THOB_VIEW_BOX,
-} from '../data/thob-sketch'
-import type { ThobView } from '../data/thob-sketch'
+  THOBE_ARROW_FILL,
+  THOBE_BACK_ARROWS,
+  THOBE_BACK_DIMS,
+  THOBE_BACK_ELLIPSES,
+  THOBE_BACK_PATHS,
+  THOBE_FRONT_ARROWS,
+  THOBE_FRONT_DIMS,
+  THOBE_FRONT_ELLIPSES,
+  THOBE_FRONT_PATHS,
+  THOBE_VALUE_SLOTS,
+  THOBE_VIEWBOX,
+} from '../components/thob-diagram'
 import type { Customer, Measurement } from '../types/customers'
 
 const TEARDOWN_FALLBACK_MS = 60_000
-
-const ARROW_LENGTH = 8
-const ARROW_HALF_WIDTH = 3
 
 const ACCENT = '#1d4ed8'
 const INK = '#10151c'
@@ -33,32 +24,32 @@ const RULE = '#d8dee7'
 
 /** Arabic row labels, matching `measurement_labels` in backend/templates/order.html. */
 const MEASUREMENT_LABELS_AR: Record<string, string> = {
-  lengthFl: 'الطول (أمام)',
-  lengthBl: 'الطول (خلف)',
+  frontHeight: 'الطول (أمام)',
+  backHeight: 'الطول (خلف)',
   shoulder: 'الكتف',
   shoulderDown: 'نزلة الكتف',
   chest: 'الصدر',
   chestUp: 'الصدر (علوي)',
   waist: 'الخصر',
-  hips: 'الأوراك',
+  hip: 'الأوراك',
   bottom: 'الأسفل',
-  bottomFolding: 'ثنية الأسفل',
+  bottomFold: 'ثنية الأسفل',
   fullBody: 'الجسم الكامل',
   sleeveHalf: 'نصف الكم',
   openFold: 'الثنية المفتوحة',
   sleeveLength: 'طول الكم',
-  neck: 'الرقبة',
+  neckSize: 'الرقبة',
   neckWidth: 'عرض الرقبة',
   openHand: 'فتحة اليد',
   openHandFolding: 'ثنية فتحة اليد',
   cuffWidth: 'عرض الأسوارة',
-  cuffling: 'الكفلنج',
-  armHole: 'فتحة الإبط',
+  cuffSize: 'الكفلنج',
+  armhole: 'فتحة الإبط',
   foWidth: 'عرض الفو',
   fo: 'الفو',
   frontPocketLength: 'طول الجيب الأمامي',
   frontPocketLengthByWidth: 'الجيب الأمامي بالعرض',
-  sidePocketLength: 'طول الجيب الجانبي',
+  sidePocket: 'طول الجيب الجانبي',
   sidePocketLengthByWidth: 'الجيب الجانبي بالعرض',
   mobilePocketLengthByWidth: 'جيب الجوال بالعرض',
   type: 'النوع',
@@ -73,119 +64,69 @@ function escapeHtml(str: string): string {
     .replace(/"/g, '&quot;')
 }
 
-function arrowHead(x: number, y: number, dx: number, dy: number): string {
-  const length = Math.hypot(dx, dy) || 1
-  const ux = dx / length
-  const uy = dy / length
-  const baseX = x - ux * ARROW_LENGTH
-  const baseY = y - uy * ARROW_LENGTH
-  const px = -uy * ARROW_HALF_WIDTH
-  const py = ux * ARROW_HALF_WIDTH
-  return `M ${x} ${y} L ${baseX + px} ${baseY + py} L ${baseX - px} ${baseY - py} Z`
-}
-
-function dimensionLineSvg(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-): string {
-  const dx = x2 - x1
-  const dy = y2 - y1
-  return (
-    `<line class="thob-dim" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />` +
-    `<path class="thob-design-arrow" d="${arrowHead(x1, y1, -dx, -dy)}" />` +
-    `<path class="thob-design-arrow" d="${arrowHead(x2, y2, dx, dy)}" />`
-  )
-}
-
-/** The garment silhouette for one view, muted, with its buttons. */
-function garmentViewSvg(view: ThobView): string {
-  let parts = '<g class="thob-base">'
-  parts += `<path class="thob-outline" d="${THOB_OUTLINE}" />`
-  parts += `<path class="thob-detail" d="${THOB_COLLAR}" />`
-  if (view === 'back') {
-    parts += `<path class="thob-detail" d="${THOB_CUFFS}" />`
-    parts += `<path class="thob-seam" d="${THOB_CENTER_BACK_SEAM}" />`
-    for (const button of THOB_SLEEVE_BUTTONS) {
-      parts += `<circle class="thob-button" cx="${button.cx}" cy="${button.cy}" r="2.5" />`
-    }
-  } else {
-    parts += `<path class="thob-detail" d="${THOB_PLACKET}" />`
-    parts += `<path class="thob-detail" d="${THOB_CUFFS}" />`
-    parts += `<path class="thob-detail" d="${THOB_SIDE_POCKETS}" />`
-    parts += `<path class="thob-detail" d="${THOB_CHEST_POCKET}" />`
-    parts += `<path class="thob-seam" d="${THOB_MOBILE_POCKET}" />`
-    for (const button of [...THOB_BUTTONS, ...THOB_SLEEVE_BUTTONS]) {
-      parts += `<circle class="thob-button" cx="${button.cx}" cy="${button.cy}" r="2.5" />`
-    }
-  }
-  parts += '</g>'
-  return parts
-}
-
-/** One measured field: its arrows/guides and its placed caption box. */
-function calloutSvg(
-  field: MeasurementField,
-  caption: { x: number; y: number; w: number; text: string },
-): string {
-  const { marker } = field
-  let parts = '<g class="thob-callout">'
-
-  for (const shape of marker.shapes ?? []) {
-    parts += `<path class="thob-shape" d="${shape}" />`
-  }
-  for (const dot of marker.dots ?? []) {
-    parts += `<circle class="thob-dot" cx="${dot.cx}" cy="${dot.cy}" r="2.5" />`
-  }
-  for (const guide of marker.guides ?? []) {
-    parts +=
-      `<line class="thob-guide" x1="${guide.x1}" y1="${guide.y1}" ` +
-      `x2="${guide.x2}" y2="${guide.y2}" stroke-dasharray="3 3" />`
-  }
-  for (const dim of marker.dims ?? []) {
-    parts += dimensionLineSvg(dim.x1, dim.y1, dim.x2, dim.y2)
-  }
-
-  parts +=
-    `<g class="thob-caption">` +
-    `<rect x="${caption.x}" y="${caption.y}" width="${caption.w}" height="20" rx="4" />` +
-    `<text x="${caption.x + caption.w / 2}" y="${caption.y + 14}" class="thob-caption-text">${escapeHtml(caption.text)}</text>` +
-    `</g>`
-
-  parts += '</g>'
-  return parts
+function ellipseSvg(e: {
+  cx: number
+  cy: number
+  rx: number
+  ry: number
+  rotate?: { angle: number; cx: number; cy: number }
+  strokeWidth?: number
+}): string {
+  const transform = e.rotate
+    ? ` transform="rotate(${e.rotate.angle} ${e.rotate.cx} ${e.rotate.cy})"`
+    : ''
+  const width = e.strokeWidth ? ` stroke-width="${e.strokeWidth}"` : ''
+  return `<ellipse class="thob-garment" cx="${e.cx}" cy="${e.cy}" rx="${e.rx}" ry="${e.ry}"${transform}${width} />`
 }
 
 /**
- * One view of the diagram: the garment silhouette plus a callout for every
- * recorded measurement on that view. Captions are laid out by `layoutCaptions`
- * so printed labels never overlap — the same layout `thob-diagram.tsx` and the
- * order document share.
+ * The thobe sheet: front + back silhouettes in one SVG with every recorded
+ * value at its slot. Fields the snapshot didn't capture are skipped —
+ * matching the on-screen `ThobDiagram`, which renders nothing for them.
  */
-function thobViewSvg(view: ThobView, measurement: Measurement): string {
-  const fields = fieldsInView(view)
-  const captions = layoutCaptions(fields, measurement)
+function thobeSheetSvg(measurement: Measurement): string {
+  const values = measurement as unknown as Record<string, unknown>
 
-  let callouts = ''
-  for (const field of fields) {
-    const caption = captions.get(field.name)
-    if (!caption) continue
-    callouts += calloutSvg(field, {
-      x: caption.x,
-      y: caption.y,
-      w: caption.w,
-      text: caption.text,
-    })
+  let svg =
+    `<svg class="thob-svg" viewBox="${THOBE_VIEWBOX}" role="img" ` +
+    `aria-label="Thobe measurement sheet">`
+
+  svg += '<g class="thob-garment-group">'
+  for (const e of THOBE_FRONT_ELLIPSES) svg += ellipseSvg(e)
+  for (const p of THOBE_FRONT_PATHS) {
+    const extra = p.grey ? ' stroke="#999" stroke-width="0.8"' : ''
+    svg += `<path class="thob-garment" d="${p.d}"${extra} />`
   }
+  for (const e of THOBE_BACK_ELLIPSES) svg += ellipseSvg(e)
+  for (const p of THOBE_BACK_PATHS) {
+    const extra = p.dashed ? ' stroke-dasharray="6 3" stroke-width="1"' : ''
+    svg += `<path class="thob-garment" d="${p.d}"${extra} />`
+  }
+  svg += '</g>'
 
-  return (
-    `<svg class="thob-svg" viewBox="${THOB_VIEW_BOX}" role="img" ` +
-    `aria-label="${view === 'back' ? 'Back' : 'Front'} view measurement chart">` +
-    garmentViewSvg(view) +
-    callouts +
-    `</svg>`
-  )
+  svg += '<g class="thob-dim-group">'
+  for (const d of [...THOBE_FRONT_DIMS, ...THOBE_BACK_DIMS]) {
+    svg += `<path class="thob-dim" d="${d}" />`
+  }
+  for (const d of [...THOBE_FRONT_ARROWS, ...THOBE_BACK_ARROWS]) {
+    svg += `<path class="thob-arrow" d="${d}" fill="${THOBE_ARROW_FILL}" />`
+  }
+  svg += '</g>'
+
+  svg += '<g font-family="Arial, sans-serif">'
+  for (const slot of THOBE_VALUE_SLOTS) {
+    const value = values[slot.key]
+    if (value === undefined || value === null || value === '') continue
+    const text = escapeHtml(String(value))
+    svg +=
+      `<g><title>${escapeHtml(slot.label)}</title>` +
+      `<text x="${slot.x}" y="${slot.y}" font-size="${slot.size}" text-anchor="middle" fill="none" stroke="#fff" stroke-width="3.5" stroke-linejoin="round">${text}</text>` +
+      `<text x="${slot.x}" y="${slot.y}" font-size="${slot.size}" text-anchor="middle" class="thob-value">${text}</text></g>`
+  }
+  svg += '</g>'
+
+  svg += '</svg>'
+  return svg
 }
 
 /** Value as it appears in the measurement grid — unit-less, decimals kept. */
@@ -222,6 +163,9 @@ function groupCard(
       )
     })
     .filter(Boolean)
+  // An empty group (e.g. no pocket values recorded) prints nothing — the
+  // grid only carries what the snapshot actually captured.
+  if (rows.length === 0) return ''
   return (
     `<div class="measurement-group"><h3>${escapeHtml(title)}</h3>` +
     `<div class="measurement-grid">${rows.join('')}</div></div>`
@@ -349,9 +293,6 @@ export function generateMeasurementsHtml(
     color: var(--muted);
   }
   .thob-sheet {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
     margin-top: 10px;
   }
   .thob-panel {
@@ -368,45 +309,17 @@ export function generateMeasurementsHtml(
     letter-spacing: 0.08em;
     color: var(--muted);
   }
-  .thob-svg { display: block; width: 100%; height: auto; }
-  .thob-outline {
-    fill: #fff;
+  .thob-svg { display: block; width: 100%; max-width: 560px; height: auto; margin: 0 auto; }
+  .thob-garment {
+    fill: none;
     stroke: var(--ink);
-    stroke-width: 1.5;
+    stroke-width: 1.2;
     stroke-linejoin: round;
-  }
-  .thob-detail {
-    fill: none;
-    stroke: var(--muted);
-    stroke-width: 1;
-    stroke-linejoin: round;
-  }
-  .thob-seam {
-    fill: none;
-    stroke: var(--muted);
-    stroke-width: 0.8;
-    stroke-dasharray: 4 3;
-    stroke-linejoin: round;
-  }
-  .thob-button { fill: var(--ink); }
-  .thob-guide {
-    fill: none;
-    stroke: var(--accent);
-    stroke-width: 0.8;
     stroke-linecap: round;
   }
-  .thob-dim { fill: none; stroke: var(--accent); stroke-width: 1.1; }
-  .thob-design-arrow { fill: var(--accent); }
-  .thob-shape {
-    fill: none;
-    stroke: var(--accent);
-    stroke-width: 1.1;
-    stroke-linejoin: round;
-  }
-  .thob-dot { fill: var(--accent); }
-  .thob-caption rect { fill: #fff; stroke: var(--rule); }
-  .thob-caption text { font-family: inherit; text-anchor: middle; }
-  .thob-caption-text { font-size: 8.5px; font-weight: 600; fill: var(--ink); }
+  .thob-dim { fill: none; stroke: var(--ink); stroke-width: 1; }
+  .thob-arrow { fill: var(--ink); }
+  .thob-value { font-size: inherit; font-weight: 600; fill: #000; }
   .measurements {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -476,15 +389,11 @@ export function generateMeasurementsHtml(
     </div>
   </header>
 
-  <h2 class="section-title">المقاسات المسجلة · Measurements</h2>
+  <h2 class="section-title">ورقة الثوب · Thobe Sheet</h2>
   <div class="thob-sheet">
     <div class="thob-panel">
-      <h3>واجهة الثوب · Front of Thob</h3>
-      ${thobViewSvg('front', measurement)}
-    </div>
-    <div class="thob-panel">
-      <h3>خلف الثوب · Back of Thob</h3>
-      ${thobViewSvg('back', measurement)}
+      <h3>الثوب · Thobe</h3>
+      ${thobeSheetSvg(measurement)}
     </div>
   </div>
 

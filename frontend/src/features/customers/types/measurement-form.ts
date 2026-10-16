@@ -10,6 +10,11 @@ export type MeasurementType = (typeof MEASUREMENT_TYPES)[number]
 export const MEASUREMENT_FITS = ['loose', 'fit', 'medium'] as const
 export type MeasurementFit = (typeof MEASUREMENT_FITS)[number]
 
+// Field names match the thobe diagram slots wherever the drawing has a slot:
+// frontHeight/backHeight (lengths), neckSize, hip (singular), armhole
+// (lowercase), bottomFold, frontPocketLength, sidePocket, cuffSize. The pocket L×W
+// stays one text field by design — the diagram was fixed to a single slot
+// rather than splitting the stored value.
 export interface MeasurementDraft {
   // Id of the historical snapshot this was loaded from, if any. Editing
   // never overwrites it — saving always inserts a new dated measurement
@@ -22,32 +27,32 @@ export interface MeasurementDraft {
   type: string
   fit: string
 
-  lengthFl: NumberInput
-  lengthBl: NumberInput
+  frontHeight: NumberInput
+  backHeight: NumberInput
   chest: NumberInput
   waist: NumberInput
-  hips: NumberInput
+  hip: NumberInput
   shoulder: NumberInput
   shoulderDown: NumberInput
   sleeveLength: NumberInput
-  neck: NumberInput
+  neckSize: NumberInput
   openHand: NumberInput
   openHandFolding: NumberInput
   chestUp: NumberInput
   cuffWidth: NumberInput
-  cuffling: NumberInput
+  cuffSize: NumberInput
   neckWidth: NumberInput
-  armHole: NumberInput
+  armhole: NumberInput
   foWidth: NumberInput
   fo: NumberInput
   sleeveHalf: NumberInput
   openFold: NumberInput
   bottom: NumberInput
-  bottomFolding: NumberInput
+  bottomFold: NumberInput
   fullBody: NumberInput
   frontPocketLength: NumberInput
   frontPocketLengthByWidth: string
-  sidePocketLength: NumberInput
+  sidePocket: NumberInput
   sidePocketLengthByWidth: string
   mobilePocketLengthByWidth: string
 }
@@ -58,32 +63,32 @@ export function createEmptyMeasurement(): MeasurementDraft {
     date: new Date().toISOString().slice(0, 10),
     type: '',
     fit: '',
-    lengthFl: '',
-    lengthBl: '',
+    frontHeight: '',
+    backHeight: '',
     chest: '',
     waist: '',
-    hips: '',
+    hip: '',
     shoulder: '',
     shoulderDown: '',
     sleeveLength: '',
-    neck: '',
+    neckSize: '',
     openHand: '',
     openHandFolding: '',
     chestUp: '',
     cuffWidth: '',
-    cuffling: '',
+    cuffSize: '',
     neckWidth: '',
-    armHole: '',
+    armhole: '',
     foWidth: '',
     fo: '',
     sleeveHalf: '',
     openFold: '',
     bottom: '',
-    bottomFolding: '',
+    bottomFold: '',
     fullBody: '',
     frontPocketLength: '',
     frontPocketLengthByWidth: '',
-    sidePocketLength: '',
+    sidePocket: '',
     sidePocketLengthByWidth: '',
     mobilePocketLengthByWidth: '',
   }
