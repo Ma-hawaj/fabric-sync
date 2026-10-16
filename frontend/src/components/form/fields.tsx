@@ -117,29 +117,49 @@ export function NumberField({
   )
 }
 
+export interface SelectOption {
+  value: string
+  label: string
+}
+
 export function SelectField({
   form,
   name,
   label,
   options,
   placeholder,
-}: FieldProps & { options: readonly string[]; placeholder?: string }) {
+  className,
+}: FieldProps & {
+  options: readonly (string | SelectOption)[]
+  placeholder?: string
+  className?: string
+}) {
+  const normalized: SelectOption[] = options.map((option) =>
+    typeof option === 'string' ? { value: option, label: option } : option,
+  )
   return (
     <form.Field name={name as never}>
       {(field: any) => (
-        <Field data-invalid={field.state.meta.errors.length > 0}>
+        <Field
+          data-invalid={field.state.meta.errors.length > 0}
+          className={className}
+        >
           <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
           <Select
             value={field.state.value}
             onValueChange={(value: string) => field.handleChange(value)}
           >
-            <SelectTrigger id={field.name} className="w-full">
+            <SelectTrigger
+              id={field.name}
+              className="w-full"
+              aria-invalid={field.state.meta.errors.length > 0}
+            >
               <SelectValue placeholder={placeholder ?? 'Select...'} />
             </SelectTrigger>
             <SelectContent>
-              {options.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {option}
+              {normalized.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
                 </SelectItem>
               ))}
             </SelectContent>

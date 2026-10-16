@@ -9,16 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Field, FieldError } from '@/components/ui/field'
-import { NumberField } from '@/components/form/fields'
+import { NumberField, SelectField } from '@/components/form/fields'
 import { CURRENCY } from '@/lib/currency'
 import { useRecordPayment } from '../hooks/use-record-payment'
 import {
@@ -149,30 +140,13 @@ function RecordPaymentForm({
 
       <NumberField form={form} name="amount" label={`Amount (${CURRENCY})`} />
 
-      <form.Field name="paymentType">
-        {(field: any) => (
-          <Field data-invalid={field.state.meta.errors.length > 0}>
-            <Label htmlFor={field.name}>Payment Method</Label>
-            <Select
-              items={paymentTypeOptions}
-              value={field.state.value}
-              onValueChange={(value: PaymentType) => field.handleChange(value)}
-            >
-              <SelectTrigger id={field.name} className="w-full">
-                <SelectValue placeholder="Select payment method..." />
-              </SelectTrigger>
-              <SelectContent>
-                {paymentTypeOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FieldError errors={field.state.meta.errors} />
-          </Field>
-        )}
-      </form.Field>
+      <SelectField
+        form={form}
+        name="paymentType"
+        label="Payment Method"
+        options={paymentTypeOptions}
+        placeholder="Select payment method..."
+      />
 
       <p className="text-sm text-muted-foreground">
         Collects money without collecting any order — the garments stay pending

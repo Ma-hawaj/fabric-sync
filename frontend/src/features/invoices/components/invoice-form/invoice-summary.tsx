@@ -1,14 +1,7 @@
 import * as React from 'react'
-import { NumberField, TextField } from '@/components/form/fields'
+import { NumberField, SelectField, TextField } from '@/components/form/fields'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
@@ -272,24 +265,15 @@ export function InvoiceSummary({
 
               <div className="grid grid-cols-2 gap-3 items-end">
                 <NumberField form={form} name="discount" label="Discount" />
-                <form.Field name={'discountUnit' as never}>
-                  {(field: any) => (
-                    <Select
-                      value={field.state.value}
-                      onValueChange={(value: string) =>
-                        field.handleChange(value)
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="amount">{CURRENCY}</SelectItem>
-                        <SelectItem value="percent">%</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                </form.Field>
+                <SelectField
+                  form={form}
+                  name="discountUnit"
+                  label=""
+                  options={[
+                    { value: 'amount', label: CURRENCY },
+                    { value: 'percent', label: '%' },
+                  ]}
+                />
               </div>
 
               <form.Subscribe
@@ -431,49 +415,14 @@ export function InvoiceSummary({
                                           label={index === 0 ? 'Amount' : ''}
                                         />
                                       </div>
-                                      <form.Field
-                                        name={
-                                          `payments[${index}].paymentType` as never
-                                        }
-                                      >
-                                        {(methodField: any) => (
-                                          <div className="w-36 space-y-1">
-                                            {index === 0 && (
-                                              <Label htmlFor={methodField.name}>
-                                                Method
-                                              </Label>
-                                            )}
-                                            <Select
-                                              items={PAYMENT_TYPE_OPTIONS}
-                                              value={methodField.state.value}
-                                              onValueChange={(
-                                                value: PaymentType,
-                                              ) =>
-                                                methodField.handleChange(value)
-                                              }
-                                            >
-                                              <SelectTrigger
-                                                id={methodField.name}
-                                                className="w-full"
-                                              >
-                                                <SelectValue placeholder="Method..." />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                {PAYMENT_TYPE_OPTIONS.map(
-                                                  (option) => (
-                                                    <SelectItem
-                                                      key={option.value}
-                                                      value={option.value}
-                                                    >
-                                                      {option.label}
-                                                    </SelectItem>
-                                                  ),
-                                                )}
-                                              </SelectContent>
-                                            </Select>
-                                          </div>
-                                        )}
-                                      </form.Field>
+                                      <SelectField
+                                        form={form}
+                                        name={`payments[${index}].paymentType`}
+                                        label={index === 0 ? 'Method' : ''}
+                                        options={PAYMENT_TYPE_OPTIONS}
+                                        placeholder="Method..."
+                                        className="w-36"
+                                      />
                                       <Button
                                         variant="ghost"
                                         size="icon"
