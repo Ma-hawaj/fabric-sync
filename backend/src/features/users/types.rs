@@ -1,11 +1,15 @@
 use serde::Serialize;
 
 /// A person who can be assigned work — an order stage, eventually. `id` is a
-/// plain string rather than a `Uuid` because it is meant to hold an Authentik
-/// user UUID once this is backed by the real user directory, not an id this
-/// app generates itself. `avatar_url` is whatever Authentik's `avatar` field
-/// carries (an `http(s)` URL or a `data:` URI); `roles` and `groups` hold
-/// the names of the Authentik roles and groups assigned to the user.
+/// plain string rather than a `Uuid` because it holds a Zitadel subject
+/// (`userId`), not an id this app generates itself. `avatar_url` is whatever
+/// Zitadel's `human.profile.avatarUrl` carries, passed straight through for
+/// the frontend to render (it falls back to initials when missing or broken).
+/// `roles` holds the user's project role keys (see `zitadel::user_roles`);
+/// `groups` is always empty — Zitadel has no usable "groups of a user" API
+/// (GroupService's member listing is still under development), so there is
+/// nothing to fill it from. The field stays so the REST shape matches what
+/// the Users table and assignee picker already render.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
