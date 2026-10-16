@@ -86,11 +86,13 @@ After the stack is up, create two OAuth applications in the Zitadel console, in 
 
 If a valid access token gets a 401 from the backend unexpectedly, check the `aud` claim Zitadel puts on tokens issued to the SPA client against whatever `OAUTH_RESOURCE_AUDIENCE` is set to — either add the backend's client ID as an audience in Zitadel, or leave `OAUTH_RESOURCE_AUDIENCE` unset locally.
 
-`GET /users` (the order-stage assignee picker) is backed by Zitadel's user directory: create a machine user (Users > New > Machine user, e.g. `fabric-sync-backend`), add a client secret into `ZITADEL_USERS_CLIENT_SECRET` (with its ID in `ZITADEL_USERS_CLIENT_ID`), and grant it the "Org User Manager" (`ORG_USER_MANAGER`) role under Organization > Managers (see `.env.example`). For the Roles column, also grant it user-grant read — without that, roles come back empty and the backend logs a warning.
+`GET /users` (the order-stage assignee picker) is backed by Zitadel's user directory: create a machine user (Users > New > Machine user, e.g. `fabric-sync-backend`), add a client secret into `ZITADEL_USERS_CLIENT_SECRET` (with its ID in `ZITADEL_USERS_CLIENT_ID`), and grant it the "Org User Manager" (`ORG_USER_MANAGER`) role under Organization > Managers (see `backend/.env.example`). For the Roles column, also grant it user-grant read — without that, roles come back empty and the backend logs a warning.
 
 ## Backend
 
-The backend reads configuration from environment variables.
+The backend reads configuration from environment variables (`backend/.env`
+via `dotenvy` when running locally — copy `backend/.env.example` there
+first).
 
 Common variables:
 
