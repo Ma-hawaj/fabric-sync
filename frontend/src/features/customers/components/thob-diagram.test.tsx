@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
 import {
   THOBE_FIELDS,
   THOBE_VALUE_SLOTS,
@@ -69,6 +69,37 @@ describe('ThobDiagram', () => {
 
     expect(screen.queryAllByText('Chest').length).toBeGreaterThan(0)
     expect(screen.queryAllByText('42').length).toBeGreaterThan(0)
+  })
+
+  it('highlights the active slot and dims the rest', () => {
+    render(
+      <ThobDiagram values={{ chest: 42, waist: 30 }} activeField="chest" />,
+    )
+
+    const active = screen.getByTestId('value-chest')
+    expect(active.getAttribute('data-active')).toBe('true')
+    expect(active.querySelector('text[font-weight="700"]')).toBeTruthy()
+    const idle = screen.getByTestId('value-waist')
+    expect(idle.getAttribute('data-active')).toBeNull()
+    expect(idle.getAttribute('opacity')).toBe('0.3')
+  })
+
+  it('highlights nothing for an unknown field name', () => {
+    const { container } = render(
+      <ThobDiagram values={{ chest: 42 }} activeField="notAMeasurement" />,
+    )
+
+    expect(container.querySelector('[data-active]')).toBeNull()
+    expect(screen.getByTestId('value-chest').getAttribute('opacity')).toBeNull()
+  })
+
+  it('reports the clicked slot so the page can focus its input', () => {
+    const onSelectField = vi.fn()
+    render(<ThobDiagram values={{ chest: 42 }} onSelectField={onSelectField} />)
+
+    fireEvent.click(screen.getByTestId('value-chest'))
+
+    expect(onSelectField).toHaveBeenCalledWith('chest')
   })
 })
 

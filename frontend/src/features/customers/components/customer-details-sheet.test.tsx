@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { CustomerDetailsSheet } from './customer-details-sheet'
 import type { Customer } from '../types/customers'
@@ -106,6 +106,32 @@ describe('CustomerDetailsSheet', () => {
     renderSheet(CUSTOMER)
 
     expect(screen.queryByLabelText('Thobe measurements')).toBeTruthy()
+  })
+
+  it('highlights the hovered measurement on the sheet', () => {
+    renderSheet(CUSTOMER)
+
+    // 'Chest' also names the sheet slot, so take the metric list's label.
+    const label = screen
+      .getAllByText('Chest')
+      .find((el) => el.tagName === 'SPAN')
+    expect(label).toBeTruthy()
+    const row = label!.closest('div')!
+
+    expect(screen.queryByTestId('value-chest')).toBeTruthy()
+    expect(
+      screen.getByTestId('value-chest').getAttribute('data-active'),
+    ).toBeNull()
+
+    fireEvent.mouseEnter(row)
+    expect(screen.getByTestId('value-chest').getAttribute('data-active')).toBe(
+      'true',
+    )
+
+    fireEvent.mouseLeave(row)
+    expect(
+      screen.getByTestId('value-chest').getAttribute('data-active'),
+    ).toBeNull()
   })
 
   it('shows the customer invoices with links to their pages', () => {

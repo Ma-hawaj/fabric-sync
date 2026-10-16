@@ -17,10 +17,11 @@ export type MeasurementValues = Partial<
  * e.g. "16x14") — the prototype's split P.L/P.W pair was merged rather than
  * splitting the stored field.
  *
- * `activeField` / `onSelectField` / `view` / `showRecorded` are accepted for
- * prop-stability with existing callers but currently ignored: hover
- * highlighting is deferred to a later pass, and the sheet always draws front
- * and back together in one SVG (there are no per-view silhouettes).
+ * `activeField` highlights one field's slot (bold value, the rest dimmed)
+ * and `onSelectField` makes slots clickable, so a page can focus the matching
+ * input. `view` / `showRecorded` are accepted but ignored: the sheet always
+ * draws front and back together in one SVG (there are no per-view
+ * silhouettes).
  */
 interface ThobDiagramProps {
   activeField?: string | null
@@ -371,7 +372,9 @@ function ellipseTransform(e: GarmentEllipse) {
 }
 
 export function ThobDiagram({
+  activeField,
   values = {},
+  onSelectField,
   showLabels = false,
   placeholder = null,
   width = '100%',
@@ -385,6 +388,12 @@ export function ThobDiagram({
     const v = m[key]
     return v !== undefined && v !== null && v !== ''
   }
+  // An unknown field name highlights nothing — and dims nothing either, so a
+  // stale hover can't wash the sheet out.
+  const hasActive =
+    activeField != null &&
+    activeField !== '' &&
+    THOBE_VALUE_SLOTS.some((slot) => slot.key === activeField)
   const common = {
     fill: 'none',
     stroke,
@@ -484,6 +493,8 @@ export function ThobDiagram({
           const v = m[f.key]
           const has = v !== undefined && v !== null && v !== ''
           if (!has && placeholder == null && !showLabels) return null
+          const active = hasActive && f.key === activeField
+          const dimmed = hasActive && !active
           const items: {
             x: number
             y: number
@@ -491,6 +502,7 @@ export function ThobDiagram({
             opacity: number
             anchor: string
             str: string
+            bold?: boolean
           }[] = []
           if (showLabels) {
             items.push({
@@ -511,10 +523,22 @@ export function ThobDiagram({
               opacity: has ? 1 : 0.45,
               anchor: 'middle',
               str: text,
+              bold: active,
             })
           }
           return (
-            <g key={f.id} data-testid={`value-${f.id}`}>
+            <g
+              key={f.id}
+              data-testid={`value-${f.id}`}
+              data-active={active || undefined}
+              opacity={dimmed ? 0.3 : undefined}
+              onClick={
+                onSelectField
+                  ? () => onSelectField(f.key as MeasurementFieldName)
+                  : undefined
+              }
+              className={cn(onSelectField && 'cursor-pointer')}
+            >
               <title>{f.label}</title>
               {items.map((it, k) => (
                 <g key={k}>
@@ -537,6 +561,7 @@ export function ThobDiagram({
                     textAnchor={it.anchor as 'middle'}
                     fill="currentColor"
                     fillOpacity={it.opacity}
+                    fontWeight={it.bold ? 700 : undefined}
                   >
                     {it.str}
                   </text>
