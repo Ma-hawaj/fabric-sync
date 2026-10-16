@@ -852,6 +852,10 @@ mod tests {
         // disappearing.
         assert!(html.contains("Saudi"));
         assert!(html.contains("double stitching"));
+        // The free-text note prints below the diagram, not in the sidebar.
+        let svg_end = html.find("</svg>").unwrap();
+        let note = html.find("double stitching").unwrap();
+        assert!(note > svg_end);
         // Two choices fit the sidebar — no overflow strip is rendered below
         // the sheet. (Matched on the div: the stylesheet always names the
         // class.)

@@ -412,6 +412,12 @@
         font-size: 8.5px;
       }
 
+      /* The free-text note under the diagram gets a touch more air than its
+         sidebar sibling since it spans the full sheet width. */
+      .design-note-below {
+        margin-top: 6px;
+      }
+
       /* Choices past the fifth land here, below the diagram, so the sidebar
          never stretches the side-by-side balance. Bounded in practice: six
          design slots exist, so at most one chip overflows. */
@@ -658,9 +664,6 @@
         {% else %}
           <div class="design-note">No design choices recorded</div>
         {% endif %}
-        {% if design_note %}
-          <div class="design-note">{{ design_note }}</div>
-        {% endif %}
       </section>
 
       <div class="thob-sheet">
@@ -703,6 +706,9 @@
           </g>
         </svg>
         </div>
+        {% if design_note %}
+          <div class="design-note design-note-below">{{ design_note }}</div>
+        {% endif %}
         {% if designs|length > 5 %}
           <div class="design-overflow">
             {% for chip in designs[5:] %}
