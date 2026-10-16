@@ -33,6 +33,7 @@ pub enum RepairStatus {
     InProgress,
     Completed,
     Cancelled,
+    Received,
 }
 
 impl RepairStatus {
@@ -42,6 +43,7 @@ impl RepairStatus {
             Self::InProgress => "in_progress",
             Self::Completed => "completed",
             Self::Cancelled => "cancelled",
+            Self::Received => "received",
         }
     }
 }
@@ -92,6 +94,10 @@ pub struct RepairRow {
     pub charge: f64,
     pub status: String,
     pub completed_at: Option<DateTime<Utc>>,
+    pub received_at: Option<DateTime<Utc>>,
+    pub received_amount: f64,
+    pub received_payment_type: Option<String>,
+    pub fixed_measurement_id: Option<Uuid>,
     pub notes: Option<String>,
 }
 
@@ -188,6 +194,10 @@ pub struct OrderRepair {
     pub charge: f64,
     pub status: String,
     pub completed_at: Option<DateTime<Utc>>,
+    pub received_at: Option<DateTime<Utc>>,
+    pub received_amount: f64,
+    pub received_payment_type: Option<String>,
+    pub fixed_measurement_id: Option<Uuid>,
     pub notes: Option<String>,
 }
 
@@ -330,5 +340,55 @@ pub struct UpdateRepairInput {
     pub reason: Option<String>,
     pub charge: Option<f64>,
     pub status: Option<RepairStatus>,
+    pub notes: Option<String>,
+}
+
+/// Body for `POST /orders/:id/repairs/:repairId/receive` — hands the repaired
+/// garment back to the customer after completion. `amount` may be zero (hand
+/// over with no money); when positive a `payment_type` is required. The money
+/// is recorded on the repair row itself; the invoice ledger is untouched.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiveRepairInput {
+    #[serde(default)]
+    pub amount: f64,
+    #[serde(default)]
+    pub payment_type: Option<PaymentType>,
+}
+
+/// Body for `PUT /orders/:id/repairs/:repairId/measurement` — records the
+/// measurement fix a repair needed, for future orders. The order's own
+/// snapshot never moves; the fix is resolved like an invoice create (reuse the
+/// customer's latest row when nothing changed, else insert a fresh one) and
+/// its id is stored on the repair as `fixed_measurement_id`.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepairMeasurementFixInput {
+    pub measurement: crate::features::customers::types::CreateMeasurementInput,
+}
+
+/// One repair with the order/customer context a global tracking page needs —
+/// the shape `GET /repairs` returns. Flat on purpose: the page filters and
+/// sorts without joining client-side.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepairListItem {
+    pub id: Uuid,
+    pub order_id: Uuid,
+    pub order_number: i64,
+    pub invoice_id: Uuid,
+    pub invoice_number: i64,
+    pub customer_name: String,
+    pub customer_mobile: String,
+    pub material: String,
+    pub reason: String,
+    pub reported_on: NaiveDate,
+    pub charge: f64,
+    pub status: String,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub received_at: Option<DateTime<Utc>>,
+    pub received_amount: f64,
+    pub received_payment_type: Option<String>,
+    pub fixed_measurement_id: Option<Uuid>,
     pub notes: Option<String>,
 }

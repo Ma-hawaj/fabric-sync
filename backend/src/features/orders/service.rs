@@ -15,8 +15,9 @@ use super::{
     repository,
     types::{
         AssignStageInput, AssignmentRow, CreateRepairInput, OrderDetail, OrderListItem,
-        OrderRepair, OrderRow, OrderStageEntry, PaymentType, ProgressRow, RepairRow, RepairStatus,
-        SetStageInput, StageRow, StageStatus, UpdateOrderInput, UpdateRepairInput,
+        OrderRepair, OrderRow, OrderStageEntry, PaymentType, ProgressRow, RepairListItem,
+        RepairRow, RepairStatus, SetStageInput, StageRow, StageStatus, UpdateOrderInput,
+        UpdateRepairInput,
     },
 };
 
@@ -172,12 +173,36 @@ fn current_stage_name(stages: &[OrderStageEntry]) -> Option<String> {
 }
 
 // Stamped when a repair is completed and cleared when it moves anywhere else,
-// so the timestamp can never describe a repair that is open again.
+// so the timestamp can never describe a repair that is open again. Receiving
+// is separate (see `repair_received_time`): a completed repair keeps its
+// `completed_at` once received, since that is when the work finished as
+// opposed to when the customer collected it.
 fn repair_completion_time(status: RepairStatus, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
     match status {
         RepairStatus::Completed => Some(now),
         _ => None,
     }
+}
+
+fn repair_received_time(status: RepairStatus, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    match status {
+        RepairStatus::Received => Some(now),
+        _ => None,
+    }
+}
+
+fn validate_receive_amount(amount: f64, payment_type: Option<PaymentType>) -> Result<(), AppError> {
+    if amount < 0.0 {
+        return Err(AppError::BadRequest(
+            "a repair handover payment cannot be negative".to_string(),
+        ));
+    }
+    if amount > 0.0 && payment_type.is_none() {
+        return Err(AppError::BadRequest(
+            "a repair handover payment needs a paymentType".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn normalized_reason(reason: &str) -> Result<String, AppError> {
@@ -348,6 +373,10 @@ fn assemble_order(
             charge: repair.charge,
             status: repair.status.clone(),
             completed_at: repair.completed_at,
+            received_at: repair.received_at,
+            received_amount: repair.received_amount,
+            received_payment_type: repair.received_payment_type.clone(),
+            fixed_measurement_id: repair.fixed_measurement_id,
             notes: repair.notes.clone(),
         })
         .collect();
@@ -773,6 +802,12 @@ pub async fn update_repair(
         validate_charge(charge)?;
     }
 
+    if input.status == Some(RepairStatus::Received) {
+        return Err(AppError::BadRequest(
+            "receive a completed repair through its receive endpoint".to_string(),
+        ));
+    }
+
     let completed_at = input
         .status
         .and_then(|status| repair_completion_time(status, Utc::now()));
@@ -797,6 +832,126 @@ pub async fn update_repair(
     );
 
     load_order(state, order_id).await
+}
+
+/// Hands a completed repair back to the customer. Only `completed` repairs can
+/// be received; anything else is a 400, and an already-`received` repair is
+/// refused so a retry cannot record the handover payment twice. The money is
+/// stored on the repair row itself — the invoice ledger is untouched, matching
+/// how `charge` was always bookkeeping-only.
+pub async fn receive_repair(
+    state: &AppState,
+    order_id: Uuid,
+    repair_id: Uuid,
+    amount: f64,
+    payment_type: Option<PaymentType>,
+) -> Result<OrderListItem, AppError> {
+    validate_receive_amount(amount, payment_type)?;
+
+    if !repository::repair_belongs_to_order(state, repair_id, order_id).await? {
+        return Err(AppError::NotFound(format!(
+            "repair {repair_id} not found on order {order_id}"
+        )));
+    }
+
+    let mut tx = state.db().begin().await?;
+    let locked = repository::lock_repair(&mut tx, repair_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("repair {repair_id} not found")))?;
+
+    if locked.status == RepairStatus::Received.as_str() {
+        return Err(AppError::BadRequest(
+            "this repair is already received".to_string(),
+        ));
+    }
+    if locked.status != RepairStatus::Completed.as_str() {
+        return Err(AppError::BadRequest(
+            "only a completed repair can be received".to_string(),
+        ));
+    }
+
+    let received_at = repair_received_time(RepairStatus::Received, Utc::now())
+        .expect("received status always stamps a time");
+    repository::mark_repair_received(
+        &mut tx,
+        repair_id,
+        received_at,
+        amount,
+        payment_type.map(|payment| payment.as_str()),
+    )
+    .await?;
+    tx.commit().await?;
+
+    tracing::info!(
+        order_id = %order_id,
+        repair_id = %repair_id,
+        amount,
+        "order repair received"
+    );
+
+    load_order(state, order_id).await
+}
+
+/// Records the measurement fix a repair needed, for future orders. Mirrors the
+/// invoice create rule: reuse the customer's latest row when the values match,
+/// else insert a fresh one — never rewrites the order's own snapshot. The new
+/// row's id is stored on the repair, so the receipt and later orders can read
+/// what changed.
+pub async fn set_repair_measurement(
+    state: &AppState,
+    order_id: Uuid,
+    repair_id: Uuid,
+    measurement: crate::features::customers::types::CreateMeasurementInput,
+) -> Result<OrderListItem, AppError> {
+    if !repository::repair_belongs_to_order(state, repair_id, order_id).await? {
+        return Err(AppError::NotFound(format!(
+            "repair {repair_id} not found on order {order_id}"
+        )));
+    }
+
+    let context = repository::repair_order_context(state, order_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
+
+    let mut tx = state.db().begin().await?;
+    let measurement_id = match crate::features::customers::repository::latest_measurement(
+        &mut tx,
+        context.customer_id,
+    )
+    .await?
+    {
+        Some((id, ref values))
+            if crate::features::customers::types::measurement_values_equal(
+                values,
+                &measurement,
+            ) =>
+        {
+            id
+        }
+        _ => {
+            crate::features::customers::repository::insert_measurement(
+                &mut tx,
+                context.customer_id,
+                &measurement,
+            )
+            .await?
+        }
+    };
+    repository::set_repair_fixed_measurement(&mut tx, repair_id, measurement_id).await?;
+    tx.commit().await?;
+
+    tracing::info!(
+        order_id = %order_id,
+        repair_id = %repair_id,
+        measurement_id = %measurement_id,
+        "order repair measurement fix recorded"
+    );
+
+    load_order(state, order_id).await
+}
+
+pub async fn list_all_repairs(state: &AppState) -> Result<Vec<RepairListItem>, AppError> {
+    repository::list_all_repairs(state).await
 }
 
 #[cfg(test)]
@@ -982,9 +1137,39 @@ mod tests {
             RepairStatus::Open,
             RepairStatus::InProgress,
             RepairStatus::Cancelled,
+            RepairStatus::Received,
         ] {
             assert_eq!(repair_completion_time(status, now), None, "{status:?}");
         }
+    }
+
+    #[test]
+    fn a_received_repair_is_stamped_and_any_other_status_clears_it() {
+        let now = Utc::now();
+
+        assert_eq!(repair_received_time(RepairStatus::Received, now), Some(now));
+        for status in [
+            RepairStatus::Open,
+            RepairStatus::InProgress,
+            RepairStatus::Completed,
+            RepairStatus::Cancelled,
+        ] {
+            assert_eq!(repair_received_time(status, now), None, "{status:?}");
+        }
+    }
+
+    #[test]
+    fn a_repair_handover_accepts_zero_or_a_paid_amount_with_a_method() {
+        use crate::features::invoices::types::PaymentType;
+
+        assert!(validate_receive_amount(0.0, None).is_ok());
+        assert!(validate_receive_amount(12.5, Some(PaymentType::Cash)).is_ok());
+
+        let missing_method = validate_receive_amount(12.5, None).unwrap_err();
+        assert!(matches!(missing_method, AppError::BadRequest(_)));
+
+        let negative = validate_receive_amount(-1.0, None).unwrap_err();
+        assert!(matches!(negative, AppError::BadRequest(_)));
     }
 
     #[test]
