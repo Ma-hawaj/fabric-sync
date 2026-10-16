@@ -76,11 +76,30 @@ describe('CustomerDetailsSheet', () => {
     // keep their grid positions.
     expect(screen.queryByText('Waist')).toBeTruthy()
     expect(screen.queryByText('108')).toBeTruthy()
-    // Body Dimensions has 23 fields and 2 recorded values; Style &
+    // Body Dimensions has 21 fields and 2 recorded values; Style &
     // Finishing has 2 fields and 1 recorded value; Pockets has 5 fields
     // and none recorded. Every other slot holds a placeholder.
     // (The sheet renders in a portal, so query the document body.)
-    expect(document.body.querySelectorAll('[data-empty]').length).toBe(27)
+    expect(document.body.querySelectorAll('[data-empty]').length).toBe(25)
+  })
+
+  it('shows the record type and fit above the diagram groups', () => {
+    renderSheet({
+      ...CUSTOMER,
+      measurements: [
+        { ...CUSTOMER.measurements[0], type: 'thobe', fit: 'loose' },
+      ],
+    })
+
+    expect(screen.queryByText('Record Details')).toBeTruthy()
+    expect(screen.queryByText('thobe')).toBeTruthy()
+    expect(screen.queryByText('loose')).toBeTruthy()
+  })
+
+  it('hides the record details for a legacy snapshot without them', () => {
+    renderSheet(CUSTOMER)
+
+    expect(screen.queryByText('Record Details')).toBeNull()
   })
 
   it('draws the thob sketch alongside the measurements', () => {

@@ -2,6 +2,14 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::error::AppError;
+
+// What a measurement snapshot describes: the customer's body as measured, an
+// existing thobe copied stitch-for-stitch, or a sample kept on file. How the
+// garment should be cut: loose, fitted, or somewhere in between.
+pub const MEASUREMENT_TYPES: &[&str] = &["body", "thobe", "sample"];
+pub const MEASUREMENT_FITS: &[&str] = &["loose", "fit", "medium"];
+
 // Decoded from Postgres' `to_jsonb(measurements)` (see repository.rs), whose
 // keys are the raw column names, then re-serialized to the frontend as
 // camelCase — hence the asymmetric rename_all. `date` is the one field whose
@@ -14,6 +22,12 @@ pub struct Measurement {
     pub customer_id: Uuid,
     #[serde(rename(deserialize = "measurement_date"))]
     pub date: NaiveDate,
+
+    // Record-level choices rather than lengths: what was measured and how to
+    // cut it. Nullable so legacy rows (written before these existed) keep
+    // reading — every new write has to set them (see validate_measurement).
+    pub r#type: Option<String>,
+    pub fit: Option<String>,
 
     pub length_fl: Option<f64>,
     pub length_bl: Option<f64>,
@@ -37,8 +51,6 @@ pub struct Measurement {
     pub bottom_folding: Option<f64>,
     pub full_body: Option<f64>,
     pub sleeve_half: Option<f64>,
-    pub button: Option<f64>,
-    pub button_fold: Option<f64>,
     pub open_fold: Option<f64>,
     pub front_pocket_length: Option<f64>,
     pub front_pocket_length_by_width: Option<String>,
@@ -83,6 +95,9 @@ pub struct CustomerInvoiceSummary {
 pub struct CreateMeasurementInput {
     pub date: NaiveDate,
 
+    pub r#type: Option<String>,
+    pub fit: Option<String>,
+
     pub length_fl: Option<f64>,
     pub length_bl: Option<f64>,
     pub chest: Option<f64>,
@@ -105,8 +120,6 @@ pub struct CreateMeasurementInput {
     pub bottom_folding: Option<f64>,
     pub full_body: Option<f64>,
     pub sleeve_half: Option<f64>,
-    pub button: Option<f64>,
-    pub button_fold: Option<f64>,
     pub open_fold: Option<f64>,
     pub front_pocket_length: Option<f64>,
     pub front_pocket_length_by_width: Option<String>,
@@ -144,6 +157,27 @@ pub fn measurement_values_equal(a: &CreateMeasurementInput, b: &CreateMeasuremen
     } == *b
 }
 
+// Type and fit are required on every new snapshot. Legacy rows predate them
+// and stay NULL in the database — validation only runs on writes, never on
+// reads, so those rows keep loading.
+pub fn validate_measurement(measurement: &CreateMeasurementInput) -> Result<(), AppError> {
+    let r#type = measurement.r#type.as_deref().unwrap_or("");
+    if !MEASUREMENT_TYPES.contains(&r#type) {
+        return Err(AppError::BadRequest(
+            "a measurement needs a type of body, thobe, or sample".to_string(),
+        ));
+    }
+
+    let fit = measurement.fit.as_deref().unwrap_or("");
+    if !MEASUREMENT_FITS.contains(&fit) {
+        return Err(AppError::BadRequest(
+            "a measurement needs a fit of loose, fit, or medium".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,6 +185,8 @@ mod tests {
     fn measurement(chest: Option<f64>, pocket: Option<&str>) -> CreateMeasurementInput {
         CreateMeasurementInput {
             date: NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+            r#type: Some("body".to_string()),
+            fit: Some("medium".to_string()),
             length_fl: None,
             length_bl: None,
             chest,
@@ -173,8 +209,6 @@ mod tests {
             bottom_folding: None,
             full_body: None,
             sleeve_half: None,
-            button: None,
-            button_fold: None,
             open_fold: None,
             front_pocket_length: None,
             front_pocket_length_by_width: pocket.map(str::to_string),
@@ -220,12 +254,13 @@ mod tests {
             "id": "4b87bb2b-cf72-476c-8446-7b30c46f0ad5",
             "customer_id": "adcdd125-7101-4e93-ba4d-c9a7fe9fca1f",
             "measurement_date": "2026-07-01",
+            "type": "thobe", "fit": "loose",
             "length_fl": 152.5, "length_bl": null, "chest": 108.0, "waist": null,
             "hips": null, "shoulder": null, "shoulder_down": null, "sleeve_length": null, "neck": null,
             "open_hand": null, "open_hand_folding": null, "chest_up": null,
             "cuff_width": null, "cuffling": null, "neck_width": null, "arm_hole": null,
             "fo_width": null, "fo": null, "bottom": null, "bottom_folding": null, "full_body": null,
-            "sleeve_half": null, "button": null, "button_fold": null, "open_fold": null,
+            "sleeve_half": null, "open_fold": null,
             "front_pocket_length": null,
             "front_pocket_length_by_width": "16x14",
             "side_pocket_length": null, "side_pocket_length_by_width": null,
@@ -239,16 +274,80 @@ mod tests {
             Some("16x14")
         );
         assert_eq!(measurement.length_fl, Some(152.5));
+        assert_eq!(measurement.r#type.as_deref(), Some("thobe"));
+        assert_eq!(measurement.fit.as_deref(), Some("loose"));
 
         let api_json = serde_json::to_value(&measurement).unwrap();
         assert_eq!(api_json["lengthFl"], 152.5);
         assert!(api_json["fullBody"].is_null());
         assert!(api_json["fo"].is_null());
+        assert_eq!(api_json["type"], "thobe");
+        assert_eq!(api_json["fit"], "loose");
         assert_eq!(
             api_json["customerId"],
             "adcdd125-7101-4e93-ba4d-c9a7fe9fca1f"
         );
         assert_eq!(api_json["date"], "2026-07-01");
         assert!(api_json.get("measurement_date").is_none());
+    }
+
+    #[test]
+    fn validate_measurement_accepts_known_types_and_fits() {
+        for r#type in MEASUREMENT_TYPES {
+            for fit in MEASUREMENT_FITS {
+                let mut m = measurement(None, None);
+                m.r#type = Some(r#type.to_string());
+                m.fit = Some(fit.to_string());
+                assert!(validate_measurement(&m).is_ok());
+            }
+        }
+    }
+
+    #[test]
+    fn validate_measurement_rejects_a_missing_or_noncanonical_type() {
+        for r#type in [
+            None,
+            Some(""),
+            Some("shirt"),
+            Some("BODY"),
+            Some(" body"),
+            Some("thobe "),
+            Some("\tsample\n"),
+        ] {
+            let mut m = measurement(None, None);
+            m.r#type = r#type.map(str::to_string);
+            let error = validate_measurement(&m).unwrap_err();
+            assert!(matches!(error, AppError::BadRequest(_)));
+        }
+    }
+
+    #[test]
+    fn validate_measurement_rejects_a_missing_or_noncanonical_fit() {
+        for fit in [
+            None,
+            Some(""),
+            Some("tight"),
+            Some("LOOSE"),
+            Some(" loose"),
+            Some("fit "),
+            Some("\tmedium\n"),
+        ] {
+            let mut m = measurement(None, None);
+            m.fit = fit.map(str::to_string);
+            let error = validate_measurement(&m).unwrap_err();
+            assert!(matches!(error, AppError::BadRequest(_)));
+        }
+    }
+
+    #[test]
+    fn measurement_values_equal_notices_a_changed_type_or_fit() {
+        let a = measurement(None, None);
+        let mut b = a.clone();
+        b.r#type = Some("sample".to_string());
+        assert!(!measurement_values_equal(&a, &b));
+
+        let mut c = a.clone();
+        c.fit = Some("loose".to_string());
+        assert!(!measurement_values_equal(&a, &c));
     }
 }

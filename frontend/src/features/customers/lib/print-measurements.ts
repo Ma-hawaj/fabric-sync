@@ -45,8 +45,6 @@ const MEASUREMENT_LABELS_AR: Record<string, string> = {
   bottomFolding: 'ثنية الأسفل',
   fullBody: 'الجسم الكامل',
   sleeveHalf: 'نصف الكم',
-  button: 'الأزرار',
-  buttonFold: 'ثنية الزر',
   openFold: 'الثنية المفتوحة',
   sleeveLength: 'طول الكم',
   neck: 'الرقبة',
@@ -63,6 +61,8 @@ const MEASUREMENT_LABELS_AR: Record<string, string> = {
   sidePocketLength: 'طول الجيب الجانبي',
   sidePocketLengthByWidth: 'الجيب الجانبي بالعرض',
   mobilePocketLengthByWidth: 'جيب الجوال بالعرض',
+  type: 'النوع',
+  fit: 'القصّة',
 }
 
 function escapeHtml(str: string): string {
@@ -238,10 +238,24 @@ function measurementsGrid(measurement: Measurement): string {
   ).join('')
 
   const date = formatMeasurementDate(measurement.date)
+  // Record-level choices ride the Recorded card rather than any diagram
+  // group — they describe the record, and legacy snapshots may not have
+  // them, so each row only prints when captured.
+  const metaRows = [
+    measurement.type
+      ? `<div class="m"><span>النوع<span class="en">Type</span></span>` +
+        `<span class="num">${escapeHtml(measurement.type)}</span></div>`
+      : '',
+    measurement.fit
+      ? `<div class="m"><span>القصّة<span class="en">Fit</span></span>` +
+        `<span class="num">${escapeHtml(measurement.fit)}</span></div>`
+      : '',
+  ].join('')
   return (
     groups +
     `<div class="measurement-group"><h3>المقايسة · Recorded</h3>` +
     `<div class="measurement-grid">` +
+    metaRows +
     `<div class="m"><span>تاريخ المقايسة<span class="en">Measured on</span></span>` +
     `<span class="num" dir="ltr">${escapeHtml(date)}</span></div>` +
     `</div></div>`

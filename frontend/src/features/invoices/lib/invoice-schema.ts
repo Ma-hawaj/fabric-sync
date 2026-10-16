@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 import {
+  MEASUREMENT_FITS,
+  MEASUREMENT_TYPES,
+} from '@/features/customers/types/measurement-form'
+import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
   computeOrderLineTotal,
@@ -12,11 +16,15 @@ import {
 // types/invoice-form.ts.
 const numberInputSchema = z.union([z.number(), z.literal('')])
 
-// Measurements have no validation rules — every field is optional free
-// text/numbers — so there's nothing for zod to check. `z.custom` keeps the
-// real MeasurementDraft type flowing through without enumerating all 24
-// fields for no benefit.
+// Numeric and text measurement fields have no validation rules — every one
+// is optional free text/numbers — so there's nothing for zod to check there
+// and `z.custom` keeps the real MeasurementDraft type flowing through without
+// enumerating them. The record-level type/fit choices are required instead,
+// checked in customerDraftSchema's superRefine below.
 const measurementDraftSchema = z.custom<MeasurementDraft>()
+
+const MEASUREMENT_TYPE_VALUES = MEASUREMENT_TYPES as readonly string[]
+const MEASUREMENT_FIT_VALUES = MEASUREMENT_FITS as readonly string[]
 
 const orderDraftSchema = z
   .object({
@@ -79,22 +87,41 @@ const customerDraftSchema = z
           path: ['existingCustomerId'],
         })
       }
-      return
+    } else {
+      if (!customer.name.trim()) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Enter a full name.',
+          path: ['name'],
+        })
+      }
+
+      if (!customer.mobileNo.trim()) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Enter a phone number.',
+          path: ['mobileNo'],
+        })
+      }
     }
 
-    if (!customer.name.trim()) {
+    // Type and fit describe the measurement record itself, so they are the
+    // only measurement fields the form requires — a legacy snapshot predates
+    // them and arrives blank, to be picked before saving. Checked for both
+    // new and existing customers, after the identity checks above so those
+    // keep reporting first: either block writes a snapshot.
+    if (!MEASUREMENT_TYPE_VALUES.includes(customer.measurement.type)) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Enter a full name.',
-        path: ['name'],
+        message: 'Pick a measurement type.',
+        path: ['measurement', 'type'],
       })
     }
-
-    if (!customer.mobileNo.trim()) {
+    if (!MEASUREMENT_FIT_VALUES.includes(customer.measurement.fit)) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Enter a phone number.',
-        path: ['mobileNo'],
+        message: 'Pick a fit.',
+        path: ['measurement', 'fit'],
       })
     }
   })

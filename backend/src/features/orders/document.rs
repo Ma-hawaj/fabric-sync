@@ -309,8 +309,6 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
     push_number(&mut values, "bottomFolding", m.bottom_folding);
     push_number(&mut values, "fullBody", m.full_body);
     push_number(&mut values, "sleeveHalf", m.sleeve_half);
-    push_number(&mut values, "button", m.button);
-    push_number(&mut values, "buttonFold", m.button_fold);
     push_number(&mut values, "openFold", m.open_fold);
     push_number(&mut values, "frontPocketLength", m.front_pocket_length);
 
@@ -330,6 +328,10 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
         "mobilePocketLengthByWidth",
         &m.mobile_pocket_length_by_width,
     );
+    // Record-level choices rather than lengths: what was measured and how to
+    // cut it. Text, so they print without a unit — see caption_text.
+    push_text(&mut values, "type", &m.r#type);
+    push_text(&mut values, "fit", &m.fit);
 
     values
 }
@@ -587,16 +589,6 @@ fn thob_fields() -> Vec<FieldDef> {
     bottom_folding.dims = vec![segment(314.0, 408.0, 314.0, 430.0)];
     bottom_folding.guides = vec![segment(314.0, 419.0, 352.0, 419.0)];
 
-    // The button stand runs down the placket, with its fold as a short
-    // arrow at the foot of the stand.
-    let mut button = marker((308.0, 141.0));
-    button.dims = vec![segment(258.0, 96.0, 258.0, 186.0)];
-    button.guides = vec![segment(258.0, 141.0, 290.0, 141.0)];
-
-    let mut button_fold = marker((310.0, 197.0));
-    button_fold.dims = vec![segment(258.0, 190.0, 258.0, 204.0)];
-    button_fold.guides = vec![segment(258.0, 197.0, 292.0, 197.0)];
-
     // The open fold sits low on the front panel, clear of the hem arrows.
     let mut open_fold = marker((140.0, 407.0));
     open_fold.dims = vec![segment(200.0, 400.0, 200.0, 414.0)];
@@ -690,14 +682,6 @@ fn thob_fields() -> Vec<FieldDef> {
         ),
         field("foWidth", "Fo Width", true, ThobView::Front, fo_width),
         field("fo", "Fo", true, ThobView::Front, fo),
-        field("button", "Button", true, ThobView::Front, button),
-        field(
-            "buttonFold",
-            "Button Fold",
-            true,
-            ThobView::Front,
-            button_fold,
-        ),
         field("openFold", "Open Fold", true, ThobView::Front, open_fold),
         field("bottom", "Bottom", true, ThobView::Front, bottom),
         field(
@@ -1296,6 +1280,8 @@ mod tests_support {
             id: uuid::Uuid::nil(),
             customer_id: uuid::Uuid::nil(),
             date: chrono::NaiveDate::from_ymd_opt(2026, 7, 30).unwrap(),
+            r#type: Some("body".to_string()),
+            fit: Some("medium".to_string()),
             length_fl: Some(120.0),
             length_bl: None,
             chest: Some(50.0),
@@ -1318,8 +1304,6 @@ mod tests_support {
             bottom_folding: None,
             full_body: None,
             sleeve_half: None,
-            button: None,
-            button_fold: None,
             open_fold: None,
             front_pocket_length: None,
             front_pocket_length_by_width: None,

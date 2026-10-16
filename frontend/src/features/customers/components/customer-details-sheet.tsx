@@ -237,6 +237,21 @@ export function CustomerDetailsSheet({
                   <div className="@container animate-in fade-in slide-in-from-bottom-2 duration-200">
                     <div className="grid gap-5 @2xl:grid-cols-[minmax(0,1fr)_16rem] @4xl:grid-cols-[minmax(0,1fr)_21rem]">
                       <div className="order-2 space-y-6 @2xl:order-1">
+                        {/* Record-level choices, not lengths: what was
+                            measured and how to cut it. Legacy snapshots
+                            predate them and simply show nothing here. */}
+                        {(activeMeasurement.type ?? activeMeasurement.fit) && (
+                          <StyleSection title="Record Details">
+                            <MetricItem
+                              label="Type"
+                              value={activeMeasurement.type ?? undefined}
+                            />
+                            <MetricItem
+                              label="Fit"
+                              value={activeMeasurement.fit ?? undefined}
+                            />
+                          </StyleSection>
+                        )}
                         {MEASUREMENT_GROUPS.map((group) => {
                           const fields = fieldsInGroup(group.id)
                           return (

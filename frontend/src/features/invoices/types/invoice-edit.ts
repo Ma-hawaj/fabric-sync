@@ -4,6 +4,8 @@ import type { InvoicePayment } from './invoice-detail'
 /** Backend measurement fields as serialized camelCase (numbers stay null). */
 export interface InvoiceEditMeasurement {
   date: string
+  type: string | null
+  fit: string | null
   lengthFl: number | null
   lengthBl: number | null
   chest: number | null
@@ -23,8 +25,6 @@ export interface InvoiceEditMeasurement {
   foWidth: number | null
   fo: number | null
   sleeveHalf: number | null
-  button: number | null
-  buttonFold: number | null
   openFold: number | null
   bottom: number | null
   bottomFolding: number | null
