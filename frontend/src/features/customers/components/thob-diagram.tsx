@@ -371,7 +371,9 @@ export function ThobDiagram({
   showLabels = false,
   placeholder = null,
   width = '100%',
-  stroke = '#222',
+  // currentColor so the sheet follows the theme (light and dark) instead of
+  // hardcoding ink. The print exports keep their own dark-on-paper colours.
+  stroke = 'currentColor',
   className,
 }: ThobDiagramProps) {
   const m = values as Record<string, string | number | null | undefined>
@@ -391,7 +393,7 @@ export function ThobDiagram({
       xmlns="http://www.w3.org/2000/svg"
       role="img"
       aria-label="Thobe measurements"
-      className={cn('w-full', className)}
+      className={cn('w-full text-foreground', className)}
     >
       {/* ===================== FRONT ===================== */}
       <g {...common}>
@@ -476,7 +478,7 @@ export function ThobDiagram({
             x: number
             y: number
             size: number
-            fill: string
+            opacity: number
             anchor: string
             str: string
           }[] = []
@@ -485,7 +487,7 @@ export function ThobDiagram({
               x: f.x,
               y: f.y - f.size * 0.85 - 2,
               size: 9,
-              fill: '#777',
+              opacity: 0.6,
               anchor: 'middle',
               str: f.label,
             })
@@ -496,7 +498,7 @@ export function ThobDiagram({
               x: f.x,
               y: f.y,
               size: f.size,
-              fill: has ? '#000' : '#aaa',
+              opacity: has ? 1 : 0.45,
               anchor: 'middle',
               str: text,
             })
@@ -523,7 +525,8 @@ export function ThobDiagram({
                     y={it.y}
                     fontSize={it.size}
                     textAnchor={it.anchor as 'middle'}
-                    fill={it.fill}
+                    fill="currentColor"
+                    fillOpacity={it.opacity}
                   >
                     {it.str}
                   </text>

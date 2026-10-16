@@ -712,6 +712,9 @@ mod tests {
         // One sheet, front and back together.
         assert!(html.contains("Thobe Sheet"));
         assert!(html.contains("0 -32 800 667"));
+        // Every ellipse (collars, cuffs, yoke) carries the garment class —
+        // without it SVG falls back to a solid black fill on the paper.
+        assert_eq!(html.matches("<ellipse class=\"thob-garment\"").count(), 7);
         // The document is titled by the order's own readable number, not an
         // id prefix.
         assert!(html.contains("ORD-12"));

@@ -84,7 +84,7 @@
    ellipses, dims, arrows, slots) — the template only renders. A slot whose
    value the snapshot didn't record renders nothing. #}
 {%- macro thobe_ellipse(e) -%}
-  <ellipse cx="{{ e.cx }}" cy="{{ e.cy }}" rx="{{ e.rx }}" ry="{{ e.ry }}"{% if e.transform %} transform="{{ e.transform }}"{% endif %}{% if e.stroke_width %} stroke-width="{{ e.stroke_width }}"{% endif %} />
+  <ellipse class="thob-garment" cx="{{ e.cx }}" cy="{{ e.cy }}" rx="{{ e.rx }}" ry="{{ e.ry }}"{% if e.transform %} transform="{{ e.transform }}"{% endif %}{% if e.stroke_width %} stroke-width="{{ e.stroke_width }}"{% endif %} />
 {%- endmacro -%}
 {# One measurement cell: the recorded value, or a blank placeholder that
    holds the column so a pair's second field never slides left when the
