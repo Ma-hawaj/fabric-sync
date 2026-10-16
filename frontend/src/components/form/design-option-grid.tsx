@@ -3,7 +3,8 @@ import { cn } from '@/lib/utils'
 interface DesignOption {
   id: string
   label: string
-  image: string
+  /** Absent for text-only options (rows with no uploaded illustration yet). */
+  image?: string | null
 }
 
 interface DesignOptionGridProps {
@@ -48,12 +49,21 @@ export function DesignOptionGrid({
               : 'border-border hover:bg-muted hover:text-foreground',
           )}
         >
-          <img
-            src={option.image}
-            alt=""
-            draggable={false}
-            className="h-16 w-full object-contain"
-          />
+          {option.image ? (
+            <img
+              src={option.image}
+              alt=""
+              draggable={false}
+              className="h-16 w-full object-contain"
+            />
+          ) : (
+            <span
+              aria-hidden
+              className="flex h-16 w-full items-center justify-center rounded bg-muted px-1 text-center text-sm font-semibold text-muted-foreground"
+            >
+              {option.label}
+            </span>
+          )}
           <span
             className={cn(
               'line-clamp-2 w-full text-center text-[10px] leading-tight',

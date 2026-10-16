@@ -1,4 +1,5 @@
 pub mod customers;
+pub mod design_options;
 pub mod gift_cards;
 pub mod health;
 pub mod invoices;

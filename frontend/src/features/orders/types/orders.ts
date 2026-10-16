@@ -95,6 +95,7 @@ export interface Order {
    */
   thobeType: string | null
   fPocket: string | null
+  sPocket: string | null
   collar: string | null
   sleeve: string | null
   patti: string | null

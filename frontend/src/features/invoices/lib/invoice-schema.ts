@@ -23,6 +23,7 @@ const orderDraftSchema = z
     key: z.string(),
     thobeType: z.string(),
     fPocket: z.string(),
+    sPocket: z.string(),
     collar: z.string(),
     sleeve: z.string(),
     patti: z.string(),

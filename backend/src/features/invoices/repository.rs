@@ -27,6 +27,7 @@ pub struct InvoiceDetailRows {
 fn order_specification(
     thobe_type: Option<String>,
     f_pocket: Option<String>,
+    s_pocket: Option<String>,
     collar: Option<String>,
     sleeve: Option<String>,
     patti: Option<String>,
@@ -36,6 +37,7 @@ fn order_specification(
     let parts: Vec<String> = [
         ("Thobe", thobe_type),
         ("Pocket", f_pocket),
+        ("Side pocket", s_pocket),
         ("Collar", collar),
         ("Sleeve", sleeve),
         ("Patti", patti),
@@ -141,6 +143,7 @@ pub async fn fetch_invoice_detail(
             o.price::float8 AS "price!",
             o.thobe_type,
             o.f_pocket,
+            o.s_pocket,
             o.collar,
             o.sleeve,
             o.patti,
@@ -199,6 +202,7 @@ pub async fn fetch_invoice_detail(
                 collar: row.collar,
                 sleeve: row.sleeve,
                 f_pocket: row.f_pocket,
+                s_pocket: row.s_pocket,
                 patti: row.patti,
                 emd: row.emd,
                 more_details: row.more_details,
@@ -210,6 +214,7 @@ pub async fn fetch_invoice_detail(
                 detail: order_specification(
                     design_values.thobe_type.clone(),
                     design_values.f_pocket.clone(),
+                    design_values.s_pocket.clone(),
                     design_values.collar.clone(),
                     design_values.sleeve.clone(),
                     design_values.patti.clone(),
@@ -680,10 +685,10 @@ pub async fn insert_order(
         r#"
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
-            thobe_type, f_pocket, collar, sleeve, patti, emd, more_details,
+            thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd, more_details,
             production_branch_id
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         "#,
         measurement_id,
         order.material_id,
@@ -692,6 +697,7 @@ pub async fn insert_order(
         order.price,
         order.thobe_type,
         order.f_pocket,
+        order.s_pocket,
         order.collar,
         order.sleeve,
         order.patti,
@@ -873,6 +879,7 @@ pub async fn fetch_invoice_edit(
             o.price::float8 AS "price!",
             o.thobe_type,
             o.f_pocket,
+            o.s_pocket,
             o.collar,
             o.sleeve,
             o.patti,
@@ -942,6 +949,7 @@ pub async fn fetch_invoice_edit(
             price: row.price,
             thobe_type: row.thobe_type,
             f_pocket: row.f_pocket,
+            s_pocket: row.s_pocket,
             collar: row.collar,
             sleeve: row.sleeve,
             patti: row.patti,
