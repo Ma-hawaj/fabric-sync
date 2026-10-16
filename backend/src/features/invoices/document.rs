@@ -226,6 +226,7 @@ pub async fn render_invoice_document(
         // alongside it because the template is the only consumer.
         // Pre-formatted day-first in the shop's timezone.
         invoice_date_time => format_datetime(&detail.date, timezone),
+        target_date => crate::document::format_date(&detail.target_date),
         // Deduplicated here rather than in the template: an invoice can carry
         // orders for several people, each line naming its own, and the header
         // wants each of them once.
