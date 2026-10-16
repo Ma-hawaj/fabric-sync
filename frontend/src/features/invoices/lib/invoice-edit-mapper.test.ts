@@ -24,32 +24,31 @@ function editFixture(): InvoiceEdit {
           date: '2026-07-19',
           type: 'body',
           fit: 'medium',
-          lengthFl: 152.5,
-          lengthBl: null,
+          frontHeight: 152.5,
+          backHeight: null,
           chest: 108,
           waist: null,
-          hips: null,
+          hip: null,
           shoulder: null,
           shoulderDown: null,
           sleeveLength: null,
-          neck: null,
+          neckSize: null,
           openHand: null,
-          openHandFolding: null,
           chestUp: null,
           cuffWidth: null,
-          cuffling: null,
+          cuffSize: null,
           neckWidth: null,
-          armHole: null,
+          armhole: null,
           foWidth: null,
           fo: null,
           sleeveHalf: null,
           openFold: null,
           bottom: null,
-          bottomFolding: null,
+          bottomFold: null,
           fullBody: null,
           frontPocketLength: null,
           frontPocketLengthByWidth: null,
-          sidePocketLength: null,
+          sidePocket: null,
           sidePocketLengthByWidth: null,
           mobilePocketLengthByWidth: null,
         },
@@ -115,10 +114,10 @@ describe('mapInvoiceEditToForm', () => {
     expect(customer.measurement.loadedFromId).toBe(
       '0197fdd2-6a67-7000-8000-000000000009',
     )
-    expect(customer.measurement.lengthFl).toBe(152.5)
+    expect(customer.measurement.frontHeight).toBe(152.5)
     expect(customer.measurement.chest).toBe(108)
     expect(customer.measurement.waist).toBe('')
-    expect(customer.measurement.sidePocketLength).toBe('')
+    expect(customer.measurement.sidePocket).toBe('')
     expect(customer.measurement.type).toBe('body')
     expect(customer.measurement.fit).toBe('medium')
 

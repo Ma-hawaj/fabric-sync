@@ -191,6 +191,7 @@ pub async fn render_invoice_document(
 ) -> Result<String, AppError> {
     let detail = service::get_invoice(state, invoice_id).await?;
     let branding = state.invoice_branding();
+    let timezone = state.timezone()?;
 
     let env = environment(branding)?;
     let template = env.get_template(TEMPLATE_NAME)?;
@@ -223,7 +224,9 @@ pub async fn render_invoice_document(
         // The invoice's creation moment, with the time of day — kept out of
         // the serialized invoice (which carries the raw timestamp) and passed
         // alongside it because the template is the only consumer.
-        invoice_date_time => format_datetime(&detail.date),
+        // Pre-formatted day-first in the shop's timezone.
+        invoice_date_time => format_datetime(&detail.date, timezone),
+        target_date => crate::document::format_date(&detail.target_date),
         // Deduplicated here rather than in the template: an invoice can carry
         // orders for several people, each line naming its own, and the header
         // wants each of them once.
@@ -369,11 +372,15 @@ mod tests {
     }
 
     #[test]
-    fn datetimes_print_as_date_plus_utc_time() {
+    fn datetimes_print_day_first_in_the_shop_timezone() {
         use chrono::TimeZone;
+        // 09:30 UTC is 12:30 in Bahrain (+03, no daylight saving).
         assert_eq!(
-            format_datetime(&chrono::Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap()),
-            "2026-07-30 09:30 UTC"
+            format_datetime(
+                &chrono::Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),
+                chrono_tz::Asia::Bahrain,
+            ),
+            "30-07-2026 12:30"
         );
     }
 

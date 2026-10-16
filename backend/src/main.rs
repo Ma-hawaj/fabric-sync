@@ -42,6 +42,9 @@ async fn main() -> Result<(), error::AppError> {
 
 async fn run() -> Result<(), error::AppError> {
     let config = Config::from_env();
+    // A misspelled TIMEZONE must refuse to boot rather than silently print
+    // UTC on every document.
+    config.timezone().map_err(error::AppError::Config)?;
     let address = SocketAddr::from(([0, 0, 0, 0], config.port));
     let listener = tokio::net::TcpListener::bind(address).await?;
     let db = PgPoolOptions::new()

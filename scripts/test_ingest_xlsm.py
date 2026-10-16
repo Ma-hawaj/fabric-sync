@@ -103,7 +103,7 @@ class ReadWorkbookTests(unittest.TestCase):
         for measurement in actual["measurements"]:
             self.assertEqual(measurement["values"]["bottom"], Decimal("29"))
             self.assertEqual(
-                measurement["values"]["bottom_folding"], Decimal("3"))
+                measurement["values"]["bottom_fold"], Decimal("3"))
             self.assertNotIn("button", measurement["values"])
             self.assertNotIn("button_fold", measurement["values"])
 

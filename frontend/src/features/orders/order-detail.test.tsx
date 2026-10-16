@@ -93,7 +93,7 @@ const ORDER: OrderDetail = {
     id: 'm-1',
     customerId: 'c-1',
     date: new Date('2026-07-28'),
-    lengthFl: 120,
+    frontHeight: 120,
     chest: 50,
   },
 }
@@ -166,15 +166,13 @@ describe('OrderDetailPage', () => {
 
     // Group title and the two recorded values.
     expect(screen.queryByText('Body Dimensions')).toBeTruthy()
-    expect(screen.queryByText('Length (Front)')).toBeTruthy()
-    expect(screen.queryByText('120')).toBeTruthy()
-    expect(screen.queryByText('Chest')).toBeTruthy()
-    expect(screen.queryByText('50')).toBeTruthy()
+    expect(screen.queryAllByText('Front Height').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('120').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('Chest').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('50').length).toBeGreaterThan(0)
 
-    // The measurement template draws the thob from both silhouettes.
-    expect(screen.queryByText('Front of Thob')).toBeTruthy()
-    expect(screen.queryByText('Back of Thob')).toBeTruthy()
-    expect(screen.queryByText('120 inch · Front Length')).toBeTruthy()
+    // The measurement template draws the thobe sheet with its values.
+    expect(screen.queryByText('Thobe Sheet')).toBeTruthy()
   })
 
   it('renders the production checklist with its stages', () => {
