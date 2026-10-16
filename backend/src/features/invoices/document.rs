@@ -379,7 +379,7 @@ mod tests {
                 &chrono::Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),
                 chrono_tz::Asia::Bahrain,
             ),
-            "30-07-2026 12:30 +03"
+            "30-07-2026 12:30"
         );
     }
 

@@ -29,17 +29,18 @@ pub(crate) fn format_quantity(value: f64) -> String {
 }
 
 /// A timestamp as the printed documents write it: the calendar date in the
-/// shop's timezone plus the time of day, day-first, e.g. "30-07-2026 12:30
-/// +03". Pre-formatted like the amounts, so editing a template can't change
-/// how a moment is written — serializing the raw timestamp would print UTC
-/// RFC 3339 into the page.
+/// shop's timezone plus the time of day, day-first, e.g. "30-07-2026 12:30".
+/// The zone itself is not printed — every document uses the one configured
+/// timezone. Pre-formatted like the amounts, so editing a template can't
+/// change how a moment is written — serializing the raw timestamp would print
+/// UTC RFC 3339 into the page.
 pub(crate) fn format_datetime(
     value: &chrono::DateTime<chrono::Utc>,
     timezone: chrono_tz::Tz,
 ) -> String {
     value
         .with_timezone(&timezone)
-        .format("%d-%m-%Y %H:%M %Z")
+        .format("%d-%m-%Y %H:%M")
         .to_string()
 }
 
@@ -83,17 +84,14 @@ mod tests {
         // 09:30 UTC is 12:30 in Bahrain (+03, no daylight saving).
         assert_eq!(
             format_datetime(&moment, chrono_tz::Asia::Bahrain),
-            "30-07-2026 12:30 +03"
+            "30-07-2026 12:30"
         );
     }
 
     #[test]
     fn datetimes_follow_whichever_zone_is_configured() {
         let moment = chrono::Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap();
-        assert_eq!(
-            format_datetime(&moment, chrono_tz::UTC),
-            "30-07-2026 09:30 UTC"
-        );
+        assert_eq!(format_datetime(&moment, chrono_tz::UTC), "30-07-2026 09:30");
     }
 
     #[test]
