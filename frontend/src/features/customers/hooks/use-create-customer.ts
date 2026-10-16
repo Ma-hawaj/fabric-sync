@@ -26,7 +26,6 @@ export function measurementPayload(measurement: MeasurementDraft) {
     sleeveLength: blankToNull(measurement.sleeveLength),
     neckSize: blankToNull(measurement.neckSize),
     openHand: blankToNull(measurement.openHand),
-    openHandFolding: blankToNull(measurement.openHandFolding),
     chestUp: blankToNull(measurement.chestUp),
     cuffWidth: blankToNull(measurement.cuffWidth),
     cuffSize: blankToNull(measurement.cuffSize),

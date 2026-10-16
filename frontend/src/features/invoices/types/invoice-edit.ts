@@ -16,7 +16,6 @@ export interface InvoiceEditMeasurement {
   sleeveLength: number | null
   neckSize: number | null
   openHand: number | null
-  openHandFolding: number | null
   chestUp: number | null
   cuffWidth: number | null
   cuffSize: number | null

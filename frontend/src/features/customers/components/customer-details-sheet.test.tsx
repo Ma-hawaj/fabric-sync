@@ -76,11 +76,11 @@ describe('CustomerDetailsSheet', () => {
     // keep their grid positions.
     expect(screen.queryByText('Waist')).toBeTruthy()
     expect(screen.queryAllByText('108').length).toBeGreaterThan(0)
-    // Body Dimensions has 21 fields and 2 recorded values; Style &
+    // Body Dimensions has 20 fields and 2 recorded values; Style &
     // Finishing has 2 fields and 1 recorded value; Pockets has 5 fields
     // and none recorded. Every other slot holds a placeholder.
     // (The sheet renders in a portal, so query the document body.)
-    expect(document.body.querySelectorAll('[data-empty]').length).toBe(25)
+    expect(document.body.querySelectorAll('[data-empty]').length).toBe(24)
   })
 
   it('shows the record type and fit above the diagram groups', () => {

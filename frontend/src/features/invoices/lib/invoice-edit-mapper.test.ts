@@ -34,7 +34,6 @@ function editFixture(): InvoiceEdit {
           sleeveLength: null,
           neckSize: null,
           openHand: null,
-          openHandFolding: null,
           chestUp: null,
           cuffWidth: null,
           cuffSize: null,

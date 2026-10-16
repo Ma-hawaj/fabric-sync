@@ -57,7 +57,6 @@
   "neckSize": "Neck Size",
   "neckWidth": "Neck Width",
   "openHand": "Open Hand",
-  "openHandFolding": "Open Hand Folding",
   "cuffWidth": "Cuff Width",
   "cuffSize": "Cuff Size",
   "armhole": "Armhole",
@@ -81,7 +80,7 @@
    further up the list wasn't recorded. A single-element pair is padded
    with "" — `order.measurement[""]` is undefined and renders as a blank
    cell that holds the column. #}
-{%- set body_pairs = [["frontHeight", "backHeight"], ["shoulder", "shoulderDown"], ["chest", "chestUp"], ["waist", "hip"], ["sleeveLength", "sleeveHalf"], ["neckSize", "neckWidth"], ["openHand", "openHandFolding"], ["cuffWidth", "cuffSize"], ["armhole", "bottom"], ["bottomFold", "fullBody"], ["openFold", ""]] -%}
+{%- set body_pairs = [["frontHeight", "backHeight"], ["shoulder", "shoulderDown"], ["chest", "chestUp"], ["waist", "hip"], ["sleeveLength", "sleeveHalf"], ["neckSize", "neckWidth"], ["openHand", ""], ["cuffWidth", "cuffSize"], ["armhole", "bottom"], ["bottomFold", "fullBody"], ["openFold", ""]] -%}
 {%- set pocket_pairs = [["frontPocketLength", "frontPocketLengthByWidth"], ["sidePocket", "sidePocketLengthByWidth"], ["mobilePocketLengthByWidth", ""]] -%}
 {%- set style_pairs = [["foWidth", "fo"], ["type", "fit"]] -%}
 

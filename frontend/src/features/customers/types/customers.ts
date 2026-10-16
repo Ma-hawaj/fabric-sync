@@ -18,7 +18,6 @@ export interface Measurement {
   sleeveLength?: number | null
   neckSize?: number | null
   openHand?: number | null
-  openHandFolding?: number | null
 
   // Extra Details
   chestUp?: number | null

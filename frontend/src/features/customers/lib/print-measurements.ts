@@ -41,7 +41,6 @@ const MEASUREMENT_LABELS_AR: Record<string, string> = {
   neckSize: 'الرقبة',
   neckWidth: 'عرض الرقبة',
   openHand: 'فتحة اليد',
-  openHandFolding: 'ثنية فتحة اليد',
   cuffWidth: 'عرض الأسوارة',
   cuffSize: 'الكفلنج',
   armhole: 'فتحة الإبط',

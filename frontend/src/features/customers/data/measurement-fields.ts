@@ -39,9 +39,8 @@ const TEXT: MeasurementInput = { kind: 'text' }
 // backHeight, neckSize, hip, armhole, bottomFold, frontPocketLength,
 // sidePocket and cuffSize are the renamed keys, and the back shoulder slot
 // reads the plain shoulder width. Fields with no slot on the drawing
-// (openHandFolding, sidePocketLengthByWidth, mobilePocketLengthByWidth)
-// still render in the form and print in the measurement grid — table-only
-// by design.
+// (sidePocketLengthByWidth, mobilePocketLengthByWidth) still render in the
+// form and print in the measurement grid — table-only by design.
 export const MEASUREMENT_FIELDS: MeasurementField[] = [
   { name: 'frontHeight', label: 'Front Height', group: 'body', input: NUMBER },
   { name: 'backHeight', label: 'Back Height', group: 'body', input: NUMBER },
@@ -70,12 +69,6 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
   },
   { name: 'sleeveHalf', label: 'Sleeve Half', group: 'body', input: NUMBER },
   { name: 'openHand', label: 'Open Hand', group: 'body', input: NUMBER },
-  {
-    name: 'openHandFolding',
-    label: 'Open Hand Folding',
-    group: 'body',
-    input: NUMBER,
-  },
   { name: 'cuffWidth', label: 'Cuff Width', group: 'body', input: NUMBER },
   { name: 'cuffSize', label: 'Cuff Size', group: 'body', input: NUMBER },
   { name: 'openFold', label: 'Open Fold', group: 'body', input: NUMBER },

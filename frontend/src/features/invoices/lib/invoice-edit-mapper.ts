@@ -35,7 +35,6 @@ function measurementToDraft(
     sleeveLength: measurement.sleeveLength ?? '',
     neckSize: measurement.neckSize ?? '',
     openHand: measurement.openHand ?? '',
-    openHandFolding: measurement.openHandFolding ?? '',
     chestUp: measurement.chestUp ?? '',
     cuffWidth: measurement.cuffWidth ?? '',
     cuffSize: measurement.cuffSize ?? '',

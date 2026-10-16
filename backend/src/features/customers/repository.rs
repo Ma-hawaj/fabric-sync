@@ -137,7 +137,7 @@ pub async fn insert_measurement(
         INSERT INTO measurements (
             customer_id, measurement_date, type, fit,
             front_height, back_height, chest, waist, hip, shoulder, shoulder_down,
-            sleeve_length, neck_size, open_hand, open_hand_folding, chest_up,
+            sleeve_length, neck_size, open_hand, chest_up,
             cuff_width, cuff_size, neck_width, armhole, fo_width, fo, bottom, bottom_fold,
             full_body, sleeve_half, open_fold, front_pocket_length,
             front_pocket_length_by_width,
@@ -147,11 +147,11 @@ pub async fn insert_measurement(
         VALUES (
             $1, $2, $3, $4,
             $5::float8, $6::float8, $7::float8, $8::float8, $9::float8, $10::float8, $11::float8,
-            $12::float8, $13::float8, $14::float8, $15::float8, $16::float8,
-            $17::float8, $18::float8, $19::float8, $20::float8, $21::float8, $22::float8,
-            $23::float8, $24::float8, $25::float8, $26::float8, $27::float8, $28::float8,
-            $29, $30::float8, $31,
-            $32
+            $12::float8, $13::float8, $14::float8, $15::float8,
+            $16::float8, $17::float8, $18::float8, $19::float8, $20::float8, $21::float8,
+            $22::float8, $23::float8, $24::float8, $25::float8, $26::float8, $27::float8,
+            $28, $29::float8, $30,
+            $31
         )
         RETURNING id
         "#,
@@ -169,7 +169,6 @@ pub async fn insert_measurement(
         measurement.sleeve_length,
         measurement.neck_size,
         measurement.open_hand,
-        measurement.open_hand_folding,
         measurement.chest_up,
         measurement.cuff_width,
         measurement.cuff_size,
@@ -205,7 +204,7 @@ pub async fn latest_measurement(
             front_height::float8, back_height::float8, chest::float8, waist::float8,
             hip::float8, shoulder::float8, shoulder_down::float8,
             sleeve_length::float8, neck_size::float8, open_hand::float8,
-            open_hand_folding::float8, chest_up::float8,
+            chest_up::float8,
             cuff_width::float8, cuff_size::float8, neck_width::float8, armhole::float8,
             fo_width::float8, fo::float8, bottom::float8, bottom_fold::float8,
             full_body::float8, sleeve_half::float8,
@@ -240,7 +239,6 @@ pub async fn latest_measurement(
                 sleeve_length: row.sleeve_length,
                 neck_size: row.neck_size,
                 open_hand: row.open_hand,
-                open_hand_folding: row.open_hand_folding,
                 chest_up: row.chest_up,
                 cuff_width: row.cuff_width,
                 cuff_size: row.cuff_size,

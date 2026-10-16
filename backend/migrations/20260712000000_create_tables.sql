@@ -90,7 +90,6 @@ CREATE TABLE measurements (
     sleeve_length NUMERIC(6, 2),
     neck_size NUMERIC(6, 2),
     open_hand NUMERIC(6, 2),
-    open_hand_folding NUMERIC(6, 2),
     chest_up NUMERIC(6, 2),
     cuff_width NUMERIC(6, 2),
     cuff_size NUMERIC(6, 2),

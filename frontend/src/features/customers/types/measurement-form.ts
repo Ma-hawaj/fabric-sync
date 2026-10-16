@@ -37,7 +37,6 @@ export interface MeasurementDraft {
   sleeveLength: NumberInput
   neckSize: NumberInput
   openHand: NumberInput
-  openHandFolding: NumberInput
   chestUp: NumberInput
   cuffWidth: NumberInput
   cuffSize: NumberInput
@@ -73,7 +72,6 @@ export function createEmptyMeasurement(): MeasurementDraft {
     sleeveLength: '',
     neckSize: '',
     openHand: '',
-    openHandFolding: '',
     chestUp: '',
     cuffWidth: '',
     cuffSize: '',

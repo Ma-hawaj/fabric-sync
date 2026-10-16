@@ -244,7 +244,6 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
     push_number(&mut values, "neckSize", m.neck_size);
     push_number(&mut values, "neckWidth", m.neck_width);
     push_number(&mut values, "openHand", m.open_hand);
-    push_number(&mut values, "openHandFolding", m.open_hand_folding);
     push_number(&mut values, "cuffWidth", m.cuff_width);
     push_number(&mut values, "cuffSize", m.cuff_size);
     push_number(&mut values, "armhole", m.armhole);
@@ -1029,7 +1028,6 @@ mod tests_support {
             sleeve_length: Some(60.0),
             neck_size: None,
             open_hand: None,
-            open_hand_folding: None,
             chest_up: None,
             cuff_width: None,
             cuff_size: None,
