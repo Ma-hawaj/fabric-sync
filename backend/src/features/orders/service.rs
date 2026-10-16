@@ -369,6 +369,7 @@ fn assemble_order(
         received_at: row.received_at,
         thobe_type: row.thobe_type,
         f_pocket: row.f_pocket,
+        s_pocket: row.s_pocket,
         collar: row.collar,
         sleeve: row.sleeve,
         patti: row.patti,

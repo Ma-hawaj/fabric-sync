@@ -65,6 +65,7 @@ export const getDesignOptionColumns = (
       options: [
         { label: 'Thobe Type', value: 'Thobe Type' },
         { label: 'Front Pocket', value: 'Front Pocket' },
+        { label: 'Side Pocket', value: 'Side Pocket' },
         { label: 'Collar', value: 'Collar' },
         { label: 'Sleeve', value: 'Sleeve' },
         { label: 'Patti', value: 'Patti' },

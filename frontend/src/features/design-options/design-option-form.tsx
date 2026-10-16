@@ -245,7 +245,7 @@ function DesignOptionForm({ existing }: { existing?: DesignOption }) {
                   <input
                     id="design-option-image"
                     type="file"
-                    accept="image/webp,image/png,image/jpeg"
+                    accept="image/svg+xml,image/webp,image/png,image/jpeg"
                     className="hidden"
                     onChange={(event) => {
                       const file = event.target.files?.[0]
@@ -277,8 +277,8 @@ function DesignOptionForm({ existing }: { existing?: DesignOption }) {
                     </p>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      WebP, PNG or JPEG, up to 2 MB. The same picture prints on
-                      the invoice.
+                      SVG, WebP, PNG or JPEG, up to 2 MB. The same picture
+                      prints on the invoice.
                     </p>
                   )}
                 </Field>

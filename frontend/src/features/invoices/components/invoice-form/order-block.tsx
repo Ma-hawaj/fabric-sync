@@ -176,7 +176,7 @@ export function OrderBlock({
     }
   }, [stockDefault, pickedMaterial, form, base])
   // The whole design catalog, shared across every order block on the form —
-  // one cached request for all six pickers, however many orders there are.
+  // one cached request for all seven pickers, however many orders there are.
   const { data: designOptions = [], isLoading: designLoading } =
     useDesignOptions()
 
@@ -209,6 +209,17 @@ export function OrderBlock({
             form={form}
             name={`${base}.fPocket`}
             category="front_pocket"
+            options={designOptions}
+            columns={2}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Side Pocket</Label>
+          <CatalogGrid
+            form={form}
+            name={`${base}.sPocket`}
+            category="side_pocket"
             options={designOptions}
             columns={2}
           />

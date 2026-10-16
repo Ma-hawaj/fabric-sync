@@ -10,7 +10,9 @@
 --
 -- Images live beside the row as BYTEA so the printed invoice stays
 -- self-contained (rendered to `data:` URIs, like the old compiled-in
--- catalog). Seeded NULL: until staff upload an illustration the
+-- catalog). SVG sits beside the rasters the same way — the documents carry
+-- the stored mime into the data URI, so vectors replace illustrations option
+-- by option with no pipeline change. Seeded NULL: until staff upload an illustration the
 -- documents fall back to the compiled-in catalog for the matching
 -- section+slug, so this seed changes no printed output on its own.
 CREATE TABLE design_options (

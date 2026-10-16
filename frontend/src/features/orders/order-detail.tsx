@@ -245,6 +245,7 @@ const DESIGN_SLOTS: {
   { category: 'neck', value: (order) => order.collar },
   { category: 'sleeve', value: (order) => order.sleeve },
   { category: 'front_pocket', value: (order) => order.fPocket },
+  { category: 'side_pocket', value: (order) => order.sPocket },
   { category: 'patti', value: (order) => order.patti },
   { category: 'emd', value: (order) => order.emd },
 ]

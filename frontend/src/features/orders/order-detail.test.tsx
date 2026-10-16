@@ -53,6 +53,7 @@ const ORDER: OrderDetail = {
   receivedAt: null,
   thobeType: 'thobx',
   fPocket: 'round',
+  sPocket: '2',
   collar: '3',
   sleeve: 'open',
   patti: 'normal',
@@ -119,6 +120,7 @@ function designCatalogFixture() {
     data: [
       option('o1', 'thob_type', 'thobx', 'Thobx', 1),
       option('o2', 'front_pocket', 'round', 'Round', 1),
+      option('o2b', 'side_pocket', '2', '2', 2),
       option('o3', 'neck', '3', '3', 1),
       option('o4', 'sleeve', 'open', 'Open', 1),
       option('o5', 'patti', 'normal', 'Normal', 1),
@@ -281,6 +283,7 @@ describe('OrderDetailPage', () => {
     // Slot titles stay visible so staff can quote each choice back.
     expect(screen.queryByText('Thobe Type')).toBeTruthy()
     expect(screen.queryByText('Front Pocket')).toBeTruthy()
+    expect(screen.queryByText('Side Pocket')).toBeTruthy()
     expect(screen.queryByText('Double stitching on hem.')).toBeTruthy()
   })
 
@@ -288,6 +291,7 @@ describe('OrderDetailPage', () => {
     renderDeliveryOrder({
       thobeType: 'Saudi',
       fPocket: null,
+      sPocket: null,
       collar: null,
       sleeve: null,
       patti: null,
@@ -302,6 +306,7 @@ describe('OrderDetailPage', () => {
     renderDeliveryOrder({
       thobeType: null,
       fPocket: null,
+      sPocket: null,
       collar: null,
       sleeve: null,
       patti: null,

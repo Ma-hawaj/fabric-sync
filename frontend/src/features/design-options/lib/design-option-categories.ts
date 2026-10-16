@@ -11,6 +11,7 @@ export interface DesignCategoryMeta {
 export const DESIGN_CATEGORIES: readonly DesignCategoryMeta[] = [
   { key: 'thob_type', label: 'Thobe Type' },
   { key: 'front_pocket', label: 'Front Pocket' },
+  { key: 'side_pocket', label: 'Side Pocket' },
   { key: 'neck', label: 'Collar' },
   { key: 'sleeve', label: 'Sleeve' },
   { key: 'patti', label: 'Patti' },
