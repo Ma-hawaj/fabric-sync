@@ -134,6 +134,26 @@ describe('CustomerDetailsSheet', () => {
     ).toBeNull()
   })
 
+  it('shows a ghost on the sheet for a hovered but unrecorded measurement', () => {
+    renderSheet(CUSTOMER)
+
+    // Waist was never recorded, so its slot only exists while hovered.
+    expect(screen.queryByTestId('value-waist')).toBeNull()
+    const label = screen
+      .getAllByText('Waist')
+      .find((el) => el.tagName === 'SPAN')
+    expect(label).toBeTruthy()
+    const row = label!.closest('div')!
+
+    fireEvent.mouseEnter(row)
+    const slot = screen.getByTestId('value-waist')
+    expect(slot.getAttribute('data-active')).toBe('true')
+    expect(slot.querySelector('circle')).toBeTruthy()
+
+    fireEvent.mouseLeave(row)
+    expect(screen.queryByTestId('value-waist')).toBeNull()
+  })
+
   it('shows the customer invoices with links to their pages', () => {
     renderSheet(CUSTOMER)
 

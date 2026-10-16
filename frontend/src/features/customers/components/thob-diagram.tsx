@@ -19,9 +19,11 @@ export type MeasurementValues = Partial<
  *
  * `activeField` highlights one field's slot (bold value, the rest dimmed)
  * and `onSelectField` makes slots clickable, so a page can focus the matching
- * input. `view` / `showRecorded` are accepted but ignored: the sheet always
- * draws front and back together in one SVG (there are no per-view
- * silhouettes).
+ * input. Hovering a field with no recorded value draws a ghost — a dashed
+ * ring where its number would sit plus its label — so empty fields still show
+ * where they are measured. `view` / `showRecorded` are accepted but ignored:
+ * the sheet always draws front and back together in one SVG (there are no
+ * per-view silhouettes).
  */
 interface ThobDiagramProps {
   activeField?: string | null
@@ -492,8 +494,12 @@ export function ThobDiagram({
         {THOBE_VALUE_SLOTS.map((f) => {
           const v = m[f.key]
           const has = v !== undefined && v !== null && v !== ''
-          if (!has && placeholder == null && !showLabels) return null
           const active = hasActive && f.key === activeField
+          // An empty slot still draws while hovered — a dashed ring where the
+          // number would sit plus its label — so hovering an unrecorded field
+          // shows where it is measured instead of showing nothing.
+          const ghost = active && !has
+          if (!has && placeholder == null && !showLabels && !ghost) return null
           const dimmed = hasActive && !active
           const items: {
             x: number
@@ -504,12 +510,12 @@ export function ThobDiagram({
             str: string
             bold?: boolean
           }[] = []
-          if (showLabels) {
+          if (showLabels || ghost) {
             items.push({
               x: f.x,
               y: f.y - f.size * 0.85 - 2,
               size: 9,
-              opacity: 0.6,
+              opacity: ghost ? 0.85 : 0.6,
               anchor: 'middle',
               str: f.label,
             })
@@ -540,6 +546,18 @@ export function ThobDiagram({
               className={cn(onSelectField && 'cursor-pointer')}
             >
               <title>{f.label}</title>
+              {ghost && (
+                <circle
+                  cx={f.x}
+                  cy={f.y - f.size * 0.35}
+                  r={f.size * 0.55}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.2}
+                  strokeDasharray="4 3"
+                  opacity={0.7}
+                />
+              )}
               {items.map((it, k) => (
                 <g key={k}>
                   <text

@@ -310,11 +310,12 @@ function MetricItem({
     <div
       className={cn(
         'flex flex-col border-b border-border/30 pb-2 transition-colors',
-        !empty && 'hover:border-info/60',
+        'hover:border-info/60',
       )}
-      // No diagram slot for a value that was never recorded.
-      onMouseEnter={empty ? undefined : onHover}
-      onMouseLeave={empty ? undefined : onLeave}
+      // Empty rows hover too: the sheet draws a ghost where the value would
+      // sit, showing where that measurement is taken.
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
     >
       <span className="text-xs text-muted-foreground font-medium">{label}</span>
       <span

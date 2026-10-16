@@ -93,6 +93,18 @@ describe('ThobDiagram', () => {
     expect(screen.getByTestId('value-chest').getAttribute('opacity')).toBeNull()
   })
 
+  it('marks the position of an empty active slot with a ghost', () => {
+    render(<ThobDiagram values={{}} activeField="chest" />)
+
+    // No other slot renders when nothing is recorded.
+    expect(screen.queryByTestId('value-waist')).toBeNull()
+
+    const slot = screen.getByTestId('value-chest')
+    expect(slot.getAttribute('data-active')).toBe('true')
+    expect(slot.querySelector('circle')).toBeTruthy()
+    expect(slot.querySelector('text')?.textContent).toBe('Chest')
+  })
+
   it('reports the clicked slot so the page can focus its input', () => {
     const onSelectField = vi.fn()
     render(<ThobDiagram values={{ chest: 42 }} onSelectField={onSelectField} />)
