@@ -14,7 +14,7 @@ use serde::Serialize;
 
 use crate::{
     config::InvoiceBranding,
-    document::{format_amount, format_datetime, format_quantity, CURRENCY},
+    document::{format_amount, format_date, format_datetime, format_quantity, CURRENCY},
     error::AppError,
     features::design_options::{service as design_catalog, types::DesignAsset as CatalogAsset},
     state::AppState,
@@ -196,9 +196,8 @@ pub async fn render_order_document(
 ) -> Result<String, AppError> {
     let detail = service::get_order(state, order_id).await?;
     let branding = state.invoice_branding();
-
-    let fields = thob_fields();
-    let measurement = formatted_measurement(&detail);
+    let timezone = state.timezone()?;
+    let thob_values = formatted_measurement(&detail);
 
     // The catalog rows behind every stored design value, in one batched query.
     let pairs: HashSet<(String, String)> = design_pairs(&detail.order).into_iter().collect();
@@ -206,12 +205,14 @@ pub async fn render_order_document(
 
     let env = environment(branding)?;
     let template = env.get_template(TEMPLATE_NAME)?;
-
     Ok(template.render(context! {
         order => minijinja::Value::from_serialize(&detail),
-        // The parent invoice's creation moment, with the time of day —
-        // pre-formatted, since the raw timestamp serializes as RFC 3339.
-        invoice_date_time => format_datetime(&detail.order.invoice_date),
+        // The parent invoice's creation moment with the time of day, and the
+        // measurement date — pre-formatted day-first in the shop's timezone,
+        // since the raw timestamp serializes as RFC 3339 and the raw date as
+        // year-first ISO.
+        invoice_date_time => format_datetime(&detail.order.invoice_date, timezone),
+        measured_on => format_date(&detail.measurement.date),
         company => minijinja::Value::from_serialize(branding),
         currency => CURRENCY,
         // Amounts are pre-formatted rather than left to the template, so that
@@ -222,15 +223,19 @@ pub async fn render_order_document(
         // per line — a tailor cutting from this sheet must see every choice.
         designs => minijinja::Value::from_serialize(order_designs(&detail.order, &catalog)),
         design_note => minijinja::Value::from_serialize(design_note(&detail.order)),
-        // The thob diagram is the same story: garment, markers, view field
-        // lists and the laid-out captions are all computed here, so a redesign
-        // can't change how a measurement is written out or overlap two labels.
-        thob_garment => minijinja::Value::from_serialize(thob_garment()),
-        thob_markers => minijinja::Value::from_serialize(thob_markers_map(&fields)),
-        thob_front_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Front, &measurement)),
-        thob_back_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Back, &measurement)),
-        thob_front_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Front, &measurement)),
-        thob_back_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Back, &measurement)),
+        // The thobe sheet: fixed slot geometry shared with the frontend
+        // (`thob-diagram.tsx` THOBE_VALUE_SLOTS). Values print as plain
+        // numbers at their slots, so there is nothing to lay out — the
+        // template skips whatever the snapshot didn't record.
+        thob_viewbox => THOB_VIEWBOX,
+        thob_slots => minijinja::Value::from_serialize(thobe_slots()),
+        thob_values => minijinja::Value::from_serialize(&thob_values),
+        thob_front_paths => minijinja::Value::from_serialize(thobe_front_paths()),
+        thob_front_ellipses => minijinja::Value::from_serialize(thobe_front_ellipses()),
+        thob_back_paths => minijinja::Value::from_serialize(thobe_back_paths()),
+        thob_back_ellipses => minijinja::Value::from_serialize(thobe_back_ellipses()),
+        thob_dims => minijinja::Value::from_serialize(thobe_dims()),
+        thob_arrows => minijinja::Value::from_serialize(thobe_arrows()),
     })?)
 }
 
@@ -280,33 +285,32 @@ fn push_text(values: &mut BTreeMap<String, String>, key: &str, value: &Option<St
 }
 
 /// Every recorded measurement as a display string, keyed by its camelCase
-/// field name (the same keys `measurement_labels` uses in the template). Only
-/// fields the snapshot actually captured appear — the diagram's captions are
-/// read from this map, so an unrecorded field gets no value on the paper.
+/// field name (the same keys `measurement_labels` and the sheet slots use in
+/// the template). Only fields the snapshot actually captured appear — the
+/// sheet renders a slot only for recorded values.
 fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
     let m = &detail.measurement;
     let mut values = BTreeMap::new();
 
-    push_number(&mut values, "lengthFl", m.length_fl);
-    push_number(&mut values, "lengthBl", m.length_bl);
+    push_number(&mut values, "frontHeight", m.front_height);
+    push_number(&mut values, "backHeight", m.back_height);
     push_number(&mut values, "shoulder", m.shoulder);
     push_number(&mut values, "shoulderDown", m.shoulder_down);
     push_number(&mut values, "chest", m.chest);
     push_number(&mut values, "chestUp", m.chest_up);
     push_number(&mut values, "waist", m.waist);
-    push_number(&mut values, "hips", m.hips);
+    push_number(&mut values, "hip", m.hip);
     push_number(&mut values, "sleeveLength", m.sleeve_length);
-    push_number(&mut values, "neck", m.neck);
+    push_number(&mut values, "neckSize", m.neck_size);
     push_number(&mut values, "neckWidth", m.neck_width);
     push_number(&mut values, "openHand", m.open_hand);
-    push_number(&mut values, "openHandFolding", m.open_hand_folding);
     push_number(&mut values, "cuffWidth", m.cuff_width);
-    push_number(&mut values, "cuffling", m.cuffling);
-    push_number(&mut values, "armHole", m.arm_hole);
+    push_number(&mut values, "cuffSize", m.cuff_size);
+    push_number(&mut values, "armhole", m.armhole);
     push_number(&mut values, "foWidth", m.fo_width);
     push_number(&mut values, "fo", m.fo);
     push_number(&mut values, "bottom", m.bottom);
-    push_number(&mut values, "bottomFolding", m.bottom_folding);
+    push_number(&mut values, "bottomFold", m.bottom_fold);
     push_number(&mut values, "fullBody", m.full_body);
     push_number(&mut values, "sleeveHalf", m.sleeve_half);
     push_number(&mut values, "openFold", m.open_fold);
@@ -317,7 +321,7 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
         "frontPocketLengthByWidth",
         &m.front_pocket_length_by_width,
     );
-    push_number(&mut values, "sidePocketLength", m.side_pocket_length);
+    push_number(&mut values, "sidePocket", m.side_pocket);
     push_text(
         &mut values,
         "sidePocketLengthByWidth",
@@ -329,7 +333,7 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
         &m.mobile_pocket_length_by_width,
     );
     // Record-level choices rather than lengths: what was measured and how to
-    // cut it. Text, so they print without a unit — see caption_text.
+    // cut it. Text, so they print as-is.
     push_text(&mut values, "type", &m.r#type);
     push_text(&mut values, "fit", &m.fit);
 
@@ -337,505 +341,338 @@ fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
 }
 
 // ---------------------------------------------------------------------------
-// The thob measurement diagram.
+// The thobe measurement sheet.
 //
-// Both the frontend (`thob-diagram.tsx` / `thob-sketch.ts` / `measurement-fields.ts`)
-// and this document draw the garment from a file-for-file identical geometry
-// and field split: 20 measurements on the front view, 10 on the back. Change a
-// marker here and the same edit must land in the frontend, or the printed
-// arrows and the screen arrows will disagree. The caption layout is mirrored
-// from `layoutCaptions` in `thob-diagram.tsx` — captions are placed
-// absolutely, so a collision here would be invisible on the screen version.
+// The frontend (`thob-diagram.tsx` THOBE_VALUE_SLOTS) and this document draw
+// the same front+back sheet: fixed slot coordinates, values printed as plain
+// numbers. There is no caption layout to mirror — a value the snapshot
+// didn't capture renders nothing, on screen and on paper alike. The
+// front-pocket L×W stays one text slot; the sheet was fixed rather than
+// splitting the stored field.
 
-const THOB_W: f64 = 480.0;
-const THOB_H: f64 = 500.0;
-const CAPTION_H: f64 = 20.0;
-const CAPTION_GAP: f64 = 2.0;
-const CAPTION_PAD: f64 = 1.0;
-/// Must match `MEASUREMENT_UNIT` in `measurement-fields.ts`.
-const THOB_UNIT: &str = "inch";
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-enum ThobView {
-    Front,
-    Back,
-}
+const THOB_VIEWBOX: &str = "0 -32 800 667";
 
 #[derive(Serialize, Clone)]
-struct ThobPoint {
-    cx: f64,
-    cy: f64,
-}
-
-#[derive(Serialize, Clone)]
-struct ThobSegment {
-    x1: f64,
-    y1: f64,
-    x2: f64,
-    y2: f64,
-}
-
-#[derive(Serialize, Clone)]
-struct ThobMarker {
-    dims: Vec<ThobSegment>,
-    guides: Vec<ThobSegment>,
-    shapes: Vec<&'static str>,
-    dots: Vec<ThobPoint>,
-    label: ThobPoint,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ThobGarment {
-    outline: &'static str,
-    collar: &'static str,
-    placket: &'static str,
-    chest_pocket: &'static str,
-    mobile_pocket: &'static str,
-    side_pockets: &'static str,
-    cuffs: &'static str,
-    center_back_seam: &'static str,
-    buttons: Vec<ThobPoint>,
-    sleeve_buttons: Vec<ThobPoint>,
-}
-
-#[derive(Serialize)]
-struct ThobCaption {
+struct ThobeSlot {
+    id: &'static str,
+    key: &'static str,
+    label: &'static str,
     x: f64,
     y: f64,
-    w: f64,
-    text: String,
+    size: f64,
 }
 
-struct FieldDef {
-    name: &'static str,
-    diagram_label: &'static str,
-    numeric: bool,
-    view: ThobView,
-    marker: ThobMarker,
+#[derive(Serialize, Clone)]
+struct ThobePath {
+    d: &'static str,
+    grey: bool,
+    dashed: bool,
 }
 
-const THOB_OUTLINE: &str = "M 258 46 C 272 47 286 50 300 60 L 354 252 L 324 268 L 290 146 L 314 430 Q 240 446 166 430 L 190 146 L 156 268 L 126 252 L 180 60 C 194 50 208 47 222 46 Q 240 78 258 46 Z";
-const THOB_COLLAR: &str = "M 222 46 C 240 78 258 50 258 46";
-const THOB_PLACKET: &str = "M 234 61 L 234 200 M 246 61 L 246 200 M 234 200 L 246 200";
-const THOB_CHEST_POCKET: &str = "M 197 116 L 225 116 L 225 158 L 197 158 Z";
-const THOB_MOBILE_POCKET: &str = "M 260 200 L 288 200 L 288 246 L 260 246 Z";
-const THOB_SIDE_POCKETS: &str = "M 182 240 L 178 290 M 298 240 L 302 290";
-const THOB_CUFFS: &str = "M 133 227 L 163 243 M 347 227 L 317 243";
-const THOB_CENTER_BACK_SEAM: &str = "M 240 46 L 240 430";
-
-fn point(x: f64, y: f64) -> ThobPoint {
-    ThobPoint { cx: x, cy: y }
+#[derive(Serialize, Clone)]
+struct ThobeEllipse {
+    cx: f64,
+    cy: f64,
+    rx: f64,
+    ry: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    transform: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stroke_width: Option<f64>,
+    /// Render this ellipse only when the named slot has a recorded value —
+    /// e.g. the yoke circle doubles as the full-body callout anchor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    show_when: Option<&'static str>,
 }
 
-fn segment(x1: f64, y1: f64, x2: f64, y2: f64) -> ThobSegment {
-    ThobSegment { x1, y1, x2, y2 }
-}
-
-fn marker(label: (f64, f64)) -> ThobMarker {
-    ThobMarker {
-        dims: Vec::new(),
-        guides: Vec::new(),
-        shapes: Vec::new(),
-        dots: Vec::new(),
-        label: point(label.0, label.1),
-    }
-}
-
-fn field(
-    name: &'static str,
-    diagram_label: &'static str,
-    numeric: bool,
-    view: ThobView,
-    marker: ThobMarker,
-) -> FieldDef {
-    FieldDef {
-        name,
-        diagram_label,
-        numeric,
-        view,
-        marker,
-    }
-}
-
-/// All 30 measurements, in the same order and with the same geometry as
-/// `MEASUREMENT_FIELDS` on the frontend.
-fn thob_fields() -> Vec<FieldDef> {
-    let mut length_fl = marker((60.0, 238.0));
-    length_fl.dims = vec![segment(60.0, 46.0, 60.0, 430.0)];
-    length_fl.guides = vec![
-        segment(64.0, 46.0, 220.0, 46.0),
-        segment(64.0, 430.0, 168.0, 430.0),
-    ];
-
-    let mut length_bl = marker((420.0, 238.0));
-    length_bl.dims = vec![segment(420.0, 46.0, 420.0, 430.0)];
-    length_bl.guides = vec![
-        segment(416.0, 46.0, 260.0, 46.0),
-        segment(416.0, 430.0, 312.0, 430.0),
-    ];
-
-    let mut shoulder = marker((240.0, 14.0));
-    shoulder.dims = vec![segment(180.0, 30.0, 300.0, 30.0)];
-    shoulder.guides = vec![
-        segment(180.0, 58.0, 180.0, 26.0),
-        segment(300.0, 58.0, 300.0, 26.0),
-    ];
-
-    // How far the shoulder slopes down from the neck — drawn as a short
-    // vertical drop at the shoulder point, next to the shoulder width arrow.
-    let mut shoulder_down = marker((348.0, 70.0));
-    shoulder_down.dims = vec![segment(300.0, 60.0, 300.0, 80.0)];
-    shoulder_down.guides = vec![segment(300.0, 70.0, 330.0, 70.0)];
-
-    let mut chest = marker((240.0, 150.0));
-    chest.dims = vec![segment(190.0, 150.0, 290.0, 150.0)];
-
-    let mut chest_up = marker((240.0, 112.0));
-    chest_up.dims = vec![segment(186.0, 112.0, 294.0, 112.0)];
-
-    let mut waist = marker((240.0, 250.0));
-    waist.dims = vec![segment(181.0, 250.0, 299.0, 250.0)];
-
-    let mut hips = marker((240.0, 320.0));
-    hips.dims = vec![segment(175.0, 320.0, 305.0, 320.0)];
-
-    let mut neck = marker((356.0, 24.0));
-    neck.shapes = vec![THOB_COLLAR];
-    neck.guides = vec![segment(240.0, 64.0, 330.0, 28.0)];
-
-    let mut neck_width = marker((240.0, 14.0));
-    neck_width.dims = vec![segment(222.0, 34.0, 258.0, 34.0)];
-    neck_width.guides = vec![
-        segment(222.0, 48.0, 222.0, 30.0),
-        segment(258.0, 48.0, 258.0, 30.0),
-    ];
-
-    let mut arm_hole = marker((212.0, 101.0));
-    arm_hole.dims = vec![segment(182.0, 65.0, 190.0, 144.0)];
-
-    let mut sleeve_length = marker((370.0, 140.0));
-    sleeve_length.dims = vec![segment(317.0, 55.0, 371.0, 247.0)];
-
-    // The half-sleeve measure runs inside the sleeve, parallel to its length.
-    let mut sleeve_half = marker((288.0, 158.0));
-    sleeve_half.dims = vec![segment(308.0, 85.0, 352.0, 232.0)];
-    sleeve_half.guides = vec![segment(330.0, 158.0, 306.0, 158.0)];
-
-    let mut open_hand = marker((128.0, 306.0));
-    open_hand.dims = vec![segment(119.0, 266.0, 149.0, 282.0)];
-    open_hand.guides = vec![segment(134.0, 275.0, 130.0, 296.0)];
-
-    // The fold at the cuff opening — a short arrow across the cuff band,
-    // just above the open-hand marker.
-    let mut open_hand_folding = marker((100.0, 252.0));
-    open_hand_folding.dims = vec![segment(126.0, 238.0, 152.0, 251.0)];
-    open_hand_folding.guides = vec![segment(139.0, 244.0, 116.0, 250.0)];
-
-    let mut cuff_width = marker((78.0, 212.0));
-    cuff_width.shapes = vec![THOB_CUFFS];
-
-    // The cuffling runs along the left cuff band, just below the cuff-width
-    // callout it belongs to.
-    let mut cuffling = marker((96.0, 232.0));
-    cuffling.dims = vec![segment(133.0, 227.0, 163.0, 243.0)];
-
-    let mut front_pocket_length = marker((110.0, 180.0));
-    front_pocket_length.dims = vec![segment(180.0, 116.0, 180.0, 158.0)];
-    front_pocket_length.guides = vec![
-        segment(197.0, 116.0, 180.0, 116.0),
-        segment(197.0, 158.0, 180.0, 158.0),
-        segment(180.0, 150.0, 130.0, 172.0),
-    ];
-    front_pocket_length.shapes = vec![THOB_CHEST_POCKET];
-
-    let mut front_pocket_length_by_width = marker((108.0, 88.0));
-    front_pocket_length_by_width.shapes = vec![THOB_CHEST_POCKET];
-    front_pocket_length_by_width.guides = vec![segment(197.0, 120.0, 140.0, 96.0)];
-
-    // The side pocket's length runs down the left side seam, mirroring the
-    // front pocket's length arrow on the chest pocket.
-    let mut side_pocket_length = marker((108.0, 265.0));
-    side_pocket_length.dims = vec![segment(176.0, 240.0, 176.0, 290.0)];
-    side_pocket_length.guides = vec![segment(176.0, 265.0, 140.0, 265.0)];
-
-    // The length-by-width, called out on the seam like the front pocket's.
-    let mut side_pocket_length_by_width = marker((110.0, 308.0));
-    side_pocket_length_by_width.shapes = vec![THOB_SIDE_POCKETS];
-    side_pocket_length_by_width.guides = vec![segment(178.0, 280.0, 140.0, 300.0)];
-
-    let mut mobile_pocket_length_by_width = marker((380.0, 222.0));
-    mobile_pocket_length_by_width.shapes = vec![THOB_MOBILE_POCKET];
-    mobile_pocket_length_by_width.guides = vec![segment(288.0, 222.0, 326.0, 222.0)];
-
-    let mut fo_width = marker((130.0, 230.0));
-    fo_width.dims = vec![segment(234.0, 192.0, 246.0, 192.0)];
-    fo_width.guides = vec![segment(240.0, 196.0, 166.0, 224.0)];
-
-    // Fo sits just above its width on the placket, sharing the same leader
-    // direction so the two captions stack without overlapping.
-    let mut fo = marker((130.0, 204.0));
-    fo.dims = vec![segment(234.0, 168.0, 246.0, 168.0)];
-    fo.guides = vec![segment(240.0, 172.0, 166.0, 198.0)];
-
-    // Hem width across the bottom of the thob.
-    let mut bottom = marker((240.0, 460.0));
-    bottom.dims = vec![segment(166.0, 430.0, 314.0, 430.0)];
-    bottom.guides = vec![segment(240.0, 430.0, 240.0, 450.0)];
-
-    // The hem fold depth — a short vertical arrow at the right hem corner,
-    // under the hem width arrow.
-    let mut bottom_folding = marker((384.0, 419.0));
-    bottom_folding.dims = vec![segment(314.0, 408.0, 314.0, 430.0)];
-    bottom_folding.guides = vec![segment(314.0, 419.0, 352.0, 419.0)];
-
-    // The open fold sits low on the front panel, clear of the hem arrows.
-    let mut open_fold = marker((140.0, 407.0));
-    open_fold.dims = vec![segment(200.0, 400.0, 200.0, 414.0)];
-    open_fold.guides = vec![segment(200.0, 407.0, 160.0, 407.0)];
-
-    // Full body: the shoulder-to-hem run on the right of the garment, kept
-    // clear of the left-side front-length arrow.
-    let mut full_body = marker((332.0, 238.0));
-    full_body.dims = vec![segment(332.0, 46.0, 332.0, 430.0)];
-    full_body.guides = vec![
-        segment(328.0, 46.0, 300.0, 46.0),
-        segment(328.0, 430.0, 314.0, 430.0),
-    ];
-
+/// Every value slot on the sheet, in the same order and with the same
+/// coordinates as `THOBE_VALUE_SLOTS` on the frontend. The front shoulder
+/// slot reads the drop and the back one the plain shoulder width.
+fn thobe_slots() -> Vec<ThobeSlot> {
+    let slot =
+        |id: &'static str, key: &'static str, label: &'static str, x: f64, y: f64, size: f64| {
+            ThobeSlot {
+                id,
+                key,
+                label,
+                x,
+                y,
+                size,
+            }
+        };
     vec![
-        field("lengthFl", "Front Length", true, ThobView::Front, length_fl),
-        field("lengthBl", "Back Length", true, ThobView::Back, length_bl),
-        field("shoulder", "Shoulder", true, ThobView::Front, shoulder),
-        field(
+        slot("neckSize", "neckSize", "Neck Size", 272.0, -4.0, 18.0),
+        slot(
+            "shoulderF",
             "shoulderDown",
             "Shoulder Down",
-            true,
-            ThobView::Front,
-            shoulder_down,
+            320.0,
+            2.0,
+            18.0,
         ),
-        field("chest", "Chest", true, ThobView::Front, chest),
-        field("chestUp", "Chest Up", true, ThobView::Front, chest_up),
-        field("waist", "Waist", true, ThobView::Front, waist),
-        field("hips", "Hips", true, ThobView::Front, hips),
-        field("neck", "Neck", true, ThobView::Back, neck),
-        field("neckWidth", "Neck W", true, ThobView::Back, neck_width),
-        field("armHole", "Armhole", true, ThobView::Back, arm_hole),
-        field(
-            "sleeveLength",
-            "Sleeve",
-            true,
-            ThobView::Back,
-            sleeve_length,
-        ),
-        field(
-            "sleeveHalf",
-            "Sleeve Half",
-            true,
-            ThobView::Back,
-            sleeve_half,
-        ),
-        field("openHand", "Open Hand", true, ThobView::Back, open_hand),
-        field(
-            "openHandFolding",
-            "Open Hand Folding",
-            true,
-            ThobView::Back,
-            open_hand_folding,
-        ),
-        field("cuffWidth", "Cuff W", true, ThobView::Back, cuff_width),
-        field("cuffling", "Cuffling", true, ThobView::Back, cuffling),
-        field(
+        slot("chestUp", "chestUp", "Chest Up", 153.0, 86.0, 16.0),
+        slot(
             "frontPocketLength",
-            "Front Pocket",
-            true,
-            ThobView::Front,
-            front_pocket_length,
+            "frontPocketLength",
+            "Front Pocket Length",
+            246.0,
+            120.0,
+            15.0,
         ),
-        field(
+        slot(
+            "pocketLxW",
             "frontPocketLengthByWidth",
             "Pocket L×W",
-            false,
-            ThobView::Front,
-            front_pocket_length_by_width,
+            258.0,
+            165.0,
+            13.0,
         ),
-        field(
-            "sidePocketLength",
+        slot("fo", "fo", "Fo", 193.0, 152.0, 15.0),
+        slot("foWidth", "foWidth", "Fo Width", 214.0, 254.0, 16.0),
+        slot("cuffWidth", "cuffWidth", "Cuff Width", 68.0, 301.0, 13.0),
+        slot("cuffSize", "cuffSize", "Cuff Size", 66.0, 346.0, 18.0),
+        slot(
+            "sidePocket",
+            "sidePocket",
             "Side Pocket",
-            true,
-            ThobView::Front,
-            side_pocket_length,
+            274.0,
+            364.0,
+            18.0,
         ),
-        field(
-            "sidePocketLengthByWidth",
-            "Side L×W",
-            false,
-            ThobView::Front,
-            side_pocket_length_by_width,
+        slot(
+            "frontHeight",
+            "frontHeight",
+            "Front Height",
+            199.0,
+            492.0,
+            22.0,
         ),
-        field(
-            "mobilePocketLengthByWidth",
-            "Mobile Pocket",
-            false,
-            ThobView::Front,
-            mobile_pocket_length_by_width,
+        slot(
+            "bottomFold",
+            "bottomFold",
+            "Bottom Fold",
+            364.0,
+            620.0,
+            18.0,
         ),
-        field("foWidth", "Fo Width", true, ThobView::Front, fo_width),
-        field("fo", "Fo", true, ThobView::Front, fo),
-        field("openFold", "Open Fold", true, ThobView::Front, open_fold),
-        field("bottom", "Bottom", true, ThobView::Front, bottom),
-        field(
-            "bottomFolding",
-            "Bottom Folding",
-            true,
-            ThobView::Front,
-            bottom_folding,
+        slot("neckWidth", "neckWidth", "Neck Width", 630.0, 20.0, 18.0),
+        slot("shoulderB", "shoulder", "Shoulder", 433.0, 48.0, 18.0),
+        slot("armhole", "armhole", "Armhole", 713.0, 50.0, 18.0),
+        slot("fullBody", "fullBody", "Full Body", 567.5, 93.0, 17.0),
+        slot("chest", "chest", "Chest", 520.0, 134.0, 20.0),
+        slot(
+            "sleeveHalf",
+            "sleeveHalf",
+            "Sleeve Half",
+            675.0,
+            154.0,
+            14.0,
         ),
-        field("fullBody", "Full Body", true, ThobView::Front, full_body),
+        slot("waist", "waist", "Waist", 520.0, 215.0, 20.0),
+        slot("hip", "hip", "Hip", 520.0, 305.0, 20.0),
+        slot(
+            "sleeveLength",
+            "sleeveLength",
+            "Sleeve Length",
+            756.0,
+            214.0,
+            18.0,
+        ),
+        slot("openFold", "openFold", "Open Fold", 712.0, 303.0, 13.0),
+        slot("openHand", "openHand", "Open Hand", 712.0, 356.0, 20.0),
+        slot(
+            "backHeight",
+            "backHeight",
+            "Back Height",
+            567.5,
+            492.0,
+            22.0,
+        ),
+        slot("bottom", "bottom", "Bottom", 724.0, 622.0, 18.0),
     ]
 }
 
-fn thob_garment() -> ThobGarment {
-    ThobGarment {
-        outline: THOB_OUTLINE,
-        collar: THOB_COLLAR,
-        placket: THOB_PLACKET,
-        chest_pocket: THOB_CHEST_POCKET,
-        mobile_pocket: THOB_MOBILE_POCKET,
-        side_pockets: THOB_SIDE_POCKETS,
-        cuffs: THOB_CUFFS,
-        center_back_seam: THOB_CENTER_BACK_SEAM,
-        buttons: vec![
-            point(240.0, 96.0),
-            point(240.0, 126.0),
-            point(240.0, 156.0),
-            point(240.0, 186.0),
-        ],
-        sleeve_buttons: vec![point(153.0, 253.0), point(327.0, 253.0)],
+fn path(d: &'static str) -> ThobePath {
+    ThobePath {
+        d,
+        grey: false,
+        dashed: false,
     }
 }
 
-fn thob_markers_map(fields: &[FieldDef]) -> BTreeMap<&'static str, ThobMarker> {
-    fields.iter().map(|f| (f.name, f.marker.clone())).collect()
+fn thobe_front_paths() -> Vec<ThobePath> {
+    vec![
+        path("M181 35 Q146 44 108.5 67"),
+        path("M181 41 Q148 50 113.5 71"),
+        path("M246 35 Q282 44 319 67"),
+        path("M246 41 Q280 50 317.5 71"),
+        path("M108.5 68 L39.5 298"),
+        path("M108.5 68 Q122 90 126 112"),
+        path("M125.5 200 L92 313"),
+        path("M46.5 274.5 Q72.8 277.9 99 289"),
+        path("M320 68 L388.75 298.75"),
+        path("M320 68 Q305 91 301 114"),
+        path("M303 198 L337 313.75"),
+        path("M330 289.3 Q354.5 275.5 382 275.7"),
+        path("M126 112 Q124 330 110 602"),
+        path("M301 114 Q303 330 320 602"),
+        ThobePath {
+            d: "M126 70 V112 M300 70 V114",
+            grey: true,
+            dashed: false,
+        },
+        path("M110 580 Q215 625 320 580"),
+        path("M110 602 Q215 648 320 602"),
+        path("M181 40 V600"),
+        path("M205 50 V218 L213.5 231 L222 218 V52"),
+        path("M205 205 H222"),
+        path("M235 128.5 H290.5 V174 L281.5 185 H242.5 L235 174 Z"),
+        path("M235 136 H290.5"),
+    ]
 }
 
-fn thob_field_names(
-    fields: &[FieldDef],
-    view: ThobView,
-    values: &BTreeMap<String, String>,
-) -> Vec<&'static str> {
-    fields
-        .iter()
-        .filter(|f| f.view == view && values.contains_key(f.name))
-        .map(|f| f.name)
-        .collect()
+fn thobe_front_ellipses() -> Vec<ThobeEllipse> {
+    vec![
+        ThobeEllipse {
+            cx: 213.5,
+            cy: 39.5,
+            rx: 32.5,
+            ry: 24.5,
+            transform: None,
+            stroke_width: None,
+            show_when: None,
+        },
+        ThobeEllipse {
+            cx: 213.5,
+            cy: 39.0,
+            rx: 32.5,
+            ry: 11.5,
+            transform: None,
+            stroke_width: None,
+            show_when: None,
+        },
+        ThobeEllipse {
+            cx: 65.75,
+            cy: 305.5,
+            rx: 27.3,
+            ry: 7.5,
+            transform: Some("rotate(16 65.75 305.5)"),
+            stroke_width: None,
+            show_when: None,
+        },
+        ThobeEllipse {
+            cx: 362.9,
+            cy: 306.25,
+            rx: 26.9,
+            ry: 7.5,
+            transform: Some("rotate(-16.2 362.9 306.25)"),
+            stroke_width: None,
+            show_when: None,
+        },
+    ]
 }
 
-fn clamp_value(v: f64, lo: f64, hi: f64) -> f64 {
-    v.max(lo).min(hi)
+fn thobe_back_paths() -> Vec<ThobePath> {
+    vec![
+        path("M535 36 L537 25 Q541 15 567.5 15 Q594 15 598 25 L600 36 Z"),
+        path("M535 36 Q499 46 462 68.5"),
+        path("M600 36 Q636 46 672 68"),
+        path("M462 68.5 L398.75 297.5"),
+        path("M462 68.5 L479 116"),
+        path("M478.5 198 L448.5 313.5"),
+        path("M405 274.5 Q431.3 273 455.4 287"),
+        path("M672 68 L735 300"),
+        path("M672 68 L653 116"),
+        path("M653.5 199 L684.5 315"),
+        path("M677.4 288 Q701 275.9 728.3 275.5"),
+        path("M479 116 Q477 330 463 605"),
+        path("M653 116 Q656 330 679 605"),
+        path("M463 587 Q571 633 679 587"),
+        path("M463 605 Q571 650 679 605"),
+        path("M567.5 36 V610"),
+        ThobePath {
+            d: "M672 67.5 H677.5 L741.5 299 H735",
+            grey: false,
+            dashed: true,
+        },
+    ]
 }
 
-fn caption_width(text: &str) -> f64 {
-    (text.chars().count() as f64 * 5.0 + 10.0).max(44.0)
+fn thobe_back_ellipses() -> Vec<ThobeEllipse> {
+    vec![
+        ThobeEllipse {
+            cx: 567.5,
+            cy: 88.0,
+            rx: 62.0,
+            ry: 13.0,
+            transform: None,
+            stroke_width: Some(1.0),
+            show_when: Some("fullBody"),
+        },
+        ThobeEllipse {
+            cx: 423.6,
+            cy: 305.5,
+            rx: 26.1,
+            ry: 7.5,
+            transform: Some("rotate(17.8 423.6 305.5)"),
+            stroke_width: None,
+            show_when: None,
+        },
+        ThobeEllipse {
+            cx: 709.75,
+            cy: 307.5,
+            rx: 26.3,
+            ry: 7.5,
+            transform: Some("rotate(-16.5 709.75 307.5)"),
+            stroke_width: None,
+            show_when: None,
+        },
+    ]
 }
 
-/// Two rects collide when they touch or come within `CAPTION_GAP` of each
-/// other — the same check `rectsOverlap` performs in `thob-diagram.tsx`.
-fn rects_touch(a: (f64, f64, f64, f64), b: (f64, f64, f64, f64)) -> bool {
-    a.0 + a.2 + CAPTION_GAP > b.0
-        && b.0 + b.2 + CAPTION_GAP > a.0
-        && a.1 + a.3 + CAPTION_GAP > b.1
-        && b.1 + b.3 + CAPTION_GAP > a.1
+/// Thin dimension/leader lines, front and back combined.
+fn thobe_dims() -> Vec<&'static str> {
+    vec![
+        "M320 8 V56",
+        "M128 92 H299",
+        "M246 42 V105",
+        "M262 -1 L226 31",
+        "M297 330 V392",
+        "M322 604 L342 612",
+        "M468 64 L452 53.5",
+        "M676 65 L697 53",
+        "M598 25 L618 17",
+        "M653 118 H554",
+        "M653 199 H554",
+        "M479 117 H488",
+        "M479 199 H490",
+        "M476 289 H490",
+        "M556 289 H656",
+        "M655 160 H695",
+        "M681 607 L702 614",
+    ]
 }
 
-/// The caption a field gets on the diagram: a recorded value rides the short
-/// label, a numeric one carries the unit. `thob_captions` only lays out
-/// recorded fields, so `def.diagram_label` alone never reaches the paper —
-/// an unrecorded measurement contributes nothing to the silhouette. Same rule
-/// as `diagramCaption` in `thob-diagram.tsx`.
-fn caption_text(def: &FieldDef, values: &BTreeMap<String, String>) -> String {
-    if let Some(value) = values.get(def.name) {
-        if def.numeric {
-            format!("{value} {THOB_UNIT} · {}", def.diagram_label)
-        } else {
-            format!("{value} · {}", def.diagram_label)
-        }
-    } else {
-        def.diagram_label.to_string()
-    }
-}
-
-/// Places one caption per recorded field for a view, nudging each box
-/// vertically until none overlaps another. Fields the measurement snapshot
-/// didn't capture are skipped entirely — only what was recorded is drawn on
-/// the silhouette, so an unpopulated field never gets a box or an arrow.
-/// Mirrors `layoutCaptions` in `thob-diagram.tsx` exactly, so the printed and
-/// on-screen diagrams agree.
-fn thob_captions(
-    fields: &[FieldDef],
-    view: ThobView,
-    values: &BTreeMap<String, String>,
-) -> BTreeMap<String, ThobCaption> {
-    let mut sorted: Vec<&FieldDef> = fields
-        .iter()
-        .filter(|f| f.view == view && values.contains_key(f.name))
-        .collect();
-    sorted.sort_by_key(|f| {
-        (
-            (f.marker.label.cy * 1000.0) as i64,
-            (f.marker.label.cx * 1000.0) as i64,
-        )
-    });
-
-    let mut placed: Vec<(f64, f64, f64, f64)> = Vec::new();
-    let mut captions: BTreeMap<String, ThobCaption> = BTreeMap::new();
-
-    for def in sorted {
-        let text = caption_text(def, values);
-        let w = caption_width(&text);
-        let x = clamp_value(
-            def.marker.label.cx - w / 2.0,
-            CAPTION_PAD,
-            THOB_W - w - CAPTION_PAD,
-        );
-        let base_y = clamp_value(
-            def.marker.label.cy - CAPTION_H / 2.0,
-            CAPTION_PAD,
-            THOB_H - CAPTION_H - CAPTION_PAD,
-        );
-        let slot = CAPTION_H + CAPTION_GAP;
-
-        let mut chosen_y = base_y;
-        for step in 0..9i64 {
-            let target = if step == 0 {
-                base_y
-            } else if step % 2 == 1 {
-                base_y + ((step + 1) as f64 / 2.0) * slot
-            } else {
-                base_y - (step as f64 / 2.0) * slot
-            };
-            let candidate = clamp_value(target, CAPTION_PAD, THOB_H - CAPTION_H - CAPTION_PAD);
-            let rect = (x, candidate, w, CAPTION_H);
-            if !placed.iter().any(|r| rects_touch(*r, rect)) {
-                chosen_y = candidate;
-                break;
-            }
-            chosen_y = candidate;
-        }
-
-        placed.push((x, chosen_y, w, CAPTION_H));
-        captions.insert(
-            def.name.to_string(),
-            ThobCaption {
-                x,
-                y: chosen_y,
-                w,
-                text,
-            },
-        );
-    }
-
-    captions
+/// Filled arrowheads for the dimension lines.
+fn thobe_arrows() -> Vec<&'static str> {
+    vec![
+        "M320 64 l-4.5 -9 h9 z",
+        "M128 92 l8 -3.5 v7 z",
+        "M299 92 l-8 -3.5 v7 z",
+        "M246 105 l-3.5 -8 h7 z",
+        "M297 330 l-3.5 8 h7 z",
+        "M297 392 l-3.5 -8 h7 z",
+        "M449.5 52 l9.5 1.5 l-4.5 7 z",
+        "M698.5 52 l-9.5 0 l3.5 7.5 z",
+        "M549 118 l9 -4 v8 z",
+        "M495 117 l-8 -3.5 v7 z",
+        "M549 199 l9 -4 v8 z",
+        "M497 199 l-7 -3.5 v7 z",
+        "M497 289 l-7 -3.5 v7 z",
+        "M553 289 l7 -3.5 v7 z",
+        "M655 160 l7 -3 v6 z",
+        "M695 160 l-7 -3 v6 z",
+    ]
 }
 
 #[cfg(test)]
@@ -888,7 +725,7 @@ mod tests {
     }
 
     #[test]
-    fn measurements_are_formatted_for_the_diagram_captions() {
+    fn measurements_are_formatted_for_the_sheet_slots() {
         let detail = OrderDetail {
             order: services_order(),
             invoice_number: 7,
@@ -896,21 +733,47 @@ mod tests {
         };
 
         let values = formatted_measurement(&detail);
-        assert_eq!(values["lengthFl"], "120");
+        assert_eq!(values["frontHeight"], "120");
         assert_eq!(values["chest"], "50");
         assert_eq!(values["sleeveLength"], "60");
-        // Everything the fixture didn't capture stays out of the captions.
+        // Everything the fixture didn't capture stays off the sheet.
         assert!(!values.contains_key("waist"));
-        assert!(!values.contains_key("lengthBl"));
+        assert!(!values.contains_key("backHeight"));
+    }
+
+    #[cfg(test)]
+    fn test_render(detail: &OrderDetail, branding: &InvoiceBranding) -> String {
+        let env = environment(branding).unwrap();
+        let template = env.get_template(TEMPLATE_NAME).unwrap();
+        let timezone = chrono_tz::Asia::Bahrain;
+        let thob_values = formatted_measurement(detail);
+        template
+            .render(context! {
+                order => minijinja::Value::from_serialize(detail),
+                invoice_date_time => format_datetime(&detail.order.invoice_date, timezone),
+                measured_on => format_date(&detail.measurement.date),
+                company => minijinja::Value::from_serialize(branding),
+                currency => CURRENCY,
+                amounts => minijinja::Value::from_serialize(formatted_amounts(detail)),
+                designs => minijinja::Value::from_serialize(order_designs(&detail.order, &empty_catalog())),
+                design_note => minijinja::Value::from_serialize(design_note(&detail.order)),
+                thob_viewbox => THOB_VIEWBOX,
+                thob_slots => minijinja::Value::from_serialize(thobe_slots()),
+                thob_values => minijinja::Value::from_serialize(&thob_values),
+                thob_front_paths => minijinja::Value::from_serialize(thobe_front_paths()),
+                thob_front_ellipses => minijinja::Value::from_serialize(thobe_front_ellipses()),
+                thob_back_paths => minijinja::Value::from_serialize(thobe_back_paths()),
+                thob_back_ellipses => minijinja::Value::from_serialize(thobe_back_ellipses()),
+                thob_dims => minijinja::Value::from_serialize(thobe_dims()),
+                thob_arrows => minijinja::Value::from_serialize(thobe_arrows()),
+            })
+            .unwrap()
     }
 
     #[test]
-    fn the_template_renders_with_front_and_back_thob_diagrams() {
-        let env = environment(&branding()).unwrap();
-        let template = env.get_template(TEMPLATE_NAME).unwrap();
-
+    fn the_template_renders_the_thobe_sheet() {
         let mut measurement = tests_support::measurement();
-        measurement.length_bl = Some(124.0);
+        measurement.back_height = Some(124.0);
         measurement.waist = Some(38.5);
         measurement.front_pocket_length_by_width = Some("No 16x14".to_string());
         let detail = OrderDetail {
@@ -918,53 +781,56 @@ mod tests {
             invoice_number: 7,
             measurement,
         };
-        let fields = thob_fields();
-        let measurement = formatted_measurement(&detail);
-        let html = template
-            .render(context! {
-                order => minijinja::Value::from_serialize(&detail),
-                company => minijinja::Value::from_serialize(branding()),
-                currency => CURRENCY,
-                amounts => minijinja::Value::from_serialize(formatted_amounts(&detail)),
-                designs => minijinja::Value::from_serialize(order_designs(&detail.order, &empty_catalog())),
-                design_note => minijinja::Value::from_serialize(design_note(&detail.order)),
-                thob_garment => minijinja::Value::from_serialize(thob_garment()),
-                thob_markers => minijinja::Value::from_serialize(thob_markers_map(&fields)),
-                thob_front_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Front, &measurement)),
-                thob_back_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Back, &measurement)),
-                thob_front_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Front, &measurement)),
-                thob_back_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Back, &measurement)),
-            })
-            .unwrap();
+        let html = test_render(&detail, &branding());
 
-        // The template is the only smoke seat: it runs the thob_callout macro
-        // against every field, so a malformed marker map fails right here.
-        assert!(html.contains("Front of Thob"));
-        assert!(html.contains("Back of Thob"));
+        // One sheet, front and back together.
+        assert!(html.contains("Thobe Sheet"));
+        assert!(html.contains("0 -32 800 667"));
+        // The shorter tables stack in one column beside Body dimensions.
+        assert!(html.contains("<div class=\"measurement-stack\">"));
+        // Every drawn ellipse (collars, cuffs) carries the garment class —
+        // without it SVG falls back to a solid black fill on the paper.
+        // Six here: the yoke is gated on fullBody, which isn't recorded.
+        assert_eq!(html.matches("<ellipse class=\"thob-garment\"").count(), 6);
         // The document is titled by the order's own readable number, not an
         // id prefix.
         assert!(html.contains("ORD-12"));
         // The material prints as its SKU, not its name.
         assert!(html.contains("CTN-001"));
         assert!(!html.contains("Cotton"));
-        // Recorded numeric values ride the captions, whole numbers trimmed,
-        // each with its short diagram label.
-        assert!(html.contains("120 inch · Front Length"));
-        assert!(html.contains("124 inch · Back Length"));
-        assert!(html.contains("60 inch · Sleeve"));
-        assert!(html.contains("38.5 inch · Waist"));
-        // Text values are already self-describing — no "inch".
-        assert!(!html.contains("No inch"));
-        // Unrecorded fields are omitted from the diagram: no caption box, no
-        // arrow, no stray label on the silhouette. Matched with the caption
-        // separator because the measurement table now prints full English
-        // labels ("Front Pocket By Width") that contain the short ones.
-        assert!(!html.contains("· Front Pocket"));
-        assert!(!html.contains("· Fo Width"));
-        // Exactly the six recorded fields are called out: 4 on the front
-        // view (lengthFl, chest, waist, frontPocketLengthByWidth)
-        // and 2 on the back (lengthBl, sleeveLength).
-        assert_eq!(html.matches("thob-callout").count(), 6);
+        // Recorded values print as plain numbers at their slots, whole
+        // numbers trimmed.
+        assert!(html.contains(">120</text>"));
+        assert!(html.contains(">124</text>"));
+        assert!(html.contains(">60</text>"));
+        assert!(html.contains(">38.5</text>"));
+        assert!(html.contains("No 16x14"));
+        // No units ride the slots.
+        assert!(!html.contains("inch"));
+        // Unrecorded fields render nothing on the sheet — no slot group at
+        // all. (Cuff Size appears nowhere else on the page: the measurement
+        // table only lists recorded fields.)
+        assert!(!html.contains("<title>Cuff Size</title>"));
+        // The yoke circle doubles as the full-body anchor: hidden until that
+        // value is recorded...
+        assert!(!html.contains("cx=\"567.5\""));
+
+        // ...and drawn with it, alongside the other six ellipses.
+        let mut bodied = tests_support::measurement();
+        bodied.full_body = Some(150.0);
+        let bodied_detail = OrderDetail {
+            order: services_order(),
+            invoice_number: 7,
+            measurement: bodied,
+        };
+        let bodied_html = test_render(&bodied_detail, &branding());
+        assert!(bodied_html.contains("cx=\"567.5\""));
+        assert_eq!(
+            bodied_html
+                .matches("<ellipse class=\"thob-garment\"")
+                .count(),
+            7
+        );
     }
 
     #[test]
@@ -1095,9 +961,6 @@ mod tests {
 
     #[test]
     fn the_template_names_each_design_slot_beside_its_image() {
-        let env = environment(&branding()).unwrap();
-        let template = env.get_template(TEMPLATE_NAME).unwrap();
-
         let mut order = services_order();
         order.thobe_type = Some("thobx".to_string());
         order.collar = Some("Saudi".to_string());
@@ -1107,24 +970,7 @@ mod tests {
             invoice_number: 7,
             measurement: tests_support::measurement(),
         };
-        let fields = thob_fields();
-        let measurement = formatted_measurement(&detail);
-        let html = template
-            .render(context! {
-                order => minijinja::Value::from_serialize(&detail),
-                company => minijinja::Value::from_serialize(branding()),
-                currency => CURRENCY,
-                amounts => minijinja::Value::from_serialize(formatted_amounts(&detail)),
-                designs => minijinja::Value::from_serialize(order_designs(&detail.order, &empty_catalog())),
-                design_note => minijinja::Value::from_serialize(design_note(&detail.order)),
-                thob_garment => minijinja::Value::from_serialize(thob_garment()),
-                thob_markers => minijinja::Value::from_serialize(thob_markers_map(&fields)),
-                thob_front_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Front, &measurement)),
-                thob_back_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Back, &measurement)),
-                thob_front_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Front, &measurement)),
-                thob_back_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Back, &measurement)),
-            })
-            .unwrap();
+        let html = test_render(&detail, &branding());
 
         // Each chip names its slot, so the image is
         // identifiable even when the stored value itself is cryptic ("3").
@@ -1136,17 +982,44 @@ mod tests {
         // disappearing.
         assert!(html.contains("Saudi"));
         assert!(html.contains("double stitching"));
+        // The free-text note prints below the diagram, not in the sidebar.
+        let svg_end = html.find("</svg>").unwrap();
+        let note = html.find("double stitching").unwrap();
+        assert!(note > svg_end);
+        // Two choices fit the sidebar — no overflow strip is rendered below
+        // the sheet. (Matched on the div: the stylesheet always names the
+        // class.)
+        assert!(!html.contains("<div class=\"design-overflow\">"));
+    }
+
+    #[test]
+    fn extra_design_choices_overflow_below_the_sheet() {
+        // All six slots filled: five stack in the sidebar, the sixth flows
+        // below the diagram so the side-by-side balance never stretches.
+        let mut order = services_order();
+        order.thobe_type = Some("thobx".to_string());
+        order.collar = Some("Saudi".to_string());
+        order.sleeve = Some("open".to_string());
+        order.f_pocket = Some("round".to_string());
+        order.patti = Some("normal".to_string());
+        order.emd = Some("6".to_string());
+        let detail = OrderDetail {
+            order,
+            invoice_number: 7,
+            measurement: tests_support::measurement(),
+        };
+        let html = test_render(&detail, &branding());
+
+        assert_eq!(html.matches("<div class=\"design-cell\">").count(), 5);
+        assert_eq!(html.matches("design-cell-overflow").count(), 1);
     }
 
     #[test]
     fn paired_measurements_share_a_row_despite_gaps_above() {
-        let env = environment(&branding()).unwrap();
-        let template = env.get_template(TEMPLATE_NAME).unwrap();
-
-        // neck_width recorded while sleeve_half (two rows up) is not: neck
+        // neckSize recorded while sleeveHalf (two rows up) is not: neck size
         // must still sit beside neck width instead of sliding up the grid.
         let mut measurement = tests_support::measurement();
-        measurement.neck = Some(22.0);
+        measurement.neck_size = Some(22.0);
         measurement.neck_width = Some(18.0);
         measurement.front_pocket_length_by_width = Some("No 16x14".to_string());
         let detail = OrderDetail {
@@ -1154,33 +1027,16 @@ mod tests {
             invoice_number: 7,
             measurement,
         };
-        let fields = thob_fields();
-        let measurement = formatted_measurement(&detail);
-        let html = template
-            .render(context! {
-                order => minijinja::Value::from_serialize(&detail),
-                company => minijinja::Value::from_serialize(branding()),
-                currency => CURRENCY,
-                amounts => minijinja::Value::from_serialize(formatted_amounts(&detail)),
-                designs => minijinja::Value::from_serialize(order_designs(&detail.order, &empty_catalog())),
-                design_note => minijinja::Value::from_serialize(design_note(&detail.order)),
-                thob_garment => minijinja::Value::from_serialize(thob_garment()),
-                thob_markers => minijinja::Value::from_serialize(thob_markers_map(&fields)),
-                thob_front_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Front, &measurement)),
-                thob_back_fields => minijinja::Value::from_serialize(thob_field_names(&fields, ThobView::Back, &measurement)),
-                thob_front_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Front, &measurement)),
-                thob_back_captions => minijinja::Value::from_serialize(thob_captions(&fields, ThobView::Back, &measurement)),
-            })
-            .unwrap();
+        let html = test_render(&detail, &branding());
 
         // Labels match the entry form, including the L×W pocket fields.
-        assert!(html.contains(">Neck</span>"));
+        assert!(html.contains(">Neck Size</span>"));
         assert!(html.contains(">Neck Width</span>"));
-        assert!(html.contains("Front Pocket L×W"));
-        // Neck and neck width share one row: no further row starts between
+        assert!(html.contains("Pocket L×W"));
+        // Neck size and neck width share one row: no further row starts between
         // the two cells. (The stylesheet's own `.m-row` sits before the
         // body, so the search starts at the neck cell.)
-        let neck = html.find(">Neck</span>").unwrap();
+        let neck = html.find(">Neck Size</span>").unwrap();
         let neck_width = html.find(">Neck Width</span>").unwrap();
         let next_row = neck + html[neck..].find("m-row").unwrap();
         assert!(neck_width < next_row);
@@ -1190,39 +1046,19 @@ mod tests {
     }
 
     #[test]
-    fn diagram_captions_stay_in_bounds_and_never_overlap() {
-        let detail = OrderDetail {
-            order: services_order(),
-            invoice_number: 7,
-            measurement: tests_support::measurement(),
-        };
-        let fields = thob_fields();
-        let values = formatted_measurement(&detail);
-
-        for view in [ThobView::Front, ThobView::Back] {
-            let captions = thob_captions(&fields, view, &values);
-            let rects: Vec<(f64, f64, f64, f64)> = captions
-                .values()
-                .map(|c| (c.x, c.y, c.w, CAPTION_H))
-                .collect();
-            for rect in &rects {
-                assert!(
-                    rect.0 >= 0.0 && rect.0 + rect.2 <= THOB_W,
-                    "{view:?}: x out of bounds"
-                );
-                assert!(
-                    rect.1 >= 0.0 && rect.1 + rect.3 <= THOB_H,
-                    "{view:?}: y out of bounds"
-                );
-            }
-            for (i, a) in rects.iter().enumerate() {
-                for b in rects.iter().skip(i + 1) {
-                    assert!(
-                        !rects_touch(*a, *b),
-                        "{view:?}: captions overlap at {a:?} vs {b:?}"
-                    );
-                }
-            }
+    fn sheet_slots_stay_inside_the_viewbox() {
+        // The sheet spans x 0..800 and y -32..635.
+        for slot in thobe_slots() {
+            assert!(
+                slot.x >= 0.0 && slot.x <= 800.0,
+                "{}: x out of bounds",
+                slot.id
+            );
+            assert!(
+                slot.y >= -32.0 && slot.y <= 635.0,
+                "{}: y out of bounds",
+                slot.id
+            );
         }
     }
 }
@@ -1282,32 +1118,31 @@ mod tests_support {
             date: chrono::NaiveDate::from_ymd_opt(2026, 7, 30).unwrap(),
             r#type: Some("body".to_string()),
             fit: Some("medium".to_string()),
-            length_fl: Some(120.0),
-            length_bl: None,
+            front_height: Some(120.0),
+            back_height: None,
             chest: Some(50.0),
             waist: None,
-            hips: None,
+            hip: None,
             shoulder: None,
             shoulder_down: None,
             sleeve_length: Some(60.0),
-            neck: None,
+            neck_size: None,
             open_hand: None,
-            open_hand_folding: None,
             chest_up: None,
             cuff_width: None,
-            cuffling: None,
+            cuff_size: None,
             neck_width: None,
-            arm_hole: None,
+            armhole: None,
             fo_width: None,
             fo: None,
             bottom: None,
-            bottom_folding: None,
+            bottom_fold: None,
             full_body: None,
             sleeve_half: None,
             open_fold: None,
             front_pocket_length: None,
             front_pocket_length_by_width: None,
-            side_pocket_length: None,
+            side_pocket: None,
             side_pocket_length_by_width: None,
             mobile_pocket_length_by_width: None,
         }

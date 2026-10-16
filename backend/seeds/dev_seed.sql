@@ -71,8 +71,8 @@ INSERT INTO product_stock (id, product_id, branch_id, quantity) VALUES
 -- json_agg(... ORDER BY measurement_date DESC) has more than one row to sort.
 INSERT INTO measurements (
     id, customer_id, measurement_date,
-    length_fl, length_bl, chest, waist, hips, shoulder, sleeve_length, neck,
-    open_hand, chest_up, cuff_width, neck_width, arm_hole, fo_width,
+    front_height, back_height, chest, waist, hip, shoulder, sleeve_length, neck_size,
+    open_hand, chest_up, cuff_width, neck_width, armhole, fo_width,
     front_pocket_length, front_pocket_length_by_width,
     mobile_pocket_length_by_width
 ) VALUES

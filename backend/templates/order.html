@@ -14,62 +14,62 @@
     order     — GET /orders/:id (see types.rs OrderDetail — the measurement
                 snapshot the garment was cut to rides along on `order.measurement`)
     invoice_date_time — the parent invoice's creation moment with the time of
-                day, pre-formatted (the raw `order.invoiceDate` is RFC 3339)
+                day, pre-formatted day-first in the shop's timezone
+                (TIMEZONE, e.g. "30-07-2026 12:30").
+    measured_on — the measurement date, pre-formatted day-first
+                ("30-07-2026").
     company   — COMPANY_* env vars (see config.rs InvoiceBranding)
     amounts   — quantities only: the order sheet is an internal production
                 document, so no money figures are printed; the sole key the
                 template reads is `materialAmount`.
     designs   — the made-to-measure choices (Thobe / Collar / Sleeve / Front Pocket / Side Pocket / Patti / EMD).
     design_note — the free-text more-details note, or empty.
-    thob_garment — the base thob drawing envelopes: outline, collar, placket,
-                chestPocket, mobilePocket, sidePockets, cuffs, centerBackSeam,
-                buttons and sleeveButtons. Every caller (the two views, and the
-                callout shapes) reads from here — edit it once, both panels move.
-    thob_markers — per-measurement geometry, keyed by field name: dims
-                (double-headed arrows), guides (leader lines), shapes (garment
-                parts re-drawn in the accent colour), dots, and label (where the
-                caption is anchored).
-    thob_front_fields / thob_back_fields — the field names for the view whose
-                values the measurement snapshot actually recorded, in diagram
-                order; loop over these to call out every marker.
-    thob_front_captions / thob_back_captions — per-field laid-out caption boxes,
-                keyed by field name: x, y, w and the finished text. Positions
-                come from the Rust layout (mirroring thob-diagram.tsx), so the
-                printed labels never overlap. Only recorded fields appear —
-                an unmeasured field gets no box and no arrow, on the paper or
-                on screen ("120 inch · Front Length").
+    thob_viewbox — the sheet's viewBox, shared with the frontend thobe sheet.
+    thob_slots — value slots in sheet order: id, key (into `thob_values`),
+                label, x, y, size. The front shoulder slot reads the drop and
+                the back one the plain shoulder width.
+    thob_values — every recorded measurement as a display string, keyed by
+                camelCase field name; unrecorded fields are absent, so their
+                slots render nothing.
+    thob_front_paths / thob_back_paths — silhouette strokes: d, grey (faint
+                stitch), dashed.
+    thob_front_ellipses / thob_back_ellipses — collar, cuffs and yoke:
+                cx, cy, rx, ry, optional transform and stroke_width. A back
+                ellipse with show_when renders only when that slot has a
+                recorded value (the yoke circle doubles as the full-body
+                callout anchor).
+    thob_dims — thin dimension/leader lines; thob_arrows — their filled heads.
 #}
 {%- set order_status_labels = {
   "pending": "Pending",
   "received": "Received"
 } -%}
 {%- set measurement_labels = {
-  "lengthFl": "Length (Front)",
-  "lengthBl": "Length (Back)",
+  "frontHeight": "Front Height",
+  "backHeight": "Back Height",
   "shoulder": "Shoulder",
   "shoulderDown": "Shoulder Down",
   "chest": "Chest",
   "chestUp": "Chest (Upper)",
   "waist": "Waist",
-  "hips": "Hips",
+  "hip": "Hip",
   "sleeveLength": "Sleeve Length",
-  "neck": "Neck",
+  "neckSize": "Neck Size",
   "neckWidth": "Neck Width",
   "openHand": "Open Hand",
-  "openHandFolding": "Open Hand Folding",
   "cuffWidth": "Cuff Width",
-  "cuffling": "Cuffling",
-  "armHole": "Armhole",
+  "cuffSize": "Cuff Size",
+  "armhole": "Armhole",
   "foWidth": "FO Width",
   "fo": "Fo",
   "bottom": "Bottom",
-  "bottomFolding": "Bottom Folding",
+  "bottomFold": "Bottom Fold",
   "fullBody": "Full Body",
   "sleeveHalf": "Sleeve Half",
   "openFold": "Open Fold",
   "frontPocketLength": "Front Pocket Length",
-  "frontPocketLengthByWidth": "Front Pocket L×W",
-  "sidePocketLength": "Side Pocket Length",
+  "frontPocketLengthByWidth": "Pocket L×W",
+  "sidePocket": "Side Pocket",
   "sidePocketLengthByWidth": "Side Pocket L×W",
   "mobilePocketLengthByWidth": "Mobile Pocket L×W",
   "type": "Type",
@@ -80,43 +80,31 @@
    further up the list wasn't recorded. A single-element pair is padded
    with "" — `order.measurement[""]` is undefined and renders as a blank
    cell that holds the column. #}
-{%- set body_pairs = [["lengthFl", "lengthBl"], ["shoulder", "shoulderDown"], ["chest", "chestUp"], ["waist", "hips"], ["sleeveLength", "sleeveHalf"], ["neck", "neckWidth"], ["openHand", "openHandFolding"], ["cuffWidth", "cuffling"], ["armHole", "bottom"], ["bottomFolding", "fullBody"], ["openFold", ""]] -%}
-{%- set pocket_pairs = [["frontPocketLength", "frontPocketLengthByWidth"], ["sidePocketLength", "sidePocketLengthByWidth"], ["mobilePocketLengthByWidth", ""]] -%}
+{%- set body_pairs = [["frontHeight", "backHeight"], ["shoulder", "shoulderDown"], ["chest", "chestUp"], ["waist", "hip"], ["sleeveLength", "sleeveHalf"], ["neckSize", "neckWidth"], ["openHand", ""], ["cuffWidth", "cuffSize"], ["armhole", "bottom"], ["bottomFold", "fullBody"], ["openFold", ""]] -%}
+{%- set pocket_pairs = [["frontPocketLength", "frontPocketLengthByWidth"], ["sidePocket", "sidePocketLengthByWidth"], ["mobilePocketLengthByWidth", ""]] -%}
 {%- set style_pairs = [["foWidth", "fo"], ["type", "fit"]] -%}
 
-{# The thob template: the garment is drawn from the front and the back, so no
-   single silhouette carries all 18 callouts. All the drawing logic lives in
-   document.rs and arrives here as data (thob_garment, thob_markers, the view
-   field lists and the laid-out captions) — the template has nothing to
-   compute, it only renders. See the context description at the top of this
-   file for the shapes of each bundle. #}
-{%- macro thob_callout(marker, caption, arrow_id) -%}
-  <g class="thob-callout">
-    {%- if marker.shapes -%}
-      {%- for shape in marker.shapes -%}
-        <path class="thob-shape" d="{{ shape }}" />
-      {%- endfor -%}
-    {%- endif -%}
-    {%- if marker.dots -%}
-      {%- for dot in marker.dots -%}
-        <circle class="thob-dot" cx="{{ dot.cx }}" cy="{{ dot.cy }}" r="2.5" />
-      {%- endfor -%}
-    {%- endif -%}
-    {%- if marker.guides -%}
-      {%- for guide in marker.guides -%}
-        <line class="thob-guide" x1="{{ guide.x1 }}" y1="{{ guide.y1 }}" x2="{{ guide.x2 }}" y2="{{ guide.y2 }}" />
-      {%- endfor -%}
-    {%- endif -%}
-    {%- if marker.dims -%}
-      {%- for dim in marker.dims -%}
-        <line class="thob-dim" x1="{{ dim.x1 }}" y1="{{ dim.y1 }}" x2="{{ dim.x2 }}" y2="{{ dim.y2 }}" marker-start="url(#{{ arrow_id }})" marker-end="url(#{{ arrow_id }})" />
-      {%- endfor -%}
-    {%- endif -%}
-    <g class="thob-caption">
-      <rect x="{{ caption.x }}" y="{{ caption.y }}" width="{{ caption.w }}" height="20" rx="4" />
-      <text x="{{ caption.x + caption.w / 2 }}" y="{{ caption.y + 14 }}" class="thob-caption-text">{{ caption.text }}</text>
-    </g>
-  </g>
+{# The thobe sheet: front and back silhouettes in one SVG with every recorded
+   value at its slot. All the drawing data arrives from document.rs (paths,
+   ellipses, dims, arrows, slots) — the template only renders. A slot whose
+   value the snapshot didn't record renders nothing. #}
+{%- macro thobe_ellipse(e) -%}
+  <ellipse class="thob-garment" cx="{{ e.cx }}" cy="{{ e.cy }}" rx="{{ e.rx }}" ry="{{ e.ry }}"{% if e.transform %} transform="{{ e.transform }}"{% endif %}{% if e.stroke_width %} stroke-width="{{ e.stroke_width }}"{% endif %} />
+{%- endmacro -%}
+{# One design cell: thumbnail above, small caption below. `cls` carries the
+   cell classes so the sidebar and the overflow strip share the markup. #}
+{%- macro design_cell(chip, cls) -%}
+  <div class="{{ cls }}">
+    {% if chip.image %}
+      <img src="{{ chip.image }}" alt="{{ chip.label }}" />
+    {% else %}
+      <span class="design-cell-empty"></span>
+    {% endif %}
+    <span class="design-copy">
+      <span class="design-title">{{ chip.titleEn }}</span>
+      <span class="design-name" dir="ltr">{{ chip.label }}</span>
+    </span>
+  </div>
 {%- endmacro -%}
 {# One measurement cell: the recorded value, or a blank placeholder that
    holds the column so a pair's second field never slides left when the
@@ -139,10 +127,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Order ORD-{{ order.orderNumber }}</title>
     <style>
-      /* A4 with a tight printer-safe margin. The sheet is designed to fit one
-         page: compact type, single-line bilingual labels, small design
-         thumbnails and capped diagram height keep everything on one page for
-         a typical order. */
+      /* A4 with a tight printer-safe margin. Compact type, single-line
+         bilingual labels and small design thumbnails keep the header tight;
+         the thobe sheet below it prints tall so the slot values stay
+         readable, and the measurement tables flow after it. */
       @page {
         size: A4;
         margin: 8mm;
@@ -242,15 +230,6 @@
         color: var(--muted);
       }
 
-      h2.section-title {
-        margin: 6px 0 3px;
-        font-size: 9px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--muted);
-      }
-
       .panels {
         display: flex;
         gap: 6px;
@@ -344,15 +323,24 @@
         font-size: 8px;
       }
 
-      /* One bordered "Design" panel: a heading and then a grid of cells,
-         one per slot (Thobe / Collar / Sleeve / Front Pocket / Side Pocket / Patti / EMD). A
-         catalog
-         match fills its cell with a raster; a legacy value that matches
-         nothing fills the label only, so the sheet reads the same shape
-         either way. The panel never splits across pages. Thumbnails are kept
-         small so the sheet still fits on a single page. */
-      .design-panel {
+      /* Side-by-side production spec: the design choices stack as a narrow
+         column on the left while the thobe sheet takes the remaining width,
+         so the diagram can print tall enough to read the slot values. */
+      .design-and-sheet {
+        display: grid;
+        grid-template-columns: 172px minmax(0, 1fr);
+        gap: 6px;
         margin-top: 6px;
+        align-items: start;
+      }
+
+      /* One bordered "Design" panel: a heading and then a vertical stack of
+         cells, one per slot (Thobe / Collar / Sleeve / Front Pocket / Side Pocket / Patti / EMD).
+         A catalog match fills its cell with a raster; a legacy value that
+         matches nothing fills the label only, so the sheet reads the same
+         shape either way. The panel never splits across pages. */
+      .design-panel {
+        margin-top: 0;
         border: 1px solid var(--rule);
         border-radius: 4px;
         padding: 5px 7px;
@@ -371,27 +359,28 @@
 
       .design-grid {
         display: grid;
-        grid-template-columns: repeat(6, 1fr);
+        grid-template-columns: 1fr;
         gap: 3px;
       }
 
       .design-cell {
         display: flex;
         flex-direction: column;
-        align-items: center;
+        align-items: stretch;
         gap: 1px;
-        padding: 2px 1px;
+        padding: 3px;
         border: 1px solid var(--rule);
         border-radius: 3px;
         background: #fff;
-        text-align: center;
         min-width: 0;
+        text-align: center;
       }
 
-      .design-cell img,
-      .design-cell-empty {
+      .design-cell img {
         width: 100%;
-        height: 44px;
+        /* Compact beside the sheet: five stacked choices stay in balance
+           with the taller diagram. */
+        height: 80px;
         object-fit: contain;
       }
 
@@ -402,7 +391,10 @@
       .design-copy {
         display: flex;
         flex-direction: column;
+        align-items: center;
+        text-align: center;
         line-height: 1.1;
+        min-width: 0;
       }
 
       .design-title {
@@ -427,11 +419,46 @@
         font-size: 8.5px;
       }
 
+      /* The free-text note under the diagram gets a touch more air than its
+         sidebar sibling since it spans the full sheet width. */
+      .design-note-below {
+        margin-top: 6px;
+      }
+
+      /* Choices past the fifth land here, below the diagram, so the sidebar
+         never stretches the side-by-side balance. Bounded in practice: six
+         design slots exist, so at most one chip overflows. */
+      .design-overflow {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+        margin-top: 6px;
+      }
+
+      .design-overflow .design-cell {
+        flex: 0 1 140px;
+      }
+
+      .design-overflow .design-cell img {
+        height: 64px;
+      }
+
       .measurements {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 6px;
         margin-top: 6px;
+      }
+
+      /* The shorter tables stack in one column beside Body dimensions. The
+         stack stretches to the row height and spreads edge to edge, so both
+         columns read as one height. */
+      .measurement-stack {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 6px;
+        min-width: 0;
       }
 
       .measurement-group {
@@ -481,10 +508,7 @@
       }
 
       .thob-sheet {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 6px;
-        margin-top: 6px;
+        margin-top: 0;
       }
 
       .thob-panel {
@@ -509,75 +533,31 @@
         display: block;
         width: 100%;
         height: auto;
-        max-height: 300px;
+        max-height: 460px;
+        margin: 0 auto;
       }
 
-      .thob-outline {
-        fill: #fff;
+      .thob-garment {
+        fill: none;
         stroke: var(--ink);
-        stroke-width: 1.5;
+        stroke-width: 1.2;
         stroke-linejoin: round;
-      }
-
-      .thob-detail {
-        fill: none;
-        stroke: var(--muted);
-        stroke-width: 1;
-        stroke-linejoin: round;
-      }
-
-      .thob-seam {
-        fill: none;
-        stroke: var(--muted);
-        stroke-width: 0.8;
-        stroke-dasharray: 4 3;
-        stroke-linejoin: round;
-      }
-
-      .thob-button {
-        fill: var(--ink);
-      }
-
-      /* Only the active callout's copy of a garment feature lights up in the
-         accent colour; the base drawing above stays muted. */
-      .thob-guide {
-        fill: none;
-        stroke: var(--accent);
-        stroke-width: 0.8;
         stroke-linecap: round;
       }
 
       .thob-dim {
         fill: none;
-        stroke: var(--accent);
-        stroke-width: 1.1;
+        stroke: var(--ink);
+        stroke-width: 1;
       }
 
-      .thob-shape {
-        fill: none;
-        stroke: var(--accent);
-        stroke-width: 1.1;
-        stroke-linejoin: round;
-      }
-
-      .thob-dot {
-        fill: var(--accent);
-      }
-
-      .thob-caption rect {
-        fill: #fff;
-        stroke: var(--rule);
-      }
-
-      .thob-caption text {
-        font-family: inherit;
-        text-anchor: middle;
-      }
-
-      .thob-caption-text {
-        font-size: 8.5px;
-        font-weight: 600;
+      .thob-arrow {
         fill: var(--ink);
+      }
+
+      .thob-value {
+        font-weight: 600;
+        fill: #000;
       }
 
       .closing {
@@ -684,84 +664,80 @@
       </div>
     </section>
 
-    <section class="design-panel">
-      <h3>Design</h3>
-      {% if designs %}
-        <div class="design-grid">
-          {% for chip in designs %}
-            <div class="design-cell">
-              {% if chip.image %}
-                <img src="{{ chip.image }}" alt="{{ chip.label }}" />
-              {% else %}
-                <span class="design-cell-empty"></span>
-              {% endif %}
-              <span class="design-copy">
-                <span class="design-title">{{ chip.titleEn }}</span>
-                <span class="design-name" dir="ltr">{{ chip.label }}</span>
-              </span>
-            </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <div class="design-note">No design choices recorded</div>
-      {% endif %}
-      {% if design_note %}
-        <div class="design-note">{{ design_note }}</div>
-      {% endif %}
-    </section>
+    {# Side-by-side production spec: the design choices stack as a narrow
+       column on the left while the thobe sheet takes the remaining width.
+       One snapshot per order — the measurements the garment was cut to. #}
+    <div class="design-and-sheet">
+      <section class="design-panel">
+        <h3>Design</h3>
+        {% if designs %}
+          <div class="design-grid">
+            {# The sidebar holds five choices; anything past that flows below
+               the diagram so the side-by-side balance never stretches. There
+               are only six design slots, so at most one lands there. #}
+            {% for chip in designs[:5] %}
+              {{ design_cell(chip, "design-cell") }}
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="design-note">No design choices recorded</div>
+        {% endif %}
+      </section>
 
-    <h2 class="section-title">Measurements</h2>
-    {# One snapshot per order — the measurements the garment was cut to. #}
-    <div class="thob-sheet">
-      <div class="thob-panel">
-        <h3>Front of Thob</h3>
-        <svg class="thob-svg" viewBox="0 0 480 500" role="img" aria-label="Front view measurement chart">
-          <defs>
-            <marker id="thob-arrow-f" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-              <path d="M 0 0 L 8 4 L 0 8 Z" fill="#1d4ed8" />
-            </marker>
-          </defs>
+      <div class="thob-sheet">
+        <div class="thob-panel">
+          <h3>Thobe Sheet</h3>
+          <svg class="thob-svg" viewBox="{{ thob_viewbox }}" role="img" aria-label="Thobe measurement sheet">
           <g>
-            <path class="thob-outline" d="{{ thob_garment.outline }}" />
-            <path class="thob-detail" d="{{ thob_garment.collar }}" />
-            <path class="thob-detail" d="{{ thob_garment.placket }}" />
-            <path class="thob-seam" d="{{ thob_garment.mobilePocket }}" />
-            <path class="thob-detail" d="{{ thob_garment.chestPocket }}" />
-            <path class="thob-detail" d="{{ thob_garment.sidePockets }}" />
-            <path class="thob-detail" d="{{ thob_garment.cuffs }}" />
-            {%- for button in thob_garment.buttons %}
-              <circle class="thob-button" cx="{{ button.cx }}" cy="{{ button.cy }}" r="2.5" />
+            {%- for e in thob_front_ellipses %}
+              {{ thobe_ellipse(e) }}
             {%- endfor %}
-            {%- for button in thob_garment.sleeveButtons %}
-              <circle class="thob-button" cx="{{ button.cx }}" cy="{{ button.cy }}" r="2.5" />
+            {%- for p in thob_front_paths %}
+              <path class="thob-garment" d="{{ p.d }}"{% if p.grey %} stroke="#999" stroke-width="0.8"{% endif %} />
+            {%- endfor %}
+            {%- for e in thob_back_ellipses %}
+              {%- if not e.show_when %}
+                {{ thobe_ellipse(e) }}
+              {%- elif thob_values[e.show_when] is defined and thob_values[e.show_when] is not none and thob_values[e.show_when] != '' %}
+                {{ thobe_ellipse(e) }}
+              {%- endif %}
+            {%- endfor %}
+            {%- for p in thob_back_paths %}
+              <path class="thob-garment" d="{{ p.d }}"{% if p.dashed %} stroke-dasharray="6 3" stroke-width="1"{% endif %} />
             {%- endfor %}
           </g>
-          {%- for field in thob_front_fields %}
-            {{ thob_callout(thob_markers[field], thob_front_captions[field], "thob-arrow-f") }}
-          {%- endfor %}
-        </svg>
-      </div>
-      <div class="thob-panel">
-        <h3>Back of Thob</h3>
-        <svg class="thob-svg" viewBox="0 0 480 500" role="img" aria-label="Back view measurement chart">
-          <defs>
-            <marker id="thob-arrow-b" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-              <path d="M 0 0 L 8 4 L 0 8 Z" fill="#1d4ed8" />
-            </marker>
-          </defs>
           <g>
-            <path class="thob-outline" d="{{ thob_garment.outline }}" />
-            <path class="thob-detail" d="{{ thob_garment.collar }}" />
-            <path class="thob-detail" d="{{ thob_garment.cuffs }}" />
-            <path class="thob-seam" d="{{ thob_garment.centerBackSeam }}" />
-            {%- for button in thob_garment.sleeveButtons %}
-              <circle class="thob-button" cx="{{ button.cx }}" cy="{{ button.cy }}" r="2.5" />
+            {%- for d in thob_dims %}
+              <path class="thob-dim" d="{{ d }}" />
+            {%- endfor %}
+            {%- for d in thob_arrows %}
+              <path class="thob-arrow" d="{{ d }}" />
             {%- endfor %}
           </g>
-          {%- for field in thob_back_fields %}
-            {{ thob_callout(thob_markers[field], thob_back_captions[field], "thob-arrow-b") }}
-          {%- endfor %}
+          <g font-family="Arial, sans-serif">
+            {%- for slot in thob_slots %}
+              {% set value = thob_values[slot.key] %}
+              {% if value is defined and value is not none and value != '' %}
+                <g>
+                  <title>{{ slot.label }}</title>
+                  <text x="{{ slot.x }}" y="{{ slot.y }}" font-size="{{ slot.size }}" text-anchor="middle" fill="none" stroke="#fff" stroke-width="3.5" stroke-linejoin="round">{{ value }}</text>
+                  <text x="{{ slot.x }}" y="{{ slot.y }}" font-size="{{ slot.size }}" text-anchor="middle" class="thob-value">{{ value }}</text>
+                </g>
+              {% endif %}
+            {%- endfor %}
+          </g>
         </svg>
+        </div>
+        {% if design_note %}
+          <div class="design-note design-note-below">{{ design_note }}</div>
+        {% endif %}
+        {% if designs|length > 5 %}
+          <div class="design-overflow">
+            {% for chip in designs[5:] %}
+              {{ design_cell(chip, "design-cell design-cell-overflow") }}
+            {% endfor %}
+          </div>
+        {% endif %}
       </div>
     </div>
     <div class="measurements">
@@ -780,6 +756,7 @@
           {% endfor %}
         </div>
       </div>
+      <div class="measurement-stack">
       <div class="measurement-group">
         <h3>Pockets</h3>
         <div class="measurement-grid">
@@ -815,9 +792,10 @@
         <div class="measurement-grid">
           <div class="m">
             <span>Measured on</span>
-            <span class="num" dir="ltr">{{ order.measurement.date }}</span>
+            <span class="num" dir="ltr">{{ measured_on }}</span>
           </div>
         </div>
+      </div>
       </div>
     </div>
 

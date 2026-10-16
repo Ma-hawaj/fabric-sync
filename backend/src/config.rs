@@ -48,6 +48,10 @@ pub struct Config {
     /// authenticate the confidential OAuth2 provider used only for
     /// introspecting end-user tokens. `None` unless set.
     pub authentik_api_token: Option<String>,
+    /// IANA timezone the printed documents write dates in (e.g.
+    /// `Asia/Bahrain`) — the database stores UTC, and a date printed in the
+    /// wrong zone is a wrong date on the paper. Unset means Bahrain.
+    pub timezone: String,
     /// Loads `seeds/dev_seed.sql` at startup. Off unless explicitly enabled,
     /// and the seed itself refuses to run against a database that already has
     /// data — see `seed::run`.
@@ -90,6 +94,15 @@ impl InvoiceBranding {
 }
 
 impl Config {
+    /// The zone printed documents write dates in. Checked once at startup —
+    /// a misspelled TIMEZONE must refuse to boot rather than silently print
+    /// UTC again.
+    pub fn timezone(&self) -> Result<chrono_tz::Tz, String> {
+        self.timezone
+            .parse()
+            .map_err(|_| format!("unknown TIMEZONE {:?}", self.timezone))
+    }
+
     pub fn from_env() -> Self {
         let port = env::var("PORT")
             .ok()
@@ -119,6 +132,10 @@ impl Config {
         let seed_dev_data = env::var("SEED_DEV_DATA")
             .map(|value| value == "true" || value == "1")
             .unwrap_or(false);
+        let timezone = env::var("TIMEZONE")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "Asia/Bahrain".to_string());
         let static_dir = env::var("STATIC_DIR")
             .ok()
             .filter(|value| !value.trim().is_empty())
@@ -135,6 +152,7 @@ impl Config {
             authentik_base_url,
             authentik_api_token,
             seed_dev_data,
+            timezone,
             static_dir,
             invoice_branding: InvoiceBranding::from_env(),
         }

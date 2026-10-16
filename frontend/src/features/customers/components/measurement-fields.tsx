@@ -121,7 +121,7 @@ export function MeasurementFields({
   const base = basePath
   // Hover wins over focus so pointing at one field while another is focused
   // shows what the pointer is on, and dropping the pointer falls back to the
-  // focused field rather than clearing the sketch.
+  // focused field rather than clearing the sheet.
   const [hovered, setHovered] = useState<string | null>(null)
   const [focused, setFocused] = useState<string | null>(null)
   const activeField = hovered ?? focused

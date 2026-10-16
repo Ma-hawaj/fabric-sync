@@ -6,32 +6,31 @@ export interface InvoiceEditMeasurement {
   date: string
   type: string | null
   fit: string | null
-  lengthFl: number | null
-  lengthBl: number | null
+  frontHeight: number | null
+  backHeight: number | null
   chest: number | null
   waist: number | null
-  hips: number | null
+  hip: number | null
   shoulder: number | null
   shoulderDown: number | null
   sleeveLength: number | null
-  neck: number | null
+  neckSize: number | null
   openHand: number | null
-  openHandFolding: number | null
   chestUp: number | null
   cuffWidth: number | null
-  cuffling: number | null
+  cuffSize: number | null
   neckWidth: number | null
-  armHole: number | null
+  armhole: number | null
   foWidth: number | null
   fo: number | null
   sleeveHalf: number | null
   openFold: number | null
   bottom: number | null
-  bottomFolding: number | null
+  bottomFold: number | null
   fullBody: number | null
   frontPocketLength: number | null
   frontPocketLengthByWidth: string | null
-  sidePocketLength: number | null
+  sidePocket: number | null
   sidePocketLengthByWidth: string | null
   mobilePocketLengthByWidth: string | null
 }

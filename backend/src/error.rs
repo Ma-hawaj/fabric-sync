@@ -13,6 +13,9 @@ pub enum AppError {
     NotFound(String),
     Conflict(String),
     BadRequest(String),
+    /// Boot-time configuration failure (e.g. an unknown TIMEZONE) — never a
+    /// response in practice, since the server refuses to start.
+    Config(String),
     /// The invoice document template failed to load or render. A server fault
     /// like the others above it, but worth its own variant because the
     /// template can be replaced at runtime (INVOICE_TEMPLATE_DIR), so this is
@@ -84,6 +87,7 @@ impl IntoResponse for AppError {
             Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
             Self::Conflict(message) => (StatusCode::CONFLICT, message),
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
+            Self::Config(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
             Self::Template(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
             Self::Authentik(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
         };

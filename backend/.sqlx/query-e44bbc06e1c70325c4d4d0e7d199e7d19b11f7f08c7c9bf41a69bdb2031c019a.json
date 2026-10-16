@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE measurements\n        SET measurement_date = $2,\n            front_height = $3::float8, back_height = $4::float8,\n            chest = $5::float8, waist = $6::float8,\n            hip = $7::float8, shoulder = $8::float8,\n            shoulder_down = $9::float8, sleeve_length = $10::float8,\n            neck_size = $11::float8, open_hand = $12::float8,\n            chest_up = $13::float8,\n            cuff_width = $14::float8, cuff_size = $15::float8,\n            neck_width = $16::float8,\n            armhole = $17::float8, fo_width = $18::float8,\n            fo = $19::float8,\n            bottom = $20::float8, bottom_fold = $21::float8,\n            full_body = $22::float8,\n            sleeve_half = $23::float8, open_fold = $24::float8,\n            front_pocket_length = $25::float8,\n            front_pocket_length_by_width = $26,\n            side_pocket = $27::float8,\n            side_pocket_length_by_width = $28,\n            mobile_pocket_length_by_width = $29,\n            type = $30, fit = $31\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Text",
+        "Float8",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e44bbc06e1c70325c4d4d0e7d199e7d19b11f7f08c7c9bf41a69bdb2031c019a"
+}

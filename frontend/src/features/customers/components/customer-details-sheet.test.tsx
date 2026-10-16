@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { CustomerDetailsSheet } from './customer-details-sheet'
 import type { Customer } from '../types/customers'
@@ -75,12 +75,12 @@ describe('CustomerDetailsSheet', () => {
     // Waist was not recorded, but its slot stays so the recorded fields
     // keep their grid positions.
     expect(screen.queryByText('Waist')).toBeTruthy()
-    expect(screen.queryByText('108')).toBeTruthy()
-    // Body Dimensions has 21 fields and 2 recorded values; Style &
+    expect(screen.queryAllByText('108').length).toBeGreaterThan(0)
+    // Body Dimensions has 20 fields and 2 recorded values; Style &
     // Finishing has 2 fields and 1 recorded value; Pockets has 5 fields
     // and none recorded. Every other slot holds a placeholder.
     // (The sheet renders in a portal, so query the document body.)
-    expect(document.body.querySelectorAll('[data-empty]').length).toBe(25)
+    expect(document.body.querySelectorAll('[data-empty]').length).toBe(24)
   })
 
   it('shows the record type and fit above the diagram groups', () => {
@@ -102,14 +102,56 @@ describe('CustomerDetailsSheet', () => {
     expect(screen.queryByText('Record Details')).toBeNull()
   })
 
-  it('draws the thob sketch alongside the measurements', () => {
+  it('draws the thobe sheet alongside the measurements', () => {
     renderSheet(CUSTOMER)
 
+    expect(screen.queryByLabelText('Thobe measurements')).toBeTruthy()
+  })
+
+  it('highlights the hovered measurement on the sheet', () => {
+    renderSheet(CUSTOMER)
+
+    // 'Chest' also names the sheet slot, so take the metric list's label.
+    const label = screen
+      .getAllByText('Chest')
+      .find((el) => el.tagName === 'SPAN')
+    expect(label).toBeTruthy()
+    const row = label!.closest('div')!
+
+    expect(screen.queryByTestId('value-chest')).toBeTruthy()
     expect(
-      screen.queryByLabelText(
-        'Thob sketch, front view, with measurement guides',
-      ),
-    ).toBeTruthy()
+      screen.getByTestId('value-chest').getAttribute('data-active'),
+    ).toBeNull()
+
+    fireEvent.mouseEnter(row)
+    expect(screen.getByTestId('value-chest').getAttribute('data-active')).toBe(
+      'true',
+    )
+
+    fireEvent.mouseLeave(row)
+    expect(
+      screen.getByTestId('value-chest').getAttribute('data-active'),
+    ).toBeNull()
+  })
+
+  it('shows a ghost on the sheet for a hovered but unrecorded measurement', () => {
+    renderSheet(CUSTOMER)
+
+    // Waist was never recorded, so its slot only exists while hovered.
+    expect(screen.queryByTestId('value-waist')).toBeNull()
+    const label = screen
+      .getAllByText('Waist')
+      .find((el) => el.tagName === 'SPAN')
+    expect(label).toBeTruthy()
+    const row = label!.closest('div')!
+
+    fireEvent.mouseEnter(row)
+    const slot = screen.getByTestId('value-waist')
+    expect(slot.getAttribute('data-active')).toBe('true')
+    expect(slot.querySelector('circle')).toBeTruthy()
+
+    fireEvent.mouseLeave(row)
+    expect(screen.queryByTestId('value-waist')).toBeNull()
   })
 
   it('shows the customer invoices with links to their pages', () => {
