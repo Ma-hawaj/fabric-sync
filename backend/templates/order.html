@@ -86,6 +86,21 @@
 {%- macro thobe_ellipse(e) -%}
   <ellipse class="thob-garment" cx="{{ e.cx }}" cy="{{ e.cy }}" rx="{{ e.rx }}" ry="{{ e.ry }}"{% if e.transform %} transform="{{ e.transform }}"{% endif %}{% if e.stroke_width %} stroke-width="{{ e.stroke_width }}"{% endif %} />
 {%- endmacro -%}
+{# One design cell: thumbnail above, small caption below. `cls` carries the
+   cell classes so the sidebar and the overflow strip share the markup. #}
+{%- macro design_cell(chip, cls) -%}
+  <div class="{{ cls }}">
+    {% if chip.image %}
+      <img src="{{ chip.image }}" alt="{{ chip.label }}" />
+    {% else %}
+      <span class="design-cell-empty"></span>
+    {% endif %}
+    <span class="design-copy">
+      <span class="design-title">{{ chip.titleEn }}</span>
+      <span class="design-name" dir="ltr">{{ chip.label }}</span>
+    </span>
+  </div>
+{%- endmacro -%}
 {# One measurement cell: the recorded value, or a blank placeholder that
    holds the column so a pair's second field never slides left when the
    first wasn't recorded. Value and label arrive as arguments because
@@ -397,6 +412,24 @@
         font-size: 8.5px;
       }
 
+      /* Choices past the fifth land here, below the diagram, so the sidebar
+         never stretches the side-by-side balance. Bounded in practice: six
+         design slots exist, so at most one chip overflows. */
+      .design-overflow {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+        margin-top: 6px;
+      }
+
+      .design-overflow .design-cell {
+        flex: 0 1 140px;
+      }
+
+      .design-overflow .design-cell img {
+        height: 64px;
+      }
+
       .measurements {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -615,18 +648,11 @@
         <h3>Design</h3>
         {% if designs %}
           <div class="design-grid">
-            {% for chip in designs %}
-              <div class="design-cell">
-                {% if chip.image %}
-                  <img src="{{ chip.image }}" alt="{{ chip.label }}" />
-                {% else %}
-                  <span class="design-cell-empty"></span>
-                {% endif %}
-                <span class="design-copy">
-                  <span class="design-title">{{ chip.titleEn }}</span>
-                  <span class="design-name" dir="ltr">{{ chip.label }}</span>
-                </span>
-              </div>
+            {# The sidebar holds five choices; anything past that flows below
+               the diagram so the side-by-side balance never stretches. There
+               are only six design slots, so at most one lands there. #}
+            {% for chip in designs[:5] %}
+              {{ design_cell(chip, "design-cell") }}
             {% endfor %}
           </div>
         {% else %}
@@ -677,6 +703,13 @@
           </g>
         </svg>
         </div>
+        {% if designs|length > 5 %}
+          <div class="design-overflow">
+            {% for chip in designs[5:] %}
+              {{ design_cell(chip, "design-cell design-cell-overflow") }}
+            {% endfor %}
+          </div>
+        {% endif %}
       </div>
     </div>
     <div class="measurements">

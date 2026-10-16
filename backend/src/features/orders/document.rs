@@ -852,6 +852,32 @@ mod tests {
         // disappearing.
         assert!(html.contains("Saudi"));
         assert!(html.contains("double stitching"));
+        // Two choices fit the sidebar — no overflow strip is rendered below
+        // the sheet. (Matched on the div: the stylesheet always names the
+        // class.)
+        assert!(!html.contains("<div class=\"design-overflow\">"));
+    }
+
+    #[test]
+    fn extra_design_choices_overflow_below_the_sheet() {
+        // All six slots filled: five stack in the sidebar, the sixth flows
+        // below the diagram so the side-by-side balance never stretches.
+        let mut order = services_order();
+        order.thobe_type = Some("thobx".to_string());
+        order.collar = Some("Saudi".to_string());
+        order.sleeve = Some("open".to_string());
+        order.f_pocket = Some("round".to_string());
+        order.patti = Some("normal".to_string());
+        order.emd = Some("6".to_string());
+        let detail = OrderDetail {
+            order,
+            invoice_number: 7,
+            measurement: tests_support::measurement(),
+        };
+        let html = test_render(&detail, &branding());
+
+        assert_eq!(html.matches("<div class=\"design-cell\">").count(), 5);
+        assert_eq!(html.matches("design-cell-overflow").count(), 1);
     }
 
     #[test]
