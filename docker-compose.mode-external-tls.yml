@@ -14,7 +14,9 @@ services:
       - --log.level=${TRAEFIK_LOG_LEVEL}
       - --accesslog=${TRAEFIK_ACCESSLOG_ENABLED}
     ports: !override
-      - 8080:8080
+      # Use loopback for a local load balancer, or an interface restricted to
+      # the remote load balancer (see .env.example).
+      - ${PROXY_EXTERNAL_TLS_BIND_IP:-127.0.0.1}:8080:8080
 
   zitadel-api:
     environment:

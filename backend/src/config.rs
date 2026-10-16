@@ -115,12 +115,18 @@ impl Config {
         let oauth_client_secret = env::var("OAUTH_CLIENT_SECRET")
             .or_else(|_| env::var("OIDC_CLIENT_SECRET"))
             .ok();
-        let oauth_introspection_url = env::var("OAUTH_INTROSPECTION_URL").ok();
+        let oauth_introspection_url = env::var("OAUTH_INTROSPECTION_URL")
+            .ok()
+            .filter(|value| !value.trim().is_empty());
         let oauth_resource_audience = env::var("OAUTH_RESOURCE_AUDIENCE")
             .ok()
             .filter(|value| !value.trim().is_empty());
-        let zitadel_users_client_id = env::var("ZITADEL_USERS_CLIENT_ID").ok();
-        let zitadel_users_client_secret = env::var("ZITADEL_USERS_CLIENT_SECRET").ok();
+        let zitadel_users_client_id = env::var("ZITADEL_USERS_CLIENT_ID")
+            .ok()
+            .filter(|value| !value.trim().is_empty());
+        let zitadel_users_client_secret = env::var("ZITADEL_USERS_CLIENT_SECRET")
+            .ok()
+            .filter(|value| !value.trim().is_empty());
         let seed_dev_data = env::var("SEED_DEV_DATA")
             .map(|value| value == "true" || value == "1")
             .unwrap_or(false);

@@ -1,6 +1,7 @@
 use base64::Engine;
 use reqwest;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::{config::Config, error::AppError};
 
@@ -31,17 +32,62 @@ pub struct ZitadelUserDirectory {
 
 #[derive(Serialize)]
 struct SearchUsersRequest {
-    query: SearchUsersQuery,
+    query: SearchQuery,
+    #[serde(rename = "sortingColumn")]
+    sorting_column: &'static str,
 }
 
 #[derive(Serialize)]
-struct SearchUsersQuery {
+struct SearchQuery {
     limit: u32,
+    offset: u64,
+    asc: bool,
 }
 
 #[derive(Deserialize)]
 struct SearchUsersResponse {
+    details: ListDetails,
+    #[serde(default)]
     result: Vec<ZitadelUser>,
+}
+
+#[derive(Deserialize)]
+struct ListDetails {
+    // Protobuf JSON emits uint64 as strings, but also accepts JSON numbers.
+    #[serde(
+        default,
+        rename = "totalResult",
+        deserialize_with = "deserialize_total"
+    )]
+    total_result: u64,
+}
+
+fn deserialize_total<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<u64, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Total {
+        String(String),
+        Number(u64),
+    }
+    match Total::deserialize(deserializer)? {
+        Total::String(value) => value.parse().map_err(serde::de::Error::custom),
+        Total::Number(value) => Ok(value),
+    }
+}
+
+impl ListDetails {
+    fn next_offset(&self, offset: u64, page_len: usize) -> Result<Option<u64>, AppError> {
+        let next = offset + page_len as u64;
+        if next >= self.total_result {
+            Ok(None)
+        } else if page_len == 0 {
+            Err(AppError::Zitadel(
+                "Zitadel returned an empty page before totalResult was reached".to_string(),
+            ))
+        } else {
+            Ok(Some(next))
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -80,9 +126,11 @@ struct TokenResponse {
 /// One page of the management v1 user-grants search
 /// (`POST /management/v1/users/grants/_search`). Each grant ties a user to
 /// project role keys; only the user id and the keys are kept. Everything
-/// defaults so a shape drift degrades to "no roles" rather than a 500.
-#[derive(Default, Deserialize)]
+/// defaults except pagination details; a shape drift still degrades to
+/// "no roles" through the best-effort enrichment error path.
+#[derive(Deserialize)]
 struct SearchGrantsResponse {
+    details: ListDetails,
     #[serde(default)]
     result: Vec<ZitadelUserGrant>,
 }
@@ -156,6 +204,7 @@ impl ZitadelUserDirectory {
 
         let http_client = reqwest::ClientBuilder::new()
             .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(30))
             .build()
             .map_err(|error| format!("failed to build Zitadel HTTP client: {error}"))?;
 
@@ -178,8 +227,7 @@ impl ZitadelUserDirectory {
             .header("Authorization", format!("Basic {credentials}"))
             .form(&[
                 ("grant_type", "client_credentials"),
-                ("scope", "openid"),
-                ("scope", "urn:zitadel:iam:org:project:id:zitadel:aud"),
+                ("scope", "openid urn:zitadel:iam:org:project:id:zitadel:aud"),
             ])
             .send()
             .await
@@ -196,22 +244,42 @@ impl ZitadelUserDirectory {
     pub async fn list_users(&self) -> Result<Vec<User>, AppError> {
         let access_token = self.exchange_client_credentials().await?;
 
-        let response = self
-            .http_client
-            .post(format!("{}/v2/users", self.api_base))
-            .bearer_auth(&access_token)
-            .json(&SearchUsersRequest {
-                query: SearchUsersQuery { limit: 200 },
-            })
-            .send()
-            .await
-            .and_then(reqwest::Response::error_for_status)
-            .map_err(|error| AppError::Zitadel(format!("Zitadel users request failed: {error}")))?
-            .json::<SearchUsersResponse>()
-            .await
-            .map_err(|error| {
-                AppError::Zitadel(format!("failed to parse Zitadel users response: {error}"))
-            })?;
+        let mut users = Vec::new();
+        let mut offset = 0;
+        loop {
+            let response = self
+                .http_client
+                .post(format!("{}/v2/users", self.api_base))
+                .bearer_auth(&access_token)
+                .json(&SearchUsersRequest {
+                    query: SearchQuery {
+                        limit: 200,
+                        offset,
+                        asc: true,
+                    },
+                    // In Zitadel v4, UNSPECIFIED sorts by the unique user ID.
+                    sorting_column: "USER_FIELD_NAME_UNSPECIFIED",
+                })
+                .send()
+                .await
+                .and_then(reqwest::Response::error_for_status)
+                .map_err(|error| {
+                    AppError::Zitadel(format!("Zitadel users request failed: {error}"))
+                })?
+                .json::<SearchUsersResponse>()
+                .await
+                .map_err(|error| {
+                    AppError::Zitadel(format!("failed to parse Zitadel users response: {error}"))
+                })?;
+            let next_offset = response
+                .details
+                .next_offset(offset, response.result.len())?;
+            users.extend(response.result);
+            match next_offset {
+                Some(next) => offset = next,
+                None => break,
+            }
+        }
 
         // Role enrichment is best-effort: it needs grant-read permission the
         // machine user may not have, and the directory listing is still
@@ -225,8 +293,7 @@ impl ZitadelUserDirectory {
             }
         };
 
-        Ok(response
-            .result
+        Ok(users
             .into_iter()
             .filter_map(|user| {
                 let empty = Vec::new();
@@ -238,31 +305,46 @@ impl ZitadelUserDirectory {
 
     /// Fetch every project role grant visible to the machine user and index
     /// the role keys by user id (`POST
-    /// /management/v1/users/grants/_search`). One batched call for the whole
-    /// directory, not one per user.
+    /// /management/v1/users/grants/_search`), in pages for the whole directory.
     async fn user_roles(
         &self,
         access_token: &str,
     ) -> Result<std::collections::HashMap<String, Vec<String>>, AppError> {
-        let response = self
-            .http_client
-            .post(format!(
-                "{}/management/v1/users/grants/_search",
-                self.api_base
-            ))
-            .bearer_auth(access_token)
-            .json(&serde_json::json!({ "query": { "limit": 1000, "offset": 0 } }))
-            .send()
-            .await
-            .and_then(reqwest::Response::error_for_status)
-            .map_err(|error| AppError::Zitadel(format!("Zitadel grants request failed: {error}")))?
-            .json::<SearchGrantsResponse>()
-            .await
-            .map_err(|error| {
-                AppError::Zitadel(format!("failed to parse Zitadel grants response: {error}"))
-            })?;
+        let mut grants = Vec::new();
+        let mut offset = 0;
+        loop {
+            let response = self
+                .http_client
+                .post(format!(
+                    "{}/management/v1/users/grants/_search",
+                    self.api_base
+                ))
+                .bearer_auth(access_token)
+                .json(
+                    &serde_json::json!({ "query": SearchQuery { limit: 1000, offset, asc: true } }),
+                )
+                .send()
+                .await
+                .and_then(reqwest::Response::error_for_status)
+                .map_err(|error| {
+                    AppError::Zitadel(format!("Zitadel grants request failed: {error}"))
+                })?
+                .json::<SearchGrantsResponse>()
+                .await
+                .map_err(|error| {
+                    AppError::Zitadel(format!("failed to parse Zitadel grants response: {error}"))
+                })?;
+            let next_offset = response
+                .details
+                .next_offset(offset, response.result.len())?;
+            grants.extend(response.result);
+            match next_offset {
+                Some(next) => offset = next,
+                None => break,
+            }
+        }
 
-        Ok(roles_by_user(response.result))
+        Ok(roles_by_user(grants))
     }
 }
 
@@ -344,6 +426,7 @@ mod tests {
     #[test]
     fn grants_index_role_keys_by_user() {
         let response: SearchGrantsResponse = serde_json::from_value(serde_json::json!({
+            "details": { "totalResult": "3" },
             "result": [
                 { "userId": "123", "roleKeys": ["tailor", "cutter"] },
                 { "userId": "456", "roleKeys": ["viewer"] },
@@ -360,7 +443,28 @@ mod tests {
 
     #[test]
     fn grants_response_tolerates_missing_result() {
-        let response: SearchGrantsResponse = serde_json::from_value(serde_json::json!({})).unwrap();
+        let response: SearchGrantsResponse =
+            serde_json::from_value(serde_json::json!({ "details": {} })).unwrap();
         assert!(roles_by_user(response.result).is_empty());
+    }
+
+    #[test]
+    fn pagination_uses_actual_page_size_until_total_is_reached() {
+        for total in [serde_json::json!(5), serde_json::json!("5")] {
+            let details: ListDetails =
+                serde_json::from_value(serde_json::json!({ "totalResult": total })).unwrap();
+            assert_eq!(details.next_offset(0, 2).unwrap(), Some(2));
+            assert_eq!(details.next_offset(2, 2).unwrap(), Some(4));
+            assert_eq!(details.next_offset(4, 1).unwrap(), None);
+            assert!(details.next_offset(2, 0).is_err());
+        }
+    }
+
+    #[test]
+    fn empty_directory_accepts_omitted_result_and_zero_total() {
+        let response: SearchUsersResponse =
+            serde_json::from_value(serde_json::json!({ "details": {} })).unwrap();
+        assert!(response.result.is_empty());
+        assert_eq!(response.details.next_offset(0, 0).unwrap(), None);
     }
 }
