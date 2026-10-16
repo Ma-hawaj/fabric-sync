@@ -833,6 +833,8 @@ pub async fn fetch_invoice_edit(
             c.mobile_no AS customer_mobile_no,
             m.id AS measurement_id,
             m.measurement_date,
+            m.type,
+            m.fit,
             m.length_fl::float8 AS length_fl,
             m.length_bl::float8 AS length_bl,
             m.chest::float8 AS chest,
@@ -855,8 +857,6 @@ pub async fn fetch_invoice_edit(
             m.bottom_folding::float8 AS bottom_folding,
             m.full_body::float8 AS full_body,
             m.sleeve_half::float8 AS sleeve_half,
-            m.button::float8 AS button,
-            m.button_fold::float8 AS button_fold,
             m.open_fold::float8 AS open_fold,
             m.front_pocket_length::float8 AS front_pocket_length,
             m.front_pocket_length_by_width,
@@ -900,6 +900,8 @@ pub async fn fetch_invoice_edit(
     for row in order_rows {
         let measurement = CreateMeasurementInput {
             date: row.measurement_date,
+            r#type: row.r#type,
+            fit: row.fit,
             length_fl: row.length_fl,
             length_bl: row.length_bl,
             chest: row.chest,
@@ -922,8 +924,6 @@ pub async fn fetch_invoice_edit(
             bottom_folding: row.bottom_folding,
             full_body: row.full_body,
             sleeve_half: row.sleeve_half,
-            button: row.button,
-            button_fold: row.button_fold,
             open_fold: row.open_fold,
             front_pocket_length: row.front_pocket_length,
             front_pocket_length_by_width: row.front_pocket_length_by_width,
@@ -1414,13 +1414,13 @@ pub async fn update_measurement(
             fo = $20::float8,
             bottom = $21::float8, bottom_folding = $22::float8,
             full_body = $23::float8,
-            sleeve_half = $24::float8, button = $25::float8,
-            button_fold = $26::float8, open_fold = $27::float8,
-            front_pocket_length = $28::float8,
-            front_pocket_length_by_width = $29,
-            side_pocket_length = $30::float8,
-            side_pocket_length_by_width = $31,
-            mobile_pocket_length_by_width = $32
+            sleeve_half = $24::float8, open_fold = $25::float8,
+            front_pocket_length = $26::float8,
+            front_pocket_length_by_width = $27,
+            side_pocket_length = $28::float8,
+            side_pocket_length_by_width = $29,
+            mobile_pocket_length_by_width = $30,
+            type = $31, fit = $32
         WHERE id = $1
         "#,
         measurement_id,
@@ -1447,14 +1447,14 @@ pub async fn update_measurement(
         measurement.bottom_folding,
         measurement.full_body,
         measurement.sleeve_half,
-        measurement.button,
-        measurement.button_fold,
         measurement.open_fold,
         measurement.front_pocket_length,
         measurement.front_pocket_length_by_width,
         measurement.side_pocket_length,
         measurement.side_pocket_length_by_width,
         measurement.mobile_pocket_length_by_width,
+        measurement.r#type,
+        measurement.fit,
     )
     .execute(&mut **tx)
     .await?;

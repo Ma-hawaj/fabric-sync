@@ -61,7 +61,7 @@ export interface MeasurementField {
   input: MeasurementInput
   /**
    * Which thob silhouette the marker is drawn against. The garment is shown
-   * from the front and the back so no single sketch carries all 31 callouts:
+   * from the front and the back so no single sketch carries all the callouts:
    * lengths, circumferences, pockets and the placket live on the front; the
    * back length, the collar, and the whole sleeve cluster on the back.
    */
@@ -447,32 +447,6 @@ export const MEASUREMENT_FIELDS: MeasurementField[] = [
       dims: [{ x1: 234, y1: 168, x2: 246, y2: 168 }],
       guides: [{ x1: 240, y1: 172, x2: 166, y2: 198 }],
       label: { x: 130, y: 204 },
-    },
-  },
-  {
-    name: 'button',
-    view: 'front',
-    label: 'Button',
-    diagramLabel: 'Button',
-    group: 'body',
-    input: NUMBER,
-    marker: {
-      dims: [{ x1: 258, y1: 96, x2: 258, y2: 186 }],
-      guides: [{ x1: 258, y1: 141, x2: 290, y2: 141 }],
-      label: { x: 308, y: 141 },
-    },
-  },
-  {
-    name: 'buttonFold',
-    view: 'front',
-    label: 'Button Fold',
-    diagramLabel: 'Button Fold',
-    group: 'body',
-    input: NUMBER,
-    marker: {
-      dims: [{ x1: 258, y1: 190, x2: 258, y2: 204 }],
-      guides: [{ x1: 258, y1: 197, x2: 292, y2: 197 }],
-      label: { x: 310, y: 197 },
     },
   },
   {

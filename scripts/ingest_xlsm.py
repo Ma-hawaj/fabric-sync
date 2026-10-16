@@ -80,7 +80,11 @@ Mapping decisions worth knowing:
    parsed to NUMERIC where the schema has a numeric column; unparseable values
    (ranges, 'CANCEL', 'SHIRT', ...) become NULL and are counted in the report.
     Every measurement column has a schema home; a column that ever loses
-    its mapping lands in DROPPED_MEASUREMENT and is counted instead.
+    its mapping lands in DROPPED_MEASUREMENT and is counted instead. Two
+    headers are misspelled in the sheet — Button / Button Fold hold Bottom /
+    Bottom Fold values and are imported onto those columns. The sheet has no
+    type/fit columns, so imported snapshots predate them and keep NULL there
+    (the app requires both only on new writes).
  * The '- 2' / '- 3' design variants describe additional thobs on one
    measurement row; the schema stores one design set per order, so only the
    '- 1' set is used (extras are counted in the report).
@@ -155,8 +159,10 @@ MEASUREMENT_NUMERIC = {
     "Fo": "fo",
     "Full Body": "full_body",
     "Sleeve Haff": "sleeve_half",
-    "Button": "button",
-    "Button Fold": "button_fold",
+    # The sheet headers misspell Bottom / Bottom Fold as Button / Button
+    # Fold; the values are hem widths, so they land on the bottom columns.
+    "Button": "bottom",
+    "Button Fold": "bottom_folding",
     "Open Fold": "open_fold",
     "Frant Pocket Length": "front_pocket_length",
 }
@@ -625,7 +631,7 @@ MEASUREMENT_VALUE_COLS = (
     "length_fl", "length_bl", "chest", "waist", "hips", "shoulder",
     "sleeve_length", "neck", "open_hand", "chest_up", "cuff_width",
     "cuffling", "neck_width", "arm_hole", "fo_width", "fo", "full_body",
-    "sleeve_half", "button", "button_fold", "open_fold",
+    "sleeve_half", "bottom", "bottom_folding", "open_fold",
     "front_pocket_length",
     "front_pocket_length_by_width",
     "mobile_pocket_length_by_width",
@@ -692,7 +698,7 @@ def load_db_state(conn) -> dict:
                 length_fl, length_bl, chest, waist, hips, shoulder,
                 sleeve_length, neck, open_hand, chest_up, cuff_width,
                 cuffling, neck_width, arm_hole, fo_width, fo, full_body,
-                sleeve_half, button, button_fold, open_fold,
+                sleeve_half, bottom, bottom_folding, open_fold,
                 front_pocket_length,
                 front_pocket_length_by_width,
                 mobile_pocket_length_by_width,
@@ -742,7 +748,7 @@ MEASUREMENT_COLUMNS = """(
                 length_fl, length_bl, chest, waist, hips, shoulder,
                 sleeve_length, neck, open_hand, chest_up, cuff_width,
                 cuffling, neck_width, arm_hole, fo_width, fo, full_body,
-                sleeve_half, button, button_fold, open_fold,
+                sleeve_half, bottom, bottom_folding, open_fold,
                 front_pocket_length,
                 front_pocket_length_by_width,
                 mobile_pocket_length_by_width,
@@ -778,8 +784,8 @@ def measurement_params(customer_id: str, m: dict) -> tuple:
         v["fo"],
         v["full_body"],
         v["sleeve_half"],
-        v["button"],
-        v["button_fold"],
+        v["bottom"],
+        v["bottom_folding"],
         v["open_fold"],
         v["front_pocket_length"],
         v["front_pocket_length_by_width"],

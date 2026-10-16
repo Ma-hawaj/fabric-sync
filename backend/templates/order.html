@@ -66,23 +66,23 @@
   "bottomFolding": "Bottom Folding",
   "fullBody": "Full Body",
   "sleeveHalf": "Sleeve Half",
-  "button": "Button",
-  "buttonFold": "Button Fold",
   "openFold": "Open Fold",
   "frontPocketLength": "Front Pocket Length",
   "frontPocketLengthByWidth": "Front Pocket L×W",
   "sidePocketLength": "Side Pocket Length",
   "sidePocketLengthByWidth": "Side Pocket L×W",
-  "mobilePocketLengthByWidth": "Mobile Pocket L×W"
+  "mobilePocketLengthByWidth": "Mobile Pocket L×W",
+  "type": "Type",
+  "fit": "Fit"
 } -%}
 {# Measurement pairs: each pair renders as one row with fixed columns, so
    related fields (neck | neck width) stay side by side even when a field
    further up the list wasn't recorded. A single-element pair is padded
    with "" — `order.measurement[""]` is undefined and renders as a blank
    cell that holds the column. #}
-{%- set body_pairs = [["lengthFl", "lengthBl"], ["shoulder", "shoulderDown"], ["chest", "chestUp"], ["waist", "hips"], ["sleeveLength", "sleeveHalf"], ["neck", "neckWidth"], ["openHand", "openHandFolding"], ["cuffWidth", "cuffling"], ["armHole", "bottom"], ["bottomFolding", "fullBody"], ["button", "buttonFold"], ["openFold", ""]] -%}
+{%- set body_pairs = [["lengthFl", "lengthBl"], ["shoulder", "shoulderDown"], ["chest", "chestUp"], ["waist", "hips"], ["sleeveLength", "sleeveHalf"], ["neck", "neckWidth"], ["openHand", "openHandFolding"], ["cuffWidth", "cuffling"], ["armHole", "bottom"], ["bottomFolding", "fullBody"], ["openFold", ""]] -%}
 {%- set pocket_pairs = [["frontPocketLength", "frontPocketLengthByWidth"], ["sidePocketLength", "sidePocketLengthByWidth"], ["mobilePocketLengthByWidth", ""]] -%}
-{%- set style_pairs = [["foWidth", "fo"]] -%}
+{%- set style_pairs = [["foWidth", "fo"], ["type", "fit"]] -%}
 
 {# The thob template: the garment is drawn from the front and the back, so no
    single silhouette carries all 18 callouts. All the drawing logic lives in

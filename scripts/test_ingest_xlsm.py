@@ -21,7 +21,7 @@ class ReadWorkbookTests(unittest.TestCase):
             for no in (101, "102", 103.0)
         ]
         self.measurements = [
-            [no, self.date, "Sheet Customer", "34444444", 42]
+            [no, self.date, "Sheet Customer", "34444444", 42, "29", "3"]
             for no in (7, "8", 9.0)
         ]
 
@@ -37,7 +37,7 @@ class ReadWorkbookTests(unittest.TestCase):
         ws = wb.create_sheet("Measurments")
         ws.append([
             "Measurement No", "Date", "Customer Name", "Customer Telephone",
-            "Chest",
+            "Chest", "Button", "Button Fold",
         ])
         for row in self.measurements if measurements is None else measurements:
             ws.append(row)
@@ -94,6 +94,18 @@ class ReadWorkbookTests(unittest.TestCase):
         self.assertEqual(measurement["values"]["chest"], Decimal("43"))
         self.assertEqual(report.numeric["Measurments: edit kept over placeholder"], 2)
         self.assertEqual(report.numeric["Measurments: duplicate number dropped"], 1)
+
+    def test_button_columns_are_imported_as_bottom(self):
+        # The sheet misspells Bottom / Bottom Fold as Button / Button Fold;
+        # the values are hem widths and land on the bottom columns.
+        actual, _ = self.read()
+        self.assertEqual(len(actual["measurements"]), 3)
+        for measurement in actual["measurements"]:
+            self.assertEqual(measurement["values"]["bottom"], Decimal("29"))
+            self.assertEqual(
+                measurement["values"]["bottom_folding"], Decimal("3"))
+            self.assertNotIn("button", measurement["values"])
+            self.assertNotIn("button_fold", measurement["values"])
 
 
 if __name__ == "__main__":

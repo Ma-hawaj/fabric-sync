@@ -22,6 +22,8 @@ function editFixture(): InvoiceEdit {
         measurementId: '0197fdd2-6a67-7000-8000-000000000009',
         measurement: {
           date: '2026-07-19',
+          type: 'body',
+          fit: 'medium',
           lengthFl: 152.5,
           lengthBl: null,
           chest: 108,
@@ -41,8 +43,6 @@ function editFixture(): InvoiceEdit {
           foWidth: null,
           fo: null,
           sleeveHalf: null,
-          button: null,
-          buttonFold: null,
           openFold: null,
           bottom: null,
           bottomFolding: null,
@@ -119,6 +119,8 @@ describe('mapInvoiceEditToForm', () => {
     expect(customer.measurement.chest).toBe(108)
     expect(customer.measurement.waist).toBe('')
     expect(customer.measurement.sidePocketLength).toBe('')
+    expect(customer.measurement.type).toBe('body')
+    expect(customer.measurement.fit).toBe('medium')
 
     expect(customer.orders).toHaveLength(1)
     const [order] = customer.orders

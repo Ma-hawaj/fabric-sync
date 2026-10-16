@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            m.customer_id,\n            c.name AS customer_name,\n            c.mobile_no AS customer_mobile_no,\n            m.id AS measurement_id,\n            m.measurement_date,\n            m.length_fl::float8 AS length_fl,\n            m.length_bl::float8 AS length_bl,\n            m.chest::float8 AS chest,\n            m.waist::float8 AS waist,\n            m.hips::float8 AS hips,\n            m.shoulder::float8 AS shoulder,\n            m.shoulder_down::float8 AS shoulder_down,\n            m.sleeve_length::float8 AS sleeve_length,\n            m.neck::float8 AS neck,\n            m.open_hand::float8 AS open_hand,\n            m.open_hand_folding::float8 AS open_hand_folding,\n            m.chest_up::float8 AS chest_up,\n            m.cuff_width::float8 AS cuff_width,\n            m.cuffling::float8 AS cuffling,\n            m.neck_width::float8 AS neck_width,\n            m.arm_hole::float8 AS arm_hole,\n            m.fo_width::float8 AS fo_width,\n            m.fo::float8 AS fo,\n            m.bottom::float8 AS bottom,\n            m.bottom_folding::float8 AS bottom_folding,\n            m.full_body::float8 AS full_body,\n            m.sleeve_half::float8 AS sleeve_half,\n            m.button::float8 AS button,\n            m.button_fold::float8 AS button_fold,\n            m.open_fold::float8 AS open_fold,\n            m.front_pocket_length::float8 AS front_pocket_length,\n            m.front_pocket_length_by_width,\n            m.side_pocket_length::float8 AS side_pocket_length,\n            m.side_pocket_length_by_width,\n            m.mobile_pocket_length_by_width,\n            o.material_id,\n            mat.name AS material_name,\n            mat.unit AS material_unit,\n            o.material_amount::float8 AS \"material_amount!\",\n            o.production_branch_id,\n            b.name AS \"production_location_name?\",\n            ms.quantity::float8 AS stock_quantity,\n            o.price::float8 AS \"price!\",\n            o.thobe_type,\n            o.f_pocket,\n            o.collar,\n            o.sleeve,\n            o.patti,\n            o.emd,\n            o.more_details\n        FROM orders o\n        JOIN measurements m ON m.id = o.measurement_id\n        JOIN customers c ON c.id = m.customer_id\n        JOIN materials mat ON mat.id = o.material_id\n        LEFT JOIN branch b ON b.id = o.production_branch_id\n        LEFT JOIN material_stock ms\n            ON ms.material_id = o.material_id\n            AND ms.branch_id = o.production_branch_id\n        WHERE o.invoice_id = $1\n        ORDER BY o.id\n        ",
+  "query": "\n        SELECT\n            m.customer_id,\n            c.name AS customer_name,\n            c.mobile_no AS customer_mobile_no,\n            m.id AS measurement_id,\n            m.measurement_date,\n            m.type,\n            m.fit,\n            m.length_fl::float8 AS length_fl,\n            m.length_bl::float8 AS length_bl,\n            m.chest::float8 AS chest,\n            m.waist::float8 AS waist,\n            m.hips::float8 AS hips,\n            m.shoulder::float8 AS shoulder,\n            m.shoulder_down::float8 AS shoulder_down,\n            m.sleeve_length::float8 AS sleeve_length,\n            m.neck::float8 AS neck,\n            m.open_hand::float8 AS open_hand,\n            m.open_hand_folding::float8 AS open_hand_folding,\n            m.chest_up::float8 AS chest_up,\n            m.cuff_width::float8 AS cuff_width,\n            m.cuffling::float8 AS cuffling,\n            m.neck_width::float8 AS neck_width,\n            m.arm_hole::float8 AS arm_hole,\n            m.fo_width::float8 AS fo_width,\n            m.fo::float8 AS fo,\n            m.bottom::float8 AS bottom,\n            m.bottom_folding::float8 AS bottom_folding,\n            m.full_body::float8 AS full_body,\n            m.sleeve_half::float8 AS sleeve_half,\n            m.open_fold::float8 AS open_fold,\n            m.front_pocket_length::float8 AS front_pocket_length,\n            m.front_pocket_length_by_width,\n            m.side_pocket_length::float8 AS side_pocket_length,\n            m.side_pocket_length_by_width,\n            m.mobile_pocket_length_by_width,\n            o.material_id,\n            mat.name AS material_name,\n            mat.unit AS material_unit,\n            o.material_amount::float8 AS \"material_amount!\",\n            o.production_branch_id,\n            b.name AS \"production_location_name?\",\n            ms.quantity::float8 AS stock_quantity,\n            o.price::float8 AS \"price!\",\n            o.thobe_type,\n            o.f_pocket,\n            o.collar,\n            o.sleeve,\n            o.patti,\n            o.emd,\n            o.more_details\n        FROM orders o\n        JOIN measurements m ON m.id = o.measurement_id\n        JOIN customers c ON c.id = m.customer_id\n        JOIN materials mat ON mat.id = o.material_id\n        LEFT JOIN branch b ON b.id = o.production_branch_id\n        LEFT JOIN material_stock ms\n            ON ms.material_id = o.material_id\n            AND ms.branch_id = o.production_branch_id\n        WHERE o.invoice_id = $1\n        ORDER BY o.id\n        ",
   "describe": {
     "columns": [
       {
@@ -30,122 +30,122 @@
       },
       {
         "ordinal": 5,
+        "name": "type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "fit",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
         "name": "length_fl",
         "type_info": "Float8"
       },
       {
-        "ordinal": 6,
+        "ordinal": 8,
         "name": "length_bl",
         "type_info": "Float8"
       },
       {
-        "ordinal": 7,
+        "ordinal": 9,
         "name": "chest",
         "type_info": "Float8"
       },
       {
-        "ordinal": 8,
+        "ordinal": 10,
         "name": "waist",
         "type_info": "Float8"
       },
       {
-        "ordinal": 9,
+        "ordinal": 11,
         "name": "hips",
         "type_info": "Float8"
       },
       {
-        "ordinal": 10,
+        "ordinal": 12,
         "name": "shoulder",
         "type_info": "Float8"
       },
       {
-        "ordinal": 11,
+        "ordinal": 13,
         "name": "shoulder_down",
         "type_info": "Float8"
       },
       {
-        "ordinal": 12,
+        "ordinal": 14,
         "name": "sleeve_length",
         "type_info": "Float8"
       },
       {
-        "ordinal": 13,
+        "ordinal": 15,
         "name": "neck",
         "type_info": "Float8"
       },
       {
-        "ordinal": 14,
+        "ordinal": 16,
         "name": "open_hand",
         "type_info": "Float8"
       },
       {
-        "ordinal": 15,
+        "ordinal": 17,
         "name": "open_hand_folding",
         "type_info": "Float8"
       },
       {
-        "ordinal": 16,
+        "ordinal": 18,
         "name": "chest_up",
         "type_info": "Float8"
       },
       {
-        "ordinal": 17,
+        "ordinal": 19,
         "name": "cuff_width",
         "type_info": "Float8"
       },
       {
-        "ordinal": 18,
+        "ordinal": 20,
         "name": "cuffling",
         "type_info": "Float8"
       },
       {
-        "ordinal": 19,
+        "ordinal": 21,
         "name": "neck_width",
         "type_info": "Float8"
       },
       {
-        "ordinal": 20,
+        "ordinal": 22,
         "name": "arm_hole",
         "type_info": "Float8"
       },
       {
-        "ordinal": 21,
+        "ordinal": 23,
         "name": "fo_width",
         "type_info": "Float8"
       },
       {
-        "ordinal": 22,
+        "ordinal": 24,
         "name": "fo",
         "type_info": "Float8"
       },
       {
-        "ordinal": 23,
+        "ordinal": 25,
         "name": "bottom",
         "type_info": "Float8"
       },
       {
-        "ordinal": 24,
+        "ordinal": 26,
         "name": "bottom_folding",
         "type_info": "Float8"
       },
       {
-        "ordinal": 25,
+        "ordinal": 27,
         "name": "full_body",
         "type_info": "Float8"
       },
       {
-        "ordinal": 26,
-        "name": "sleeve_half",
-        "type_info": "Float8"
-      },
-      {
-        "ordinal": 27,
-        "name": "button",
-        "type_info": "Float8"
-      },
-      {
         "ordinal": 28,
-        "name": "button_fold",
+        "name": "sleeve_half",
         "type_info": "Float8"
       },
       {
@@ -265,8 +265,8 @@
       false,
       false,
       false,
-      null,
-      null,
+      true,
+      true,
       null,
       null,
       null,
@@ -312,5 +312,5 @@
       true
     ]
   },
-  "hash": "b31290a4801899709000a22b328e341a8e834d0cc1664435e41b4f5453998bd4"
+  "hash": "3bf4addd7f310b25407dbf09cf542987b8c130c63d2800edacc9eab66ee7248a"
 }

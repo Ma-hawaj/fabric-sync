@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createEmptyMeasurement } from '@/features/customers/types/measurement-form'
 import { invoiceFormSchema } from './invoice-schema'
 import {
   createEmptyCustomer,
@@ -22,6 +23,13 @@ function validOrder() {
     productionLocationId: 'loc-1',
     price: 150,
   }
+}
+
+// Type and fit are the only required measurement fields, so a customer that
+// is otherwise valid carries them — mirroring what the form's selects hold
+// once picked.
+function validMeasurement() {
+  return { ...createEmptyMeasurement(), type: 'body', fit: 'medium' }
 }
 
 function validProductLine() {
@@ -70,6 +78,7 @@ describe('invoiceFormSchema', () => {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
       existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
       orders: [validOrder()],
     }
     expect(invoiceFormSchema.safeParse(baseValues([customer])).success).toBe(
@@ -117,6 +126,7 @@ describe('invoiceFormSchema', () => {
       mode: 'new' as const,
       name: 'Ahmed Al-Mansoori',
       mobileNo: '+966501234567',
+      measurement: validMeasurement(),
       orders: [validOrder()],
     }
     expect(invoiceFormSchema.safeParse(baseValues([customer])).success).toBe(
@@ -303,6 +313,7 @@ describe('invoiceFormSchema', () => {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
       existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
       orders: [validOrder()],
     }
     const withPaymentType = {
@@ -319,6 +330,7 @@ describe('invoiceFormSchema', () => {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
       existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
       orders: [validOrder()], // 150 gross
     }
     const overpaid = {
@@ -342,6 +354,7 @@ describe('invoiceFormSchema', () => {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
       existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
       orders: [validOrder()],
     }
     const bad = {
@@ -352,5 +365,62 @@ describe('invoiceFormSchema', () => {
     }
     const error = firstError([good, bad])
     expect(error?.path).toEqual(['customers', 1, 'existingCustomerId'])
+  })
+
+  it('rejects a measurement without a type', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: { ...validMeasurement(), type: '' },
+      orders: [validOrder()],
+    }
+    const error = firstError([customer])
+    expect(error?.message).toMatch(/measurement type/i)
+    expect(error?.path).toEqual(['customers', 0, 'measurement', 'type'])
+  })
+
+  it('rejects a measurement without a fit', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'new' as const,
+      name: 'Ahmed',
+      mobileNo: '+966501234567',
+      measurement: { ...validMeasurement(), fit: '' },
+      orders: [validOrder()],
+    }
+    const error = firstError([customer])
+    expect(error?.message).toMatch(/pick a fit/i)
+    expect(error?.path).toEqual(['customers', 0, 'measurement', 'fit'])
+  })
+
+  it('rejects a measurement with an unknown type or fit', () => {
+    const badType = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: { ...validMeasurement(), type: 'shirt' },
+      orders: [validOrder()],
+    }
+    expect(firstError([badType])?.path).toEqual([
+      'customers',
+      0,
+      'measurement',
+      'type',
+    ])
+
+    const badFit = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: { ...validMeasurement(), fit: 'tight' },
+      orders: [validOrder()],
+    }
+    expect(firstError([badFit])?.path).toEqual([
+      'customers',
+      0,
+      'measurement',
+      'fit',
+    ])
   })
 })

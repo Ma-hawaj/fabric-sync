@@ -2,6 +2,10 @@ export interface Measurement {
   id: string
   customerId: string
   date: Date
+  // Record-level choices rather than lengths. Null on legacy snapshots that
+  // predate them — every new write has to set both.
+  type?: string | null
+  fit?: string | null
 
   // Body Dimensions
   lengthFl?: number | null
@@ -25,8 +29,6 @@ export interface Measurement {
   foWidth?: number | null
   fo?: number | null
   sleeveHalf?: number | null
-  button?: number | null
-  buttonFold?: number | null
   openFold?: number | null
   bottom?: number | null
   bottomFolding?: number | null
