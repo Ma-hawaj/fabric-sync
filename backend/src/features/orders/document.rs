@@ -723,6 +723,8 @@ mod tests {
         // One sheet, front and back together.
         assert!(html.contains("Thobe Sheet"));
         assert!(html.contains("0 -32 800 667"));
+        // The shorter tables stack in one column beside Body dimensions.
+        assert!(html.contains("<div class=\"measurement-stack\">"));
         // Every drawn ellipse (collars, cuffs) carries the garment class —
         // without it SVG falls back to a solid black fill on the paper.
         // Six here: the yoke is gated on fullBody, which isn't recorded.

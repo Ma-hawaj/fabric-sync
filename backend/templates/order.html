@@ -376,9 +376,9 @@
 
       .design-cell img {
         width: 100%;
-        /* About a fifth of the sheet height, so five stacked choices stay
-           in balance with the diagram beside them. */
-        height: 100px;
+        /* Compact beside the sheet: five stacked choices stay in balance
+           with the taller diagram. */
+        height: 80px;
         object-fit: contain;
       }
 
@@ -446,6 +446,17 @@
         grid-template-columns: 1fr 1fr;
         gap: 6px;
         margin-top: 6px;
+      }
+
+      /* The shorter tables stack in one column beside Body dimensions. The
+         stack stretches to the row height and spreads edge to edge, so both
+         columns read as one height. */
+      .measurement-stack {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 6px;
+        min-width: 0;
       }
 
       .measurement-group {
@@ -743,6 +754,7 @@
           {% endfor %}
         </div>
       </div>
+      <div class="measurement-stack">
       <div class="measurement-group">
         <h3>Pockets</h3>
         <div class="measurement-grid">
@@ -781,6 +793,7 @@
             <span class="num" dir="ltr">{{ order.measurement.date }}</span>
           </div>
         </div>
+      </div>
       </div>
     </div>
 
