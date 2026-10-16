@@ -40,11 +40,38 @@ describe('ReadOnlyMeasurement', () => {
     ).toBeTruthy()
   })
 
+  it.each([
+    { type: 'body', fit: 'medium', expected: 'body · medium' },
+    { type: 'thobe', expected: 'thobe' },
+    { fit: 'loose', expected: 'loose' },
+  ] as const)(
+    'shows available type and fit without diagram fields: $expected',
+    ({ expected, ...choices }) => {
+      render(
+        <ReadOnlyMeasurement
+          measurement={{ ...blankMeasurement(), ...choices }}
+        />,
+      )
+
+      expect(
+        screen.queryByText('No measurements on record for this garment.'),
+      ).toBeTruthy()
+      expect(
+        screen.queryByText(
+          `Measured ${blankMeasurement().date.toLocaleDateString()} (${expected})`,
+        ),
+      ).toBeTruthy()
+      expect(screen.queryByText('Front of Thob')).toBeNull()
+    },
+  )
+
   it('lists recorded values and skips the blank fields', () => {
     render(
       <ReadOnlyMeasurement
         measurement={{
           ...blankMeasurement(),
+          type: 'sample',
+          fit: 'fit',
           lengthFl: 120,
           sidePocketLength: 9,
         }}
@@ -54,5 +81,10 @@ describe('ReadOnlyMeasurement', () => {
     expect(screen.queryByText('Length (Front)')).toBeTruthy()
     expect(screen.queryByText('Side Pocket Length')).toBeTruthy()
     expect(screen.queryByText('Chest')).toBeNull()
+    expect(
+      screen.queryByText(
+        `Measured ${blankMeasurement().date.toLocaleDateString()} — the cut-to spec for this order. (sample · fit)`,
+      ),
+    ).toBeTruthy()
   })
 })

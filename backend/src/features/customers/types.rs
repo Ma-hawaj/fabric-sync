@@ -161,14 +161,14 @@ pub fn measurement_values_equal(a: &CreateMeasurementInput, b: &CreateMeasuremen
 // and stay NULL in the database — validation only runs on writes, never on
 // reads, so those rows keep loading.
 pub fn validate_measurement(measurement: &CreateMeasurementInput) -> Result<(), AppError> {
-    let r#type = measurement.r#type.as_deref().map(str::trim).unwrap_or("");
+    let r#type = measurement.r#type.as_deref().unwrap_or("");
     if !MEASUREMENT_TYPES.contains(&r#type) {
         return Err(AppError::BadRequest(
             "a measurement needs a type of body, thobe, or sample".to_string(),
         ));
     }
 
-    let fit = measurement.fit.as_deref().map(str::trim).unwrap_or("");
+    let fit = measurement.fit.as_deref().unwrap_or("");
     if !MEASUREMENT_FITS.contains(&fit) {
         return Err(AppError::BadRequest(
             "a measurement needs a fit of loose, fit, or medium".to_string(),
@@ -292,13 +292,28 @@ mod tests {
     }
 
     #[test]
-    fn validate_measurement_accepts_a_known_type_and_fit() {
-        assert!(validate_measurement(&measurement(None, None)).is_ok());
+    fn validate_measurement_accepts_known_types_and_fits() {
+        for r#type in MEASUREMENT_TYPES {
+            for fit in MEASUREMENT_FITS {
+                let mut m = measurement(None, None);
+                m.r#type = Some(r#type.to_string());
+                m.fit = Some(fit.to_string());
+                assert!(validate_measurement(&m).is_ok());
+            }
+        }
     }
 
     #[test]
-    fn validate_measurement_rejects_a_missing_or_unknown_type() {
-        for r#type in [None, Some(""), Some("shirt"), Some("BODY")] {
+    fn validate_measurement_rejects_a_missing_or_noncanonical_type() {
+        for r#type in [
+            None,
+            Some(""),
+            Some("shirt"),
+            Some("BODY"),
+            Some(" body"),
+            Some("thobe "),
+            Some("\tsample\n"),
+        ] {
             let mut m = measurement(None, None);
             m.r#type = r#type.map(str::to_string);
             let error = validate_measurement(&m).unwrap_err();
@@ -307,8 +322,16 @@ mod tests {
     }
 
     #[test]
-    fn validate_measurement_rejects_a_missing_or_unknown_fit() {
-        for fit in [None, Some(""), Some("tight"), Some("LOOSE")] {
+    fn validate_measurement_rejects_a_missing_or_noncanonical_fit() {
+        for fit in [
+            None,
+            Some(""),
+            Some("tight"),
+            Some("LOOSE"),
+            Some(" loose"),
+            Some("fit "),
+            Some("\tmedium\n"),
+        ] {
             let mut m = measurement(None, None);
             m.fit = fit.map(str::to_string);
             let error = validate_measurement(&m).unwrap_err();

@@ -43,6 +43,13 @@ export function ReadOnlyMeasurement({
         </p>
         <p className="text-xs text-muted-foreground/80 mt-0.5">
           Measured {measurement.date.toLocaleDateString()}
+          {(measurement.type ?? measurement.fit) && (
+            <>
+              {' '}
+              ({[measurement.type, measurement.fit].filter(Boolean).join(' · ')}
+              )
+            </>
+          )}
         </p>
       </div>
     )
