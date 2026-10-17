@@ -292,7 +292,7 @@ pub async fn render_invoice_document(
         // alongside it because the template is the only consumer.
         // Pre-formatted day-first in the shop's timezone.
         invoice_date_time => format_datetime(&detail.date, timezone),
-        target_date => crate::document::format_date(&detail.target_date),
+        target_date => detail.target_date.as_ref().map(crate::document::format_date),
         // Deduplicated here rather than in the template: an invoice can carry
         // orders for several people, each line naming its own, and the header
         // wants each of them once.
@@ -713,7 +713,7 @@ mod tests_support {
             id: uuid::Uuid::nil(),
             invoice_number: 1,
             date: Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),
-            target_date: NaiveDate::from_ymd_opt(2026, 8, 6).unwrap(),
+            target_date: Some(NaiveDate::from_ymd_opt(2026, 8, 6).unwrap()),
             created_at: Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),
             branch_name: None,
             buyer: None,

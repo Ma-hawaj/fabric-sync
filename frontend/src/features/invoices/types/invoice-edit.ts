@@ -93,8 +93,8 @@ export interface InvoiceEdit {
   invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */
   date: string
-  /** The promised delivery date — the editable date on the form. */
-  targetDate: string
+  /** The promised delivery date — the editable date on the form. Null when none was promised. */
+  targetDate: string | null
   branchId: string | null
   branchName: string | null
   discount: number

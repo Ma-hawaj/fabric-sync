@@ -37,9 +37,12 @@ function validProductLine() {
 }
 
 function values(overrides: Partial<InvoiceFormValues> = {}): InvoiceFormValues {
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10)
   return {
     ...createEmptyInvoiceForm(),
-    targetDate: '2026-07-25',
+    targetDate: tomorrow,
     customers: [],
     ...overrides,
   }
@@ -59,7 +62,22 @@ function firstError(customers: InvoiceCustomerDraft[]) {
 }
 
 describe('invoiceFormSchema', () => {
-  it('requires a target date', () => {
+  it('passes without a target date', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
+      orders: [validOrder()],
+    }
+    expect(
+      invoiceFormSchema.safeParse(
+        values({ customers: [customer], targetDate: '' }),
+      ).success,
+    ).toBe(true)
+  })
+
+  it('rejects a malformed target date', () => {
     const customer = {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
@@ -67,10 +85,62 @@ describe('invoiceFormSchema', () => {
       orders: [validOrder()],
     }
     const error = firstErrorFor(
-      values({ customers: [customer], targetDate: '' }),
+      values({ customers: [customer], targetDate: 'not-a-date' }),
     )
-    expect(error?.message).toMatch(/enter a target date/i)
+    expect(error?.message).toMatch(/valid date/i)
     expect(error?.path).toEqual(['targetDate'])
+  })
+
+  it('rejects a target date in the past', () => {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10)
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
+      orders: [validOrder()],
+    }
+    const error = firstErrorFor(
+      values({ customers: [customer], targetDate: yesterday }),
+    )
+    expect(error?.message).toMatch(/in the future/i)
+    expect(error?.path).toEqual(['targetDate'])
+  })
+
+  it('rejects today as a target date', () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
+      orders: [validOrder()],
+    }
+    const error = firstErrorFor(
+      values({ customers: [customer], targetDate: today }),
+    )
+    expect(error?.message).toMatch(/in the future/i)
+    expect(error?.path).toEqual(['targetDate'])
+  })
+
+  it('passes for a target date tomorrow', () => {
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10)
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
+      orders: [validOrder()],
+    }
+    expect(
+      invoiceFormSchema.safeParse(
+        values({ customers: [customer], targetDate: tomorrow }),
+      ).success,
+    ).toBe(true)
   })
 
   it('passes for a fully filled existing customer with a valid order', () => {

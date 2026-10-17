@@ -1,7 +1,7 @@
 import * as React from 'react'
-import { NumberField, TextField } from '@/components/form/fields'
+import { DateField, NumberField } from '@/components/form/fields'
 import { AsyncCombobox } from '@/components/form/async-combobox'
-import { Label } from '@/components/ui/label'
+import { Field, FieldLabel } from '@/components/ui/field'
 import {
   Select,
   SelectContent,
@@ -135,11 +135,16 @@ export function InvoiceSummary({
       <h3 className="text-sm font-semibold">Invoice Summary</h3>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextField form={form} name="targetDate" label="Target Date" />
+        <DateField
+          form={form}
+          name="targetDate"
+          label="Target Date (optional)"
+          placeholder="Pick a target date"
+        />
         <form.Field name={'receivingBranch' as never}>
           {(field: any) => (
-            <div className="space-y-1">
-              <Label htmlFor={field.name}>Receiving Branch</Label>
+            <div className="space-y-2">
+              <FieldLabel htmlFor={field.name}>Receiving Branch</FieldLabel>
               <AsyncCombobox<Location>
                 id={field.name}
                 endpoint="/locations"
@@ -170,8 +175,10 @@ export function InvoiceSummary({
             customers.length === 0 && (
               <form.Field name={'customerId' as never}>
                 {(field: any) => (
-                  <div className="space-y-1">
-                    <Label htmlFor={field.name}>Customer (optional)</Label>
+                  <div className="space-y-2">
+                    <FieldLabel htmlFor={field.name}>
+                      Customer (optional)
+                    </FieldLabel>
                     <AsyncCombobox<Customer>
                       id={field.name}
                       endpoint="/customers"
@@ -437,11 +444,13 @@ export function InvoiceSummary({
                                         }
                                       >
                                         {(methodField: any) => (
-                                          <div className="w-36 space-y-1">
+                                          <Field className="w-36">
                                             {index === 0 && (
-                                              <Label htmlFor={methodField.name}>
+                                              <FieldLabel
+                                                htmlFor={methodField.name}
+                                              >
                                                 Method
-                                              </Label>
+                                              </FieldLabel>
                                             )}
                                             <Select
                                               items={PAYMENT_TYPE_OPTIONS}
@@ -471,7 +480,7 @@ export function InvoiceSummary({
                                                 )}
                                               </SelectContent>
                                             </Select>
-                                          </div>
+                                          </Field>
                                         )}
                                       </form.Field>
                                       <Button

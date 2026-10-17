@@ -87,8 +87,9 @@ export interface PaymentDraft {
 }
 
 export interface InvoiceFormValues {
-  // When the garment is promised for. Required and staff-editable. The
-  // invoice's own date is server-set at creation and never enters the form.
+  // When the garment is promised for, if at all — blank means no committed
+  // pickup. Staff-editable; the invoice's own date is server-set at
+  // creation and never enters the form.
   targetDate: string
   receivingBranch: string
   // Who a sale with no tailoring orders is billed to; a tailoring invoice
@@ -155,19 +156,14 @@ export function createEmptyCustomer(): InvoiceCustomerDraft {
   }
 }
 
-// A week out by default: the form promises delivery, it doesn't record when
-// the invoice was opened (the backend stamps that itself).
-function defaultTargetDate(): string {
-  return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10)
-}
-
 // The form page and the schema tests both build from here, so a new field
 // can't be added to InvoiceFormValues without both picking it up.
 export function createEmptyInvoiceForm(): InvoiceFormValues {
   return {
-    targetDate: defaultTargetDate(),
+    // Blank: a target date is promised explicitly, not assumed. The form
+    // never records when the invoice was opened (the backend stamps that
+    // itself).
+    targetDate: '',
     receivingBranch: '',
     customerId: '',
     productBranch: '',

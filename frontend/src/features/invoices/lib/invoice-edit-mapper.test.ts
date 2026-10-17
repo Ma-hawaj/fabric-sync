@@ -103,6 +103,15 @@ describe('mapInvoiceEditToForm', () => {
     expect(values.payments).toEqual([])
   })
 
+  it('maps a missing target date to a blank field', () => {
+    const { values } = mapInvoiceEditToForm({
+      ...editFixture(),
+      targetDate: null,
+    })
+
+    expect(values.targetDate).toBe('')
+  })
+
   it('maps customer blocks with measurements and design slots', () => {
     const { values } = mapInvoiceEditToForm(editFixture())
 

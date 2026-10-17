@@ -86,13 +86,15 @@ export const getInvoiceColumns = (
   },
   {
     id: 'targetDate',
-    accessorFn: (invoice) => new Date(invoice.targetDate),
+    accessorFn: (invoice) =>
+      invoice.targetDate ? new Date(invoice.targetDate) : null,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Target Date" />
     ),
-    cell: ({ row }) => (
-      <div>{row.getValue<Date>('targetDate').toLocaleDateString()}</div>
-    ),
+    cell: ({ row }) => {
+      const value = row.getValue<Date | null>('targetDate')
+      return <div>{value ? value.toLocaleDateString() : '—'}</div>
+    },
     enableSorting: true,
     enableColumnFilter: false,
   },

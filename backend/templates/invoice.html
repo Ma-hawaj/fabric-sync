@@ -462,10 +462,12 @@
             <dt>التاريخ<span class="en">Date</span></dt>
             <dd dir="ltr">{{ invoice_date_time }}</dd>
           </div>
+          {% if invoice.targetDate %}
           <div class="row">
             <dt>تاريخ التسليم<span class="en">Target date</span></dt>
             <dd dir="ltr">{{ invoice.targetDate }}</dd>
           </div>
+          {% endif %}
           {% if invoice.branchName %}
             <div class="row">
               <dt>الفرع<span class="en">Branch</span></dt>
