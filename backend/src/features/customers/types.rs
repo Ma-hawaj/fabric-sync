@@ -83,7 +83,7 @@ pub struct CustomerInvoiceSummary {
     pub id: Uuid,
     pub invoice_number: i64,
     pub invoice_date: DateTime<Utc>,
-    pub target_date: NaiveDate,
+    pub target_date: Option<NaiveDate>,
     pub total_price: f64,
     pub payment_status: String,
     pub balance_due: f64,

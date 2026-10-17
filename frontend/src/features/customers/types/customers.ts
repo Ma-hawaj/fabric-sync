@@ -55,7 +55,7 @@ export interface CustomerInvoiceSummary {
   id: string
   invoiceNumber: number
   invoiceDate: Date
-  targetDate: Date
+  targetDate: Date | null
   totalPrice: number
   paymentStatus: 'unpaid' | 'partial' | 'paid'
   balanceDue: number
@@ -66,7 +66,7 @@ type CustomerInvoiceSummaryDto = Omit<
   'invoiceDate' | 'targetDate'
 > & {
   invoiceDate: string
-  targetDate: string
+  targetDate: string | null
 }
 
 type CustomerDto = Omit<Customer, 'measurements' | 'invoices'> & {
@@ -87,7 +87,7 @@ export function toCustomer(dto: CustomerDto): Customer {
     invoices: (dto.invoices ?? []).map((invoice) => ({
       ...invoice,
       invoiceDate: new Date(invoice.invoiceDate),
-      targetDate: new Date(invoice.targetDate),
+      targetDate: invoice.targetDate ? new Date(invoice.targetDate) : null,
     })),
   }
 }
