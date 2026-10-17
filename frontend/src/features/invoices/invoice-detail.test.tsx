@@ -23,6 +23,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 const DETAIL: InvoiceDetail = {
+  editBlockedReason: null,
   id: 'inv-1',
   invoiceNumber: 42,
   date: '2026-07-28T09:30:00Z',
@@ -153,12 +154,52 @@ describe('InvoiceDetailPage', () => {
   })
 
   it('marks a collected invoice received and disables editing', () => {
-    renderPage({ ...DETAIL, received: true })
+    renderPage({
+      ...DETAIL,
+      received: true,
+      editBlockedReason: 'Some orders have been collected.',
+    })
 
     expect(screen.queryByText('Received')).toBeTruthy()
     expect(
       screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
     ).toBe(true)
+  })
+
+  it.each([
+    'Some orders have been collected.',
+    'Production has started on this invoice.',
+    'A gift card sold on this invoice has already been used.',
+  ])('disables editing and explains the server restriction: %s', (reason) => {
+    renderPage({ ...DETAIL, received: false, editBlockedReason: reason })
+    expect(
+      screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
+    ).toBe(true)
+    expect(screen.getByRole('status').textContent).toContain(reason)
+  })
+
+  it('allows editing a retail-only invoice when the server reports no restriction', () => {
+    renderPage({
+      ...DETAIL,
+      received: true,
+      editBlockedReason: null,
+      lines: [DETAIL.lines[1]],
+    })
+    expect(
+      screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
+    ).toBe(false)
+  })
+
+  it('keeps family members sharing a phone visible in the customer summary', () => {
+    const first = DETAIL.lines[0]
+    const second = {
+      ...first,
+      orderId: 'order-2',
+      customer: { name: 'Omar', mobileNo: first.customer!.mobileNo },
+    }
+    renderPage({ ...DETAIL, lines: [first, second] })
+    expect(screen.getAllByText('Omar')).toHaveLength(2)
+    expect(screen.getAllByText('Ahmed Al-Mansoori')).toHaveLength(2)
   })
 
   it('waits for the line items rather than rendering an empty invoice', () => {

@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 
 export interface RowActionItem {
   label: string
+  description?: string
   icon?: ComponentType<{ className?: string }>
   onClick?: () => void
   disabled?: boolean
@@ -53,7 +54,16 @@ export function RowActions({
                 render={item.render}
               >
                 {Icon && <Icon className="h-4 w-4" />}
-                {item.label}
+                {item.description ? (
+                  <span className="flex flex-col gap-1 whitespace-normal">
+                    <span>{item.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {item.description}
+                    </span>
+                  </span>
+                ) : (
+                  item.label
+                )}
               </DropdownMenuItem>
             </div>
           )

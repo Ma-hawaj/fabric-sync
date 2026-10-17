@@ -66,6 +66,8 @@ export interface InvoicePayment {
 
 /** Shape of GET /invoices/:id. */
 export interface InvoiceDetail {
+  /** Server-provided reason editing is unavailable; null when editable. */
+  editBlockedReason: string | null
   id: string
   invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */

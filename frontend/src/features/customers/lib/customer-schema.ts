@@ -12,10 +12,13 @@ const measurementDraftSchema = z.custom<MeasurementDraft>()
 const MEASUREMENT_TYPE_VALUES = MEASUREMENT_TYPES as readonly string[]
 const MEASUREMENT_FIT_VALUES = MEASUREMENT_FITS as readonly string[]
 
-export const customerFormSchema = z
-  .object({
-    name: z.string().trim().min(1, 'Enter a full name.'),
-    mobileNo: z.string().trim().min(1, 'Enter a phone number.'),
+export const customerIdentitySchema = z.object({
+  name: z.string().trim().min(1, 'Enter a full name.'),
+  mobileNo: z.string().trim().min(1, 'Enter a phone number.'),
+})
+
+export const customerFormSchema = customerIdentitySchema
+  .extend({
     addMeasurement: z.boolean(),
     measurement: measurementDraftSchema,
   })

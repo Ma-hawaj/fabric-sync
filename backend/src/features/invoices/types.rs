@@ -120,8 +120,8 @@ pub struct InvoiceCustomerInput {
     pub existing_customer_id: Option<Uuid>,
     #[serde(default)]
     pub new_customer: Option<NewCustomerInput>,
-    // Saving an invoice always records a fresh measurement snapshot (orders
-    // reference it), even when every field was left blank.
+    // Orders reference an immutable measurement snapshot. Unchanged values
+    // may reuse an existing record; changed values append a new one.
     pub measurement: CreateMeasurementInput,
     pub orders: Vec<CreateOrderInput>,
 }
@@ -208,8 +208,8 @@ pub struct InvoiceEditOrder {
 }
 
 /// One customer block as it was entered: the measurement snapshot behind the
-/// block plus the orders cut to it. `measurement_id` is the row an edit
-/// rewrites in place (see service::update_invoice).
+/// block plus the orders cut to it. `measurement_id` identifies the immutable
+/// snapshot; editing measurements creates another record.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEditCustomer {
@@ -271,6 +271,8 @@ pub struct InvoicePayment {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEdit {
+    /// Reason editing is unavailable; null means the invoice can be edited.
+    pub edit_blocked_reason: Option<String>,
     pub id: Uuid,
     /// Sequential and human-readable, unlike `id` — for the edit page title.
     pub invoice_number: i64,
@@ -495,6 +497,8 @@ pub struct InvoiceRecord {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceDetail {
+    /// Reason editing is unavailable; null means the invoice can be edited.
+    pub edit_blocked_reason: Option<String>,
     pub id: Uuid,
     /// Sequential and human-readable, unlike `id`. Formatted for display by
     /// the consumer, which is why it stays a number here.
@@ -528,6 +532,9 @@ pub struct InvoiceDetail {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceListItem {
+    /// Reason editing is unavailable; null means the invoice can be edited.
+    #[sqlx(skip)]
+    pub edit_blocked_reason: Option<String>,
     pub id: Uuid,
     #[sqlx(rename = "invoice_date")]
     pub date: DateTime<Utc>,

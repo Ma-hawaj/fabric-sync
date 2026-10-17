@@ -11,6 +11,8 @@ export interface InvoiceCustomer {
 // payments (the ledger); `amountPaid` is their sum and `paymentMethod` the
 // most recent one's method.
 export interface Invoice {
+  /** Server-provided reason editing is unavailable; null when editable. */
+  editBlockedReason: string | null
   id: string
   /** Server-set creation moment, as an ISO datetime with the time of day. */
   date: string

@@ -17,7 +17,7 @@ async function updateInvoice(
 
 /**
  * A full rebuild from a fresh copy of the create input. Invalidates the same
- * lists as creation — an edit can create customers, rewrite measurements, and
+ * lists as creation — an edit can create customers, append measurements, and
  * move stock and gift card balances around — plus this invoice's own detail
  * and edit caches.
  */

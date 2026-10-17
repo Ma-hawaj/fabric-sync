@@ -47,7 +47,7 @@ function customerPayload(customer: InvoiceCustomerDraft) {
       customer.mode === 'existing' ? customer.existingCustomerId : null,
     newCustomer:
       customer.mode === 'new'
-        ? { name: customer.name, mobileNo: customer.mobileNo }
+        ? { name: customer.name.trim(), mobileNo: customer.mobileNo.trim() }
         : null,
     measurement: measurementPayload(customer.measurement),
     orders: customer.orders.map(orderPayload),

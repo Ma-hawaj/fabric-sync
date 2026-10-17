@@ -191,13 +191,14 @@ pub async fn insert_measurement(
     .await
 }
 
-// Tx-scoped so the invoices feature can check it against a new snapshot
-// inside its own transaction before deciding whether to insert one.
-pub async fn latest_measurement(
+// Immutable reuse candidates: the latest record and any records already
+// referenced by the invoice being edited. No measurement history is rewritten.
+pub async fn measurement_candidates(
     tx: &mut sqlx::PgTransaction<'_>,
     customer_id: Uuid,
-) -> Result<Option<(Uuid, CreateMeasurementInput)>, sqlx::Error> {
-    let row = sqlx::query!(
+    invoice_measurement_ids: &[Uuid],
+) -> Result<Vec<(Uuid, CreateMeasurementInput)>, sqlx::Error> {
+    let rows = sqlx::query!(
         r#"
         SELECT
             id, measurement_date, type, fit,
@@ -213,52 +214,60 @@ pub async fn latest_measurement(
             side_pocket::float8, side_pocket_length_by_width,
             mobile_pocket_length_by_width
         FROM measurements
-        WHERE customer_id = $1
+        WHERE customer_id = $1 AND (
+            id = ANY($2) OR id = (
+                SELECT id FROM measurements WHERE customer_id = $1
+                ORDER BY measurement_date DESC, id DESC LIMIT 1
+            )
+        )
         ORDER BY measurement_date DESC, id DESC
-        LIMIT 1
         "#,
         customer_id,
+        invoice_measurement_ids,
     )
-    .fetch_optional(&mut **tx)
+    .fetch_all(&mut **tx)
     .await?;
 
-    Ok(row.map(|row| {
-        (
-            row.id,
-            CreateMeasurementInput {
-                date: row.measurement_date,
-                r#type: row.r#type,
-                fit: row.fit,
-                front_height: row.front_height,
-                back_height: row.back_height,
-                chest: row.chest,
-                waist: row.waist,
-                hip: row.hip,
-                shoulder: row.shoulder,
-                shoulder_down: row.shoulder_down,
-                sleeve_length: row.sleeve_length,
-                neck_size: row.neck_size,
-                open_hand: row.open_hand,
-                chest_up: row.chest_up,
-                cuff_width: row.cuff_width,
-                cuff_size: row.cuff_size,
-                neck_width: row.neck_width,
-                armhole: row.armhole,
-                fo_width: row.fo_width,
-                fo: row.fo,
-                bottom: row.bottom,
-                bottom_fold: row.bottom_fold,
-                full_body: row.full_body,
-                sleeve_half: row.sleeve_half,
-                open_fold: row.open_fold,
-                front_pocket_length: row.front_pocket_length,
-                front_pocket_length_by_width: row.front_pocket_length_by_width,
-                side_pocket: row.side_pocket,
-                side_pocket_length_by_width: row.side_pocket_length_by_width,
-                mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
-            },
-        )
-    }))
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.id,
+                CreateMeasurementInput {
+                    date: row.measurement_date,
+                    r#type: row.r#type,
+                    fit: row.fit,
+                    front_height: row.front_height,
+                    back_height: row.back_height,
+                    chest: row.chest,
+                    waist: row.waist,
+                    hip: row.hip,
+                    shoulder: row.shoulder,
+                    shoulder_down: row.shoulder_down,
+                    sleeve_length: row.sleeve_length,
+                    neck_size: row.neck_size,
+                    open_hand: row.open_hand,
+                    chest_up: row.chest_up,
+                    cuff_width: row.cuff_width,
+                    cuff_size: row.cuff_size,
+                    neck_width: row.neck_width,
+                    armhole: row.armhole,
+                    fo_width: row.fo_width,
+                    fo: row.fo,
+                    bottom: row.bottom,
+                    bottom_fold: row.bottom_fold,
+                    full_body: row.full_body,
+                    sleeve_half: row.sleeve_half,
+                    open_fold: row.open_fold,
+                    front_pocket_length: row.front_pocket_length,
+                    front_pocket_length_by_width: row.front_pocket_length_by_width,
+                    side_pocket: row.side_pocket,
+                    side_pocket_length_by_width: row.side_pocket_length_by_width,
+                    mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
+                },
+            )
+        })
+        .collect())
 }
 
 // Tx-scoped so the invoices feature can create new customers as part of an
