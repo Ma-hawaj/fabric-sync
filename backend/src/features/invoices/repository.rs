@@ -137,8 +137,10 @@ pub async fn fetch_invoice_detail(
             o.id AS order_id,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile_no,
-            mat.name AS material_name,
-            mat.unit AS material_unit,
+            CASE WHEN o.material_source = 'customer'
+                THEN 'Customer-provided material: ' || o.customer_material_description
+                ELSE mat.name END AS "material_name!",
+            COALESCE(mat.unit, 'meters') AS "material_unit!",
             o.material_amount::float8 AS "material_amount!",
             o.price::float8 AS "price!",
             o.thobe_type,
@@ -152,7 +154,7 @@ pub async fn fetch_invoice_detail(
         FROM orders o
         JOIN measurements m ON m.id = o.measurement_id
         JOIN customers c ON c.id = m.customer_id
-        JOIN materials mat ON mat.id = o.material_id
+        LEFT JOIN materials mat ON mat.id = o.material_id
         WHERE o.invoice_id = $1
         ORDER BY o.id
         "#,
@@ -358,17 +360,17 @@ const SPEC: ListSpec = ListSpec {
                     'name', c.name,
                     'mobileNo', c.mobile_no
                 )) AS customers,
-                json_agg(DISTINCT mat.name) AS materials,
+                json_agg(DISTINCT CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END) AS materials,
                 string_agg(DISTINCT c.name, ', ') AS customer_names,
                 string_agg(DISTINCT c.mobile_no, ', ') AS customer_mobiles,
-                array_agg(DISTINCT mat.name) AS material_names,
+                array_agg(DISTINCT CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END) AS material_names,
                 json_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_locations,
                 array_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_location_names,
                 MAX(o.received_at) AS last_received_at
             FROM orders o
             JOIN measurements m ON m.id = o.measurement_id
             JOIN customers c ON c.id = m.customer_id
-            JOIN materials mat ON mat.id = o.material_id
+            LEFT JOIN materials mat ON mat.id = o.material_id
             LEFT JOIN branch prod ON prod.id = o.production_branch_id
             WHERE o.invoice_id = i.id
         ) agg ON true
@@ -686,9 +688,9 @@ pub async fn insert_order(
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
             thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd, more_details,
-            production_branch_id
+            production_branch_id, material_source, customer_material_description
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         "#,
         measurement_id,
         order.material_id,
@@ -704,6 +706,11 @@ pub async fn insert_order(
         order.emd,
         order.more_details,
         order.production_location_id,
+        order.material_source.as_str(),
+        order
+            .customer_material_description
+            .as_deref()
+            .map(str::trim),
     )
     .execute(&mut **tx)
     .await?;
@@ -770,7 +777,7 @@ pub async fn insert_gift_card_item(
 
 /// Old tailoring lines, for restoring the material they consumed.
 pub struct OldOrderLine {
-    pub material_id: Uuid,
+    pub material_id: Option<Uuid>,
     pub production_branch_id: Option<Uuid>,
     pub material_amount: f64,
 }
@@ -869,8 +876,10 @@ pub async fn fetch_invoice_edit(
             m.side_pocket_length_by_width,
             m.mobile_pocket_length_by_width,
             o.material_id,
-            mat.name AS material_name,
-            mat.unit AS material_unit,
+            o.material_source,
+            o.customer_material_description,
+            COALESCE(mat.name, o.customer_material_description) AS "material_name!",
+            COALESCE(mat.unit, 'meters') AS "material_unit!",
             o.material_amount::float8 AS "material_amount!",
             o.production_branch_id,
             b.name AS "production_location_name?",
@@ -887,7 +896,7 @@ pub async fn fetch_invoice_edit(
         FROM orders o
         JOIN measurements m ON m.id = o.measurement_id
         JOIN customers c ON c.id = m.customer_id
-        JOIN materials mat ON mat.id = o.material_id
+        LEFT JOIN materials mat ON mat.id = o.material_id
         LEFT JOIN branch b ON b.id = o.production_branch_id
         LEFT JOIN material_stock ms
             ON ms.material_id = o.material_id
@@ -938,6 +947,8 @@ pub async fn fetch_invoice_edit(
         };
         let order = InvoiceEditOrder {
             material_id: row.material_id,
+            material_source: row.material_source,
+            customer_material_description: row.customer_material_description,
             material_name: row.material_name,
             material_unit: row.material_unit,
             material_amount: row.material_amount,
@@ -1499,4 +1510,14 @@ pub async fn update_invoice_header(
     .await?;
 
     Ok(())
+}
+
+pub async fn is_production_location(
+    tx: &mut sqlx::PgTransaction<'_>,
+    location_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query_scalar!(
+        "SELECT EXISTS(SELECT 1 FROM branch WHERE id = $1 AND is_active AND holds_stock) AS \"usable!\"",
+        location_id,
+    ).fetch_one(&mut **tx).await?)
 }

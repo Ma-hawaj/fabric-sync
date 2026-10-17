@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
 import { OrderBlock } from './order-block'
 import { createEmptyCustomer } from '../../types/invoice-form'
+import type { InvoiceOrderDraft } from '../../types/invoice-form'
 import type { Material } from '../../types/materials'
 import { apiGetMock } from '@/lib/list-fixtures'
 import { typeSearchText } from '@/lib/test-events'
@@ -40,14 +41,39 @@ vi.mock('@/lib/api', () => ({
   ApiError: class ApiError extends Error {},
 }))
 
-function Harness() {
+function Harness({ order = {} }: { order?: Partial<InvoiceOrderDraft> } = {}) {
   const form = useForm({
-    defaultValues: { customers: [createEmptyCustomer()] },
+    defaultValues: {
+      customers: [
+        {
+          ...createEmptyCustomer(),
+          orders: [{ ...createEmptyCustomer().orders[0], ...order }],
+        },
+      ],
+    },
   })
-  apiGet.mockImplementation(apiGetMock({ '/materials': MATERIALS }))
+  apiGet.mockImplementation(
+    apiGetMock({
+      '/materials': MATERIALS,
+      '/locations': [
+        {
+          id: 'workshop',
+          name: 'Customer Fabric Workshop',
+          receivesOrders: false,
+          holdsStock: true,
+          isActive: true,
+        },
+      ],
+    }),
+  )
   const client = new QueryClient()
   return (
     <QueryClientProvider client={client}>
+      <form.Subscribe selector={(state) => state.values}>
+        {(values) => (
+          <output data-testid="draft">{JSON.stringify(values)}</output>
+        )}
+      </form.Subscribe>
       <OrderBlock
         form={form as never}
         customerIndex={0}
@@ -93,6 +119,64 @@ async function pickMaterial(name: RegExp | string) {
 }
 
 describe('OrderBlock', () => {
+  it('creates a customer fabric order with a production location that has no inventory stock', async () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('radio', { name: 'Customer' }))
+    expect(
+      screen.queryByPlaceholderText('Search material by name or SKU...'),
+    ).toBeNull()
+    fireEvent.change(screen.getByLabelText('Customer fabric description'), {
+      target: { value: 'White linen' },
+    })
+    const input = screen.getByPlaceholderText('Search production location...')
+    fireEvent.pointerDown(input)
+    fireEvent.mouseDown(input)
+    fireEvent.click(input)
+    fireEvent.click(
+      await screen.findByRole('option', { name: 'Customer Fabric Workshop' }),
+    )
+    await waitFor(() => {
+      const draft = JSON.parse(screen.getByTestId('draft').textContent)
+      expect(draft.customers[0].orders[0]).toMatchObject({
+        materialSource: 'customer',
+        materialId: '',
+        customerMaterialDescription: 'White linen',
+        productionLocationId: 'workshop',
+      })
+    })
+    expect(screen.queryByText(/Available:/)).toBeNull()
+  })
+
+  it('clears incompatible fabric and location fields when changing material source', async () => {
+    render(
+      <Harness
+        order={{
+          materialId: 'mat-1',
+          productionLocationId: 'loc-1',
+          materialAmount: 3,
+          price: 40,
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('radio', { name: 'Customer' }))
+    fireEvent.change(screen.getByLabelText('Customer fabric description'), {
+      target: { value: 'Customer linen' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: 'Shop' }))
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order).toMatchObject({
+        materialSource: 'shop',
+        materialId: '',
+        customerMaterialDescription: '',
+        productionLocationId: '',
+        materialAmount: 3,
+        price: 40,
+      })
+    })
+  })
+
   it('lists fetched materials with their SKU when present', async () => {
     render(<Harness />)
 
@@ -123,6 +207,21 @@ describe('OrderBlock', () => {
         }),
       ).toBeNull(),
     )
+  })
+
+  it('keeps the material search text editable after a material is selected', async () => {
+    render(<Harness />)
+
+    await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')
+    const input = searchInput()
+    typeSearchText(input, 'Wool')
+
+    expect(input.value).toBe('Wool')
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order.materialId).toBe('mat-1')
+    })
   })
 
   it("shows the material's stock across locations once selected", async () => {

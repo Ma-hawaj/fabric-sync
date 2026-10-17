@@ -46,7 +46,10 @@ export function InvoicesPage() {
   const { data: locations = [] } = useAllLocations()
   const columns = React.useMemo(() => {
     const names = [
-      ...new Set(materials.map((material) => material.name)),
+      ...new Set([
+        'Customer-provided material',
+        ...materials.map((material) => material.name),
+      ]),
     ].sort()
     const receiving = orderReceivingLocations(locations).map((location) => ({
       label: location.name,

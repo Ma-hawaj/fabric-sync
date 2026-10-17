@@ -47,14 +47,14 @@ fn stage_applies(
 fn effective_production(
     assigned_id: Option<Uuid>,
     assigned_name: Option<&str>,
-    material_id: Uuid,
+    material_id: Option<Uuid>,
     single_location_materials: &HashMap<Uuid, (Uuid, String)>,
 ) -> (Option<Uuid>, Option<String>, bool) {
     if let Some(id) = assigned_id {
         return (Some(id), assigned_name.map(str::to_string), false);
     }
 
-    match single_location_materials.get(&material_id) {
+    match material_id.and_then(|id| single_location_materials.get(&id)) {
         Some((id, name)) => (Some(*id), Some(name.clone()), true),
         None => (None, None, false),
     }
@@ -362,6 +362,7 @@ fn assemble_order(
         customer_name: row.customer_name,
         customer_mobile: row.customer_mobile,
         material: row.material,
+        material_source: row.material_source,
         material_sku: row.material_sku,
         material_amount: row.material_amount,
         price: row.price,
@@ -413,7 +414,7 @@ async fn assemble(state: &AppState, rows: Vec<OrderRow>) -> Result<Vec<OrderList
     }
 
     let order_ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
-    let material_ids: Vec<Uuid> = rows.iter().map(|row| row.material_id).collect();
+    let material_ids: Vec<Uuid> = rows.iter().filter_map(|row| row.material_id).collect();
     let catalog = repository::list_stage_catalog(state).await?;
     let progress = repository::list_progress(state, &order_ids).await?;
     let assignments = repository::list_assignments(state, &order_ids).await?;
@@ -612,7 +613,7 @@ pub async fn set_stage(
         .ok_or_else(|| AppError::NotFound(format!("order stage {stage_id} not found")))?;
 
     let single_location_materials =
-        single_location_map(state, std::slice::from_ref(&order.material_id)).await?;
+        single_location_map(state, &order.material_id.into_iter().collect::<Vec<_>>()).await?;
     let (effective_production_id, _, _) = effective_production(
         order.production_location_id,
         order.production_location.as_deref(),
@@ -1033,7 +1034,7 @@ mod tests {
         let (id, name, inferred) = effective_production(
             Some(branch()),
             Some("Riyadh Main Branch"),
-            cotton(),
+            Some(cotton()),
             &single_location,
         );
 
@@ -1043,11 +1044,25 @@ mod tests {
     }
 
     #[test]
+    fn customer_material_never_infers_a_location_from_shop_stock() {
+        let stock = [(cotton(), (workshop(), "Workshop".to_string()))].into();
+        assert_eq!(
+            effective_production(None, None, None, &stock),
+            (None, None, false)
+        );
+        assert_eq!(
+            effective_production(Some(branch()), Some("Branch"), None, &stock),
+            (Some(branch()), Some("Branch".to_string()), false)
+        );
+    }
+
+    #[test]
     fn a_material_stocked_at_exactly_one_location_is_inferred() {
         let mut single_location = HashMap::new();
         single_location.insert(cotton(), (workshop(), "Central Workshop".to_string()));
 
-        let (id, name, inferred) = effective_production(None, None, cotton(), &single_location);
+        let (id, name, inferred) =
+            effective_production(None, None, Some(cotton()), &single_location);
 
         assert_eq!(id, Some(workshop()));
         assert_eq!(name.as_deref(), Some("Central Workshop"));
@@ -1061,7 +1076,8 @@ mod tests {
         // so an absent entry is exactly what an ambiguous material looks like.
         let single_location = HashMap::new();
 
-        let (id, name, inferred) = effective_production(None, None, cotton(), &single_location);
+        let (id, name, inferred) =
+            effective_production(None, None, Some(cotton()), &single_location);
 
         assert_eq!(id, None);
         assert_eq!(name, None);

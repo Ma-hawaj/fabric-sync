@@ -1,6 +1,10 @@
 {
   "db_name": "PostgreSQL",
+<<<<<<<< HEAD:backend/.sqlx/query-74d3a0daddfb10bc8b426e24a7df8b656abacfc8cece77976ee02d1f8f4b8f68.json
   "query": "\n        INSERT INTO orders (\n            measurement_id, material_id, material_amount, invoice_id, price,\n            thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd, more_details,\n            production_branch_id\n        )\n        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14)\n        ",
+========
+  "query": "\n        INSERT INTO orders (\n            measurement_id, material_id, material_amount, invoice_id, price,\n            thobe_type, f_pocket, collar, sleeve, patti, emd, more_details,\n            production_branch_id, material_source, customer_material_description\n        )\n        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)\n        ",
+>>>>>>>> b7e7bef (Support customer-provided material on tailoring orders (#75)):backend/.sqlx/query-a28b630e8e87d1cd19dc0bc16b9dcc614ae9be362765525d1563bc9b98f8b8ed.json
   "describe": {
     "columns": [],
     "parameters": {
@@ -17,11 +21,21 @@
         "Text",
         "Text",
         "Text",
+<<<<<<<< HEAD:backend/.sqlx/query-74d3a0daddfb10bc8b426e24a7df8b656abacfc8cece77976ee02d1f8f4b8f68.json
         "Text",
         "Uuid"
+========
+        "Uuid",
+        "Text",
+        "Text"
+>>>>>>>> b7e7bef (Support customer-provided material on tailoring orders (#75)):backend/.sqlx/query-a28b630e8e87d1cd19dc0bc16b9dcc614ae9be362765525d1563bc9b98f8b8ed.json
       ]
     },
     "nullable": []
   },
+<<<<<<<< HEAD:backend/.sqlx/query-74d3a0daddfb10bc8b426e24a7df8b656abacfc8cece77976ee02d1f8f4b8f68.json
   "hash": "74d3a0daddfb10bc8b426e24a7df8b656abacfc8cece77976ee02d1f8f4b8f68"
+========
+  "hash": "a28b630e8e87d1cd19dc0bc16b9dcc614ae9be362765525d1563bc9b98f8b8ed"
+>>>>>>>> b7e7bef (Support customer-provided material on tailoring orders (#75)):backend/.sqlx/query-a28b630e8e87d1cd19dc0bc16b9dcc614ae9be362765525d1563bc9b98f8b8ed.json
 }

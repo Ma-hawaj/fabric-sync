@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { cn } from '@/lib/utils'
 
 interface DesignOption {
@@ -18,7 +19,7 @@ interface DesignOptionGridProps {
 // An image-per-choice radio group, in the spirit of SegmentedOptions but for
 // choices that mean something visually (thob type, collar, sleeve, pocket,
 // patti). Selected state keyed by option.id — the catalog id an order stores.
-export function DesignOptionGrid({
+export const DesignOptionGrid = memo(function DesignOptionGrid({
   options,
   value,
   onChange,
@@ -54,6 +55,8 @@ export function DesignOptionGrid({
               src={option.image}
               alt=""
               draggable={false}
+              loading="lazy"
+              decoding="async"
               className="h-16 w-full object-contain"
             />
           ) : (
@@ -78,4 +81,4 @@ export function DesignOptionGrid({
       ))}
     </div>
   )
-}
+})

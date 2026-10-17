@@ -107,10 +107,6 @@ export function NumberField({
                 id={field.name}
                 aria-invalid={field.state.meta.errors.length > 0}
                 onBlur={field.handleBlur}
-                onChange={(e) => {
-                  const raw = e.currentTarget.value
-                  field.handleChange(raw === '' ? '' : Number(raw))
-                }}
                 className={unit ? 'pe-10' : undefined}
               />
               {unit && (

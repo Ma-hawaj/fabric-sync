@@ -139,7 +139,16 @@ export function getOrderColumns(
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Material" />
       ),
-      cell: ({ row }) => <div>{row.getValue('material')}</div>,
+      cell: ({ row }) => (
+        <div>
+          {row.getValue('material')}
+          {row.original.materialSource === 'customer' && (
+            <div className="text-xs text-muted-foreground">
+              Customer-provided material
+            </div>
+          )}
+        </div>
+      ),
       enableSorting: true,
       enableColumnFilter: true,
       meta: {
