@@ -54,7 +54,7 @@ const ORDER: OrderDetail = {
   receivedAt: null,
   thobeType: 'thobx',
   fPocket: 'round',
-  sPocket: '2',
+  sPocket: 'type-2',
   collar: '3',
   sleeve: 'open',
   patti: 'normal',
@@ -107,13 +107,14 @@ function designCatalogFixture() {
     slug: string,
     label: string,
     sortOrder: number,
+    isActive = true,
   ) => ({
     id,
     category,
     slug,
     label,
     sortOrder,
-    isActive: true,
+    isActive,
     hasImage: false,
     imageUrl: `/design-options/${id}/image`,
   })
@@ -121,11 +122,12 @@ function designCatalogFixture() {
     data: [
       option('o1', 'thob_type', 'thobx', 'Thobx', 1),
       option('o2', 'front_pocket', 'round', 'Round', 1),
-      option('o2b', 'side_pocket', '2', '2', 2),
+      option('o2b', 'side_pocket', 'type-2', '2', 2),
       option('o3', 'neck', '3', '3', 1),
       option('o4', 'sleeve', 'open', 'Open', 1),
       option('o5', 'patti', 'normal', 'Normal', 1),
       option('o6', 'emd', '6', '6', 6),
+      option('o7', 'emd', 'retired-emd', 'Retired EMD', 7, false),
     ],
     page: 1,
     perPage: 6,
@@ -134,9 +136,9 @@ function designCatalogFixture() {
   }
 }
 
-function renderPage() {
+function renderPage(order = ORDER) {
   const client = new QueryClient()
-  client.setQueryData(['orders', ORDER.id], ORDER)
+  client.setQueryData(['orders', order.id], order)
   client.setQueryData(['design-options', ''], designCatalogFixture())
   return render(
     <QueryClientProvider client={client}>
@@ -299,6 +301,12 @@ describe('OrderDetailPage', () => {
     })
 
     expect(screen.queryByText('Saudi')).toBeTruthy()
+  })
+
+  it('keeps retired catalog labels on historical orders', () => {
+    renderPage({ ...ORDER, emd: 'retired-emd' })
+
+    expect(screen.queryByText('Retired EMD')).toBeTruthy()
   })
 
   it('notes when an order carries no design choices at all', () => {

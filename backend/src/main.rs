@@ -53,6 +53,12 @@ async fn run() -> Result<(), error::AppError> {
         .await?;
     sqlx::migrate!().run(&db).await?;
 
+    seed::run_reference_data(&db).await?;
+
+    if config.seed_design_options {
+        seed::run_design_options(&db).await?;
+    }
+
     if config.seed_dev_data {
         seed::run(&db).await?;
     }

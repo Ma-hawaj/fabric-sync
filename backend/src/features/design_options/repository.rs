@@ -22,7 +22,7 @@ const SPEC: ListSpec = ListSpec {
             sort_order,
             is_active,
             (image IS NOT NULL) AS has_image,
-            ('/design-options/' || id::text || '/image') AS image_url
+            ('/design-options/' || id::text || '/image?v=' || image_version::text) AS image_url
         FROM design_options
     "#,
     columns: &[
@@ -65,7 +65,7 @@ pub async fn create_option(
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, category, slug, label, sort_order, is_active,
             (image IS NOT NULL) AS "has_image!",
-            ('/design-options/' || id::text || '/image') AS "image_url!"
+            ('/design-options/' || id::text || '/image?v=' || image_version::text) AS "image_url!"
         "#,
         category,
         slug,
@@ -101,11 +101,12 @@ pub async fn update_option(
             sort_order = COALESCE($3, sort_order),
             is_active = COALESCE($4, is_active),
             image = CASE WHEN $5 THEN $6 ELSE image END,
-            image_mime = CASE WHEN $5 THEN COALESCE($7, image_mime) ELSE image_mime END
+            image_mime = CASE WHEN $5 THEN COALESCE($7, image_mime) ELSE image_mime END,
+            image_version = CASE WHEN $5 THEN image_version + 1 ELSE image_version END
         WHERE id = $1
         RETURNING id, category, slug, label, sort_order, is_active,
             (image IS NOT NULL) AS "has_image!",
-            ('/design-options/' || id::text || '/image') AS "image_url!"
+            ('/design-options/' || id::text || '/image?v=' || image_version::text) AS "image_url!"
         "#,
         option_id,
         label,

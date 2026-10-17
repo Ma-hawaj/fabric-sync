@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE design_options\n        SET label = COALESCE($2, label),\n            sort_order = COALESCE($3, sort_order),\n            is_active = COALESCE($4, is_active),\n            image = CASE WHEN $5 THEN $6 ELSE image END,\n            image_mime = CASE WHEN $5 THEN COALESCE($7, image_mime) ELSE image_mime END\n        WHERE id = $1\n        RETURNING id, category, slug, label, sort_order, is_active,\n            (image IS NOT NULL) AS \"has_image!\",\n            ('/design-options/' || id::text || '/image') AS \"image_url!\"\n        ",
+  "query": "\n        UPDATE design_options\n        SET label = COALESCE($2, label),\n            sort_order = COALESCE($3, sort_order),\n            is_active = COALESCE($4, is_active),\n            image = CASE WHEN $5 THEN $6 ELSE image END,\n            image_mime = CASE WHEN $5 THEN COALESCE($7, image_mime) ELSE image_mime END,\n            image_version = CASE WHEN $5 THEN image_version + 1 ELSE image_version END\n        WHERE id = $1\n        RETURNING id, category, slug, label, sort_order, is_active,\n            (image IS NOT NULL) AS \"has_image!\",\n            ('/design-options/' || id::text || '/image?v=' || image_version::text) AS \"image_url!\"\n        ",
   "describe": {
     "columns": [
       {
@@ -66,5 +66,5 @@
       null
     ]
   },
-  "hash": "1cd7b7344bcef5a580af2715383922695a5a23cb0b04ada61711c1953015fe63"
+  "hash": "ff49fa654136be25a62b4eae3a92c0177a6276516f6800a13a53ad9edf8f7052"
 }

@@ -21,8 +21,8 @@ import {
 } from './types/design-option-form'
 import type { DesignOption } from './types/design-option'
 
-// Matches the server's 2 MB cap — rejected client-side before the FileReader
-// even runs, so staff get the message without waiting on an upload.
+// Matches the server's 2 MiB raw-byte cap — the design-options route accepts a
+// larger JSON envelope because base64 adds roughly one third to this size.
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
 
 function readFileAsDataUrl(file: File): Promise<string> {

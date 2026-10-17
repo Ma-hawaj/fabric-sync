@@ -75,10 +75,12 @@ function CatalogGrid({
   options: DesignOption[]
   columns?: number
 }) {
+  // EMD is optional. Keep an actual grid choice for clearing a stored value;
+  // an empty form value cannot be selected by a button-less grid.
+  const clearOption =
+    category === 'emd' ? [{ id: '', label: 'None', image: null }] : []
   const items = [
-    ...(category === 'emd'
-      ? [{ id: '', label: 'None', image: null }]
-      : []),
+    ...clearOption,
     ...selectCategoryOptions(options, category).map((option) => ({
       id: option.slug,
       label: option.label,
