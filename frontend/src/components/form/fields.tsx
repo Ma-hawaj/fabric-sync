@@ -224,6 +224,7 @@ export function DateField({
                   <Calendar
                     autoFocus
                     captionLayout="dropdown"
+                    endMonth={new Date(new Date().getFullYear() + 10, 11)}
                     mode="single"
                     selected={date}
                     onSelect={(selected) => {
