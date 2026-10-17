@@ -45,15 +45,34 @@ impl PaymentType {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum MaterialSource {
+    #[default]
+    Shop,
+    Customer,
+}
+
+impl MaterialSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Shop => "shop",
+            Self::Customer => "customer",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateOrderInput {
-    pub material_id: Uuid,
+    #[serde(default)]
+    pub material_source: MaterialSource,
+    pub material_id: Option<Uuid>,
+    pub customer_material_description: Option<String>,
     pub material_amount: f64,
-    // Where material_amount comes off — material_stock is per-location, so an
-    // order has to name one, the same way a product line names a branch_id.
-    // Stored directly as orders.production_branch_id, so production location
-    // is known from creation rather than left for staff to assign later.
+    // Where the garment is made. Shop fabric is deducted from stock here;
+    // customer fabric needs an active production location without a stock row.
+    // Stored directly as orders.production_branch_id for delivery tracking.
     pub production_location_id: Uuid,
     // Entered by staff per order line; materials carry no unit price to derive
     // it from.
@@ -186,7 +205,9 @@ pub struct CreatedInvoice {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEditOrder {
-    pub material_id: Uuid,
+    pub material_source: String,
+    pub material_id: Option<Uuid>,
+    pub customer_material_description: Option<String>,
     pub material_name: String,
     /// The unit the availability hint prints ("Available: X meters").
     pub material_unit: String,

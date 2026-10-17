@@ -33,6 +33,7 @@ interface CustomerBlockProps {
   initialMaterialForId?: (id: string) => Material | null
   /** The label for a stored material id (edit forms). */
   materialLabelForId?: (id: string) => string | null
+  locationLabelForId?: (id: string) => string | null
   onRemove: () => void
   removable: boolean
 }
@@ -46,6 +47,7 @@ export function CustomerBlock({
   customerLabelForId,
   initialMaterialForId,
   materialLabelForId,
+  locationLabelForId,
   onRemove,
   removable,
 }: CustomerBlockProps) {
@@ -207,6 +209,7 @@ export function CustomerBlock({
                 orderNumber={orderIndex + 1}
                 initialMaterialForId={initialMaterialForId}
                 materialLabelForId={materialLabelForId}
+                locationLabelForId={locationLabelForId}
                 removable={ordersField.state.value.length > 1}
                 onRemove={() => ordersField.removeValue(orderIndex)}
               />

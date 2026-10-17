@@ -206,6 +206,9 @@ export function InvoiceForm({
                   initialMaterialForId={(id) =>
                     seeds?.materials.get(id) ?? null
                   }
+                  locationLabelForId={(id) =>
+                    seeds?.locationLabels.get(id) ?? null
+                  }
                   materialLabelForId={(id) =>
                     seeds?.materialLabels.get(id) ?? null
                   }

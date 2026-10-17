@@ -22,13 +22,12 @@ export interface InvoiceOrderDraft {
   emd: string
   moreDetails: string
 
+  materialSource: 'shop' | 'customer'
+  customerMaterialDescription: string
   materialId: string
   materialAmount: NumberInput
-  // Where materialAmount comes off — material stock is held per location, and
-  // different orders on the same invoice can use materials stocked at
-  // different locations, so this has to be per order rather than one
-  // invoice-wide field (unlike productBranch, where every product line
-  // sells from the same register).
+  // Where the garment is made. Shop material needs stock at this location;
+  // customer fabric can use any active production location.
   productionLocationId: string
   // Entered by staff per order line — materials carry no unit price to derive
   // it from.
@@ -135,6 +134,8 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     patti: '',
     emd: '',
     moreDetails: '',
+    materialSource: 'shop',
+    customerMaterialDescription: '',
     materialId: '',
     materialAmount: '',
     productionLocationId: '',

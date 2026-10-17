@@ -147,7 +147,14 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           <dl className="space-y-1 text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Material</dt>
-              <dd className="font-medium">{order.material}</dd>
+              <dd className="font-medium">
+                {order.material}
+                {order.materialSource === 'customer' && (
+                  <span className="block text-xs text-muted-foreground">
+                    Customer-provided material
+                  </span>
+                )}
+              </dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Quantity</dt>
