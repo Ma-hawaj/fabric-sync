@@ -6,6 +6,7 @@ interface SegmentedOptionsProps {
   onChange: (value: string) => void
   columns?: number
   id?: string
+  ariaLabel?: string
 }
 
 export function SegmentedOptions({
@@ -14,11 +15,13 @@ export function SegmentedOptions({
   onChange,
   columns = 2,
   id,
+  ariaLabel,
 }: SegmentedOptionsProps) {
   return (
     <div
       id={id}
       role="radiogroup"
+      aria-label={ariaLabel}
       className="grid gap-1.5"
       style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
     >
