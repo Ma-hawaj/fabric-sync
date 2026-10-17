@@ -58,7 +58,7 @@ export interface InvoiceEditCustomer {
   existingCustomerId: string
   customerName: string
   customerMobileNo: string
-  /** The row an edit rewrites in place. */
+  /** The immutable snapshot currently referenced by the orders. */
   measurementId: string | null
   measurement: InvoiceEditMeasurement
   orders: InvoiceEditOrder[]
@@ -88,6 +88,8 @@ export interface InvoiceEditRedemption {
 
 /** Shape of GET /invoices/:id/edit — the invoice as entered, not as printed. */
 export interface InvoiceEdit {
+  /** Server-provided reason editing is unavailable; null when editable. */
+  editBlockedReason: string | null
   id: string
   invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */
@@ -98,7 +100,7 @@ export interface InvoiceEdit {
   branchName: string | null
   discount: number
   discountUnit: DiscountUnit
-  /** Non-empty exactly when the invoice cannot be edited (it has payments). */
+  /** Payments already taken; retained during edits and do not block editing. */
   payments: InvoicePayment[]
   customerId: string | null
   customers: InvoiceEditCustomer[]

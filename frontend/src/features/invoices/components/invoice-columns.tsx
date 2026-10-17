@@ -324,13 +324,12 @@ export const getInvoiceColumns = (
               onClick: () => onExportPdf(invoice),
             },
             {
-              // Collected garments can't be re-specified: the backend refuses
-              // to rebuild an invoice with received orders, so the action is
-              // disabled rather than failing on save. Advances don't block —
-              // the ledger survives a rebuild untouched.
+              // The same server policy guards list actions, details, and
+              // direct edit links. Advances alone do not block editing.
               label: 'Edit',
               icon: PencilIcon,
-              disabled: invoice.received,
+              disabled: Boolean(invoice.editBlockedReason),
+              description: invoice.editBlockedReason ?? undefined,
               onClick: () => onEdit(invoice),
             },
             {

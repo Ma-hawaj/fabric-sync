@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT i.id, CASE\n            WHEN EXISTS (\n                SELECT 1 FROM orders o WHERE o.invoice_id = i.id AND o.status = 'received'\n            ) THEN 'Some orders have been collected.'\n            WHEN EXISTS (\n                SELECT 1 FROM order_stage_progress p JOIN orders o ON o.id = p.order_id\n                WHERE o.invoice_id = i.id\n            ) OR EXISTS (\n                SELECT 1 FROM order_stage_assignments a JOIN orders o ON o.id = a.order_id\n                WHERE o.invoice_id = i.id\n            ) OR EXISTS (\n                SELECT 1 FROM order_repairs r JOIN orders o ON o.id = r.order_id\n                WHERE o.invoice_id = i.id\n            ) THEN 'Production has started on this invoice.'\n            WHEN EXISTS (\n                SELECT 1 FROM invoice_items ii JOIN gift_card_redemptions r ON r.gift_card_id = ii.gift_card_id\n                WHERE ii.invoice_id = i.id AND ii.kind = 'gift_card'\n            ) THEN 'A gift card sold on this invoice has already been used.'\n            ELSE NULL\n        END AS \"reason?\"\n        FROM invoices i WHERE i.id = ANY($1)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "reason?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "ecfadda8c8b1916527034e6f4a55eafbcb0cde1db0bc9be6260abdcc184a01fb"
+}

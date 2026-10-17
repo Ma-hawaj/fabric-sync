@@ -113,7 +113,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           <ExportPdfButton invoiceId={invoice.id} />
           <Button
             variant="outline"
-            disabled={detail.received}
+            disabled={Boolean(detail.editBlockedReason)}
             onClick={() =>
               void navigate({
                 to: '/invoices/$invoiceId/edit',
@@ -129,6 +129,12 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
         </div>
       </div>
 
+      {detail.editBlockedReason && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Editing unavailable: {detail.editBlockedReason}
+        </p>
+      )}
+
       <div>
         <SectionHeading icon={<Users className="h-3.5 w-3.5" />}>
           Customers
@@ -139,7 +145,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           ) : (
             <div className="flex flex-wrap gap-x-6 gap-y-2">
               {invoice.customers.map((customer) => (
-                <div key={customer.mobileNo}>
+                <div key={JSON.stringify([customer.name, customer.mobileNo])}>
                   <div className="text-sm font-semibold">{customer.name}</div>
                   <div className="text-xs text-muted-foreground">
                     {customer.mobileNo}
@@ -410,6 +416,7 @@ function toInvoice(detail: InvoiceDetail): Invoice {
     paymentMethod: detail.paymentMethod,
     giftCardRedeemed: detail.totals.giftCardRedeemed,
     received: detail.received,
+    editBlockedReason: detail.editBlockedReason,
     lastReceivedAt: detail.lastReceivedAt,
     receivingLocation: detail.branchName,
     // The detail endpoint carries no production locations (lines carry no
@@ -422,7 +429,7 @@ function toInvoice(detail: InvoiceDetail): Invoice {
 function deduplicate(customers: InvoiceCustomer[]): InvoiceCustomer[] {
   const seen = new Map<string, InvoiceCustomer>()
   for (const customer of customers) {
-    seen.set(customer.mobileNo, customer)
+    seen.set(JSON.stringify([customer.name, customer.mobileNo]), customer)
   }
   return [...seen.values()]
 }

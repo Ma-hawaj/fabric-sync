@@ -28,6 +28,7 @@ export function useSetAssignee() {
     mutationFn: setAssignee,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
     },
   })
 }

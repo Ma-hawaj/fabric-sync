@@ -1018,6 +1018,7 @@ pub async fn fetch_invoice_edit(
     let payments = list_payments(state, invoice_id).await?;
 
     Ok(Some(InvoiceEdit {
+        edit_blocked_reason: None,
         id: invoice_id,
         invoice_number: header.invoice_number,
         date: header.invoice_date,
@@ -1059,51 +1060,49 @@ pub async fn fetch_invoice_edit(
     }))
 }
 
-/// True once any order on the invoice has been collected.
-pub async fn invoice_has_received_orders(
-    tx: &mut sqlx::PgTransaction<'_>,
-    invoice_id: Uuid,
-) -> Result<bool, sqlx::Error> {
-    Ok(sqlx::query_scalar!(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM orders
-            WHERE invoice_id = $1 AND status = 'received'
-        ) AS "exists!"
-        "#,
-        invoice_id,
-    )
-    .fetch_one(&mut **tx)
-    .await?)
+pub struct InvoiceEditStatus {
+    pub id: Uuid,
+    pub reason: Option<String>,
 }
 
-/// True once production has touched any order on the invoice: a recorded
-/// stage, an assignee, or a repair. Editing lines under that would rewrite
-/// history the shop floor already acted on.
-pub async fn invoice_has_production_activity(
-    tx: &mut sqlx::PgTransaction<'_>,
-    invoice_id: Uuid,
-) -> Result<bool, sqlx::Error> {
-    Ok(sqlx::query_scalar!(
+/// Batched to avoid a query per invoice on the list. Updates run this after
+/// locking the invoice; gift cards are checked again under their own locks.
+pub async fn invoice_edit_status<'e, E>(
+    executor: E,
+    invoice_ids: &[Uuid],
+) -> Result<Vec<InvoiceEditStatus>, sqlx::Error>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    sqlx::query_as!(
+        InvoiceEditStatus,
         r#"
-        SELECT EXISTS(
-            SELECT 1 FROM order_stage_progress p
-            JOIN orders o ON o.id = p.order_id
-            WHERE o.invoice_id = $1
-        ) OR EXISTS(
-            SELECT 1 FROM order_stage_assignments a
-            JOIN orders o ON o.id = a.order_id
-            WHERE o.invoice_id = $1
-        ) OR EXISTS(
-            SELECT 1 FROM order_repairs r
-            JOIN orders o ON o.id = r.order_id
-            WHERE o.invoice_id = $1
-        ) AS "exists!"
+        SELECT i.id, CASE
+            WHEN EXISTS (
+                SELECT 1 FROM orders o WHERE o.invoice_id = i.id AND o.status = 'received'
+            ) THEN 'Some orders have been collected.'
+            WHEN EXISTS (
+                SELECT 1 FROM order_stage_progress p JOIN orders o ON o.id = p.order_id
+                WHERE o.invoice_id = i.id
+            ) OR EXISTS (
+                SELECT 1 FROM order_stage_assignments a JOIN orders o ON o.id = a.order_id
+                WHERE o.invoice_id = i.id
+            ) OR EXISTS (
+                SELECT 1 FROM order_repairs r JOIN orders o ON o.id = r.order_id
+                WHERE o.invoice_id = i.id
+            ) THEN 'Production has started on this invoice.'
+            WHEN EXISTS (
+                SELECT 1 FROM invoice_items ii JOIN gift_card_redemptions r ON r.gift_card_id = ii.gift_card_id
+                WHERE ii.invoice_id = i.id AND ii.kind = 'gift_card'
+            ) THEN 'A gift card sold on this invoice has already been used.'
+            ELSE NULL
+        END AS "reason?"
+        FROM invoices i WHERE i.id = ANY($1)
         "#,
-        invoice_id,
+        invoice_ids,
     )
-    .fetch_one(&mut **tx)
-    .await?)
+    .fetch_all(executor)
+    .await
 }
 
 pub async fn old_order_lines(
@@ -1191,27 +1190,6 @@ pub async fn old_measurement_refs(
     )
     .fetch_all(&mut **tx)
     .await
-}
-
-/// True when no other invoice's orders point at this measurement: the row is
-/// exclusively this invoice's to rewrite or delete.
-pub async fn measurement_is_exclusive(
-    tx: &mut sqlx::PgTransaction<'_>,
-    measurement_id: Uuid,
-    invoice_id: Uuid,
-) -> Result<bool, sqlx::Error> {
-    Ok(!sqlx::query_scalar!(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM orders
-            WHERE measurement_id = $1 AND invoice_id != $2
-        ) AS "exists!"
-        "#,
-        measurement_id,
-        invoice_id,
-    )
-    .fetch_one(&mut **tx)
-    .await?)
 }
 
 /// True once a sold card has been spent anywhere — including on the invoice
@@ -1368,90 +1346,6 @@ pub async fn delete_gift_cards(
     sqlx::query!(
         r#"DELETE FROM gift_cards WHERE id = ANY($1)"#,
         gift_card_ids,
-    )
-    .execute(&mut **tx)
-    .await?;
-
-    Ok(())
-}
-
-pub async fn delete_measurements(
-    tx: &mut sqlx::PgTransaction<'_>,
-    measurement_ids: &[Uuid],
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"DELETE FROM measurements WHERE id = ANY($1)"#,
-        measurement_ids,
-    )
-    .execute(&mut **tx)
-    .await?;
-
-    Ok(())
-}
-
-// The in-place rewrite: same row id, corrected values. Only called for rows
-// the exclusivity check proved belong to this invoice alone.
-pub async fn update_measurement(
-    tx: &mut sqlx::PgTransaction<'_>,
-    measurement_id: Uuid,
-    measurement: &CreateMeasurementInput,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"
-        UPDATE measurements
-        SET measurement_date = $2,
-            front_height = $3::float8, back_height = $4::float8,
-            chest = $5::float8, waist = $6::float8,
-            hip = $7::float8, shoulder = $8::float8,
-            shoulder_down = $9::float8, sleeve_length = $10::float8,
-            neck_size = $11::float8, open_hand = $12::float8,
-            chest_up = $13::float8,
-            cuff_width = $14::float8, cuff_size = $15::float8,
-            neck_width = $16::float8,
-            armhole = $17::float8, fo_width = $18::float8,
-            fo = $19::float8,
-            bottom = $20::float8, bottom_fold = $21::float8,
-            full_body = $22::float8,
-            sleeve_half = $23::float8, open_fold = $24::float8,
-            front_pocket_length = $25::float8,
-            front_pocket_length_by_width = $26,
-            side_pocket = $27::float8,
-            side_pocket_length_by_width = $28,
-            mobile_pocket_length_by_width = $29,
-            type = $30, fit = $31
-        WHERE id = $1
-        "#,
-        measurement_id,
-        measurement.date,
-        measurement.front_height,
-        measurement.back_height,
-        measurement.chest,
-        measurement.waist,
-        measurement.hip,
-        measurement.shoulder,
-        measurement.shoulder_down,
-        measurement.sleeve_length,
-        measurement.neck_size,
-        measurement.open_hand,
-        measurement.chest_up,
-        measurement.cuff_width,
-        measurement.cuff_size,
-        measurement.neck_width,
-        measurement.armhole,
-        measurement.fo_width,
-        measurement.fo,
-        measurement.bottom,
-        measurement.bottom_fold,
-        measurement.full_body,
-        measurement.sleeve_half,
-        measurement.open_fold,
-        measurement.front_pocket_length,
-        measurement.front_pocket_length_by_width,
-        measurement.side_pocket,
-        measurement.side_pocket_length_by_width,
-        measurement.mobile_pocket_length_by_width,
-        measurement.r#type,
-        measurement.fit,
     )
     .execute(&mut **tx)
     .await?;

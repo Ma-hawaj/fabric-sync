@@ -585,6 +585,7 @@ mod tests_support {
 
     pub fn detail() -> InvoiceDetail {
         InvoiceDetail {
+            edit_blocked_reason: None,
             id: uuid::Uuid::nil(),
             invoice_number: 1,
             date: Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),

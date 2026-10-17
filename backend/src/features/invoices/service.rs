@@ -34,7 +34,17 @@ pub async fn list_invoices(
     state: &AppState,
     params: &ListParams,
 ) -> Result<list::Page<InvoiceListItem>, AppError> {
-    repository::list_invoices(state, params).await
+    let mut page = repository::list_invoices(state, params).await?;
+    let ids: Vec<Uuid> = page.data.iter().map(|invoice| invoice.id).collect();
+    let reasons: HashMap<Uuid, Option<String>> = repository::invoice_edit_status(state.db(), &ids)
+        .await?
+        .into_iter()
+        .map(|status| (status.id, status.reason))
+        .collect();
+    for invoice in &mut page.data {
+        invoice.edit_blocked_reason = reasons.get(&invoice.id).cloned().flatten();
+    }
+    Ok(page)
 }
 
 /// Reads one invoice with its lines and the arithmetic behind its total.
@@ -75,7 +85,13 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
 
     let payments = repository::list_payments(state, invoice_id).await?;
 
+    let edit_blocked_reason = repository::invoice_edit_status(state.db(), &[invoice_id])
+        .await?
+        .into_iter()
+        .next()
+        .and_then(|status| status.reason);
     Ok(InvoiceDetail {
+        edit_blocked_reason,
         id: invoice.id,
         invoice_number: invoice.invoice_number,
         date: invoice.date,
@@ -1035,51 +1051,63 @@ mod tests {
         .unwrap();
         assert!(validate(&input).is_ok());
     }
-
-    fn measurement_id(n: u128) -> Uuid {
-        Uuid::from_u128(n)
+    fn snapshot(chest: f64) -> CreateMeasurementInput {
+        serde_json::from_value(serde_json::json!({
+            "date": "2026-10-17", "type": "body", "fit": "medium", "chest": chest,
+        }))
+        .unwrap()
     }
 
     #[test]
-    fn measurement_reuse_picks_the_first_exclusive_row() {
-        let old = vec![measurement_id(1), measurement_id(2)];
-        let exclusive: HashSet<Uuid> = [measurement_id(1), measurement_id(2)].into();
+    fn unchanged_edits_keep_the_original_snapshot_after_a_later_visit() {
+        let old = Uuid::from_u128(1);
+        let later = Uuid::from_u128(2);
+        let candidates = vec![(later, snapshot(110.0)), (old, snapshot(100.0))];
         assert_eq!(
-            plan_measurement_reuse(&old, &exclusive, &HashSet::new()),
-            Some(measurement_id(1))
+            reusable_measurement(&candidates, &[old], &snapshot(100.0)),
+            Some(old)
         );
     }
 
     #[test]
-    fn measurement_reuse_leaves_shared_rows_alone() {
-        // Every old row is also referenced by another invoice: nothing may be
-        // rewritten, so the block falls back to the create rule instead.
-        let old = vec![measurement_id(1)];
+    fn changed_measurements_do_not_reuse_a_different_snapshot() {
+        let old = Uuid::from_u128(1);
         assert_eq!(
-            plan_measurement_reuse(&old, &HashSet::new(), &HashSet::new()),
+            reusable_measurement(&[(old, snapshot(100.0))], &[old], &snapshot(120.0)),
             None
         );
     }
 
     #[test]
-    fn measurement_reuse_skips_rows_claimed_by_an_earlier_block() {
-        // Two edited blocks for the same customer must not rewrite the same
-        // row twice.
-        let old = vec![measurement_id(1), measurement_id(2)];
-        let exclusive: HashSet<Uuid> = [measurement_id(1), measurement_id(2)].into();
-        let reused: HashSet<Uuid> = [measurement_id(1)].into();
+    fn unchanged_latest_measurements_can_be_reused_for_a_new_invoice() {
+        let id = Uuid::from_u128(1);
         assert_eq!(
-            plan_measurement_reuse(&old, &exclusive, &reused),
-            Some(measurement_id(2))
+            reusable_measurement(&[(id, snapshot(100.0))], &[], &snapshot(100.0)),
+            Some(id)
         );
     }
 
     #[test]
-    fn measurement_reuse_finds_nothing_when_everything_is_taken() {
-        let old = vec![measurement_id(1)];
-        let exclusive: HashSet<Uuid> = [measurement_id(1)].into();
-        let reused: HashSet<Uuid> = [measurement_id(1)].into();
-        assert_eq!(plan_measurement_reuse(&old, &exclusive, &reused), None);
+    fn an_old_match_is_not_reused_for_a_new_invoice_after_measurements_change() {
+        let candidates = vec![
+            (Uuid::from_u128(2), snapshot(110.0)),
+            (Uuid::from_u128(1), snapshot(100.0)),
+        ];
+        assert_eq!(
+            reusable_measurement(&candidates, &[], &snapshot(100.0)),
+            None
+        );
+    }
+
+    #[test]
+    fn invoice_snapshots_are_reused_without_rewriting_their_original_date() {
+        let id = Uuid::from_u128(1);
+        let recorded = snapshot(100.0);
+        let mut edited = recorded.clone();
+        edited.date = chrono::NaiveDate::from_ymd_opt(2026, 10, 18).unwrap();
+        let candidates = vec![(id, recorded.clone())];
+        assert_eq!(reusable_measurement(&candidates, &[id], &edited), Some(id));
+        assert_eq!(candidates[0].1, recorded);
     }
 }
 
@@ -1088,15 +1116,39 @@ mod tests {
 ///
 /// An unknown existing_customer_id surfaces as a foreign-key violation on the
 /// insert, which the AppError conversion maps to a 400.
-async fn resolve_measurement_for_create(
+fn reusable_measurement(
+    candidates: &[(Uuid, CreateMeasurementInput)],
+    invoice_measurement_ids: &[Uuid],
+    measurement: &CreateMeasurementInput,
+) -> Option<Uuid> {
+    // Prefer the invoice's own unchanged snapshot, even if a later visit has
+    // recorded different measurements. Otherwise retain the create rule:
+    // reuse the latest record only when its values match.
+    candidates
+        .iter()
+        .find(|(id, values)| {
+            invoice_measurement_ids.contains(id) && measurement_values_equal(values, measurement)
+        })
+        .or_else(|| {
+            candidates
+                .first()
+                .filter(|(_, values)| measurement_values_equal(values, measurement))
+        })
+        .map(|(id, _)| *id)
+}
+
+async fn resolve_measurement(
     tx: &mut sqlx::PgTransaction<'_>,
     customer_id: Uuid,
     measurement: &CreateMeasurementInput,
+    invoice_measurement_ids: &[Uuid],
 ) -> Result<Uuid, AppError> {
-    let latest = customers_repository::latest_measurement(tx, customer_id).await?;
-    match latest {
-        Some((id, ref values)) if measurement_values_equal(values, measurement) => Ok(id),
-        _ => Ok(customers_repository::insert_measurement(tx, customer_id, measurement).await?),
+    let candidates =
+        customers_repository::measurement_candidates(tx, customer_id, invoice_measurement_ids)
+            .await?;
+    match reusable_measurement(&candidates, invoice_measurement_ids, measurement) {
+        Some(id) => Ok(id),
+        None => Ok(customers_repository::insert_measurement(tx, customer_id, measurement).await?),
     }
 }
 
@@ -1259,7 +1311,7 @@ pub async fn create_invoice(
     for customer in &input.customers {
         let customer_id = resolve_customer_id(&mut tx, customer).await?;
         let measurement_id =
-            resolve_measurement_for_create(&mut tx, customer_id, &customer.measurement).await?;
+            resolve_measurement(&mut tx, customer_id, &customer.measurement, &[]).await?;
         write_customer_orders(&mut tx, invoice_id, measurement_id, &customer.orders).await?;
     }
 
@@ -1301,25 +1353,15 @@ pub async fn get_invoice_for_edit(
     state: &AppState,
     invoice_id: Uuid,
 ) -> Result<InvoiceEdit, AppError> {
-    repository::fetch_invoice_edit(state, invoice_id)
+    let mut edit = repository::fetch_invoice_edit(state, invoice_id)
         .await?
-        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))
-}
-
-/// Picks the old measurement row an edited customer block rewrites in place:
-/// the first of its rows that belongs to this invoice alone and hasn't already
-/// been claimed by an earlier block. A block whose rows are all shared (or
-/// that has no rows yet) gets `None` and falls back to the create rule, so a
-/// shared row is never mutated. Pure, so it can be tested without a database.
-fn plan_measurement_reuse(
-    old_ids: &[Uuid],
-    exclusive: &HashSet<Uuid>,
-    reused: &HashSet<Uuid>,
-) -> Option<Uuid> {
-    old_ids
-        .iter()
-        .find(|id| exclusive.contains(id) && !reused.contains(id))
-        .copied()
+        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
+    edit.edit_blocked_reason = repository::invoice_edit_status(state.db(), &[invoice_id])
+        .await?
+        .into_iter()
+        .next()
+        .and_then(|status| status.reason);
+    Ok(edit)
 }
 
 /// Rebuilds an invoice from a fresh copy of the create input: the old lines
@@ -1364,16 +1406,15 @@ pub async fn update_invoice(
     let kept = repository::sum_payments(&mut tx, invoice_id).await?;
     validate_kept_payments(kept, totals.total, totals.redeemed)?;
 
-    if repository::invoice_has_received_orders(&mut tx, invoice_id).await? {
-        return Err(AppError::BadRequest(
-            "this invoice has received orders and cannot be edited".to_string(),
-        ));
-    }
-
-    if repository::invoice_has_production_activity(&mut tx, invoice_id).await? {
-        return Err(AppError::BadRequest(
-            "this invoice has production activity and cannot be edited".to_string(),
-        ));
+    if let Some(reason) = repository::invoice_edit_status(&mut *tx, &[invoice_id])
+        .await?
+        .into_iter()
+        .next()
+        .and_then(|status| status.reason)
+    {
+        return Err(AppError::BadRequest(format!(
+            "This invoice cannot be edited: {reason}"
+        )));
     }
 
     // Everything the rebuild is about to tear down.
@@ -1428,9 +1469,8 @@ pub async fn update_invoice(
         }
     }
 
-    // Tear down the old lines. Orders go before measurements (the FK points
-    // from orders at measurements), and the sold gift cards go once the
-    // spent-check above has cleared them.
+    // Rebuild order and retail lines, retaining all measurement history.
+    // Sold gift cards go once the spent-check above has cleared them.
     repository::delete_redemptions(&mut tx, invoice_id).await?;
     repository::delete_orders(&mut tx, invoice_id).await?;
     repository::delete_items(&mut tx, invoice_id).await?;
@@ -1439,60 +1479,19 @@ pub async fn update_invoice(
         repository::delete_gift_cards(&mut tx, &sold_ids).await?;
     }
 
-    // Which measurement rows belong to this invoice alone. The old rows are
-    // grouped per customer the way the form's blocks were entered.
-    let mut old_by_customer: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
-    for reference in &measurement_refs {
-        old_by_customer
-            .entry(reference.customer_id)
-            .or_default()
-            .push(reference.measurement_id);
-    }
-    let mut exclusive = HashSet::new();
-    for reference in &measurement_refs {
-        if repository::measurement_is_exclusive(&mut tx, reference.measurement_id, invoice_id)
-            .await?
-        {
-            exclusive.insert(reference.measurement_id);
-        }
-    }
-
-    let mut reused: HashSet<Uuid> = HashSet::new();
+    // Measurements are customer history, including records created before
+    // this invoice. Reuse unchanged snapshots, append changed values, and
+    // retain records even when their customer block has been removed.
     for customer in &input.customers {
         let customer_id = resolve_customer_id(&mut tx, customer).await?;
-        let old_ids = old_by_customer
-            .get(&customer_id)
-            .cloned()
-            .unwrap_or_default();
-
-        let measurement_id = match plan_measurement_reuse(&old_ids, &exclusive, &reused) {
-            Some(id) => {
-                repository::update_measurement(&mut tx, id, &customer.measurement).await?;
-                reused.insert(id);
-                id
-            }
-            // No exclusive row to rewrite: shared rows stay untouched, and a
-            // block without history falls back to the create rule.
-            None => {
-                resolve_measurement_for_create(&mut tx, customer_id, &customer.measurement).await?
-            }
-        };
-
+        let old_ids: Vec<Uuid> = measurement_refs
+            .iter()
+            .filter(|reference| reference.customer_id == customer_id)
+            .map(|reference| reference.measurement_id)
+            .collect();
+        let measurement_id =
+            resolve_measurement(&mut tx, customer_id, &customer.measurement, &old_ids).await?;
         write_customer_orders(&mut tx, invoice_id, measurement_id, &customer.orders).await?;
-    }
-
-    // Old rows this invoice owned alone that no edited block rewrote — removed
-    // blocks, or superseded extras — are deleted rather than left orphaned.
-    // Shared rows are never touched: some other invoice still points at them.
-    let mut orphaned: Vec<Uuid> = measurement_refs
-        .iter()
-        .map(|reference| reference.measurement_id)
-        .filter(|id| exclusive.contains(id) && !reused.contains(id))
-        .collect();
-    orphaned.sort();
-    orphaned.dedup();
-    if !orphaned.is_empty() {
-        repository::delete_measurements(&mut tx, &orphaned).await?;
     }
 
     write_product_lines(&mut tx, invoice_id, &input.products).await?;
