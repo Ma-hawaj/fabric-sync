@@ -27,7 +27,12 @@ function blankToNull(value: string): string | null {
 
 function orderPayload(order: InvoiceOrderDraft) {
   return {
-    materialId: order.materialId,
+    materialSource: order.materialSource,
+    materialId: order.materialSource === 'shop' ? order.materialId : null,
+    customerMaterialDescription:
+      order.materialSource === 'customer'
+        ? order.customerMaterialDescription.trim()
+        : null,
     materialAmount: numberOrZero(order.materialAmount),
     productionLocationId: order.productionLocationId,
     price: numberOrZero(order.price),

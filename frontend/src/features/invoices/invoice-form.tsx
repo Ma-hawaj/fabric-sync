@@ -187,7 +187,7 @@ export function InvoiceForm({
         }}
         className="space-y-6"
       >
-        <form.Field name="customers">
+        <form.Field name="customers" mode="array">
           {(customersField) => (
             <div className="space-y-6">
               {customersField.state.value.map((customer, index) => (
@@ -205,6 +205,9 @@ export function InvoiceForm({
                   }
                   initialMaterialForId={(id) =>
                     seeds?.materials.get(id) ?? null
+                  }
+                  locationLabelForId={(id) =>
+                    seeds?.locationLabels.get(id) ?? null
                   }
                   materialLabelForId={(id) =>
                     seeds?.materialLabels.get(id) ?? null
@@ -274,7 +277,7 @@ export function InvoiceForm({
             }
           </form.Subscribe>
 
-          <form.Field name="products">
+          <form.Field name="products" mode="array">
             {(productsField) => (
               <div className="space-y-3">
                 <form.Subscribe
@@ -329,7 +332,7 @@ export function InvoiceForm({
             </p>
           </div>
 
-          <form.Field name="giftCards">
+          <form.Field name="giftCards" mode="array">
             {(giftCardsField) => (
               <div className="space-y-3">
                 {giftCardsField.state.value.map((line, index) => (
@@ -356,7 +359,7 @@ export function InvoiceForm({
             )}
           </form.Field>
 
-          <form.Field name="redemptions">
+          <form.Field name="redemptions" mode="array">
             {(redemptionsField) => (
               <div className="space-y-3">
                 {redemptionsField.state.value.map((line, index) => (

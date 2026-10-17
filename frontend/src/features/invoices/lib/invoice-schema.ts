@@ -36,17 +36,43 @@ const orderDraftSchema = z
     patti: z.string(),
     emd: z.string(),
     moreDetails: z.string(),
+    materialSource: z.enum(['shop', 'customer']),
+    customerMaterialDescription: z.string(),
     materialId: z.string(),
     materialAmount: numberInputSchema,
     productionLocationId: z.string(),
     price: numberInputSchema,
   })
   .superRefine((order, ctx) => {
-    if (!order.materialId || order.materialAmount === '') {
+    if (
+      order.materialSource === 'shop' &&
+      (!order.materialId || order.materialAmount === '')
+    ) {
       ctx.addIssue({
         code: 'custom',
         message: 'Pick a material and quantity.',
         path: ['materialId'],
+      })
+    }
+    if (
+      order.materialSource === 'customer' &&
+      !order.customerMaterialDescription.trim()
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Describe the customer-provided material.',
+        path: ['customerMaterialDescription'],
+      })
+    }
+    if (
+      order.materialAmount === '' ||
+      !Number.isFinite(order.materialAmount) ||
+      order.materialAmount < 0.01
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter a quantity of at least 0.01.',
+        path: ['materialAmount'],
       })
     }
     // Material stock is held per location, and comes off automatically when
@@ -58,7 +84,11 @@ const orderDraftSchema = z
         path: ['productionLocationId'],
       })
     }
-    if (order.price === '') {
+    if (
+      order.price === '' ||
+      !Number.isFinite(order.price) ||
+      order.price < 0
+    ) {
       ctx.addIssue({
         code: 'custom',
         message: 'Enter a price.',

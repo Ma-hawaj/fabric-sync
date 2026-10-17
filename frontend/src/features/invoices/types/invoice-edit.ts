@@ -36,7 +36,9 @@ export interface InvoiceEditMeasurement {
 }
 
 export interface InvoiceEditOrder {
-  materialId: string
+  materialSource: 'shop' | 'customer'
+  customerMaterialDescription: string | null
+  materialId: string | null
   materialName: string
   materialUnit: string
   materialAmount: number

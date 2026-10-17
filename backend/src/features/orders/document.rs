@@ -676,6 +676,22 @@ mod tests {
     }
 
     #[cfg(test)]
+    #[test]
+    fn customer_fabric_is_labeled_and_escaped_on_the_order_sheet() {
+        let mut order = services_order();
+        order.material_source = "customer".into();
+        order.material = "White <linen>".into();
+        order.material_sku = None;
+        let detail = OrderDetail {
+            order,
+            invoice_number: 7,
+            measurement: tests_support::measurement(),
+        };
+        let html = test_render(&detail, &branding());
+        assert!(html.contains("Customer-provided material:"));
+        assert!(html.contains("White &lt;linen&gt;"));
+    }
+
     fn test_render(detail: &OrderDetail, branding: &InvoiceBranding) -> String {
         let env = environment(branding).unwrap();
         let template = env.get_template(TEMPLATE_NAME).unwrap();
@@ -978,6 +994,7 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         customer_name: "Ahmed".to_string(),
         customer_mobile: "+973 0000".to_string(),
         material: "Cotton".to_string(),
+        material_source: "shop".to_string(),
         material_sku: Some("CTN-001".to_string()),
         material_amount: 3.5,
         price: 100.0,

@@ -118,8 +118,17 @@ CREATE TABLE measurements (
 CREATE TABLE orders (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     measurement_id UUID NOT NULL REFERENCES measurements(id),
-    material_id UUID NOT NULL REFERENCES materials(id),
-    material_amount NUMERIC(10, 2) NOT NULL,
+    material_source TEXT NOT NULL DEFAULT 'shop' CHECK (material_source IN ('shop', 'customer')),
+    material_id UUID REFERENCES materials(id),
+    customer_material_description TEXT,
+    material_amount NUMERIC(10, 2) NOT NULL CHECK (material_amount > 0),
+    CONSTRAINT orders_material_details_check CHECK (
+        (material_source = 'shop' AND material_id IS NOT NULL AND customer_material_description IS NULL)
+        OR
+        (material_source = 'customer' AND material_id IS NULL
+         AND customer_material_description IS NOT NULL
+         AND length(btrim(customer_material_description)) > 0)
+    ),
     invoice_id UUID NOT NULL REFERENCES invoices(id),
     price NUMERIC(10, 2) NOT NULL,
     thobe_type TEXT,
