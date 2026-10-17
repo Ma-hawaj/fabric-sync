@@ -32,6 +32,19 @@ const MATERIALS: Material[] = [
   },
 ]
 
+const DESIGN_OPTIONS = [
+  {
+    id: 'emd-6',
+    category: 'emd',
+    slug: '6',
+    label: '6',
+    sortOrder: 6,
+    isActive: true,
+    hasImage: false,
+    imageUrl: '/design-options/emd-6/image?v=1',
+  },
+]
+
 // The material picker queries the server per keystroke, so the API layer is
 // mocked to serve the search against in-memory rows instead of hitting the
 // network in jsdom.
@@ -64,6 +77,7 @@ function Harness({ order = {} }: { order?: Partial<InvoiceOrderDraft> } = {}) {
           isActive: true,
         },
       ],
+      '/design-options': DESIGN_OPTIONS,
     }),
   )
   const client = new QueryClient()
@@ -268,5 +282,22 @@ describe('OrderBlock', () => {
   it('has a manual price field for the order line', () => {
     render(<Harness />)
     expect(screen.getByLabelText(`Price incl. VAT (${CURRENCY})`)).toBeTruthy()
+  })
+
+  it('lets staff clear a stored EMD value', async () => {
+    render(<Harness order={{ emd: '6' }} />)
+
+    const none = await screen.findByRole('radio', { name: 'None' })
+    expect((none as HTMLButtonElement).getAttribute('aria-checked')).toBe(
+      'false',
+    )
+
+    fireEvent.click(none)
+
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order.emd).toBe('')
+    })
   })
 })

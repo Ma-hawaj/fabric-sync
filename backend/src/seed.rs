@@ -8,6 +8,26 @@ use crate::error::AppError;
 /// purpose: it is unchecked, so it contributes nothing to `.sqlx` and can never
 /// make `cargo sqlx prepare --check` fail.
 const DEV_SEED: &str = include_str!("../seeds/dev_seed.sql");
+const DESIGN_OPTIONS_SEED: &str = include_str!("../seeds/design_options.sql");
+const REFERENCE_DATA_SEED: &str = include_str!("../seeds/reference_data.sql");
+
+/// Loads baseline reference rows after migrations. This runs on every startup
+/// so a new environment gets the standard checklist without putting inserts in
+/// the migration history; `ON CONFLICT DO NOTHING` leaves staff edits alone.
+pub async fn run_reference_data(db: &PgPool) -> Result<(), AppError> {
+    sqlx::raw_sql(REFERENCE_DATA_SEED).execute(db).await?;
+    tracing::info!("reference data loaded");
+    Ok(())
+}
+
+/// Bootstraps the staff-managed design catalog without making it part of the
+/// schema migration history. The SQL is idempotent and image updates only
+/// fill empty image slots, so a later run cannot overwrite staff changes.
+pub async fn run_design_options(db: &PgPool) -> Result<(), AppError> {
+    sqlx::raw_sql(DESIGN_OPTIONS_SEED).execute(db).await?;
+    tracing::info!("design option seed loaded");
+    Ok(())
+}
 
 /// Loads the seed, but only into a database that has no customers yet.
 ///

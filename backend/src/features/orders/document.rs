@@ -856,7 +856,7 @@ mod tests {
         order.collar = Some("3".to_string());
         order.sleeve = Some("open".to_string());
         order.f_pocket = Some("round".to_string());
-        order.s_pocket = Some("2".to_string());
+        order.s_pocket = Some("type-2".to_string());
         order.patti = Some("normal".to_string());
         order.emd = Some("6".to_string());
 
@@ -876,7 +876,7 @@ mod tests {
         // Catalog slugs resolve to their display labels.
         assert_eq!(
             chips.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(),
-            vec!["Thobx", "3", "Open", "Round", "2", "Normal", "6"]
+            vec!["Thobx", "3", "Open", "Round", "type-2", "Normal", "6"]
         );
     }
 

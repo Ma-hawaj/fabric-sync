@@ -45,10 +45,10 @@ pub async fn update_option(
     ))
 }
 
-/// The stored illustration, served as the raw bytes. Deliberately public (see
-/// `routes::public_router`): an `<img>` can't carry a bearer token, and catalog
-/// thumbnails are not sensitive — the same reasoning that leaves `/health`
-/// unguarded.
+/// The stored illustration, served publicly so an `<img>` can load it without
+/// a bearer token. SVG is still an active document when opened directly, so
+/// the response gives it a sandboxed, script-free CSP rather than relying on
+/// the caller to use it only as an image.
 pub async fn get_image(
     State(state): State<AppState>,
     Path(option_id): Path<Uuid>,
@@ -75,6 +75,11 @@ pub async fn get_image(
         [
             (header::CONTENT_TYPE, content_type),
             (header::CACHE_CONTROL, "public, max-age=86400"),
+            (
+                header::CONTENT_SECURITY_POLICY,
+                "sandbox; default-src 'none'; script-src 'none'; object-src 'none'; base-uri 'none'; img-src 'self' data:; style-src 'unsafe-inline'",
+            ),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
         ],
         bytes,
     )

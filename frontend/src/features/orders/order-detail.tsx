@@ -16,11 +16,10 @@ import {
 import { toast } from 'sonner'
 import {
   designOptionImageSrc,
-  selectCategoryOptions,
+  findCategoryOptionIncludingRetired,
   useDesignOptions,
 } from '@/features/design-options/hooks/use-design-options'
 import { designCategoryLabel } from '@/features/design-options/lib/design-option-categories'
-import type { DesignOption } from '@/features/design-options/types/design-option'
 import { OrderTrackingPanel } from './components/order-tracking-panel'
 import { LogRepairDialog } from './components/log-repair-dialog'
 import { ReceiveOrderDialog } from './components/receive-order-dialog'
@@ -263,9 +262,7 @@ function DesignDetails({ order }: { order: OrderDetail }) {
     const raw = slot.value(order)?.trim() ?? ''
     if (!raw) return null
     const match =
-      selectCategoryOptions(options, slot.category).find(
-        (option: DesignOption) => option.slug === raw,
-      ) ?? null
+      findCategoryOptionIncludingRetired(options, slot.category, raw) ?? null
     return {
       label: designCategoryLabel(slot.category),
       raw,

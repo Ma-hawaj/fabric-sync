@@ -34,6 +34,20 @@ export function selectCategoryOptions(
     .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label))
 }
 
+/**
+ * Resolves a stored value for historical display. Retired options remain
+ * valid on existing orders even though they must not appear in new pickers.
+ */
+export function findCategoryOptionIncludingRetired(
+  options: DesignOption[],
+  category: string,
+  slug: string,
+): DesignOption | undefined {
+  return options.find(
+    (option) => option.category === category && option.slug === slug,
+  )
+}
+
 /** Absolute-enough src for an `<img>`: same origin in prod, the Vite `/api` proxy in dev. */
 export function designOptionImageSrc(option: DesignOption): string | null {
   if (!option.hasImage) {

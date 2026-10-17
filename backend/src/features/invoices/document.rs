@@ -686,7 +686,7 @@ mod tests {
             Some(""),
             None,
             Some("round"),
-            Some("2"),
+            Some("type-2"),
             Some("   "),
             Some("6"),
         ));
@@ -695,7 +695,7 @@ mod tests {
             vec![
                 ("thob_type".to_string(), "thobx".to_string()),
                 ("front_pocket".to_string(), "round".to_string()),
-                ("side_pocket".to_string(), "2".to_string()),
+                ("side_pocket".to_string(), "type-2".to_string()),
                 ("emd".to_string(), "6".to_string()),
             ]
         );

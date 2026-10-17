@@ -75,11 +75,18 @@ function CatalogGrid({
   options: DesignOption[]
   columns?: number
 }) {
-  const items = selectCategoryOptions(options, category).map((option) => ({
-    id: option.slug,
-    label: option.label,
-    image: designOptionImageSrc(option),
-  }))
+  // EMD is optional. Keep an actual grid choice for clearing a stored value;
+  // an empty form value cannot be selected by a button-less grid.
+  const clearOption =
+    category === 'emd' ? [{ id: '', label: 'None', image: null }] : []
+  const items = [
+    ...clearOption,
+    ...selectCategoryOptions(options, category).map((option) => ({
+      id: option.slug,
+      label: option.label,
+      image: designOptionImageSrc(option),
+    })),
+  ]
   return (
     <form.Field name={name as never}>
       {(field: any) => {
