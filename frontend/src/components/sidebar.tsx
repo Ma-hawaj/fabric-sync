@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ThemeMenuItems } from '@/components/theme-menu-items'
 import { useAuth } from '@/lib/auth'
+import { accountSettingsUrl } from '@/lib/oidc'
 import { useAllLocations } from '@/features/locations/hooks/use-locations'
 import {
   usePreferences,
@@ -43,6 +44,7 @@ import {
   CheckIcon,
   LogInIcon,
   LogOutIcon,
+  SettingsIcon,
   SunIcon,
 } from 'lucide-react'
 
@@ -120,6 +122,10 @@ function DefaultLocationSubmenu() {
 function UserMenu() {
   const { isAuthenticated, user, signOut } = useAuth()
   const { data: preferences } = usePreferences()
+  // Identity lives in the IdP (no local user table), so account
+  // maintenance — profile, password, MFA — opens the IdP's self-service
+  // page in a new tab rather than living in this app.
+  const accountUrl = accountSettingsUrl()
 
   if (!isAuthenticated || !user) {
     return (
@@ -169,6 +175,16 @@ function UserMenu() {
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DefaultLocationSubmenu />
+        {accountUrl && (
+          <DropdownMenuItem
+            onClick={() =>
+              window.open(accountUrl, '_blank', 'noopener,noreferrer')
+            }
+          >
+            <SettingsIcon />
+            Account settings
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={signOut}>
           <LogOutIcon />
