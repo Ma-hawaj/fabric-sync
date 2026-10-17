@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id AS \"id!\", request_payload AS \"request_payload!\" FROM invoice_returns\n        WHERE invoice_id = $1 AND request_id = $2 AND $3\n        UNION ALL\n        SELECT id, request_payload FROM invoice_refunds\n        WHERE invoice_id = $1 AND request_id = $2 AND NOT $3\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "request_payload!",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "bfce89de2c48b1daf625f18e64d4aaeedacbae24376ff1ae428a84bec6a095e1"
+}

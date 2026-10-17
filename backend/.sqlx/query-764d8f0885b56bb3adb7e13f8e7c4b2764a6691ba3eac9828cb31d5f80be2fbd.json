@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT sold.line_id AS \"line_id!\", sold.kind AS \"kind!\",\n               sold.description AS \"description!\", sold.quantity::float8 AS \"quantity!\",\n               COALESCE(ret.quantity, 0)::float8 AS \"returned_quantity!\",\n               COALESCE(ret.amount, 0)::float8 AS \"credited_amount!\",\n               sold.line_total::float8 AS \"line_total!\", sold.collected AS \"collected!\",\n               COALESCE(b.is_active AND b.holds_stock, false) AS \"can_restock!\",\n               0::float8 AS \"credit_limit!\", sold.product_id AS \"product_id?\",\n               sold.branch_id AS \"branch_id?\"\n        FROM (\n            SELECT o.id AS line_id, 'order' AS kind,\n                   'Order #' || o.order_number AS description, 1::numeric AS quantity,\n                   o.price AS line_total, o.status = 'received' AS collected,\n                   NULL::uuid AS product_id, NULL::uuid AS branch_id\n            FROM orders o WHERE o.invoice_id = $1\n            UNION ALL\n            SELECT id, 'product', description, quantity, line_total, true, product_id, branch_id\n            FROM invoice_items WHERE invoice_id = $1 AND kind = 'product'\n        ) sold\n        LEFT JOIN branch b ON b.id = sold.branch_id\n        LEFT JOIN LATERAL (\n            SELECT SUM(quantity) AS quantity, SUM(amount) AS amount\n            FROM invoice_return_lines\n            WHERE order_id = sold.line_id OR item_id = sold.line_id\n        ) ret ON true\n        ORDER BY sold.line_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "line_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "quantity!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "returned_quantity!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "credited_amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "line_total!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "collected!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "can_restock!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "credit_limit!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 10,
+        "name": "product_id?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 11,
+        "name": "branch_id?",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "764d8f0885b56bb3adb7e13f8e7c4b2764a6691ba3eac9828cb31d5f80be2fbd"
+}

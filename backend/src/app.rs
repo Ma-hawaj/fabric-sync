@@ -8,7 +8,7 @@ use crate::{
     auth,
     features::{
         customers, gift_cards, health, invoices, locations, materials, order_stages, orders,
-        preferences, products, users,
+        preferences, products, returns, users,
     },
     request_log,
     state::AppState,
@@ -32,6 +32,12 @@ pub fn router(state: AppState) -> Router {
     // The inner fallback keeps unknown `/api/*` paths a 404 instead of
     // falling through to the SPA's `index.html`.
     let api = Router::new()
+        .merge(
+            returns::router().route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::require_auth,
+            )),
+        )
         .merge(
             customers::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),

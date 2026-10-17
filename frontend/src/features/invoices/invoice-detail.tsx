@@ -21,6 +21,7 @@ import {
 import { toast } from 'sonner'
 import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
+import { ReturnsPanel } from '@/features/returns/components/returns-panel'
 import { useInvoice } from './hooks/use-invoice'
 import { printInvoiceDocument } from './lib/print-invoice'
 import type { Invoice, InvoiceCustomer } from './types/invoices'
@@ -113,7 +114,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           <ExportPdfButton invoiceId={invoice.id} />
           <Button
             variant="outline"
-            disabled={detail.received}
+            disabled={detail.received || detail.hasAdjustments}
             onClick={() =>
               void navigate({
                 to: '/invoices/$invoiceId/edit',
@@ -251,6 +252,31 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           {detail.totals.amountPaid > 0 && (
             <TotalRow label="Paid" value={-detail.totals.amountPaid} />
           )}
+          {detail.totals.amountCredited > 0 && (
+            <TotalRow
+              label="Return credits"
+              value={-detail.totals.amountCredited}
+            />
+          )}
+          {detail.totals.cashRefunded > 0 && (
+            <TotalRow
+              label="Refunds paid back"
+              value={detail.totals.cashRefunded}
+            />
+          )}
+          {detail.totals.giftCardRefunded > 0 && (
+            <TotalRow
+              label="Restored to gift cards"
+              value={detail.totals.giftCardRefunded}
+            />
+          )}
+          {detail.totals.refundDue > 0 && (
+            <TotalRow
+              label="Refund due"
+              value={detail.totals.refundDue}
+              emphasis
+            />
+          )}
           <TotalRow
             label="Balance due"
             value={detail.totals.balanceDue}
@@ -258,6 +284,8 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           />
         </dl>
       </div>
+
+      <ReturnsPanel invoiceId={detail.id} />
 
       {detail.payments.length > 0 && (
         <div>

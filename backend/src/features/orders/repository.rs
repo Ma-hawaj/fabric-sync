@@ -67,14 +67,14 @@ const SPEC: ListSpec = ListSpec {
             -- consistent with the displayed location.
             COALESCE(prod.name, inferred.branch_name) AS effective_production_location,
             i.total_price::float8 AS invoice_total_price,
-            pay.paid AS invoice_amount_paid,
-            pay.status AS invoice_payment_status,
+            balance.amount_paid::float8 AS invoice_amount_paid,
+            balance.payment_status AS invoice_payment_status,
             i.gift_card_redeemed::float8 AS invoice_gift_card_redeemed,
             -- Unlike the list page's own balance, this one nets off gift
             -- card tender too — it is what the receive dialog collects.
-            GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS invoice_balance_due,
+            balance.balance_due::float8 AS invoice_balance_due,
             method.payment_type AS invoice_payment_method,
-            GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS balance_due,
+            balance.balance_due::float8 AS balance_due,
             method.payment_type AS payment_method,
             CASE
                 WHEN next_stage.name IS NULL THEN 'Completed'
@@ -93,20 +93,7 @@ const SPEC: ListSpec = ListSpec {
         -- The invoice's money state, derived from the payments ledger: the
         -- table stores only the total, so the paid sum, the status and the
         -- latest method are worked out here — mirrors fetch_invoice_detail.
-        LEFT JOIN LATERAL (
-            SELECT
-                COALESCE(SUM(amount), 0)::float8 AS paid,
-                CASE
-                    WHEN GREATEST(
-                        i.total_price - i.gift_card_redeemed - COALESCE(SUM(amount), 0),
-                        0
-                    ) = 0 THEN 'paid'
-                    WHEN COALESCE(SUM(amount), 0) = 0 THEN 'unpaid'
-                    ELSE 'partial'
-                END AS status
-            FROM invoice_payments
-            WHERE invoice_id = i.id
-        ) pay ON true
+        LEFT JOIN invoice_balances balance ON balance.invoice_id = i.id
         LEFT JOIN LATERAL (
             SELECT payment_type
             FROM invoice_payments

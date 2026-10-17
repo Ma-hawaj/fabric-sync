@@ -90,6 +90,10 @@ If a valid access token gets a 401 from the backend unexpectedly, check the `aud
 
 ## Backend
 
+Staff can record item returns and refunds from invoice details. See
+[Returns and refunds](docs/returns-and-refunds.md) for the workflow, refund
+limits, stock behavior, and API examples.
+
 The backend reads configuration from environment variables (`backend/.env`
 via `dotenvy` when running locally — copy `backend/.env.example` there
 first).
