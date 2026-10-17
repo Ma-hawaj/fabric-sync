@@ -63,6 +63,7 @@ const DETAIL: InvoiceDetail = {
     },
   ],
   redemptions: [],
+  hasAdjustments: false,
   payments: [
     {
       id: 'pay-1',
@@ -84,6 +85,10 @@ const DETAIL: InvoiceDetail = {
     total: 300,
     giftCardRedeemed: 0,
     amountPaid: 60,
+    amountCredited: 0,
+    cashRefunded: 0,
+    giftCardRefunded: 0,
+    refundDue: 0,
     balanceDue: 240,
   },
 }
@@ -158,6 +163,13 @@ describe('InvoiceDetailPage', () => {
     renderPage({ ...DETAIL, received: true })
 
     expect(screen.queryByText('Received')).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
+    ).toBe(true)
+  })
+
+  it('protects the original sale after a return even when its credit was zero', () => {
+    renderPage({ ...DETAIL, received: false, hasAdjustments: true })
     expect(
       screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
     ).toBe(true)

@@ -3,9 +3,10 @@ import { InvoiceForm } from './invoice-form'
 import { useInvoiceEdit } from './hooks/use-invoice-edit'
 import { useUpdateInvoice } from './hooks/use-update-invoice'
 import { mapInvoiceEditToForm } from './lib/invoice-edit-mapper'
+import { ApiError } from '@/lib/api'
 
 export function InvoiceEditPage({ invoiceId }: { invoiceId: string }) {
-  const { data: edit, isLoading, isError } = useInvoiceEdit(invoiceId)
+  const { data: edit, isLoading, isError, error } = useInvoiceEdit(invoiceId)
   const updateInvoice = useUpdateInvoice(invoiceId)
 
   const mapped = React.useMemo(
@@ -16,7 +17,9 @@ export function InvoiceEditPage({ invoiceId }: { invoiceId: string }) {
   if (isError) {
     return (
       <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center text-sm text-destructive">
-        Could not load this invoice for editing.
+        {error instanceof ApiError && error.status === 400
+          ? error.message
+          : 'Could not load this invoice for editing.'}
       </div>
     )
   }

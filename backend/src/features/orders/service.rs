@@ -525,7 +525,7 @@ pub async fn receive_order(
 
     // Match invoice edits and whole-invoice receipts: always lock the invoice
     // before its orders, including pickups that take no payment.
-    let invoice = crate::features::invoices::repository::lock_invoice(&mut tx, invoice_id)
+    crate::features::invoices::repository::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
     let locked = repository::lock_order(&mut tx, order_id)
@@ -543,12 +543,12 @@ pub async fn receive_order(
 
     if amount > 0.0 {
         let payment_type = payment_type.expect("validated: payment type is set");
-        let paid = crate::features::invoices::repository::sum_payments(&mut tx, invoice_id).await?;
+        let balance = crate::features::returns::repository::settlement(&mut tx, invoice_id).await?;
         crate::features::invoices::service::validate_payment_amount(
             amount,
-            invoice.total_price,
-            invoice.gift_card_redeemed,
-            paid,
+            balance.net_total,
+            balance.net_gift_card_redeemed,
+            balance.net_amount_paid,
         )?;
         crate::features::invoices::repository::insert_payment(
             &mut tx,

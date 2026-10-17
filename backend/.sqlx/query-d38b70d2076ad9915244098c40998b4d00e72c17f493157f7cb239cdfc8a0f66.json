@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO invoice_return_lines (return_id, order_id, item_id, description, quantity, amount, restocked)\n        VALUES ($1, $2, $3, $4, $5::float8, $6::float8, $7)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Float8",
+        "Float8",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d38b70d2076ad9915244098c40998b4d00e72c17f493157f7cb239cdfc8a0f66"
+}
