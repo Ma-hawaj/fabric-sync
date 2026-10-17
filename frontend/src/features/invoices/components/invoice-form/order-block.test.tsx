@@ -209,6 +209,21 @@ describe('OrderBlock', () => {
     )
   })
 
+  it('keeps the material search text editable after a material is selected', async () => {
+    render(<Harness />)
+
+    await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')
+    const input = searchInput()
+    typeSearchText(input, 'Wool')
+
+    expect(input.value).toBe('Wool')
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order.materialId).toBe('mat-1')
+    })
+  })
+
   it("shows the material's stock across locations once selected", async () => {
     render(<Harness />)
 
