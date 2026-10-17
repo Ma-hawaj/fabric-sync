@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT EXISTS(SELECT 1 FROM invoice_returns WHERE invoice_id = $1)\n            OR EXISTS(SELECT 1 FROM invoice_refunds WHERE invoice_id = $1) AS \"exists!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4bbbfc2159b29e2f7c3657ab72785171c171e9f4b06b3d6f1d50f604f31adde6"
+}

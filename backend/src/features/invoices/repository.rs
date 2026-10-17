@@ -76,8 +76,8 @@ pub async fn fetch_invoice_detail(
             -- the total, so the paid sum, the status and the latest method
             -- are worked out here. The NUMERIC arithmetic stays exact —
             -- nothing is rounded until the service layer.
-            pay.paid AS "amount_paid!",
-            pay.status AS "payment_status!",
+            balance.amount_paid::float8 AS "amount_paid!",
+            balance.payment_status AS "payment_status!",
             method.payment_type AS "payment_method?",
             -- Goods receipt is separate from money: true once no order on
             -- the invoice is still pending collection. A retail-only invoice
@@ -90,6 +90,13 @@ pub async fn fetch_invoice_detail(
             collection.last_collected_at AS "last_collected_at?",
             i.total_price::float8 AS "total_price!",
             i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
+            balance.amount_credited::float8 AS "amount_credited!",
+            balance.cash_refunded::float8 AS "cash_refunded!",
+            balance.gift_card_refunded::float8 AS "gift_card_refunded!",
+            balance.balance_due::float8 AS "balance_due!",
+            balance.refund_due::float8 AS "refund_due!",
+            (EXISTS(SELECT 1 FROM invoice_returns WHERE invoice_id = i.id)
+             OR EXISTS(SELECT 1 FROM invoice_refunds WHERE invoice_id = i.id)) AS "has_adjustments!",
             -- The `?` suffixes are for sqlx: it reads nullability off the
             -- column definition, which says NOT NULL, and can't see that a
             -- LEFT JOIN may not match.
@@ -106,20 +113,7 @@ pub async fn fetch_invoice_detail(
                    max(collected_at) AS last_collected_at
             FROM orders WHERE invoice_id = i.id
         ) collection ON true
-        LEFT JOIN LATERAL (
-            SELECT
-                COALESCE(SUM(amount), 0)::float8 AS paid,
-                CASE
-                    WHEN GREATEST(
-                        i.total_price - i.gift_card_redeemed - COALESCE(SUM(amount), 0),
-                        0
-                    ) = 0 THEN 'paid'
-                    WHEN COALESCE(SUM(amount), 0) = 0 THEN 'unpaid'
-                    ELSE 'partial'
-                END AS status
-            FROM invoice_payments
-            WHERE invoice_id = i.id
-        ) pay ON true
+        LEFT JOIN invoice_balances balance ON balance.invoice_id = i.id
         LEFT JOIN LATERAL (
             SELECT payment_type
             FROM invoice_payments
@@ -306,6 +300,12 @@ pub async fn fetch_invoice_detail(
             collected_order_count: invoice.collected_order_count,
             last_collected_at: invoice.last_collected_at,
             gift_card_redeemed: invoice.gift_card_redeemed,
+            amount_credited: invoice.amount_credited,
+            cash_refunded: invoice.cash_refunded,
+            gift_card_refunded: invoice.gift_card_refunded,
+            balance_due: invoice.balance_due,
+            refund_due: invoice.refund_due,
+            has_adjustments: invoice.has_adjustments,
         },
         lines,
         redemptions: redemptions
@@ -337,10 +337,10 @@ const SPEC: ListSpec = ListSpec {
             i.target_date,
             i.urgent_charge::float8 AS urgent_charge,
             i.collection_method,
-            pay.status AS payment_status,
+            balance.payment_status AS payment_status,
             i.total_price::float8 AS total_price,
-            pay.paid AS amount_paid,
-            GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS balance_due,
+            balance.amount_paid::float8 AS amount_paid,
+            balance.balance_due::float8 AS balance_due,
             method.payment_type AS payment_method,
             NOT EXISTS(
                 SELECT 1 FROM orders o
@@ -419,20 +419,7 @@ const SPEC: ListSpec = ListSpec {
         -- The money state, derived from the ledger like in
         -- fetch_invoice_detail above: the paid sum, the status, and the most
         -- recent payment's method.
-        LEFT JOIN LATERAL (
-            SELECT
-                COALESCE(SUM(amount), 0)::float8 AS paid,
-                CASE
-                    WHEN GREATEST(
-                        i.total_price - i.gift_card_redeemed - COALESCE(SUM(amount), 0),
-                        0
-                    ) = 0 THEN 'paid'
-                    WHEN COALESCE(SUM(amount), 0) = 0 THEN 'unpaid'
-                    ELSE 'partial'
-                END AS status
-            FROM invoice_payments
-            WHERE invoice_id = i.id
-        ) pay ON true
+        LEFT JOIN invoice_balances balance ON balance.invoice_id = i.id
         LEFT JOIN LATERAL (
             SELECT payment_type
             FROM invoice_payments
@@ -554,12 +541,10 @@ pub async fn insert_invoice(
     .map(|row| (row.id, row.invoice_date))
 }
 
-/// The invoice's totals with the row locked, so a payment validated against
-/// them cannot be interleaved with another one. `None` when the invoice
-/// doesn't exist.
-pub struct LockedInvoiceTotals {
-    pub total_price: f64,
-    pub gift_card_redeemed: f64,
+/// Locks the invoice before reading its ledger in a separate statement.
+/// That later read observes any changes committed while lock acquisition
+/// waited. `None` means the invoice does not exist.
+pub struct LockedInvoice {
     /// The server-set creation date. Gift card expiry on an edit is checked
     /// against this — the date the sale happened — not the editable target.
     pub invoice_date: chrono::DateTime<chrono::Utc>,
@@ -568,10 +553,10 @@ pub struct LockedInvoiceTotals {
 pub async fn lock_invoice(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
-) -> Result<Option<LockedInvoiceTotals>, sqlx::Error> {
+) -> Result<Option<LockedInvoice>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT total_price::float8 AS "total_price!", gift_card_redeemed::float8 AS "gift_card_redeemed!", invoice_date
+        SELECT invoice_date
         FROM invoices
         WHERE id = $1
         FOR UPDATE
@@ -581,9 +566,7 @@ pub async fn lock_invoice(
     .fetch_optional(&mut **tx)
     .await?;
 
-    Ok(row.map(|row| LockedInvoiceTotals {
-        total_price: row.total_price,
-        gift_card_redeemed: row.gift_card_redeemed,
+    Ok(row.map(|row| LockedInvoice {
         invoice_date: row.invoice_date,
     }))
 }

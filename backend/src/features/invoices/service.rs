@@ -12,6 +12,7 @@ use crate::{
         gift_cards::{repository as gift_cards_repository, service as gift_cards_service},
         materials::repository as materials_repository,
         products::repository as products_repository,
+        returns::repository as returns_repository,
     },
     list::{self, ListParams},
     state::AppState,
@@ -95,6 +96,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         lines: rows.lines,
         redemptions: rows.redemptions,
         payments,
+        has_adjustments: invoice.has_adjustments,
         totals: InvoiceTotalsBreakdown {
             urgent_charge: invoice.urgent_charge,
             subtotal: totals.subtotal,
@@ -111,9 +113,11 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
             total: invoice.total_price,
             gift_card_redeemed: invoice.gift_card_redeemed,
             amount_paid: invoice.amount_paid,
-            balance_due: round2(
-                (invoice.total_price - invoice.gift_card_redeemed - invoice.amount_paid).max(0.0),
-            ),
+            amount_credited: invoice.amount_credited,
+            cash_refunded: invoice.cash_refunded,
+            gift_card_refunded: invoice.gift_card_refunded,
+            refund_due: invoice.refund_due,
+            balance_due: invoice.balance_due,
         },
     })
 }
@@ -153,7 +157,7 @@ pub fn validate_payment_amount(
     gift_card_redeemed: f64,
     amount_paid: f64,
 ) -> Result<(), AppError> {
-    if round2(amount) <= 0.0 {
+    if !amount.is_finite() || round2(amount) <= 0.0 {
         return Err(AppError::BadRequest(
             "a payment has to be greater than zero".to_string(),
         ));
@@ -200,7 +204,7 @@ pub async fn record_payment(
 ) -> Result<RecordedPayment, AppError> {
     let mut tx = state.db().begin().await?;
 
-    let locked = repository::lock_invoice(&mut tx, invoice_id)
+    repository::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
 
@@ -212,8 +216,13 @@ pub async fn record_payment(
         }
     }
 
-    let paid = repository::sum_payments(&mut tx, invoice_id).await?;
-    validate_payment_amount(amount, locked.total_price, locked.gift_card_redeemed, paid)?;
+    let balance = returns_repository::settlement(&mut tx, invoice_id).await?;
+    validate_payment_amount(
+        amount,
+        balance.net_total,
+        balance.net_gift_card_redeemed,
+        balance.net_amount_paid,
+    )?;
 
     let payment = repository::insert_payment(
         &mut tx,
@@ -233,7 +242,16 @@ pub async fn record_payment(
         "payment recorded"
     );
 
-    let summary = payment_summary(locked.total_price, locked.gift_card_redeemed, paid + amount);
+    let summary = PaymentSummary {
+        payment_status: payment_summary(
+            balance.net_total,
+            balance.net_gift_card_redeemed,
+            balance.net_amount_paid + amount,
+        )
+        .payment_status,
+        amount_paid: balance.amount_paid + amount,
+        balance_due: round2((balance.balance_due - amount).max(0.0)),
+    };
     Ok(RecordedPayment { payment, summary })
 }
 
@@ -248,14 +266,18 @@ pub async fn collect_invoice(
 ) -> Result<CollectedInvoice, AppError> {
     let mut tx = state.db().begin().await?;
 
-    let locked = repository::lock_invoice(&mut tx, invoice_id)
+    repository::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
 
     repository::mark_orders_collected(&mut tx, invoice_id).await?;
 
-    let paid = repository::sum_payments(&mut tx, invoice_id).await?;
-    let summary = payment_summary(locked.total_price, locked.gift_card_redeemed, paid);
+    let balance = returns_repository::settlement(&mut tx, invoice_id).await?;
+    let summary = PaymentSummary {
+        payment_status: balance.payment_status,
+        amount_paid: balance.amount_paid,
+        balance_due: balance.balance_due,
+    };
 
     let payment_method = if summary.balance_due > 0.0 {
         let payment_type = payment_type.ok_or_else(|| {
@@ -281,11 +303,11 @@ pub async fn collect_invoice(
 
     tx.commit().await?;
 
-    let summary = payment_summary(
-        locked.total_price,
-        locked.gift_card_redeemed,
-        paid + summary.balance_due,
-    );
+    let summary = PaymentSummary {
+        payment_status: "paid".into(),
+        amount_paid: balance.amount_paid + summary.balance_due,
+        balance_due: 0.0,
+    };
 
     tracing::info!(
         invoice_id = %invoice_id,
@@ -1974,6 +1996,14 @@ pub async fn get_invoice_for_edit(
     state: &AppState,
     invoice_id: Uuid,
 ) -> Result<InvoiceEdit, AppError> {
+    let mut tx = state.db().begin().await?;
+    let adjusted = returns_repository::has_adjustments(&mut tx, invoice_id).await?;
+    tx.commit().await?;
+    if adjusted {
+        return Err(AppError::BadRequest(
+            "an invoice with returns or refunds cannot be edited".into(),
+        ));
+    }
     repository::fetch_invoice_edit(state, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))
@@ -2024,6 +2054,11 @@ pub async fn update_invoice(
     // The money already taken has to fit the rebuilt total: shrinking the
     // lines below what the customer already paid would leave the ledger
     // overpaying the invoice, with no payment row to blame for it.
+    if returns_repository::has_adjustments(&mut tx, invoice_id).await? {
+        return Err(AppError::BadRequest(
+            "an invoice with returns or refunds cannot be edited".into(),
+        ));
+    }
     let kept = repository::sum_payments(&mut tx, invoice_id).await?;
     validate_kept_payments(kept, totals.total, totals.redeemed)?;
 

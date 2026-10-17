@@ -55,6 +55,10 @@ export interface InvoiceTotals {
   total: number
   giftCardRedeemed: number
   amountPaid: number
+  amountCredited: number
+  cashRefunded: number
+  giftCardRefunded: number
+  refundDue: number
   balanceDue: number
 }
 
@@ -98,5 +102,6 @@ export interface InvoiceDetail extends ReadinessFields {
   lines: InvoiceLine[]
   redemptions: InvoiceRedemption[]
   payments: InvoicePayment[]
+  hasAdjustments: boolean
   totals: InvoiceTotals
 }

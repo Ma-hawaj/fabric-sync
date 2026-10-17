@@ -514,6 +514,10 @@ pub struct InvoiceTotalsBreakdown {
     pub total: f64,
     pub gift_card_redeemed: f64,
     pub amount_paid: f64,
+    pub amount_credited: f64,
+    pub cash_refunded: f64,
+    pub gift_card_refunded: f64,
+    pub refund_due: f64,
     /// What the customer still owes: the total less everything already
     /// settled, whether in cash or in gift card tender.
     pub balance_due: f64,
@@ -555,6 +559,12 @@ pub struct InvoiceRecord {
     /// collected (and on retail-only invoices, which have no orders).
     pub last_collected_at: Option<DateTime<Utc>>,
     pub gift_card_redeemed: f64,
+    pub amount_credited: f64,
+    pub cash_refunded: f64,
+    pub gift_card_refunded: f64,
+    pub balance_due: f64,
+    pub refund_due: f64,
+    pub has_adjustments: bool,
 }
 
 /// Shape of `GET /invoices/:id`, and the context the invoice document template
@@ -595,6 +605,7 @@ pub struct InvoiceDetail {
     pub lines: Vec<InvoiceDetailLine>,
     pub redemptions: Vec<InvoiceRedemptionLine>,
     pub payments: Vec<InvoicePayment>,
+    pub has_adjustments: bool,
     pub totals: InvoiceTotalsBreakdown,
 }
 

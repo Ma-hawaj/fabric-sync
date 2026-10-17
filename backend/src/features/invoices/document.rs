@@ -352,6 +352,10 @@ fn formatted_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<Strin
         ("total", totals.total),
         ("giftCardRedeemed", totals.gift_card_redeemed),
         ("amountPaid", totals.amount_paid),
+        ("amountCredited", totals.amount_credited),
+        ("cashRefunded", totals.cash_refunded),
+        ("giftCardRefunded", totals.gift_card_refunded),
+        ("refundDue", totals.refund_due),
         ("balanceDue", totals.balance_due),
     ] {
         amounts.insert(key.to_string(), format_amount(value));
@@ -840,8 +844,13 @@ mod tests_support {
             lines: Vec::new(),
             redemptions: Vec::new(),
             payments: Vec::new(),
+            has_adjustments: false,
             totals: InvoiceTotalsBreakdown {
                 urgent_charge: 0.0,
+                amount_credited: 0.0,
+                cash_refunded: 0.0,
+                gift_card_refunded: 0.0,
+                refund_due: 0.0,
                 subtotal: 100.0,
                 discount: 0.0,
                 discount_unit: "amount".to_string(),

@@ -82,6 +82,7 @@ const DETAIL: InvoiceDetail = {
     },
   ],
   redemptions: [],
+  hasAdjustments: false,
   payments: [
     {
       id: 'pay-1',
@@ -104,6 +105,10 @@ const DETAIL: InvoiceDetail = {
     total: 300,
     giftCardRedeemed: 0,
     amountPaid: 60,
+    amountCredited: 0,
+    cashRefunded: 0,
+    giftCardRefunded: 0,
+    refundDue: 0,
     balanceDue: 240,
   },
 }
@@ -243,6 +248,13 @@ describe('InvoiceDetailPage', () => {
     renderPage({ ...DETAIL, lines: [first, second] })
     expect(screen.getAllByText('Omar')).toHaveLength(2)
     expect(screen.getAllByText('Ahmed Al-Mansoori')).toHaveLength(2)
+  })
+
+  it('protects the original sale after a return even when its credit was zero', () => {
+    renderPage({ ...DETAIL, received: false, hasAdjustments: true })
+    expect(
+      screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
+    ).toBe(true)
   })
 
   it('waits for the line items rather than rendering an empty invoice', () => {
