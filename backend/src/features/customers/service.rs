@@ -8,7 +8,10 @@ use crate::{
 
 use super::{
     repository,
-    types::{validate_measurement, CreateCustomerInput, Customer, UpdateCustomerInput},
+    types::{
+        normalize_customer_identity, normalized_field, validate_measurement, CreateCustomerInput,
+        Customer, UpdateCustomerInput,
+    },
 };
 
 pub async fn list_customers(
@@ -28,8 +31,7 @@ pub async fn create_customer(
     state: &AppState,
     input: CreateCustomerInput,
 ) -> Result<Customer, AppError> {
-    let name = normalized_field(&input.name, "customer name")?;
-    let mobile_no = normalized_field(&input.mobile_no, "phone number")?;
+    let (name, mobile_no) = normalize_customer_identity(&input.name, &input.mobile_no)?;
 
     if let Some(measurement) = input.measurement.as_ref() {
         validate_measurement(measurement)?;
@@ -45,16 +47,6 @@ pub async fn create_customer(
     tracing::info!(customer_id = %customer.id, "customer created");
 
     Ok(customer)
-}
-
-fn normalized_field(value: &str, label: &str) -> Result<String, AppError> {
-    let trimmed = value.trim();
-
-    if trimmed.is_empty() {
-        return Err(AppError::BadRequest(format!("{label} cannot be empty")));
-    }
-
-    Ok(trimmed.to_string())
 }
 
 pub async fn update_customer(
@@ -90,6 +82,14 @@ pub async fn update_customer(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalize_customer_identity_trims_both_fields() {
+        assert_eq!(
+            normalize_customer_identity("  Ahmed  ", "  33112233\n").unwrap(),
+            ("Ahmed".to_string(), "33112233".to_string())
+        );
+    }
 
     #[test]
     fn normalized_field_trims_surrounding_whitespace() {

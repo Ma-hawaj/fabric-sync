@@ -127,7 +127,7 @@ export function InvoiceForm({
           `Invoice ${savedVerb} — total ${CURRENCY} ${invoice.totalPrice.toFixed(2)}.`,
         error: (error) =>
           error instanceof ApiError && error.status === 409
-            ? 'A customer with this name and phone number already exists.'
+            ? 'A customer with this name and phone number already exists. Select Existing Customer instead.'
             : `Could not ${saveVerb.toLowerCase()} this invoice. Please try again.`,
       })
 

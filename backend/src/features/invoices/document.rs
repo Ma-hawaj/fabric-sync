@@ -254,12 +254,13 @@ fn billed_customers(detail: &InvoiceDetail) -> Vec<&InvoiceParty> {
         return vec![buyer];
     }
 
+    // Family members may share a phone; the name is part of their identity.
     let mut seen = std::collections::HashSet::new();
     detail
         .lines
         .iter()
         .filter_map(|line| line.customer.as_ref())
-        .filter(|customer| seen.insert(customer.mobile_no.as_str()))
+        .filter(|customer| seen.insert((customer.name.as_str(), customer.mobile_no.as_str())))
         .collect()
 }
 
@@ -314,6 +315,67 @@ fn formatted_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<Strin
 mod tests {
     use super::*;
     use crate::features::invoices::types::OrderDesignValues;
+
+    fn customer_line(name: &str, mobile_no: &str) -> super::super::types::InvoiceDetailLine {
+        use super::super::types::{InvoiceDetailLine, InvoiceLineKind, InvoiceParty};
+        InvoiceDetailLine {
+            kind: InvoiceLineKind::Order,
+            order_id: Some(uuid::Uuid::nil()),
+            description: "Cotton".to_string(),
+            detail: None,
+            customer: Some(InvoiceParty {
+                name: name.to_string(),
+                mobile_no: mobile_no.to_string(),
+            }),
+            quantity: 3.0,
+            unit: Some("m".to_string()),
+            unit_price: 20.0,
+            line_total: 20.0,
+            taxable: true,
+            design_values: None,
+        }
+    }
+
+    #[test]
+    fn billed_customers_preserve_family_members_sharing_a_phone() {
+        let mut detail = super::tests_support::detail();
+        detail.lines = vec![
+            customer_line("Ahmed", "33112233"),
+            customer_line("Omar", "33112233"),
+            customer_line("Ahmed", "33112233"),
+            customer_line("Ahmed", "33445566"),
+        ];
+        let customers = billed_customers(&detail);
+        assert_eq!(
+            customers
+                .iter()
+                .map(|customer| (customer.name.as_str(), customer.mobile_no.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Ahmed", "33112233"),
+                ("Omar", "33112233"),
+                ("Ahmed", "33445566"),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_explicit_buyer_remains_the_billed_contact() {
+        let mut detail = super::tests_support::detail();
+        detail.buyer = Some(super::super::types::InvoiceParty {
+            name: "Family contact".to_string(),
+            mobile_no: "33112233".to_string(),
+        });
+        detail.lines = vec![customer_line("Omar", "33112233")];
+        let customers = billed_customers(&detail);
+        assert_eq!(customers.len(), 1);
+        assert_eq!(customers[0].name, "Family contact");
+    }
+
+    #[test]
+    fn a_walk_in_invoice_has_no_billed_customers() {
+        assert!(billed_customers(&super::tests_support::detail()).is_empty());
+    }
 
     fn branding() -> InvoiceBranding {
         InvoiceBranding {

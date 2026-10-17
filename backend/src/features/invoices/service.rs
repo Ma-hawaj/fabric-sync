@@ -28,7 +28,7 @@ use super::{
         ReceivedInvoice, RecordedPayment,
     },
 };
-use crate::features::customers::types::CreateMeasurementInput;
+use crate::features::customers::types::{normalize_customer_identity, CreateMeasurementInput};
 
 pub async fn list_invoices(
     state: &AppState,
@@ -432,7 +432,11 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
         }
     }
 
-    for customer in &input.customers {
+    let mut new_customers = HashMap::new();
+    let mut existing_customers: HashMap<Uuid, Vec<(usize, &CreateMeasurementInput)>> =
+        HashMap::new();
+    for (index, customer) in input.customers.iter().enumerate() {
+        let number = index + 1;
         match (&customer.existing_customer_id, &customer.new_customer) {
             (Some(_), Some(_)) | (None, None) => {
                 return Err(AppError::BadRequest(
@@ -440,7 +444,26 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
                         .to_string(),
                 ));
             }
-            _ => {}
+            (None, Some(new_customer)) => {
+                let identity =
+                    normalize_customer_identity(&new_customer.name, &new_customer.mobile_no)?;
+                if let Some(first) = new_customers.insert(identity, number) {
+                    return Err(AppError::BadRequest(format!(
+                        "customer {number} repeats customer {first}; add their orders to customer {first} instead"
+                    )));
+                }
+            }
+            (Some(id), None) => {
+                let measurements = existing_customers.entry(*id).or_default();
+                if let Some((first, _)) = measurements.iter().find(|(_, measurement)| {
+                    measurement_values_equal(measurement, &customer.measurement)
+                }) {
+                    return Err(AppError::BadRequest(format!(
+                        "customer {number} repeats customer {first} with the same measurements; add their orders to customer {first} instead"
+                    )));
+                }
+                measurements.push((number, &customer.measurement));
+            }
         }
 
         // A customer block exists to carry orders and a measurement snapshot;
@@ -512,12 +535,22 @@ async fn resolve_customer_id(
 ) -> Result<uuid::Uuid, AppError> {
     match (&customer.existing_customer_id, &customer.new_customer) {
         (Some(id), None) => Ok(*id),
-        (None, Some(new_customer)) => Ok(customers_repository::insert_customer(
-            tx,
-            &new_customer.name,
-            &new_customer.mobile_no,
-        )
-        .await?),
+        (None, Some(new_customer)) => {
+            let (name, mobile_no) =
+                normalize_customer_identity(&new_customer.name, &new_customer.mobile_no)?;
+            customers_repository::insert_customer(tx, &name, &mobile_no)
+                .await
+                .map_err(|error| match &error {
+                    sqlx::Error::Database(db_error)
+                        if db_error.code().as_deref() == Some("23505") =>
+                    {
+                        AppError::Conflict(format!(
+                            "customer {name} with this phone number already exists; select Existing Customer instead"
+                        ))
+                    }
+                    _ => error.into(),
+                })
+        }
         // Already rejected by validate().
         _ => unreachable!("validated: exactly one of existing/new customer is set"),
     }
@@ -590,6 +623,96 @@ mod tests {
         }
 
         input(base)
+    }
+
+    fn new_customer(name: &str, mobile_no: &str) -> serde_json::Value {
+        let mut block = customer(vec![order(20.0)]);
+        block.as_object_mut().unwrap().remove("existingCustomerId");
+        block["newCustomer"] = serde_json::json!({"name": name, "mobileNo": mobile_no});
+        block
+    }
+
+    #[test]
+    fn invoice_customers_use_the_standalone_identity_validation() {
+        for (name, phone) in [(" ", "33112233"), ("Ahmed", "\t"), ("", "")] {
+            let error = validate(&invoice(0.0, "amount", vec![new_customer(name, phone)]));
+            assert!(matches!(error, Err(AppError::BadRequest(_))));
+        }
+        assert!(validate(&invoice(
+            0.0,
+            "amount",
+            vec![new_customer(" Ahmed ", " 33112233 ")]
+        ))
+        .is_ok());
+    }
+
+    #[test]
+    fn duplicate_new_customer_blocks_are_rejected_after_trimming() {
+        let error = validate(&invoice(
+            0.0,
+            "amount",
+            vec![
+                new_customer("Ahmed", "33112233"),
+                new_customer(" Ahmed ", " 33112233 "),
+            ],
+        ))
+        .unwrap_err();
+        assert!(
+            matches!(error, AppError::BadRequest(message) if message.contains("customer 2 repeats customer 1"))
+        );
+    }
+
+    #[test]
+    fn different_family_members_can_share_a_phone_number() {
+        assert!(validate(&invoice(
+            0.0,
+            "amount",
+            vec![
+                new_customer("Ahmed", "33112233"),
+                new_customer("Omar", "33112233"),
+            ]
+        ))
+        .is_ok());
+    }
+
+    #[test]
+    fn same_name_with_different_phones_is_not_a_duplicate() {
+        assert!(validate(&invoice(
+            0.0,
+            "amount",
+            vec![
+                new_customer("Ahmed", "33112233"),
+                new_customer("Ahmed", "33445566"),
+            ]
+        ))
+        .is_ok());
+    }
+
+    #[test]
+    fn duplicate_existing_customer_measurements_are_rejected_even_on_different_dates() {
+        let first = customer(vec![order(20.0)]);
+        let mut second = first.clone();
+        second["measurement"]["date"] = serde_json::json!("2026-07-20");
+        let error = validate(&invoice(0.0, "amount", vec![first, second])).unwrap_err();
+        assert!(
+            matches!(error, AppError::BadRequest(message) if message.contains("same measurements"))
+        );
+    }
+
+    #[test]
+    fn one_customer_can_have_distinct_measurement_sets() {
+        let first = customer(vec![order(20.0)]);
+        let mut second = first.clone();
+        second["measurement"]["fit"] = serde_json::json!("loose");
+        assert!(validate(&invoice(0.0, "amount", vec![first, second])).is_ok());
+    }
+
+    #[test]
+    fn different_existing_customers_can_have_identical_measurements() {
+        let first = customer(vec![order(20.0)]);
+        let mut second = first.clone();
+        second["existingCustomerId"] = serde_json::json!("0197fdd2-6a67-7000-8000-000000000008");
+        assert!(validate(&invoice(0.0, "amount", vec![first, second])).is_ok());
     }
 
     #[test]
