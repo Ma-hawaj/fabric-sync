@@ -392,6 +392,7 @@ function toInvoice(detail: InvoiceDetail): Invoice {
 
   return {
     id: detail.id,
+    invoiceNumber: detail.invoiceNumber,
     date: detail.date,
     targetDate: detail.targetDate,
     customers,

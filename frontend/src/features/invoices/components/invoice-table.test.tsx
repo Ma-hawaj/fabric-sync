@@ -24,6 +24,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 const invoice: Invoice = {
   id: 'invoice-one',
+  invoiceNumber: 42,
   date: '2026-10-17T10:00:00Z',
   targetDate: null,
   customers: [
@@ -157,13 +158,14 @@ describe('Invoice table', () => {
       screen.queryByRole('columnheader', { name: 'Customer Mobile' }),
     ).toBeNull()
     expect(screen.getByText('1 of 3 collected')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'INV-42' })).toBeTruthy()
     expect(screen.getByText('0 of 1 row(s) selected.')).toBeTruthy()
     expect(apiClient.get).not.toHaveBeenCalled()
   })
   it('loads only this invoice’s orders on expansion and groups them by customer', async () => {
     renderTable()
     const toggle = screen.getByRole('button', {
-      name: 'Show orders for invoice INVOICE-',
+      name: 'Show orders for invoice INV-42',
     })
     fireEvent.click(toggle)
     expect(screen.getByRole('status').textContent).toBe('Loading orders...')

@@ -556,6 +556,8 @@ pub struct InvoiceDetail {
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceListItem {
     pub id: Uuid,
+    /// The human-readable invoice identity shown as `INV-###` in the UI.
+    pub invoice_number: i64,
     #[sqlx(rename = "invoice_date")]
     pub date: DateTime<Utc>,
     pub target_date: Option<NaiveDate>,

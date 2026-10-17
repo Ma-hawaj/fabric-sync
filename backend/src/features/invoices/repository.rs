@@ -310,6 +310,7 @@ const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
             i.id,
+            i.invoice_number,
             i.invoice_date,
             i.target_date,
             pay.status AS payment_status,
@@ -416,6 +417,10 @@ const SPEC: ListSpec = ListSpec {
     "#,
     columns: &[
         ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        (
+            "invoiceNumber",
+            ColumnDef::new("invoice_number", ColumnKind::Number),
+        ),
         ("date", ColumnDef::new("invoice_date", ColumnKind::Date)),
         (
             "targetDate",

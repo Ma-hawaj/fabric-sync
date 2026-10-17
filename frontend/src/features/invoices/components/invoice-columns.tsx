@@ -30,12 +30,6 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: CURRENCY,
 })
 
-// Invoice ids are uuidv7 — time-ordered, so the short prefix still sorts by
-// creation and is unique enough to identify an invoice at a glance.
-function shortId(id: string) {
-  return id.slice(0, 8).toUpperCase()
-}
-
 const PAYMENT_STATUS_VARIANT: Record<
   PaymentStatus,
   'destructive' | 'secondary' | 'default'
@@ -64,7 +58,7 @@ export const getInvoiceColumns = (
           variant="ghost"
           size="icon-sm"
           type="button"
-          aria-label={`${row.getIsExpanded() ? 'Hide' : 'Show'} orders for invoice ${shortId(row.original.id)}`}
+          aria-label={`${row.getIsExpanded() ? 'Hide' : 'Show'} orders for invoice INV-${row.original.invoiceNumber}`}
           aria-expanded={row.getIsExpanded()}
           aria-controls={`invoice-orders-${row.original.id}`}
           onClick={row.getToggleExpandedHandler()}
@@ -77,7 +71,7 @@ export const getInvoiceColumns = (
     size: 40,
   },
   {
-    accessorKey: 'id',
+    accessorKey: 'invoiceNumber',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Invoice" />
     ),
@@ -87,7 +81,7 @@ export const getInvoiceColumns = (
         params={{ invoiceId: row.original.id }}
         className="font-mono font-medium text-info hover:underline"
       >
-        {shortId(row.getValue('id'))}
+        INV-{row.getValue<number>('invoiceNumber')}
       </Link>
     ),
     enableSorting: true,
