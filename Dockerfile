@@ -10,7 +10,7 @@
 #
 # Build it:
 #   docker build \
-#     --build-arg VITE_OIDC_AUTHORITY=https://auth.example.com/application/o/fabric-sync/ \
+#     --build-arg VITE_OIDC_AUTHORITY=https://auth.example.com/ \
 #     --build-arg VITE_OIDC_CLIENT_ID=<spa-client-id> \
 #     -t fabric-sync .
 #

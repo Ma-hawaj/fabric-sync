@@ -48,17 +48,15 @@ services:
       OAUTH_ISSUER_URL: ${OAUTH_ISSUER_URL}
       OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID}
       OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET}
-      # Authentik's introspection endpoint is global, not per-provider, and
-      # isn't advertised by per-provider discovery — set explicitly.
-      OAUTH_INTROSPECTION_URL: ${OAUTH_INTROSPECTION_URL}
+      # Only set if Zitadel uses a non-standard introspection endpoint —
+      # otherwise discovery advertises it.
+      OAUTH_INTROSPECTION_URL: ${OAUTH_INTROSPECTION_URL:-}
       # Leave unset unless verified (see .env.example).
       OAUTH_RESOURCE_AUDIENCE: ${OAUTH_RESOURCE_AUDIENCE:-}
-      # Base URL of the Authentik instance backing GET /users (server root,
-      # not the per-provider issuer path).
-      AUTHENTIK_BASE_URL: ${AUTHENTIK_BASE_URL}
-      # Static API token of a service account with "View user" (see
-      # .env.example). Required — the app refuses to boot without it.
-      AUTHENTIK_API_TOKEN: ${AUTHENTIK_API_TOKEN}
+      # Dedicated Zitadel machine user backing GET /users (see
+      # .env.example). Required — the app refuses to boot without both.
+      ZITADEL_USERS_CLIENT_ID: ${ZITADEL_USERS_CLIENT_ID:?set ZITADEL_USERS_CLIENT_ID}
+      ZITADEL_USERS_CLIENT_SECRET: ${ZITADEL_USERS_CLIENT_SECRET:?set ZITADEL_USERS_CLIENT_SECRET}
       SEED_DEV_DATA: ${SEED_DEV_DATA:-false}
       RUST_LOG: ${RUST_LOG:-info}
       COMPANY_NAME_EN: ${COMPANY_NAME_EN:-Fabric Sync}
