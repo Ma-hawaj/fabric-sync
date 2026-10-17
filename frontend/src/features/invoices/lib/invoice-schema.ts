@@ -244,7 +244,20 @@ export const invoiceFormSchema = z
       .string()
       .refine((value) => value === '' || !Number.isNaN(Date.parse(value)), {
         message: 'Enter a valid date.',
-      }),
+      })
+      .refine(
+        (value) => {
+          if (value === '') return true
+          const [year, month, day] = value.split('-').map(Number)
+          const chosen = new Date(year, month - 1, day)
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          return chosen > today
+        },
+        {
+          message: 'The target date must be in the future.',
+        },
+      ),
     receivingBranch: z.string(),
     customerId: z.string(),
     productBranch: z.string(),
