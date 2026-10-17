@@ -197,7 +197,7 @@ export function CustomerBlock({
         </form.Subscribe>
       </div>
 
-      <form.Field name={`${base}.orders` as never}>
+      <form.Field name={`${base}.orders` as never} mode="array">
         {(ordersField: any) => (
           <div className="space-y-4">
             {ordersField.state.value.map((order: any, orderIndex: number) => (

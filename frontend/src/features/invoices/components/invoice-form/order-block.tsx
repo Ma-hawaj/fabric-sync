@@ -243,8 +243,10 @@ export function OrderBlock({
                     })),
                   ]}
                   value={stored || EMD_UNSET}
-                  onValueChange={(value: string) =>
-                    field.handleChange(value === EMD_UNSET ? '' : value)
+                  onValueChange={(value: string | null) =>
+                    field.handleChange(
+                      value === EMD_UNSET || value == null ? '' : value,
+                    )
                   }
                 >
                   <SelectTrigger id={field.name} className="w-full">
