@@ -78,13 +78,12 @@ pub async fn fetch_invoice_detail(
             -- Goods receipt is separate from money: true once no order on
             -- the invoice is still pending collection. A retail-only invoice
             -- has no orders, so there is nothing to collect.
-            NOT EXISTS(
-                SELECT 1 FROM orders o
-                WHERE o.invoice_id = i.id AND o.status <> 'received'
-            ) AS "received!",
+            collection.order_count = collection.collected_order_count AS "received!",
+            collection.order_count AS "order_count!",
+            collection.collected_order_count AS "collected_order_count!",
             -- The latest collection across the invoice's tailoring lines
             -- (see the list query's `agg` lateral for the same derivation).
-            (SELECT MAX(o.received_at) FROM orders o WHERE o.invoice_id = i.id) AS "last_received_at?",
+            collection.last_received_at AS "last_received_at?",
             i.total_price::float8 AS "total_price!",
             i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
             -- The `?` suffixes are for sqlx: it reads nullability off the
@@ -96,6 +95,12 @@ pub async fn fetch_invoice_detail(
         FROM invoices i
         LEFT JOIN branch b ON b.id = i.branch_id
         LEFT JOIN customers c ON c.id = i.customer_id
+        LEFT JOIN LATERAL (
+            SELECT count(*) AS order_count,
+                   count(*) FILTER (WHERE status = 'received') AS collected_order_count,
+                   max(received_at) AS last_received_at
+            FROM orders WHERE invoice_id = i.id
+        ) collection ON true
         LEFT JOIN LATERAL (
             SELECT
                 COALESCE(SUM(amount), 0)::float8 AS paid,
@@ -275,6 +280,8 @@ pub async fn fetch_invoice_detail(
             amount_paid: invoice.amount_paid,
             payment_method: invoice.payment_method,
             received: invoice.received,
+            order_count: invoice.order_count,
+            collected_order_count: invoice.collected_order_count,
             last_received_at: invoice.last_received_at,
             gift_card_redeemed: invoice.gift_card_redeemed,
         },
@@ -303,6 +310,7 @@ const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
             i.id,
+            i.invoice_number,
             i.invoice_date,
             i.target_date,
             pay.status AS payment_status,
@@ -318,6 +326,8 @@ const SPEC: ListSpec = ListSpec {
             -- NULL until the first order is received (and on retail-only
             -- invoices, which have no orders at all).
             agg.last_received_at AS last_received_at,
+            COALESCE(agg.item_count, 0) AS order_count,
+            COALESCE(agg.collected_order_count, 0) AS collected_order_count,
             i.gift_card_redeemed::float8 AS gift_card_redeemed,
             i.branch_id AS receiving_location_id,
             recv.name AS receiving_location,
@@ -351,6 +361,7 @@ const SPEC: ListSpec = ListSpec {
         LEFT JOIN LATERAL (
             SELECT
                 count(*) AS item_count,
+                count(*) FILTER (WHERE o.status = 'received') AS collected_order_count,
                 json_agg(DISTINCT jsonb_build_object(
                     'name', c.name,
                     'mobileNo', c.mobile_no
@@ -406,6 +417,10 @@ const SPEC: ListSpec = ListSpec {
     "#,
     columns: &[
         ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        (
+            "invoiceNumber",
+            ColumnDef::new("invoice_number", ColumnKind::Number),
+        ),
         ("date", ColumnDef::new("invoice_date", ColumnKind::Date)),
         (
             "targetDate",
