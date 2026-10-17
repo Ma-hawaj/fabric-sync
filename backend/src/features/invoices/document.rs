@@ -720,6 +720,8 @@ mod tests_support {
             payment_status: "paid".to_string(),
             payment_method: None,
             received: true,
+            order_count: 0,
+            collected_order_count: 0,
             last_received_at: None,
             lines: Vec::new(),
             redemptions: Vec::new(),

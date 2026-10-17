@@ -12,6 +12,7 @@ export interface InvoiceCustomer {
 // most recent one's method.
 export interface Invoice {
   id: string
+  invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */
   date: string
   /** The promised delivery date, editable on the form. Null when none was promised. */
@@ -27,6 +28,9 @@ export interface Invoice {
   giftCardRedeemed: number
   /** Goods receipt, separate from money: every order collected. */
   received: boolean
+  /** Tailoring garments only, excluding retail products and gift cards. */
+  orderCount: number
+  collectedOrderCount: number
   /**
    * Latest collection across the invoice's tailoring lines, as an ISO
    * datetime. Null until the first order is received (and on retail-only

@@ -33,6 +33,8 @@ const DETAIL: InvoiceDetail = {
   paymentStatus: 'partial',
   paymentMethod: 'benefit',
   received: false,
+  orderCount: 1,
+  collectedOrderCount: 0,
   lastReceivedAt: null,
   lines: [
     {

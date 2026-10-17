@@ -392,6 +392,7 @@ function toInvoice(detail: InvoiceDetail): Invoice {
 
   return {
     id: detail.id,
+    invoiceNumber: detail.invoiceNumber,
     date: detail.date,
     targetDate: detail.targetDate,
     customers,
@@ -410,6 +411,8 @@ function toInvoice(detail: InvoiceDetail): Invoice {
     paymentMethod: detail.paymentMethod,
     giftCardRedeemed: detail.totals.giftCardRedeemed,
     received: detail.received,
+    orderCount: detail.orderCount,
+    collectedOrderCount: detail.collectedOrderCount,
     lastReceivedAt: detail.lastReceivedAt,
     receivingLocation: detail.branchName,
     // The detail endpoint carries no production locations (lines carry no

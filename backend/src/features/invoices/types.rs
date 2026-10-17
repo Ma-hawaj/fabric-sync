@@ -507,6 +507,9 @@ pub struct InvoiceRecord {
     /// Goods receipt, separate from money: true once no order on the invoice
     /// is still pending collection.
     pub received: bool,
+    /// Tailoring garments only; retail products and gift cards are excluded.
+    pub order_count: i64,
+    pub collected_order_count: i64,
     /// The latest collection time across the invoice's tailoring lines,
     /// derived as MAX(orders.received_at). Null until the first order is
     /// received (and on retail-only invoices, which have no orders).
@@ -540,6 +543,9 @@ pub struct InvoiceDetail {
     /// is still pending collection. The edit form and the receive actions
     /// both read this rather than inferring it from the payment status.
     pub received: bool,
+    /// Tailoring garments only; retail products and gift cards are excluded.
+    pub order_count: i64,
+    pub collected_order_count: i64,
     /// The latest collection time across the invoice's tailoring lines.
     /// Null until the first order is received.
     pub last_received_at: Option<DateTime<Utc>>,
@@ -553,6 +559,8 @@ pub struct InvoiceDetail {
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceListItem {
     pub id: Uuid,
+    /// The human-readable invoice identity shown as `INV-###` in the UI.
+    pub invoice_number: i64,
     #[sqlx(rename = "invoice_date")]
     pub date: DateTime<Utc>,
     pub target_date: Option<NaiveDate>,
@@ -573,6 +581,9 @@ pub struct InvoiceListItem {
     /// Goods receipt, separate from money: true once no order on the invoice
     /// is still pending collection. Backs the list's collection filter.
     pub received: bool,
+    /// Tailoring garments only; retail products and gift cards are excluded.
+    pub order_count: i64,
+    pub collected_order_count: i64,
     /// The latest collection time across the invoice's tailoring lines.
     /// Null until the first order is received (and on retail-only invoices,
     /// which have no orders).
