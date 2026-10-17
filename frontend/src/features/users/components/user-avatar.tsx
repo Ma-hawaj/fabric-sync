@@ -22,7 +22,7 @@ export function UserAvatar({
         <AvatarImage src={user.avatarUrl} alt={user.name} />
       ) : null}
       {/* Base UI swaps to the fallback automatically when the image is
-          missing or fails to load, so a broken Authentik URL degrades to
+          missing or fails to load, so a broken avatar URL degrades to
           initials instead of a broken-image icon. */}
       <AvatarFallback>{initials(user.name)}</AvatarFallback>
     </Avatar>
