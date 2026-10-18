@@ -4,7 +4,7 @@ import { PlusIcon } from 'lucide-react'
 import { useDataTable } from '@/hooks/use-data-table'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
-import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
+import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-advanced-toolbar'
 import { getInventoryColumns } from './components/inventory-columns'
 import { InventoryDetailsSheet } from './components/inventory-details-sheet'
 import { RemoveStockDialog } from './components/remove-stock-dialog'
@@ -42,15 +42,21 @@ export function InventoryPage() {
     columns,
     pageCount,
     rowCount: total,
+    enableAdvancedFilter: true,
   })
 
   return (
-    <div className="space-y-4">
+    <div className="list-page">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Inventory</h1>
-          <p className="text-muted-foreground">
-            Track materials and their stock across every location.
+          <h1 className="text-xl font-semibold tracking-tight">
+            Inventory{' '}
+            <span className="ms-2 align-middle text-xs font-normal text-muted-foreground tabular-nums">
+              {isLoading ? '…' : total.toLocaleString()} records
+            </span>
+          </h1>
+          <p className="list-description">
+            Material availability across all locations.
           </p>
         </div>
         <Button nativeButton={false} render={<Link to="/inventory/new" />}>
@@ -59,15 +65,9 @@ export function InventoryPage() {
         </Button>
       </div>
 
-      {isLoading ? (
-        <div className="text-center text-sm text-muted-foreground py-10">
-          Loading inventory...
-        </div>
-      ) : (
-        <DataTable table={table}>
-          <DataTableToolbar table={table} />
-        </DataTable>
-      )}
+      <DataTable isLoading={isLoading} table={table}>
+        <DataTableAdvancedToolbar table={table} />
+      </DataTable>
 
       <InventoryDetailsSheet
         material={selectedMaterial}

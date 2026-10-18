@@ -49,11 +49,16 @@ export function DesignOptionsPage() {
   })
 
   return (
-    <div className="space-y-4">
+    <div
+      data-slot="list-page"
+      className="flex h-full min-h-0 min-w-0 flex-col gap-3 [&>:first-child]:shrink-0"
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Design Options</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl font-semibold tracking-tight">
+            Design Options
+          </h1>
+          <p className="mt-0.5 hidden text-xs leading-relaxed text-muted-foreground sm:block">
             The illustrated choices inside each order design slot. Retiring an
             option takes it out of its picker without erasing the orders that
             already used it.
@@ -65,15 +70,9 @@ export function DesignOptionsPage() {
         </Button>
       </div>
 
-      {isLoading ? (
-        <div className="text-center text-sm text-muted-foreground py-10">
-          Loading design options...
-        </div>
-      ) : (
-        <DataTable table={table}>
-          <DataTableToolbar table={table} />
-        </DataTable>
-      )}
+      <DataTable isLoading={isLoading} table={table}>
+        <DataTableToolbar table={table} />
+      </DataTable>
     </div>
   )
 }

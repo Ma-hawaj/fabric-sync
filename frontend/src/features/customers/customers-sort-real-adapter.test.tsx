@@ -105,7 +105,9 @@ describe('customers page sorting (real tanstack-router adapter)', () => {
     expect(screen.getByText('Zainab')).toBeTruthy()
     expect(rowOrder()).toEqual(['Zainab', 'Aamal'])
 
-    const nameHeader = screen.getByText('Name').closest('button')
+    const nameHeader = screen
+      .getByRole('columnheader', { name: /^Name/ })
+      .querySelector('button')!
     expect(nameHeader).toBeTruthy()
     fireEvent.pointerDown(nameHeader)
     fireEvent.mouseDown(nameHeader)

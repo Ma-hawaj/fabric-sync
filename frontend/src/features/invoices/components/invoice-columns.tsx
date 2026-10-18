@@ -91,7 +91,7 @@ export const getInvoiceColumns = (
     meta: {
       label: 'Invoice',
       placeholder: 'Filter invoice...',
-      variant: 'text',
+      variant: 'number',
     },
   },
   {
@@ -100,7 +100,26 @@ export const getInvoiceColumns = (
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Date" />
     ),
-    cell: ({ row }) => <div>{row.getValue<Date>('date').toLocaleString()}</div>,
+    cell: ({ row }) => {
+      const value = row.getValue<Date>('date')
+      return (
+        <div className="leading-tight">
+          <div>
+            {value.toLocaleDateString(undefined, {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+            })}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {value.toLocaleTimeString(undefined, {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </div>
+        </div>
+      )
+    },
     enableSorting: true,
     enableColumnFilter: false,
   },
@@ -325,6 +344,40 @@ export const getInvoiceColumns = (
     },
     enableSorting: true,
     enableColumnFilter: false,
+  },
+  {
+    accessorKey: 'amountPaid',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Paid" />
+    ),
+    cell: ({ row }) => (
+      <div className="text-end tabular-nums">
+        {currencyFormatter.format(row.original.amountPaid)}
+      </div>
+    ),
+    enableSorting: true,
+    enableColumnFilter: true,
+    meta: { label: 'Paid', variant: 'range', unit: CURRENCY, align: 'end' },
+  },
+  {
+    accessorKey: 'balanceDue',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Balance" />
+    ),
+    cell: ({ row }) => (
+      <div
+        className={
+          row.original.balanceDue > 0
+            ? 'font-semibold text-warning text-end tabular-nums'
+            : 'text-end tabular-nums text-muted-foreground'
+        }
+      >
+        {currencyFormatter.format(row.original.balanceDue)}
+      </div>
+    ),
+    enableSorting: false,
+    enableColumnFilter: false,
+    meta: { label: 'Balance', align: 'end' },
   },
   {
     accessorKey: 'totalPrice',

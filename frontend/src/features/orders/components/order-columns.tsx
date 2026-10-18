@@ -109,10 +109,22 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'customerName',
+      cell: ({ row }) => (
+        <div
+          className="truncate leading-tight"
+          title={`${row.original.customerName} · ${row.original.customerMobile}`}
+        >
+          <div className="truncate font-medium">
+            {row.original.customerName}
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {row.original.customerMobile}
+          </span>
+        </div>
+      ),
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Customer Name" />
       ),
-      cell: ({ row }) => <div>{row.getValue('customerName')}</div>,
       enableSorting: true,
       enableColumnFilter: true,
       meta: {
@@ -235,7 +247,7 @@ export function getOrderColumns(
     {
       accessorKey: 'status',
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} label="Status" />
+        <DataTableColumnHeader column={column} label="Collection" />
       ),
       cell: ({ row }) => {
         const status = row.getValue<Order['status']>('status')
@@ -252,7 +264,7 @@ export function getOrderColumns(
       enableSorting: true,
       enableColumnFilter: true,
       meta: {
-        label: 'Status',
+        label: 'Collection',
         variant: 'multiSelect',
         options: statusOptions,
       },
@@ -278,10 +290,23 @@ export function getOrderColumns(
       ),
       cell: ({ row }) => {
         const label = row.getValue<string>('stage')
+        const current = row.original.stages.find(
+          (entry) => entry.applicable && entry.status === 'pending',
+        )
         return (
-          <Badge variant={label === COMPLETED ? 'default' : 'secondary'}>
-            {label}
-          </Badge>
+          <div className="flex items-center gap-2 overflow-hidden">
+            <Badge variant={label === COMPLETED ? 'default' : 'secondary'}>
+              {label}
+            </Badge>
+            {current?.assigneeName && (
+              <span
+                className="truncate text-xs text-muted-foreground"
+                title={current.assigneeName}
+              >
+                {current.assigneeName}
+              </span>
+            )}
+          </div>
         )
       },
       enableSorting: true,

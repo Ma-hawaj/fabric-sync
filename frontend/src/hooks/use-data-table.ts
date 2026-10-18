@@ -11,6 +11,7 @@ import {
 import type {
   ColumnFiltersState,
   ColumnPinningState,
+  ColumnSizingState,
   PaginationState,
   RowSelectionState,
   SortingState,
@@ -37,6 +38,11 @@ import {
   toColumnFilters,
 } from '@/lib/list-params'
 import { getSortingStateParser } from '@/lib/parsers'
+import {
+  readTablePreferences,
+  saveTablePreferences,
+  tablePreferenceKey,
+} from '@/lib/table-preferences'
 import type { ExtendedColumnSort, QueryKeys } from '@/types/data-table'
 
 const DEBOUNCE_MS = 300
@@ -107,11 +113,19 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     [history, scroll, shallow, clearOnDefault, startTransition],
   )
 
+  const [preferenceKey] = React.useState(tablePreferenceKey)
+  const [saved] = React.useState(readTablePreferences)
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>(
     initialState?.rowSelection ?? {},
   )
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>(initialState?.columnVisibility ?? {})
+    React.useState<VisibilityState>({
+      ...initialState?.columnVisibility,
+      ...saved.visibility,
+    })
+  const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>(
+    saved.sizing ?? {},
+  )
 
   const [page, setPage] = useQueryState(
     pageKey,
@@ -121,7 +135,11 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     perPageKey,
     parseAsInteger
       .withOptions(queryStateOptions)
-      .withDefault(initialState?.pagination?.pageSize ?? DEFAULT_PER_PAGE),
+      .withDefault(
+        initialState?.pagination?.pageSize ??
+          saved.pageSize ??
+          DEFAULT_PER_PAGE,
+      ),
   )
 
   const pagination: PaginationState = React.useMemo(() => {
@@ -130,6 +148,14 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       pageSize: perPage,
     }
   }, [page, perPage])
+
+  React.useEffect(() => {
+    saveTablePreferences(preferenceKey, {
+      visibility: columnVisibility,
+      sizing: columnSizing,
+      pageSize: perPage,
+    })
+  }, [preferenceKey, columnVisibility, columnSizing, perPage])
 
   const onPaginationChange = React.useCallback(
     (updaterOrValue: Updater<PaginationState>) => {
@@ -257,20 +283,80 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       : (initialState?.columnPinning ?? {}),
   )
 
+  const sizedColumns = React.useMemo(
+    () =>
+      columns.map((column) => {
+        const id = getColumnDefId(column) ?? ''
+        const widths: Partial<Record<string, number>> = {
+          expand: 36,
+          actions: 72,
+          orderNumber: 88,
+          invoiceNumber: 88,
+          date: 154,
+          targetDate: 128,
+          customerName: 190,
+          name: 220,
+          customerMobile: 150,
+          mobileNo: 150,
+          material: 138,
+          materials: 180,
+          stage: 164,
+          repairs: 80,
+          materialAmount: 90,
+          itemCount: 80,
+          price: 110,
+          totalPrice: 116,
+          amountPaid: 116,
+          balanceDue: 116,
+          collected: 132,
+          readinessStatus: 140,
+          status: 96,
+          paymentStatus: 120,
+          receivingLocation: 114,
+          productionLocation: 114,
+        }
+        const labels: Partial<Record<string, string>> = {
+          id: 'ID',
+          collected: 'Collected',
+          lastCollectedAt: 'Last collected',
+          paymentMethod: 'Payment method',
+          targetDate: 'Target date',
+          invoiceDate: 'Invoice date',
+          invoicePaymentStatus: 'Payment status',
+        }
+        const label =
+          labels[id] ??
+          id
+            .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+            .replace(/^./, (character) => character.toUpperCase())
+        return {
+          ...column,
+          size: column.size ?? widths[id] ?? 140,
+          minSize: column.minSize ?? (id === 'expand' ? 48 : 64),
+          meta: { ...column.meta, label: column.meta?.label ?? label },
+        }
+      }),
+    [columns],
+  )
+
   const table = useReactTable({
     ...tableProps,
-    columns,
+    columns: sizedColumns,
     initialState,
     pageCount: manualPagination ? (pageCount ?? -1) : undefined,
     state: {
       pagination,
       sorting,
       columnVisibility,
+      columnSizing,
       rowSelection,
       columnFilters,
       columnPinning,
     },
     defaultColumn: {
+      size: 130,
+      minSize: 64,
+      maxSize: 600,
       ...tableProps.defaultColumn,
       enableColumnFilter: false,
     },
@@ -281,6 +367,8 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     onSortingChange,
     onColumnFiltersChange,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnSizingChange: setColumnSizing,
+    columnResizeMode: 'onChange',
     onColumnPinningChange: setColumnPinning,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -294,6 +382,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     manualFiltering,
     meta: {
       ...tableProps.meta,
+      advancedFilters: enableAdvancedFilter,
       queryKeys: {
         page: pageKey,
         perPage: perPageKey,

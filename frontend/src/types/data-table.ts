@@ -5,10 +5,12 @@ import type { FilterItemSchema } from '@/lib/parsers'
 declare module '@tanstack/react-table' {
   interface TableMeta<TData extends RowData> {
     queryKeys?: QueryKeys
+    advancedFilters?: boolean
   }
 
   interface ColumnMeta<TData extends RowData, TValue> {
     label?: string
+    align?: 'start' | 'end'
     placeholder?: string
     variant?: FilterVariant
     options?: Option[]

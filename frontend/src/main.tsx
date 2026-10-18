@@ -52,7 +52,7 @@ if (!rootElement.innerHTML) {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <TooltipProvider>
-            <SidebarProvider>
+            <SidebarProvider className="h-dvh min-h-0 overflow-hidden">
               <App />
             </SidebarProvider>
           </TooltipProvider>

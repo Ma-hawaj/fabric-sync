@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { useDataTable } from '@/hooks/use-data-table'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
-import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
+import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-advanced-toolbar'
 import { getInvoiceColumns } from './components/invoice-columns'
 import { InvoiceOrderBreakdown } from './components/invoice-order-breakdown'
 import { CollectInvoiceDialog } from './components/collect-invoice-dialog'
@@ -96,24 +96,50 @@ export function InvoicesPage() {
     columns,
     pageCount,
     rowCount: total,
+    enableAdvancedFilter: true,
     getRowId: (invoice) => invoice.id,
     getRowCanExpand: (row) => row.original.orderCount > 0,
     manualExpanding: true,
-    initialState: { columnVisibility: { customerMobile: false } },
+    initialState: {
+      columnVisibility: {
+        customerMobile: false,
+        materials: false,
+        productionLocations: false,
+        lastCollectedAt: false,
+        paymentMethod: false,
+      },
+      columnPinning: { left: ['invoiceNumber'] },
+      columnOrder: [
+        'expand',
+        'invoiceNumber',
+        'customerName',
+        'date',
+        'targetDate',
+        'itemCount',
+        'paymentStatus',
+        'amountPaid',
+        'balanceDue',
+        'totalPrice',
+        'readinessStatus',
+        'collected',
+        'receivingLocation',
+        'actions',
+      ],
+    },
   })
 
   return (
-    <div className="space-y-4">
-      <NotificationDialog
-        invoiceId={resendId}
-        kind="manual_resend"
-        onClose={() => setResendId(null)}
-      />
+    <div className="list-page">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Invoices</h1>
-          <p className="text-muted-foreground">
-            Manage and view all customer invoices and their details.
+          <h1 className="text-xl font-semibold tracking-tight">
+            Invoices{' '}
+            <span className="ms-2 align-middle text-xs font-normal text-muted-foreground tabular-nums">
+              {isLoading ? '…' : total.toLocaleString()} records
+            </span>
+          </h1>
+          <p className="list-description">
+            Sales, outstanding balances and collection progress.
           </p>
         </div>
         <Button nativeButton={false} render={<Link to="/invoices/new" />}>
@@ -122,21 +148,21 @@ export function InvoicesPage() {
         </Button>
       </div>
 
-      {isLoading ? (
-        <div className="text-center text-sm text-muted-foreground">
-          Loading invoices...
-        </div>
-      ) : (
-        <DataTable
-          table={table}
-          renderExpandedRow={(row) => (
-            <InvoiceOrderBreakdown invoiceId={row.original.id} />
-          )}
-        >
-          <DataTableToolbar table={table} />
-        </DataTable>
-      )}
+      <DataTable
+        isLoading={isLoading}
+        table={table}
+        renderExpandedRow={(row) => (
+          <InvoiceOrderBreakdown invoiceId={row.original.id} />
+        )}
+      >
+        <DataTableAdvancedToolbar table={table} />
+      </DataTable>
 
+      <NotificationDialog
+        invoiceId={resendId}
+        kind="manual_resend"
+        onClose={() => setResendId(null)}
+      />
       <CollectInvoiceDialog
         invoice={collectInvoice}
         onOpenChange={(open) => !open && setCollectInvoice(null)}

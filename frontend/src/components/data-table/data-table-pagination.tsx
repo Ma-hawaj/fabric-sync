@@ -24,14 +24,21 @@ interface DataTablePaginationProps<TData> extends React.ComponentProps<'div'> {
 
 export function DataTablePagination<TData>({
   table,
-  pageSizeOptions = [10, 20, 30, 40, 50],
+  pageSizeOptions = [10, 25, 50, 100],
   className,
   ...props
 }: DataTablePaginationProps<TData>) {
+  const { pageIndex, pageSize } = table.getState().pagination
+  const total = table.options.manualPagination
+    ? table.getRowCount()
+    : table.getFilteredRowModel().rows.length
+  const selected = table.getFilteredSelectedRowModel().rows.length
+  const from = total === 0 ? 0 : pageIndex * pageSize + 1
+  const to = Math.min((pageIndex + 1) * pageSize, total)
   return (
     <div
       className={cn(
-        'flex w-full flex-col-reverse items-center justify-between gap-4 overflow-auto p-1 sm:flex-row sm:gap-8',
+        'flex w-full flex-wrap items-center justify-between gap-2',
         className,
       )}
       {...props}
@@ -43,12 +50,18 @@ export function DataTablePagination<TData>({
         Selection is still page-scoped, which is what the left-hand number says.
       */}
       <div className="flex-1 whitespace-nowrap text-muted-foreground text-sm">
-        {table.getFilteredSelectedRowModel().rows.length} of{' '}
-        {table.getRowCount()} row(s) selected.
+        <span className="font-medium text-foreground tabular-nums">
+          {from}–{to}
+        </span>{' '}
+        of <span className="tabular-nums">{total.toLocaleString()}</span>{' '}
+        records
+        {selected > 0 && <span> · {selected} selected</span>}
       </div>
-      <div className="flex flex-col-reverse items-center gap-4 sm:flex-row sm:gap-6 lg:gap-8">
+      <div className="flex items-center gap-3 sm:gap-5">
         <div className="flex items-center space-x-2 rtl:space-x-reverse">
-          <p className="whitespace-nowrap font-medium text-sm">Rows per page</p>
+          <p className="hidden whitespace-nowrap text-xs text-muted-foreground sm:block">
+            Rows per page
+          </p>
           <Select
             value={`${table.getState().pagination.pageSize}`}
             onValueChange={(value) => {
@@ -60,9 +73,9 @@ export function DataTablePagination<TData>({
             </SelectTrigger>
             <SelectContent side="top">
               <SelectGroup>
-                {pageSizeOptions.map((pageSize) => (
-                  <SelectItem key={pageSize} value={`${pageSize}`}>
-                    {pageSize}
+                {pageSizeOptions.map((option) => (
+                  <SelectItem key={option} value={`${option}`}>
+                    {option}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -70,8 +83,9 @@ export function DataTablePagination<TData>({
           </Select>
         </div>
         <div className="flex items-center justify-center font-medium text-sm">
-          Page {table.getState().pagination.pageIndex + 1} of{' '}
-          {table.getPageCount()}
+          <span className="whitespace-nowrap text-xs tabular-nums">
+            Page {pageIndex + 1} of {Math.max(1, table.getPageCount())}
+          </span>
         </div>
         <div className="flex items-center space-x-2 rtl:space-x-reverse">
           <Button

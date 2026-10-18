@@ -64,6 +64,30 @@ export const getCustomerColumns = (
     },
   },
   {
+    id: 'measurementCount',
+    header: 'Measurements',
+    accessorFn: (customer) => customer.measurements.length,
+    meta: { label: 'Measurements', align: 'end' },
+    cell: ({ row }) => (
+      <div className="text-end tabular-nums">
+        {row.original.measurements.length}
+      </div>
+    ),
+    enableSorting: false,
+  },
+  {
+    id: 'invoiceCount',
+    header: 'Invoices',
+    accessorFn: (customer) => customer.invoices.length,
+    meta: { label: 'Invoices', align: 'end' },
+    cell: ({ row }) => (
+      <div className="text-end tabular-nums">
+        {row.original.invoices.length}
+      </div>
+    ),
+    enableSorting: false,
+  },
+  {
     id: 'actions',
     header: 'Actions',
     enablePinning: true,

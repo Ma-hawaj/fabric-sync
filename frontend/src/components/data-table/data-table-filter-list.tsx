@@ -5,7 +5,6 @@ import {
   CalendarIcon,
   Check,
   ChevronsUpDown,
-  GripVertical,
   ListFilter,
   Trash2,
 } from 'lucide-react'
@@ -49,28 +48,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Sortable,
-  SortableContent,
-  SortableItem,
-  SortableItemHandle,
-  SortableOverlay,
-} from '@/components/ui/sortable'
 import { dataTableConfig } from '@/config/data-table'
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
 import { getDefaultFilterOperator, getFilterOperators } from '@/lib/data-table'
 import { formatDate } from '@/lib/format'
 import { generateId } from '@/lib/id'
-import { getFiltersStateParser } from '@/lib/parsers'
+import { useTableFilters } from '@/hooks/use-table-filters'
 import { cn } from '@/lib/utils'
-import type {
-  ExtendedColumnFilter,
-  FilterOperator,
-  JoinOperator,
-} from '@/types/data-table'
+import type { ExtendedColumnFilter, JoinOperator } from '@/types/data-table'
 
 const DEBOUNCE_MS = 300
-const THROTTLE_MS = 50
 const FILTER_SHORTCUT_KEY = 'f'
 const REMOVE_FILTER_SHORTCUTS = ['backspace', 'delete']
 
@@ -78,16 +65,12 @@ interface DataTableFilterListProps<TData> extends React.ComponentProps<
   typeof PopoverContent
 > {
   table: Table<TData>
-  debounceMs?: number
-  throttleMs?: number
   shallow?: boolean
   disabled?: boolean
 }
 
 export function DataTableFilterList<TData>({
   table,
-  debounceMs = DEBOUNCE_MS,
-  throttleMs = THROTTLE_MS,
   shallow = true,
   disabled,
   ...props
@@ -98,26 +81,22 @@ export function DataTableFilterList<TData>({
   const [open, setOpen] = React.useState(false)
   const addButtonRef = React.useRef<HTMLButtonElement>(null)
 
+  const tableColumns = table.getAllColumns()
   const columns = React.useMemo(() => {
-    return table
-      .getAllColumns()
-      .filter((column) => column.columnDef.enableColumnFilter)
-  }, [table])
+    return tableColumns.filter((column) => column.columnDef.enableColumnFilter)
+  }, [tableColumns])
 
-  const [filters, setFilters] = useQueryState(
-    table.options.meta?.queryKeys?.filters ?? 'filters',
-    getFiltersStateParser<TData>(columns.map((field) => field.id))
-      .withDefault([])
-      .withOptions({
-        clearOnDefault: true,
-        shallow,
-        throttleMs,
-      }),
+  const definitions = React.useMemo(
+    () => columns.map((column) => column.columnDef),
+    [columns],
   )
-  const debouncedSetFilters = useDebouncedCallback(setFilters, debounceMs)
+  const { filters, setFilters } = useTableFilters(
+    definitions,
+    table.options.meta?.queryKeys,
+  )
 
   const [joinOperator, setJoinOperator] = useQueryState(
-    table.options.meta?.queryKeys?.joinOperator ?? '',
+    table.options.meta?.queryKeys?.joinOperator ?? 'joinOperator',
     parseAsStringEnum(['and', 'or']).withDefault('and').withOptions({
       clearOnDefault: true,
       shallow,
@@ -129,7 +108,7 @@ export function DataTableFilterList<TData>({
 
     const column = columns[0]
 
-    debouncedSetFilters([
+    void setFilters([
       ...filters,
       {
         id: column.id as Extract<keyof TData, string>,
@@ -141,14 +120,14 @@ export function DataTableFilterList<TData>({
         filterId: generateId({ length: 8 }),
       },
     ])
-  }, [columns, filters, debouncedSetFilters])
+  }, [columns, filters, setFilters])
 
   const onFilterUpdate = React.useCallback(
     (
       filterId: string,
       updates: Partial<Omit<ExtendedColumnFilter<TData>, 'filterId'>>,
     ) => {
-      debouncedSetFilters((prevFilters) => {
+      void setFilters((prevFilters) => {
         const updatedFilters = prevFilters.map((filter) => {
           if (filter.filterId === filterId) {
             return { ...filter, ...updates }
@@ -158,7 +137,7 @@ export function DataTableFilterList<TData>({
         return updatedFilters
       })
     },
-    [debouncedSetFilters],
+    [setFilters],
   )
 
   const onFilterRemove = React.useCallback(
@@ -218,11 +197,7 @@ export function DataTableFilterList<TData>({
   )
 
   return (
-    <Sortable
-      value={filters}
-      onValueChange={setFilters}
-      getItemValue={(item) => item.filterId}
-    >
+    <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           render={
@@ -235,7 +210,7 @@ export function DataTableFilterList<TData>({
           }
         >
           <ListFilter className="text-muted-foreground" />
-          Filter
+          Filters
           {filters.length > 0 && (
             <Badge
               variant="secondary"
@@ -248,7 +223,7 @@ export function DataTableFilterList<TData>({
         <PopoverContent
           aria-describedby={descriptionId}
           aria-labelledby={labelId}
-          className="flex w-full max-w-(--radix-popover-content-available-width) flex-col gap-3.5 p-4 sm:min-w-[380px]"
+          className="flex w-[min(48rem,calc(100vw-2rem))] flex-col gap-4 p-4"
           {...props}
         >
           <div className="flex flex-col gap-1">
@@ -267,14 +242,33 @@ export function DataTableFilterList<TData>({
                 : 'Add filters to refine your rows.'}
             </p>
           </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            Match
+            <Select
+              value={joinOperator}
+              onValueChange={(value) => {
+                if (value) void setJoinOperator(value)
+                table.setPageIndex(0)
+              }}
+            >
+              <SelectTrigger
+                aria-label="Filter match mode"
+                className="h-7 w-28 rounded-md"
+              >
+                <SelectValue>
+                  {joinOperator === 'and' ? 'All rules' : 'Any rule'}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="and">All rules</SelectItem>
+                <SelectItem value="or">Any rule</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {filters.length > 0 ? (
-            <SortableContent
-              render={
-                <div
-                  role="list"
-                  className="flex max-h-[300px] flex-col gap-2 overflow-y-auto p-1"
-                />
-              }
+            <div
+              role="list"
+              className="flex max-h-80 flex-col gap-2 overflow-y-auto p-1"
             >
               {filters.map((filter, index) => (
                 <DataTableFilterItem<TData>
@@ -289,7 +283,7 @@ export function DataTableFilterList<TData>({
                   onFilterRemove={onFilterRemove}
                 />
               ))}
-            </SortableContent>
+            </div>
           ) : null}
           <div className="flex w-full items-center gap-2">
             <Button
@@ -311,17 +305,7 @@ export function DataTableFilterList<TData>({
           </div>
         </PopoverContent>
       </Popover>
-      <SortableOverlay>
-        <div className="flex items-center gap-2">
-          <div className="h-8 min-w-[72px] rounded-sm bg-primary/10" />
-          <div className="h-8 w-32 rounded-sm bg-primary/10" />
-          <div className="h-8 w-32 rounded-sm bg-primary/10" />
-          <div className="h-8 min-w-36 flex-1 rounded-sm bg-primary/10" />
-          <div className="size-8 shrink-0 rounded-sm bg-primary/10" />
-          <div className="size-8 shrink-0 rounded-sm bg-primary/10" />
-        </div>
-      </SortableOverlay>
-    </Sortable>
+    </>
   )
 }
 
@@ -361,7 +345,9 @@ function DataTableFilterItem<TData>({
   const inputId = `${filterItemId}-input`
 
   const columnMeta = column?.columnDef.meta
-  const filterOperators = getFilterOperators(filter.variant)
+  const filterOperators = getFilterOperators(filter.variant).filter(
+    (operator) => operator.value !== 'isRelativeToToday',
+  )
 
   const onItemKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -393,17 +379,12 @@ function DataTableFilterItem<TData>({
   if (!column) return null
 
   return (
-    <SortableItem
-      value={filter.filterId}
-      render={
-        <div
-          role="listitem"
-          id={filterItemId}
-          tabIndex={-1}
-          className="flex items-center gap-2"
-          onKeyDown={onItemKeyDown}
-        />
-      }
+    <div
+      role="listitem"
+      id={filterItemId}
+      tabIndex={-1}
+      className="flex flex-wrap items-center gap-2"
+      onKeyDown={onItemKeyDown}
     >
       <div className="min-w-[72px] text-center">
         {index === 0 ? (
@@ -411,7 +392,9 @@ function DataTableFilterItem<TData>({
         ) : index === 1 ? (
           <Select
             value={joinOperator}
-            onValueChange={(value: JoinOperator) => setJoinOperator(value)}
+            onValueChange={(value) => {
+              if (value) setJoinOperator(value)
+            }}
           >
             <SelectTrigger
               aria-label="Select join operator"
@@ -422,8 +405,8 @@ function DataTableFilterItem<TData>({
             </SelectTrigger>
             <SelectContent
               id={joinOperatorListboxId}
-              position="popper"
-              className="min-w-(--radix-select-trigger-width) lowercase"
+
+              className="lowercase"
             >
               <SelectGroup>
                 {dataTableConfig.joinOperators.map((op) => (
@@ -497,7 +480,8 @@ function DataTableFilterItem<TData>({
         open={showOperatorSelector}
         onOpenChange={setShowOperatorSelector}
         value={filter.operator}
-        onValueChange={(value: FilterOperator) =>
+        onValueChange={(value) =>
+          value &&
           onFilterUpdate(filter.filterId, {
             operator: value,
             value:
@@ -506,11 +490,15 @@ function DataTableFilterItem<TData>({
         }
       >
         <SelectTrigger
+          aria-label="Filter operator"
           aria-controls={operatorListboxId}
-          className="w-32 rounded lowercase"
+          className="w-48 rounded lowercase"
         >
           <div className="truncate">
-            <SelectValue placeholder={filter.operator} />
+            <SelectValue>
+              {filterOperators.find((entry) => entry.value === filter.operator)
+                ?.label ?? filter.operator}
+            </SelectValue>
           </div>
         </SelectTrigger>
         <SelectContent id={operatorListboxId}>
@@ -539,6 +527,7 @@ function DataTableFilterItem<TData>({
         })}
       </div>
       <Button
+        aria-label={`Remove ${columnMeta?.label ?? column.id} rule`}
         aria-controls={filterItemId}
         variant="outline"
         size="icon"
@@ -547,14 +536,7 @@ function DataTableFilterItem<TData>({
       >
         <Trash2 />
       </Button>
-      <SortableItemHandle
-        render={
-          <Button variant="outline" size="icon" className="size-8 rounded" />
-        }
-      >
-        <GripVertical />
-      </SortableItemHandle>
-    </SortableItem>
+    </div>
   )
 }
 
@@ -613,7 +595,8 @@ function onFilterInputRender<TData>({
       const isNumber = filter.variant === 'number' || filter.variant === 'range'
 
       return (
-        <Input
+        <FilterTextInput
+          key={`${filter.filterId}:${filter.id}:${filter.operator}`}
           id={inputId}
           type={isNumber ? 'number' : filter.variant}
           aria-label={`${columnMeta?.label} filter value`}
@@ -621,14 +604,8 @@ function onFilterInputRender<TData>({
           inputMode={isNumber ? 'numeric' : undefined}
           placeholder={columnMeta?.placeholder ?? 'Enter a value...'}
           className="h-8 w-full rounded"
-          defaultValue={
-            typeof filter.value === 'string' ? filter.value : undefined
-          }
-          onChange={(event) =>
-            onFilterUpdate(filter.filterId, {
-              value: event.target.value,
-            })
-          }
+          value={typeof filter.value === 'string' ? filter.value : ''}
+          onValueChange={(value) => onFilterUpdate(filter.filterId, { value })}
         />
       )
     }
@@ -645,7 +622,7 @@ function onFilterInputRender<TData>({
           value={filter.value}
           onValueChange={(value) =>
             onFilterUpdate(filter.filterId, {
-              value,
+              value: value ?? '',
             })
           }
         >
@@ -687,7 +664,7 @@ function onFilterInputRender<TData>({
           value={selectedValues}
           onValueChange={(value) => {
             onFilterUpdate(filter.filterId, {
-              value,
+              value: value ?? '',
             })
           }}
           multiple={multiple}
@@ -839,4 +816,27 @@ function onFilterInputRender<TData>({
     default:
       return null
   }
+}
+
+function FilterTextInput({
+  value,
+  onValueChange,
+  ...props
+}: Omit<React.ComponentProps<typeof Input>, 'value' | 'onChange'> & {
+  value: string
+  onValueChange: (value: string) => void
+}) {
+  const [draft, setDraft] = React.useState(value)
+  const updateValue = useDebouncedCallback(onValueChange, DEBOUNCE_MS)
+  React.useEffect(() => setDraft(value), [value])
+  return (
+    <Input
+      {...props}
+      value={draft}
+      onChange={(event) => {
+        setDraft(event.target.value)
+        updateValue(event.target.value)
+      }}
+    />
+  )
 }

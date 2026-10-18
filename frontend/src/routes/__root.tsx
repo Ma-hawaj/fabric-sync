@@ -36,8 +36,8 @@ function RootErrorComponent({ error }: { error: Error }) {
 
 function Header() {
   return (
-    <header className="border-b">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-6">
+    <header className="shrink-0 border-b">
+      <div className="flex h-12 items-center gap-2 px-3 md:px-4">
         <SidebarTrigger />
         <Breadcrumbs />
       </div>
@@ -49,23 +49,25 @@ function RootComponent() {
   return (
     <NuqsAdapter>
       <Sidebar />
-      <SidebarInset>
+      <SidebarInset className="min-w-0 overflow-hidden">
         <Header />
-        <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-6">
+        <div className="workspace-content min-h-0 flex-1 overflow-y-auto p-3 md:p-4">
           <Outlet />
         </div>
       </SidebarInset>
-      <TanStackDevtools
-        config={{
-          position: 'bottom-right',
-        }}
-        plugins={[
-          {
-            name: 'TanStack Router',
-            render: <TanStackRouterDevtoolsPanel />,
-          },
-        ]}
-      />
+      {import.meta.env.DEV && import.meta.env.VITE_SHOW_DEVTOOLS === 'true' && (
+        <TanStackDevtools
+          config={{
+            position: 'bottom-right',
+          }}
+          plugins={[
+            {
+              name: 'TanStack Router',
+              render: <TanStackRouterDevtoolsPanel />,
+            },
+          ]}
+        />
+      )}
       <Toaster />
     </NuqsAdapter>
   )

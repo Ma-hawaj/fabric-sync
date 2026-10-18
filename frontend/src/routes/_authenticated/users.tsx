@@ -24,21 +24,15 @@ function Users() {
   })
 
   return (
-    <div className="space-y-4">
+    <div className="list-page">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Users</h1>
-        <p className="text-muted-foreground">View all Users.</p>
+        <h1 className="text-xl font-semibold tracking-tight">Users</h1>
+        <p className="list-description">View all Users.</p>
       </div>
 
-      {isLoading ? (
-        <div className="text-center text-sm text-muted-foreground">
-          Loading users...
-        </div>
-      ) : (
-        <DataTable table={table}>
-          <DataTableToolbar table={table} />
-        </DataTable>
-      )}
+      <DataTable isLoading={isLoading} table={table}>
+        <DataTableToolbar table={table} />
+      </DataTable>
     </div>
   )
 }

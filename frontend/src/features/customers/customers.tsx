@@ -6,7 +6,7 @@ import { useDataTable } from '@/hooks/use-data-table'
 import { useListParams } from '@/hooks/use-list-params'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
-import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
+import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-advanced-toolbar'
 import { getCustomerColumns } from './components/customer-columns'
 import { CustomerDetailsSheet } from './components/customer-details-sheet'
 import { useCustomers } from './hooks/use-customers'
@@ -46,16 +46,21 @@ export function CustomersPage() {
     columns,
     pageCount,
     rowCount: total,
+    enableAdvancedFilter: true,
   })
 
   return (
-    <div className="space-y-4">
+    <div className="list-page">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Customers</h1>
-          <p className="text-muted-foreground">
-            View all registered customers and inspect their measurement
-            histories.
+          <h1 className="text-xl font-semibold tracking-tight">
+            Customers{' '}
+            <span className="ms-2 align-middle text-xs font-normal text-muted-foreground tabular-nums">
+              {isLoading ? '…' : total.toLocaleString()} records
+            </span>
+          </h1>
+          <p className="list-description">
+            Contacts, measurements and invoice history.
           </p>
         </div>
         <Button nativeButton={false} render={<Link to="/customers/new" />}>
@@ -64,15 +69,9 @@ export function CustomersPage() {
         </Button>
       </div>
 
-      {isLoading ? (
-        <div className="text-center text-sm text-muted-foreground py-10">
-          Loading customers...
-        </div>
-      ) : (
-        <DataTable table={table}>
-          <DataTableToolbar table={table} />
-        </DataTable>
-      )}
+      <DataTable isLoading={isLoading} table={table}>
+        <DataTableAdvancedToolbar table={table} />
+      </DataTable>
 
       <CustomerDetailsSheet
         customer={selectedCustomer}
