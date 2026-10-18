@@ -133,11 +133,11 @@ INSERT INTO invoice_payments (id, invoice_id, order_id, amount, payment_type, pa
 -- delivery stage is reported as not applicable), and 11 and 12 have no
 -- production location assigned yet.
 --
--- The five design columns hold the DESIGN CATALOG SLUGS (see
--- frontend/src/features/invoices/data/design-catalog.ts), not free text — the
+-- The six design columns hold the DESIGN CATALOG SLUGS (see the
+-- `design_options` table, managed at /design-options), not free text — the
 -- printed invoice looks each one up against the catalog and embeds the
 -- matching illustration; a value that matches nothing prints without a
--- picture. Pick options from those arrays when editing this import.
+-- picture. Pick options from that table when editing this import.
 INSERT INTO orders (
     id, measurement_id, material_id, material_amount, invoice_id, price,
     thobe_type, f_pocket, collar, sleeve, patti, more_details,

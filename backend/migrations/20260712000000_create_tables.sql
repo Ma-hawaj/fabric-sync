@@ -133,6 +133,7 @@ CREATE TABLE orders (
     price NUMERIC(10, 2) NOT NULL,
     thobe_type TEXT,
     f_pocket TEXT,
+    s_pocket TEXT,
     collar TEXT,
     sleeve TEXT,
     patti TEXT,
@@ -182,14 +183,6 @@ CREATE TABLE order_stages (
     requires_delivery BOOLEAN NOT NULL DEFAULT FALSE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
-
--- Seeded in the migration rather than a dev seed, so every environment starts
--- with a usable list. Staff are free to rename, reorder, or retire these.
-INSERT INTO order_stages (name, sort_order, requires_delivery) VALUES
-    ('Cutting', 1, FALSE),
-    ('Sewing', 2, FALSE),
-    ('Finishing', 3, FALSE),
-    ('Location delivery', 4, TRUE);
 
 -- A finished order brought back for modification or repair. Each return is its
 -- own record with its own pass through the stage checklist, so an order
@@ -330,3 +323,42 @@ CREATE TABLE invoice_items (
         OR (kind = 'gift_card' AND gift_card_id IS NOT NULL AND product_id IS NULL)
     )
 );
+
+
+-- Staff-editable thob design catalog: the choices inside each fixed
+-- order slot (thobe type, collar, sleeve, front pocket, side pocket, patti, EMD).
+--
+-- The slots themselves stay fixed columns on `orders` — only the options
+-- live here, one row each, mirroring `order_stages` and its retirement
+-- rule: `is_active` retires an option without disturbing the orders that
+-- already stored its slug. `orders` keeps storing the bare slug as TEXT
+-- (no foreign key), so a legacy value that matches nothing still prints
+-- as a text-only chip rather than disappearing.
+--
+-- Images live beside the row as BYTEA so the printed invoice stays
+-- self-contained (rendered to `data:` URIs, like the old compiled-in
+-- catalog). SVG sits beside the rasters the same way — the documents carry
+-- the stored mime into the data URI, so vectors replace illustrations option
+-- by option with no pipeline change. Seeded NULL: until staff upload an illustration the
+-- documents fall back to the compiled-in catalog for the matching
+-- section+slug, so this seed changes no printed output on its own.
+CREATE TABLE design_options (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    category TEXT NOT NULL CHECK (category IN
+        ('thob_type', 'neck', 'sleeve', 'front_pocket', 'side_pocket', 'patti', 'emd')),
+    slug TEXT NOT NULL,
+    label TEXT NOT NULL,
+    image BYTEA,
+    image_mime TEXT NOT NULL DEFAULT 'image/webp',
+    image_version BIGINT NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 1,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    UNIQUE (category, slug)
+);
+
+-- Picker order per category, and the admin table's default sort.
+CREATE INDEX IF NOT EXISTS design_options_category_idx
+    ON design_options (category, sort_order);
+
+-- Catalog rows and bundled illustrations live in backend/seeds/design_options.sql
+-- and are loaded explicitly after migrations when the deployment needs them.

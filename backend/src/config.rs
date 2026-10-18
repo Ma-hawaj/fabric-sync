@@ -51,6 +51,10 @@ pub struct Config {
     /// and the seed itself refuses to run against a database that already has
     /// data — see `seed::run`.
     pub seed_dev_data: bool,
+    /// Loads the staff-facing design catalog and its bundled illustrations
+    /// from `seeds/design_options.sql`. Off by default so catalog bootstrap is
+    /// an explicit deployment choice and never part of a schema migration.
+    pub seed_design_options: bool,
     pub invoice_branding: InvoiceBranding,
     /// Directory the built frontend (`vite build` output) is served from.
     /// Unset means `./static` next to the server binary — the Dockerfile
@@ -130,6 +134,9 @@ impl Config {
         let seed_dev_data = env::var("SEED_DEV_DATA")
             .map(|value| value == "true" || value == "1")
             .unwrap_or(false);
+        let seed_design_options = env::var("SEED_DESIGN_OPTIONS")
+            .map(|value| value == "true" || value == "1")
+            .unwrap_or(false);
         let timezone = env::var("TIMEZONE")
             .ok()
             .filter(|value| !value.trim().is_empty())
@@ -150,6 +157,7 @@ impl Config {
             zitadel_users_client_id,
             zitadel_users_client_secret,
             seed_dev_data,
+            seed_design_options,
             timezone,
             static_dir,
             invoice_branding: InvoiceBranding::from_env(),

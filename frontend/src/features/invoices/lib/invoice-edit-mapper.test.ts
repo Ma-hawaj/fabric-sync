@@ -66,6 +66,7 @@ function editFixture(): InvoiceEdit {
             price: 100,
             thobeType: 'saudi-classic',
             fPocket: null,
+            sPocket: 'type-2',
             collar: null,
             sleeve: null,
             patti: null,
@@ -142,6 +143,7 @@ describe('mapInvoiceEditToForm', () => {
     expect(order.price).toBe(100)
     expect(order.thobeType).toBe('saudi-classic')
     expect(order.collar).toBe('')
+    expect(order.sPocket).toBe('type-2')
     expect(order.emd).toBe('6')
   })
 

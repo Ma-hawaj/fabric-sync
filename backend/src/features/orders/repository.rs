@@ -51,6 +51,7 @@ const SPEC: ListSpec = ListSpec {
             o.received_at,
             o.thobe_type,
             o.f_pocket,
+            o.s_pocket,
             o.collar,
             o.sleeve,
             o.patti,

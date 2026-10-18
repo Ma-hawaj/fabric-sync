@@ -142,6 +142,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
         key: crypto.randomUUID(),
         thobeType: nullToBlank(line.thobeType),
         fPocket: nullToBlank(line.fPocket),
+        sPocket: nullToBlank(line.sPocket),
         collar: nullToBlank(line.collar),
         sleeve: nullToBlank(line.sleeve),
         patti: nullToBlank(line.patti),
