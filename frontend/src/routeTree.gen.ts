@@ -19,6 +19,7 @@ import { Route as AuthenticatedLocationsIndexRouteImport } from './routes/_authe
 import { Route as AuthenticatedInvoicesIndexRouteImport } from './routes/_authenticated/invoices/index'
 import { Route as AuthenticatedInventoryIndexRouteImport } from './routes/_authenticated/inventory/index'
 import { Route as AuthenticatedGiftCardsIndexRouteImport } from './routes/_authenticated/gift-cards/index'
+import { Route as AuthenticatedDesignOptionsIndexRouteImport } from './routes/_authenticated/design-options/index'
 import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers/index'
 import { Route as AuthenticatedProductsNewRouteImport } from './routes/_authenticated/products/new'
 import { Route as AuthenticatedOrdersOrderIdRouteImport } from './routes/_authenticated/orders/$orderId'
@@ -27,6 +28,7 @@ import { Route as AuthenticatedLocationsNewRouteImport } from './routes/_authent
 import { Route as AuthenticatedInvoicesNewRouteImport } from './routes/_authenticated/invoices/new'
 import { Route as AuthenticatedInventoryNewRouteImport } from './routes/_authenticated/inventory/new'
 import { Route as AuthenticatedGiftCardsNewRouteImport } from './routes/_authenticated/gift-cards/new'
+import { Route as AuthenticatedDesignOptionsNewRouteImport } from './routes/_authenticated/design-options/new'
 import { Route as AuthenticatedCustomersNewRouteImport } from './routes/_authenticated/customers/new'
 import { Route as AuthenticatedInvoicesInvoiceIdRouteRouteImport } from './routes/_authenticated/invoices/$invoiceId/route'
 import { Route as AuthenticatedInvoicesInvoiceIdIndexRouteImport } from './routes/_authenticated/invoices/$invoiceId/index'
@@ -34,6 +36,7 @@ import { Route as AuthenticatedProductsProductIdEditRouteImport } from './routes
 import { Route as AuthenticatedOrderStagesStageIdEditRouteImport } from './routes/_authenticated/order-stages/$stageId/edit'
 import { Route as AuthenticatedLocationsLocationIdEditRouteImport } from './routes/_authenticated/locations/$locationId/edit'
 import { Route as AuthenticatedInvoicesInvoiceIdEditRouteImport } from './routes/_authenticated/invoices/$invoiceId/edit'
+import { Route as AuthenticatedDesignOptionsDesignOptionIdEditRouteImport } from './routes/_authenticated/design-options/$designOptionId/edit'
 import { Route as AuthenticatedCustomersCustomerIdEditRouteImport } from './routes/_authenticated/customers/$customerId/edit'
 
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
@@ -92,6 +95,12 @@ const AuthenticatedGiftCardsIndexRoute =
     path: '/gift-cards/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedDesignOptionsIndexRoute =
+  AuthenticatedDesignOptionsIndexRouteImport.update({
+    id: '/design-options/',
+    path: '/design-options/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedCustomersIndexRoute =
   AuthenticatedCustomersIndexRouteImport.update({
     id: '/customers/',
@@ -140,6 +149,12 @@ const AuthenticatedGiftCardsNewRoute =
     path: '/gift-cards/new',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedDesignOptionsNewRoute =
+  AuthenticatedDesignOptionsNewRouteImport.update({
+    id: '/design-options/new',
+    path: '/design-options/new',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedCustomersNewRoute =
   AuthenticatedCustomersNewRouteImport.update({
     id: '/customers/new',
@@ -182,6 +197,12 @@ const AuthenticatedInvoicesInvoiceIdEditRoute =
     path: '/edit',
     getParentRoute: () => AuthenticatedInvoicesInvoiceIdRouteRoute,
   } as any)
+const AuthenticatedDesignOptionsDesignOptionIdEditRoute =
+  AuthenticatedDesignOptionsDesignOptionIdEditRouteImport.update({
+    id: '/design-options/$designOptionId/edit',
+    path: '/design-options/$designOptionId/edit',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedCustomersCustomerIdEditRoute =
   AuthenticatedCustomersCustomerIdEditRouteImport.update({
     id: '/customers/$customerId/edit',
@@ -194,6 +215,7 @@ export interface FileRoutesByFullPath {
   '/users': typeof AuthenticatedUsersRoute
   '/invoices/$invoiceId': typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
   '/customers/new': typeof AuthenticatedCustomersNewRoute
+  '/design-options/new': typeof AuthenticatedDesignOptionsNewRoute
   '/gift-cards/new': typeof AuthenticatedGiftCardsNewRoute
   '/inventory/new': typeof AuthenticatedInventoryNewRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
@@ -202,6 +224,7 @@ export interface FileRoutesByFullPath {
   '/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/products/new': typeof AuthenticatedProductsNewRoute
   '/customers/': typeof AuthenticatedCustomersIndexRoute
+  '/design-options/': typeof AuthenticatedDesignOptionsIndexRoute
   '/gift-cards/': typeof AuthenticatedGiftCardsIndexRoute
   '/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/invoices/': typeof AuthenticatedInvoicesIndexRoute
@@ -210,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/orders/': typeof AuthenticatedOrdersIndexRoute
   '/products/': typeof AuthenticatedProductsIndexRoute
   '/customers/$customerId/edit': typeof AuthenticatedCustomersCustomerIdEditRoute
+  '/design-options/$designOptionId/edit': typeof AuthenticatedDesignOptionsDesignOptionIdEditRoute
   '/invoices/$invoiceId/edit': typeof AuthenticatedInvoicesInvoiceIdEditRoute
   '/locations/$locationId/edit': typeof AuthenticatedLocationsLocationIdEditRoute
   '/order-stages/$stageId/edit': typeof AuthenticatedOrderStagesStageIdEditRoute
@@ -220,6 +244,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/users': typeof AuthenticatedUsersRoute
   '/customers/new': typeof AuthenticatedCustomersNewRoute
+  '/design-options/new': typeof AuthenticatedDesignOptionsNewRoute
   '/gift-cards/new': typeof AuthenticatedGiftCardsNewRoute
   '/inventory/new': typeof AuthenticatedInventoryNewRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
@@ -228,6 +253,7 @@ export interface FileRoutesByTo {
   '/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/products/new': typeof AuthenticatedProductsNewRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
+  '/design-options': typeof AuthenticatedDesignOptionsIndexRoute
   '/gift-cards': typeof AuthenticatedGiftCardsIndexRoute
   '/inventory': typeof AuthenticatedInventoryIndexRoute
   '/invoices': typeof AuthenticatedInvoicesIndexRoute
@@ -236,6 +262,7 @@ export interface FileRoutesByTo {
   '/orders': typeof AuthenticatedOrdersIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/customers/$customerId/edit': typeof AuthenticatedCustomersCustomerIdEditRoute
+  '/design-options/$designOptionId/edit': typeof AuthenticatedDesignOptionsDesignOptionIdEditRoute
   '/invoices/$invoiceId/edit': typeof AuthenticatedInvoicesInvoiceIdEditRoute
   '/locations/$locationId/edit': typeof AuthenticatedLocationsLocationIdEditRoute
   '/order-stages/$stageId/edit': typeof AuthenticatedOrderStagesStageIdEditRoute
@@ -249,6 +276,7 @@ export interface FileRoutesById {
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/invoices/$invoiceId': typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
   '/_authenticated/customers/new': typeof AuthenticatedCustomersNewRoute
+  '/_authenticated/design-options/new': typeof AuthenticatedDesignOptionsNewRoute
   '/_authenticated/gift-cards/new': typeof AuthenticatedGiftCardsNewRoute
   '/_authenticated/inventory/new': typeof AuthenticatedInventoryNewRoute
   '/_authenticated/invoices/new': typeof AuthenticatedInvoicesNewRoute
@@ -257,6 +285,7 @@ export interface FileRoutesById {
   '/_authenticated/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/_authenticated/products/new': typeof AuthenticatedProductsNewRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
+  '/_authenticated/design-options/': typeof AuthenticatedDesignOptionsIndexRoute
   '/_authenticated/gift-cards/': typeof AuthenticatedGiftCardsIndexRoute
   '/_authenticated/inventory/': typeof AuthenticatedInventoryIndexRoute
   '/_authenticated/invoices/': typeof AuthenticatedInvoicesIndexRoute
@@ -265,6 +294,7 @@ export interface FileRoutesById {
   '/_authenticated/orders/': typeof AuthenticatedOrdersIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
   '/_authenticated/customers/$customerId/edit': typeof AuthenticatedCustomersCustomerIdEditRoute
+  '/_authenticated/design-options/$designOptionId/edit': typeof AuthenticatedDesignOptionsDesignOptionIdEditRoute
   '/_authenticated/invoices/$invoiceId/edit': typeof AuthenticatedInvoicesInvoiceIdEditRoute
   '/_authenticated/locations/$locationId/edit': typeof AuthenticatedLocationsLocationIdEditRoute
   '/_authenticated/order-stages/$stageId/edit': typeof AuthenticatedOrderStagesStageIdEditRoute
@@ -278,6 +308,7 @@ export interface FileRouteTypes {
     | '/users'
     | '/invoices/$invoiceId'
     | '/customers/new'
+    | '/design-options/new'
     | '/gift-cards/new'
     | '/inventory/new'
     | '/invoices/new'
@@ -286,6 +317,7 @@ export interface FileRouteTypes {
     | '/orders/$orderId'
     | '/products/new'
     | '/customers/'
+    | '/design-options/'
     | '/gift-cards/'
     | '/inventory/'
     | '/invoices/'
@@ -294,6 +326,7 @@ export interface FileRouteTypes {
     | '/orders/'
     | '/products/'
     | '/customers/$customerId/edit'
+    | '/design-options/$designOptionId/edit'
     | '/invoices/$invoiceId/edit'
     | '/locations/$locationId/edit'
     | '/order-stages/$stageId/edit'
@@ -304,6 +337,7 @@ export interface FileRouteTypes {
     | '/'
     | '/users'
     | '/customers/new'
+    | '/design-options/new'
     | '/gift-cards/new'
     | '/inventory/new'
     | '/invoices/new'
@@ -312,6 +346,7 @@ export interface FileRouteTypes {
     | '/orders/$orderId'
     | '/products/new'
     | '/customers'
+    | '/design-options'
     | '/gift-cards'
     | '/inventory'
     | '/invoices'
@@ -320,6 +355,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/products'
     | '/customers/$customerId/edit'
+    | '/design-options/$designOptionId/edit'
     | '/invoices/$invoiceId/edit'
     | '/locations/$locationId/edit'
     | '/order-stages/$stageId/edit'
@@ -332,6 +368,7 @@ export interface FileRouteTypes {
     | '/_authenticated/users'
     | '/_authenticated/invoices/$invoiceId'
     | '/_authenticated/customers/new'
+    | '/_authenticated/design-options/new'
     | '/_authenticated/gift-cards/new'
     | '/_authenticated/inventory/new'
     | '/_authenticated/invoices/new'
@@ -340,6 +377,7 @@ export interface FileRouteTypes {
     | '/_authenticated/orders/$orderId'
     | '/_authenticated/products/new'
     | '/_authenticated/customers/'
+    | '/_authenticated/design-options/'
     | '/_authenticated/gift-cards/'
     | '/_authenticated/inventory/'
     | '/_authenticated/invoices/'
@@ -348,6 +386,7 @@ export interface FileRouteTypes {
     | '/_authenticated/orders/'
     | '/_authenticated/products/'
     | '/_authenticated/customers/$customerId/edit'
+    | '/_authenticated/design-options/$designOptionId/edit'
     | '/_authenticated/invoices/$invoiceId/edit'
     | '/_authenticated/locations/$locationId/edit'
     | '/_authenticated/order-stages/$stageId/edit'
@@ -432,6 +471,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedGiftCardsIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/design-options/': {
+      id: '/_authenticated/design-options/'
+      path: '/design-options'
+      fullPath: '/design-options/'
+      preLoaderRoute: typeof AuthenticatedDesignOptionsIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/customers/': {
       id: '/_authenticated/customers/'
       path: '/customers'
@@ -488,6 +534,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedGiftCardsNewRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/design-options/new': {
+      id: '/_authenticated/design-options/new'
+      path: '/design-options/new'
+      fullPath: '/design-options/new'
+      preLoaderRoute: typeof AuthenticatedDesignOptionsNewRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/customers/new': {
       id: '/_authenticated/customers/new'
       path: '/customers/new'
@@ -537,6 +590,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInvoicesInvoiceIdEditRouteImport
       parentRoute: typeof AuthenticatedInvoicesInvoiceIdRouteRoute
     }
+    '/_authenticated/design-options/$designOptionId/edit': {
+      id: '/_authenticated/design-options/$designOptionId/edit'
+      path: '/design-options/$designOptionId/edit'
+      fullPath: '/design-options/$designOptionId/edit'
+      preLoaderRoute: typeof AuthenticatedDesignOptionsDesignOptionIdEditRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/customers/$customerId/edit': {
       id: '/_authenticated/customers/$customerId/edit'
       path: '/customers/$customerId/edit'
@@ -569,6 +629,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
   AuthenticatedInvoicesInvoiceIdRouteRoute: typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
   AuthenticatedCustomersNewRoute: typeof AuthenticatedCustomersNewRoute
+  AuthenticatedDesignOptionsNewRoute: typeof AuthenticatedDesignOptionsNewRoute
   AuthenticatedGiftCardsNewRoute: typeof AuthenticatedGiftCardsNewRoute
   AuthenticatedInventoryNewRoute: typeof AuthenticatedInventoryNewRoute
   AuthenticatedInvoicesNewRoute: typeof AuthenticatedInvoicesNewRoute
@@ -577,6 +638,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedOrdersOrderIdRoute: typeof AuthenticatedOrdersOrderIdRoute
   AuthenticatedProductsNewRoute: typeof AuthenticatedProductsNewRoute
   AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
+  AuthenticatedDesignOptionsIndexRoute: typeof AuthenticatedDesignOptionsIndexRoute
   AuthenticatedGiftCardsIndexRoute: typeof AuthenticatedGiftCardsIndexRoute
   AuthenticatedInventoryIndexRoute: typeof AuthenticatedInventoryIndexRoute
   AuthenticatedInvoicesIndexRoute: typeof AuthenticatedInvoicesIndexRoute
@@ -585,6 +647,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedOrdersIndexRoute: typeof AuthenticatedOrdersIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedCustomersCustomerIdEditRoute: typeof AuthenticatedCustomersCustomerIdEditRoute
+  AuthenticatedDesignOptionsDesignOptionIdEditRoute: typeof AuthenticatedDesignOptionsDesignOptionIdEditRoute
   AuthenticatedLocationsLocationIdEditRoute: typeof AuthenticatedLocationsLocationIdEditRoute
   AuthenticatedOrderStagesStageIdEditRoute: typeof AuthenticatedOrderStagesStageIdEditRoute
   AuthenticatedProductsProductIdEditRoute: typeof AuthenticatedProductsProductIdEditRoute
@@ -595,6 +658,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedInvoicesInvoiceIdRouteRoute:
     AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren,
   AuthenticatedCustomersNewRoute: AuthenticatedCustomersNewRoute,
+  AuthenticatedDesignOptionsNewRoute: AuthenticatedDesignOptionsNewRoute,
   AuthenticatedGiftCardsNewRoute: AuthenticatedGiftCardsNewRoute,
   AuthenticatedInventoryNewRoute: AuthenticatedInventoryNewRoute,
   AuthenticatedInvoicesNewRoute: AuthenticatedInvoicesNewRoute,
@@ -603,6 +667,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedOrdersOrderIdRoute: AuthenticatedOrdersOrderIdRoute,
   AuthenticatedProductsNewRoute: AuthenticatedProductsNewRoute,
   AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
+  AuthenticatedDesignOptionsIndexRoute: AuthenticatedDesignOptionsIndexRoute,
   AuthenticatedGiftCardsIndexRoute: AuthenticatedGiftCardsIndexRoute,
   AuthenticatedInventoryIndexRoute: AuthenticatedInventoryIndexRoute,
   AuthenticatedInvoicesIndexRoute: AuthenticatedInvoicesIndexRoute,
@@ -612,6 +677,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
   AuthenticatedCustomersCustomerIdEditRoute:
     AuthenticatedCustomersCustomerIdEditRoute,
+  AuthenticatedDesignOptionsDesignOptionIdEditRoute:
+    AuthenticatedDesignOptionsDesignOptionIdEditRoute,
   AuthenticatedLocationsLocationIdEditRoute:
     AuthenticatedLocationsLocationIdEditRoute,
   AuthenticatedOrderStagesStageIdEditRoute:

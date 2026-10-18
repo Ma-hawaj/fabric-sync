@@ -45,21 +45,41 @@ impl PaymentType {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum MaterialSource {
+    #[default]
+    Shop,
+    Customer,
+}
+
+impl MaterialSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Shop => "shop",
+            Self::Customer => "customer",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateOrderInput {
-    pub material_id: Uuid,
+    #[serde(default)]
+    pub material_source: MaterialSource,
+    pub material_id: Option<Uuid>,
+    pub customer_material_description: Option<String>,
     pub material_amount: f64,
-    // Where material_amount comes off — material_stock is per-location, so an
-    // order has to name one, the same way a product line names a branch_id.
-    // Stored directly as orders.production_branch_id, so production location
-    // is known from creation rather than left for staff to assign later.
+    // Where the garment is made. Shop fabric is deducted from stock here;
+    // customer fabric needs an active production location without a stock row.
+    // Stored directly as orders.production_branch_id for delivery tracking.
     pub production_location_id: Uuid,
     // Entered by staff per order line; materials carry no unit price to derive
     // it from.
     pub price: f64,
     pub thobe_type: Option<String>,
     pub f_pocket: Option<String>,
+    pub s_pocket: Option<String>,
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub patti: Option<String>,
@@ -139,10 +159,11 @@ pub struct CreatePaymentInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateInvoiceInput {
-    /// When the garment is promised for. Required and staff-editable — this is
-    /// what the form's date picker writes. The invoice's own date
+    /// When the garment is promised for. Optional and staff-editable — this
+    /// is what the form's date picker writes. The invoice's own date
     /// (`invoice_date`) is server-set at creation and never taken from input.
-    pub target_date: NaiveDate,
+    #[serde(default)]
+    pub target_date: Option<NaiveDate>,
     #[serde(default)]
     pub branch_id: Option<Uuid>,
     #[serde(default)]
@@ -185,7 +206,9 @@ pub struct CreatedInvoice {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEditOrder {
-    pub material_id: Uuid,
+    pub material_source: String,
+    pub material_id: Option<Uuid>,
+    pub customer_material_description: Option<String>,
     pub material_name: String,
     /// The unit the availability hint prints ("Available: X meters").
     pub material_unit: String,
@@ -199,6 +222,7 @@ pub struct InvoiceEditOrder {
     pub price: f64,
     pub thobe_type: Option<String>,
     pub f_pocket: Option<String>,
+    pub s_pocket: Option<String>,
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub patti: Option<String>,
@@ -274,8 +298,8 @@ pub struct InvoiceEdit {
     /// Sequential and human-readable, unlike `id` — for the edit page title.
     pub invoice_number: i64,
     pub date: DateTime<Utc>,
-    /// The promised delivery date. Editable, unlike `date`.
-    pub target_date: NaiveDate,
+    /// The promised delivery date, if one was set. Editable, unlike `date`.
+    pub target_date: Option<NaiveDate>,
     pub branch_id: Option<Uuid>,
     pub branch_name: Option<String>,
     pub discount: f64,
@@ -419,6 +443,7 @@ pub struct OrderDesignValues {
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub f_pocket: Option<String>,
+    pub s_pocket: Option<String>,
     pub patti: Option<String>,
     pub emd: Option<String>,
     /// The free-text line note. Not a design slot; printed beneath the chips.
@@ -467,8 +492,9 @@ pub struct InvoiceRecord {
     pub invoice_number: i64,
     /// Server-set at creation, with the time of day — never taken from input.
     pub date: DateTime<Utc>,
-    /// When the garment is promised for. Staff-editable, unlike `date`.
-    pub target_date: NaiveDate,
+    /// When the garment is promised for, if one was set. Staff-editable,
+    /// unlike `date`.
+    pub target_date: Option<NaiveDate>,
     pub created_at: DateTime<Utc>,
     pub branch_name: Option<String>,
     pub buyer: Option<InvoiceParty>,
@@ -481,6 +507,9 @@ pub struct InvoiceRecord {
     /// Goods receipt, separate from money: true once no order on the invoice
     /// is still pending collection.
     pub received: bool,
+    /// Tailoring garments only; retail products and gift cards are excluded.
+    pub order_count: i64,
+    pub collected_order_count: i64,
     /// The latest collection time across the invoice's tailoring lines,
     /// derived as MAX(orders.received_at). Null until the first order is
     /// received (and on retail-only invoices, which have no orders).
@@ -498,9 +527,9 @@ pub struct InvoiceDetail {
     /// the consumer, which is why it stays a number here.
     pub invoice_number: i64,
     pub date: DateTime<Utc>,
-    /// The promised delivery date, editable on the form. `date` above is the
-    /// server-set creation date and is read-only.
-    pub target_date: NaiveDate,
+    /// The promised delivery date, if one was set — editable on the form.
+    /// `date` above is the server-set creation date and is read-only.
+    pub target_date: Option<NaiveDate>,
     pub created_at: DateTime<Utc>,
     pub branch_name: Option<String>,
     /// Named directly on a retail sale. A tailoring invoice leaves this unset
@@ -514,6 +543,9 @@ pub struct InvoiceDetail {
     /// is still pending collection. The edit form and the receive actions
     /// both read this rather than inferring it from the payment status.
     pub received: bool,
+    /// Tailoring garments only; retail products and gift cards are excluded.
+    pub order_count: i64,
+    pub collected_order_count: i64,
     /// The latest collection time across the invoice's tailoring lines.
     /// Null until the first order is received.
     pub last_received_at: Option<DateTime<Utc>>,
@@ -527,9 +559,11 @@ pub struct InvoiceDetail {
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceListItem {
     pub id: Uuid,
+    /// The human-readable invoice identity shown as `INV-###` in the UI.
+    pub invoice_number: i64,
     #[sqlx(rename = "invoice_date")]
     pub date: DateTime<Utc>,
-    pub target_date: NaiveDate,
+    pub target_date: Option<NaiveDate>,
     #[sqlx(json)]
     pub customers: Vec<InvoiceListCustomer>,
     pub item_count: i64,
@@ -547,6 +581,9 @@ pub struct InvoiceListItem {
     /// Goods receipt, separate from money: true once no order on the invoice
     /// is still pending collection. Backs the list's collection filter.
     pub received: bool,
+    /// Tailoring garments only; retail products and gift cards are excluded.
+    pub order_count: i64,
+    pub collected_order_count: i64,
     /// The latest collection time across the invoice's tailoring lines.
     /// Null until the first order is received (and on retail-only invoices,
     /// which have no orders).

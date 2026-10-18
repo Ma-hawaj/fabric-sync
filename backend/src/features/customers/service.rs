@@ -8,7 +8,7 @@ use crate::{
 
 use super::{
     repository,
-    types::{CreateCustomerInput, Customer, UpdateCustomerInput},
+    types::{validate_measurement, CreateCustomerInput, Customer, UpdateCustomerInput},
 };
 
 pub async fn list_customers(
@@ -30,6 +30,10 @@ pub async fn create_customer(
 ) -> Result<Customer, AppError> {
     let name = normalized_field(&input.name, "customer name")?;
     let mobile_no = normalized_field(&input.mobile_no, "phone number")?;
+
+    if let Some(measurement) = input.measurement.as_ref() {
+        validate_measurement(measurement)?;
+    }
 
     let customer_id =
         repository::create_customer(state, &name, &mobile_no, input.measurement.as_ref()).await?;

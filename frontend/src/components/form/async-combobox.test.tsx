@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AsyncCombobox } from './async-combobox'
 import { apiGetMock } from '@/lib/list-fixtures'
+import { typeSearchText } from '@/lib/test-events'
 
 interface LocationRow {
   id: string
@@ -73,5 +74,20 @@ describe('AsyncCombobox programmatic value', () => {
     const input =
       screen.getByPlaceholderText<HTMLInputElement>('Search branch...')
     await waitFor(() => expect(input.value).toBe('Downtown Branch (default)'))
+  })
+
+  it('keeps a partially edited selected label while results refresh', async () => {
+    const { rerenderValue } = renderPicker('loc-2')
+    const input =
+      screen.getByPlaceholderText<HTMLInputElement>('Search branch...')
+
+    await waitFor(() => expect(input.value).toBe('Downtown Branch (default)'))
+    typeSearchText(input, 'Downtown Bran')
+    expect(input.value).toBe('Downtown Bran')
+
+    // A query response and a form update both recreate the selected option.
+    // Neither should restore the full selected label over the active search.
+    rerenderValue('loc-2')
+    expect(input.value).toBe('Downtown Bran')
   })
 })

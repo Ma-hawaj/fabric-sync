@@ -22,39 +22,40 @@ function editFixture(): InvoiceEdit {
         measurementId: '0197fdd2-6a67-7000-8000-000000000009',
         measurement: {
           date: '2026-07-19',
-          lengthFl: 152.5,
-          lengthBl: null,
+          type: 'body',
+          fit: 'medium',
+          frontHeight: 152.5,
+          backHeight: null,
           chest: 108,
           waist: null,
-          hips: null,
+          hip: null,
           shoulder: null,
           shoulderDown: null,
           sleeveLength: null,
-          neck: null,
+          neckSize: null,
           openHand: null,
-          openHandFolding: null,
           chestUp: null,
           cuffWidth: null,
-          cuffling: null,
+          cuffSize: null,
           neckWidth: null,
-          armHole: null,
+          armhole: null,
           foWidth: null,
           fo: null,
           sleeveHalf: null,
-          button: null,
-          buttonFold: null,
           openFold: null,
           bottom: null,
-          bottomFolding: null,
+          bottomFold: null,
           fullBody: null,
           frontPocketLength: null,
           frontPocketLengthByWidth: null,
-          sidePocketLength: null,
+          sidePocket: null,
           sidePocketLengthByWidth: null,
           mobilePocketLengthByWidth: null,
         },
         orders: [
           {
+            materialSource: 'shop',
+            customerMaterialDescription: null,
             materialId: '0197fdd2-6a67-7000-8000-000000000003',
             materialName: 'Linen',
             materialUnit: 'meters',
@@ -65,6 +66,7 @@ function editFixture(): InvoiceEdit {
             price: 100,
             thobeType: 'saudi-classic',
             fPocket: null,
+            sPocket: 'type-2',
             collar: null,
             sleeve: null,
             patti: null,
@@ -103,6 +105,15 @@ describe('mapInvoiceEditToForm', () => {
     expect(values.payments).toEqual([])
   })
 
+  it('maps a missing target date to a blank field', () => {
+    const { values } = mapInvoiceEditToForm({
+      ...editFixture(),
+      targetDate: null,
+    })
+
+    expect(values.targetDate).toBe('')
+  })
+
   it('maps customer blocks with measurements and design slots', () => {
     const { values } = mapInvoiceEditToForm(editFixture())
 
@@ -115,10 +126,12 @@ describe('mapInvoiceEditToForm', () => {
     expect(customer.measurement.loadedFromId).toBe(
       '0197fdd2-6a67-7000-8000-000000000009',
     )
-    expect(customer.measurement.lengthFl).toBe(152.5)
+    expect(customer.measurement.frontHeight).toBe(152.5)
     expect(customer.measurement.chest).toBe(108)
     expect(customer.measurement.waist).toBe('')
-    expect(customer.measurement.sidePocketLength).toBe('')
+    expect(customer.measurement.sidePocket).toBe('')
+    expect(customer.measurement.type).toBe('body')
+    expect(customer.measurement.fit).toBe('medium')
 
     expect(customer.orders).toHaveLength(1)
     const [order] = customer.orders
@@ -130,6 +143,7 @@ describe('mapInvoiceEditToForm', () => {
     expect(order.price).toBe(100)
     expect(order.thobeType).toBe('saudi-classic')
     expect(order.collar).toBe('')
+    expect(order.sPocket).toBe('type-2')
     expect(order.emd).toBe('6')
   })
 
@@ -173,6 +187,28 @@ describe('mapInvoiceEditToForm', () => {
       },
     ])
     expect(seeds.soldFromBranchName).toBe('Main Branch')
+  })
+
+  it('round-trips customer fabric and its production label without fabricating inventory', () => {
+    const fixture = editFixture()
+    const line = fixture.customers[0].orders[0]
+    line.materialSource = 'customer'
+    line.materialId = null
+    line.materialName = 'White linen'
+    line.customerMaterialDescription = 'White linen'
+    line.stockQuantity = null
+    const { values, seeds } = mapInvoiceEditToForm(fixture)
+    expect(values.customers[0].orders[0]).toMatchObject({
+      materialSource: 'customer',
+      materialId: '',
+      customerMaterialDescription: 'White linen',
+      materialAmount: 2,
+      productionLocationId: line.productionLocationId,
+    })
+    expect(seeds.materials.size).toBe(0)
+    expect(seeds.locationLabels.get(line.productionLocationId!)).toBe(
+      'Main Branch',
+    )
   })
 
   it('leaves the product branch blank when there are no product lines', () => {

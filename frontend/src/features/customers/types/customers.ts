@@ -2,38 +2,39 @@ export interface Measurement {
   id: string
   customerId: string
   date: Date
+  // Record-level choices rather than lengths. Null on legacy snapshots that
+  // predate them — every new write has to set both.
+  type?: string | null
+  fit?: string | null
 
   // Body Dimensions
-  lengthFl?: number | null
-  lengthBl?: number | null
+  frontHeight?: number | null
+  backHeight?: number | null
   chest?: number | null
   waist?: number | null
-  hips?: number | null
+  hip?: number | null
   shoulder?: number | null
   shoulderDown?: number | null
   sleeveLength?: number | null
-  neck?: number | null
+  neckSize?: number | null
   openHand?: number | null
-  openHandFolding?: number | null
 
   // Extra Details
   chestUp?: number | null
   cuffWidth?: number | null
-  cuffling?: number | null
+  cuffSize?: number | null
   neckWidth?: number | null
-  armHole?: number | null
+  armhole?: number | null
   foWidth?: number | null
   fo?: number | null
   sleeveHalf?: number | null
-  button?: number | null
-  buttonFold?: number | null
   openFold?: number | null
   bottom?: number | null
-  bottomFolding?: number | null
+  bottomFold?: number | null
   fullBody?: number | null
   frontPocketLength?: number | null
   frontPocketLengthByWidth?: string | null
-  sidePocketLength?: number | null
+  sidePocket?: number | null
   sidePocketLengthByWidth?: string | null
   mobilePocketLengthByWidth?: string | null
 }
@@ -54,7 +55,7 @@ export interface CustomerInvoiceSummary {
   id: string
   invoiceNumber: number
   invoiceDate: Date
-  targetDate: Date
+  targetDate: Date | null
   totalPrice: number
   paymentStatus: 'unpaid' | 'partial' | 'paid'
   balanceDue: number
@@ -65,7 +66,7 @@ type CustomerInvoiceSummaryDto = Omit<
   'invoiceDate' | 'targetDate'
 > & {
   invoiceDate: string
-  targetDate: string
+  targetDate: string | null
 }
 
 type CustomerDto = Omit<Customer, 'measurements' | 'invoices'> & {
@@ -86,7 +87,7 @@ export function toCustomer(dto: CustomerDto): Customer {
     invoices: (dto.invoices ?? []).map((invoice) => ({
       ...invoice,
       invoiceDate: new Date(invoice.invoiceDate),
-      targetDate: new Date(invoice.targetDate),
+      targetDate: invoice.targetDate ? new Date(invoice.targetDate) : null,
     })),
   }
 }

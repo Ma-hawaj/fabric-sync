@@ -27,6 +27,7 @@ pub struct InvoiceDetailRows {
 fn order_specification(
     thobe_type: Option<String>,
     f_pocket: Option<String>,
+    s_pocket: Option<String>,
     collar: Option<String>,
     sleeve: Option<String>,
     patti: Option<String>,
@@ -36,6 +37,7 @@ fn order_specification(
     let parts: Vec<String> = [
         ("Thobe", thobe_type),
         ("Pocket", f_pocket),
+        ("Side pocket", s_pocket),
         ("Collar", collar),
         ("Sleeve", sleeve),
         ("Patti", patti),
@@ -78,13 +80,12 @@ pub async fn fetch_invoice_detail(
             -- Goods receipt is separate from money: true once no order on
             -- the invoice is still pending collection. A retail-only invoice
             -- has no orders, so there is nothing to collect.
-            NOT EXISTS(
-                SELECT 1 FROM orders o
-                WHERE o.invoice_id = i.id AND o.status <> 'received'
-            ) AS "received!",
+            collection.order_count = collection.collected_order_count AS "received!",
+            collection.order_count AS "order_count!",
+            collection.collected_order_count AS "collected_order_count!",
             -- The latest collection across the invoice's tailoring lines
             -- (see the list query's `agg` lateral for the same derivation).
-            (SELECT MAX(o.received_at) FROM orders o WHERE o.invoice_id = i.id) AS "last_received_at?",
+            collection.last_received_at AS "last_received_at?",
             i.total_price::float8 AS "total_price!",
             i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
             -- The `?` suffixes are for sqlx: it reads nullability off the
@@ -96,6 +97,12 @@ pub async fn fetch_invoice_detail(
         FROM invoices i
         LEFT JOIN branch b ON b.id = i.branch_id
         LEFT JOIN customers c ON c.id = i.customer_id
+        LEFT JOIN LATERAL (
+            SELECT count(*) AS order_count,
+                   count(*) FILTER (WHERE status = 'received') AS collected_order_count,
+                   max(received_at) AS last_received_at
+            FROM orders WHERE invoice_id = i.id
+        ) collection ON true
         LEFT JOIN LATERAL (
             SELECT
                 COALESCE(SUM(amount), 0)::float8 AS paid,
@@ -135,12 +142,15 @@ pub async fn fetch_invoice_detail(
             o.id AS order_id,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile_no,
-            mat.name AS material_name,
-            mat.unit AS material_unit,
+            CASE WHEN o.material_source = 'customer'
+                THEN 'Customer-provided material: ' || o.customer_material_description
+                ELSE mat.name END AS "material_name!",
+            COALESCE(mat.unit, 'meters') AS "material_unit!",
             o.material_amount::float8 AS "material_amount!",
             o.price::float8 AS "price!",
             o.thobe_type,
             o.f_pocket,
+            o.s_pocket,
             o.collar,
             o.sleeve,
             o.patti,
@@ -149,7 +159,7 @@ pub async fn fetch_invoice_detail(
         FROM orders o
         JOIN measurements m ON m.id = o.measurement_id
         JOIN customers c ON c.id = m.customer_id
-        JOIN materials mat ON mat.id = o.material_id
+        LEFT JOIN materials mat ON mat.id = o.material_id
         WHERE o.invoice_id = $1
         ORDER BY o.id
         "#,
@@ -199,6 +209,7 @@ pub async fn fetch_invoice_detail(
                 collar: row.collar,
                 sleeve: row.sleeve,
                 f_pocket: row.f_pocket,
+                s_pocket: row.s_pocket,
                 patti: row.patti,
                 emd: row.emd,
                 more_details: row.more_details,
@@ -210,6 +221,7 @@ pub async fn fetch_invoice_detail(
                 detail: order_specification(
                     design_values.thobe_type.clone(),
                     design_values.f_pocket.clone(),
+                    design_values.s_pocket.clone(),
                     design_values.collar.clone(),
                     design_values.sleeve.clone(),
                     design_values.patti.clone(),
@@ -273,6 +285,8 @@ pub async fn fetch_invoice_detail(
             amount_paid: invoice.amount_paid,
             payment_method: invoice.payment_method,
             received: invoice.received,
+            order_count: invoice.order_count,
+            collected_order_count: invoice.collected_order_count,
             last_received_at: invoice.last_received_at,
             gift_card_redeemed: invoice.gift_card_redeemed,
         },
@@ -301,6 +315,7 @@ const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
             i.id,
+            i.invoice_number,
             i.invoice_date,
             i.target_date,
             pay.status AS payment_status,
@@ -316,6 +331,8 @@ const SPEC: ListSpec = ListSpec {
             -- NULL until the first order is received (and on retail-only
             -- invoices, which have no orders at all).
             agg.last_received_at AS last_received_at,
+            COALESCE(agg.item_count, 0) AS order_count,
+            COALESCE(agg.collected_order_count, 0) AS collected_order_count,
             i.gift_card_redeemed::float8 AS gift_card_redeemed,
             i.branch_id AS receiving_location_id,
             recv.name AS receiving_location,
@@ -349,21 +366,22 @@ const SPEC: ListSpec = ListSpec {
         LEFT JOIN LATERAL (
             SELECT
                 count(*) AS item_count,
+                count(*) FILTER (WHERE o.status = 'received') AS collected_order_count,
                 json_agg(DISTINCT jsonb_build_object(
                     'name', c.name,
                     'mobileNo', c.mobile_no
                 )) AS customers,
-                json_agg(DISTINCT mat.name) AS materials,
+                json_agg(DISTINCT CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END) AS materials,
                 string_agg(DISTINCT c.name, ', ') AS customer_names,
                 string_agg(DISTINCT c.mobile_no, ', ') AS customer_mobiles,
-                array_agg(DISTINCT mat.name) AS material_names,
+                array_agg(DISTINCT CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END) AS material_names,
                 json_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_locations,
                 array_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_location_names,
                 MAX(o.received_at) AS last_received_at
             FROM orders o
             JOIN measurements m ON m.id = o.measurement_id
             JOIN customers c ON c.id = m.customer_id
-            JOIN materials mat ON mat.id = o.material_id
+            LEFT JOIN materials mat ON mat.id = o.material_id
             LEFT JOIN branch prod ON prod.id = o.production_branch_id
             WHERE o.invoice_id = i.id
         ) agg ON true
@@ -404,6 +422,10 @@ const SPEC: ListSpec = ListSpec {
     "#,
     columns: &[
         ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        (
+            "invoiceNumber",
+            ColumnDef::new("invoice_number", ColumnKind::Number),
+        ),
         ("date", ColumnDef::new("invoice_date", ColumnKind::Date)),
         (
             "targetDate",
@@ -680,10 +702,10 @@ pub async fn insert_order(
         r#"
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
-            thobe_type, f_pocket, collar, sleeve, patti, emd, more_details,
-            production_branch_id
+            thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd, more_details,
+            production_branch_id, material_source, customer_material_description
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         "#,
         measurement_id,
         order.material_id,
@@ -692,12 +714,18 @@ pub async fn insert_order(
         order.price,
         order.thobe_type,
         order.f_pocket,
+        order.s_pocket,
         order.collar,
         order.sleeve,
         order.patti,
         order.emd,
         order.more_details,
         order.production_location_id,
+        order.material_source.as_str(),
+        order
+            .customer_material_description
+            .as_deref()
+            .map(str::trim),
     )
     .execute(&mut **tx)
     .await?;
@@ -764,7 +792,7 @@ pub async fn insert_gift_card_item(
 
 /// Old tailoring lines, for restoring the material they consumed.
 pub struct OldOrderLine {
-    pub material_id: Uuid,
+    pub material_id: Option<Uuid>,
     pub production_branch_id: Option<Uuid>,
     pub material_amount: f64,
 }
@@ -833,39 +861,40 @@ pub async fn fetch_invoice_edit(
             c.mobile_no AS customer_mobile_no,
             m.id AS measurement_id,
             m.measurement_date,
-            m.length_fl::float8 AS length_fl,
-            m.length_bl::float8 AS length_bl,
+            m.type,
+            m.fit,
+            m.front_height::float8 AS front_height,
+            m.back_height::float8 AS back_height,
             m.chest::float8 AS chest,
             m.waist::float8 AS waist,
-            m.hips::float8 AS hips,
+            m.hip::float8 AS hip,
             m.shoulder::float8 AS shoulder,
             m.shoulder_down::float8 AS shoulder_down,
             m.sleeve_length::float8 AS sleeve_length,
-            m.neck::float8 AS neck,
+            m.neck_size::float8 AS neck_size,
             m.open_hand::float8 AS open_hand,
-            m.open_hand_folding::float8 AS open_hand_folding,
             m.chest_up::float8 AS chest_up,
             m.cuff_width::float8 AS cuff_width,
-            m.cuffling::float8 AS cuffling,
+            m.cuff_size::float8 AS cuff_size,
             m.neck_width::float8 AS neck_width,
-            m.arm_hole::float8 AS arm_hole,
+            m.armhole::float8 AS armhole,
             m.fo_width::float8 AS fo_width,
             m.fo::float8 AS fo,
             m.bottom::float8 AS bottom,
-            m.bottom_folding::float8 AS bottom_folding,
+            m.bottom_fold::float8 AS bottom_fold,
             m.full_body::float8 AS full_body,
             m.sleeve_half::float8 AS sleeve_half,
-            m.button::float8 AS button,
-            m.button_fold::float8 AS button_fold,
             m.open_fold::float8 AS open_fold,
             m.front_pocket_length::float8 AS front_pocket_length,
             m.front_pocket_length_by_width,
-            m.side_pocket_length::float8 AS side_pocket_length,
+            m.side_pocket::float8 AS side_pocket,
             m.side_pocket_length_by_width,
             m.mobile_pocket_length_by_width,
             o.material_id,
-            mat.name AS material_name,
-            mat.unit AS material_unit,
+            o.material_source,
+            o.customer_material_description,
+            COALESCE(mat.name, o.customer_material_description) AS "material_name!",
+            COALESCE(mat.unit, 'meters') AS "material_unit!",
             o.material_amount::float8 AS "material_amount!",
             o.production_branch_id,
             b.name AS "production_location_name?",
@@ -873,6 +902,7 @@ pub async fn fetch_invoice_edit(
             o.price::float8 AS "price!",
             o.thobe_type,
             o.f_pocket,
+            o.s_pocket,
             o.collar,
             o.sleeve,
             o.patti,
@@ -881,7 +911,7 @@ pub async fn fetch_invoice_edit(
         FROM orders o
         JOIN measurements m ON m.id = o.measurement_id
         JOIN customers c ON c.id = m.customer_id
-        JOIN materials mat ON mat.id = o.material_id
+        LEFT JOIN materials mat ON mat.id = o.material_id
         LEFT JOIN branch b ON b.id = o.production_branch_id
         LEFT JOIN material_stock ms
             ON ms.material_id = o.material_id
@@ -900,39 +930,40 @@ pub async fn fetch_invoice_edit(
     for row in order_rows {
         let measurement = CreateMeasurementInput {
             date: row.measurement_date,
-            length_fl: row.length_fl,
-            length_bl: row.length_bl,
+            r#type: row.r#type,
+            fit: row.fit,
+            front_height: row.front_height,
+            back_height: row.back_height,
             chest: row.chest,
             waist: row.waist,
-            hips: row.hips,
+            hip: row.hip,
             shoulder: row.shoulder,
             shoulder_down: row.shoulder_down,
             sleeve_length: row.sleeve_length,
-            neck: row.neck,
+            neck_size: row.neck_size,
             open_hand: row.open_hand,
-            open_hand_folding: row.open_hand_folding,
             chest_up: row.chest_up,
             cuff_width: row.cuff_width,
-            cuffling: row.cuffling,
+            cuff_size: row.cuff_size,
             neck_width: row.neck_width,
-            arm_hole: row.arm_hole,
+            armhole: row.armhole,
             fo_width: row.fo_width,
             fo: row.fo,
             bottom: row.bottom,
-            bottom_folding: row.bottom_folding,
+            bottom_fold: row.bottom_fold,
             full_body: row.full_body,
             sleeve_half: row.sleeve_half,
-            button: row.button,
-            button_fold: row.button_fold,
             open_fold: row.open_fold,
             front_pocket_length: row.front_pocket_length,
             front_pocket_length_by_width: row.front_pocket_length_by_width,
-            side_pocket_length: row.side_pocket_length,
+            side_pocket: row.side_pocket,
             side_pocket_length_by_width: row.side_pocket_length_by_width,
             mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
         };
         let order = InvoiceEditOrder {
             material_id: row.material_id,
+            material_source: row.material_source,
+            customer_material_description: row.customer_material_description,
             material_name: row.material_name,
             material_unit: row.material_unit,
             material_amount: row.material_amount,
@@ -942,6 +973,7 @@ pub async fn fetch_invoice_edit(
             price: row.price,
             thobe_type: row.thobe_type,
             f_pocket: row.f_pocket,
+            s_pocket: row.s_pocket,
             collar: row.collar,
             sleeve: row.sleeve,
             patti: row.patti,
@@ -1402,59 +1434,58 @@ pub async fn update_measurement(
         r#"
         UPDATE measurements
         SET measurement_date = $2,
-            length_fl = $3::float8, length_bl = $4::float8,
+            front_height = $3::float8, back_height = $4::float8,
             chest = $5::float8, waist = $6::float8,
-            hips = $7::float8, shoulder = $8::float8,
+            hip = $7::float8, shoulder = $8::float8,
             shoulder_down = $9::float8, sleeve_length = $10::float8,
-            neck = $11::float8, open_hand = $12::float8,
-            open_hand_folding = $13::float8, chest_up = $14::float8,
-            cuff_width = $15::float8, cuffling = $16::float8,
-            neck_width = $17::float8,
-            arm_hole = $18::float8, fo_width = $19::float8,
-            fo = $20::float8,
-            bottom = $21::float8, bottom_folding = $22::float8,
-            full_body = $23::float8,
-            sleeve_half = $24::float8, button = $25::float8,
-            button_fold = $26::float8, open_fold = $27::float8,
-            front_pocket_length = $28::float8,
-            front_pocket_length_by_width = $29,
-            side_pocket_length = $30::float8,
-            side_pocket_length_by_width = $31,
-            mobile_pocket_length_by_width = $32
+            neck_size = $11::float8, open_hand = $12::float8,
+            chest_up = $13::float8,
+            cuff_width = $14::float8, cuff_size = $15::float8,
+            neck_width = $16::float8,
+            armhole = $17::float8, fo_width = $18::float8,
+            fo = $19::float8,
+            bottom = $20::float8, bottom_fold = $21::float8,
+            full_body = $22::float8,
+            sleeve_half = $23::float8, open_fold = $24::float8,
+            front_pocket_length = $25::float8,
+            front_pocket_length_by_width = $26,
+            side_pocket = $27::float8,
+            side_pocket_length_by_width = $28,
+            mobile_pocket_length_by_width = $29,
+            type = $30, fit = $31
         WHERE id = $1
         "#,
         measurement_id,
         measurement.date,
-        measurement.length_fl,
-        measurement.length_bl,
+        measurement.front_height,
+        measurement.back_height,
         measurement.chest,
         measurement.waist,
-        measurement.hips,
+        measurement.hip,
         measurement.shoulder,
         measurement.shoulder_down,
         measurement.sleeve_length,
-        measurement.neck,
+        measurement.neck_size,
         measurement.open_hand,
-        measurement.open_hand_folding,
         measurement.chest_up,
         measurement.cuff_width,
-        measurement.cuffling,
+        measurement.cuff_size,
         measurement.neck_width,
-        measurement.arm_hole,
+        measurement.armhole,
         measurement.fo_width,
         measurement.fo,
         measurement.bottom,
-        measurement.bottom_folding,
+        measurement.bottom_fold,
         measurement.full_body,
         measurement.sleeve_half,
-        measurement.button,
-        measurement.button_fold,
         measurement.open_fold,
         measurement.front_pocket_length,
         measurement.front_pocket_length_by_width,
-        measurement.side_pocket_length,
+        measurement.side_pocket,
         measurement.side_pocket_length_by_width,
         measurement.mobile_pocket_length_by_width,
+        measurement.r#type,
+        measurement.fit,
     )
     .execute(&mut **tx)
     .await?;
@@ -1494,4 +1525,14 @@ pub async fn update_invoice_header(
     .await?;
 
     Ok(())
+}
+
+pub async fn is_production_location(
+    tx: &mut sqlx::PgTransaction<'_>,
+    location_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query_scalar!(
+        "SELECT EXISTS(SELECT 1 FROM branch WHERE id = $1 AND is_active AND holds_stock) AS \"usable!\"",
+        location_id,
+    ).fetch_one(&mut **tx).await?)
 }

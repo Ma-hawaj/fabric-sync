@@ -1,24 +1,15 @@
 import { ShieldAlert } from 'lucide-react'
 import { MEASUREMENT_GROUPS, fieldsInGroup } from '../data/measurement-fields'
-import type { ThobView } from '../data/thob-sketch'
 import type { Measurement } from '../types/customers'
 import { ThobDiagram } from './thob-diagram'
 import type { MeasurementValues } from './thob-diagram'
-
-const VIEW_TITLES: Record<ThobView, string> = {
-  front: 'Front of Thob',
-  back: 'Back of Thob',
-}
-
-const THOB_VIEWS: ThobView[] = ['front', 'back']
 
 /**
  * A read-only snapshot of a single measurement record, rendered from the same
  * `measurement-fields.ts` catalog the entry form uses — add a measurement
  * there and it shows up here too. Only fields the record actually set are
  * listed, and they're grouped exactly like the form. Above the groups, the
- * garment is drawn from the front and the back with every recorded value
- * called out on the silhouette it belongs to.
+ * thobe sheet draws every recorded value at its slot.
  */
 export function ReadOnlyMeasurement({
   measurement,
@@ -43,6 +34,13 @@ export function ReadOnlyMeasurement({
         </p>
         <p className="text-xs text-muted-foreground/80 mt-0.5">
           Measured {measurement.date.toLocaleDateString()}
+          {(measurement.type ?? measurement.fit) && (
+            <>
+              {' '}
+              ({[measurement.type, measurement.fit].filter(Boolean).join(' · ')}
+              )
+            </>
+          )}
         </p>
       </div>
     )
@@ -60,19 +58,18 @@ export function ReadOnlyMeasurement({
       <p className="text-sm text-muted-foreground">
         Measured {measurement.date.toLocaleDateString()} — the cut-to spec for
         this order.
+        {(measurement.type ?? measurement.fit) && (
+          <>
+            {' '}
+            ({[measurement.type, measurement.fit].filter(Boolean).join(' · ')})
+          </>
+        )}
       </p>
-      <div className="grid gap-4 sm:grid-cols-2">
-        {THOB_VIEWS.map((view) => (
-          <div
-            key={view}
-            className="rounded-xl border border-border/60 bg-card p-3 pb-1 shadow-sm"
-          >
-            <h5 className="mb-1 text-xs font-bold uppercase tracking-wider text-info">
-              {VIEW_TITLES[view]}
-            </h5>
-            <ThobDiagram view={view} showRecorded values={values} />
-          </div>
-        ))}
+      <div className="rounded-xl border border-border/60 bg-card p-3 pb-1 shadow-sm">
+        <h5 className="mb-1 text-xs font-bold uppercase tracking-wider text-info">
+          Thobe Sheet
+        </h5>
+        <ThobDiagram values={values} />
       </div>
       {groups.map(({ group, recorded }) => (
         <div

@@ -5,7 +5,10 @@ use chrono::NaiveDate;
 use crate::{
     error::AppError,
     features::{
-        customers::{repository as customers_repository, types::measurement_values_equal},
+        customers::{
+            repository as customers_repository,
+            types::{measurement_values_equal, validate_measurement},
+        },
         gift_cards::{repository as gift_cards_repository, service as gift_cards_service},
         materials::repository as materials_repository,
         products::repository as products_repository,
@@ -21,8 +24,8 @@ use super::{
     types::{
         CreateGiftCardLineInput, CreateInvoiceInput, CreateOrderInput, CreateProductLineInput,
         CreatedInvoice, DiscountUnit, GiftCardRedemptionInput, InvoiceCustomerInput, InvoiceDetail,
-        InvoiceEdit, InvoiceListItem, InvoiceTotalsBreakdown, PaymentSummary, PaymentType,
-        ReceivedInvoice, RecordedPayment,
+        InvoiceEdit, InvoiceListItem, InvoiceTotalsBreakdown, MaterialSource, PaymentSummary,
+        PaymentType, ReceivedInvoice, RecordedPayment,
     },
 };
 use crate::features::customers::types::CreateMeasurementInput;
@@ -83,6 +86,8 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         payment_status: invoice.payment_status,
         payment_method: invoice.payment_method,
         received: invoice.received,
+        order_count: invoice.order_count,
+        collected_order_count: invoice.collected_order_count,
         last_received_at: invoice.last_received_at,
         lines: rows.lines,
         redemptions: rows.redemptions,
@@ -409,6 +414,39 @@ fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
     }
 }
 
+fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
+    if !order.material_amount.is_finite() || order.material_amount < 0.01 {
+        return Err(AppError::BadRequest(
+            "material quantity must be at least 0.01".into(),
+        ));
+    }
+    if !order.price.is_finite() || order.price < 0.0 {
+        return Err(AppError::BadRequest(
+            "an order price cannot be negative".into(),
+        ));
+    }
+    match order.material_source {
+        MaterialSource::Shop
+            if order.material_id.is_some() && order.customer_material_description.is_none() =>
+        {
+            Ok(())
+        }
+        MaterialSource::Customer
+            if order.material_id.is_none()
+                && order
+                    .customer_material_description
+                    .as_deref()
+                    .is_some_and(|description| !description.trim().is_empty()) =>
+        {
+            Ok(())
+        }
+        _ => Err(AppError::BadRequest(
+            "shop material needs a materialId; customer material needs only a fabric description"
+                .into(),
+        )),
+    }
+}
+
 fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
     let has_orders = input
         .customers
@@ -446,6 +484,11 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
             return Err(AppError::BadRequest(
                 "each invoice customer needs at least one order".to_string(),
             ));
+        }
+
+        validate_measurement(&customer.measurement)?;
+        for order in &customer.orders {
+            validate_order(order)?;
         }
     }
 
@@ -535,10 +578,47 @@ mod tests {
         })
     }
 
+    #[test]
+    fn material_sources_validate_exclusive_details_and_keep_legacy_requests() {
+        let legacy: CreateOrderInput = serde_json::from_value(order(100.0)).unwrap();
+        assert_eq!(legacy.material_source, MaterialSource::Shop);
+        assert!(validate_order(&legacy).is_ok());
+
+        let mut customer_order = order(100.0);
+        customer_order["materialSource"] = serde_json::json!("customer");
+        customer_order["materialId"] = serde_json::Value::Null;
+        customer_order["customerMaterialDescription"] = serde_json::json!("White linen");
+        let parse = |value| serde_json::from_value::<CreateOrderInput>(value).unwrap();
+        assert!(validate_order(&parse(customer_order.clone())).is_ok());
+
+        for description in [serde_json::Value::Null, serde_json::json!("  ")] {
+            let mut invalid = customer_order.clone();
+            invalid["customerMaterialDescription"] = description;
+            assert!(validate_order(&parse(invalid)).is_err());
+        }
+        let mut contradictory = customer_order;
+        contradictory["materialId"] = order(100.0)["materialId"].clone();
+        assert!(validate_order(&parse(contradictory.clone())).is_err());
+        contradictory["materialSource"] = serde_json::json!("shop");
+        assert!(validate_order(&parse(contradictory)).is_err());
+        let mut missing_shop_material = order(100.0);
+        missing_shop_material["materialId"] = serde_json::Value::Null;
+        assert!(validate_order(&parse(missing_shop_material)).is_err());
+    }
+
+    #[test]
+    fn order_quantity_cannot_increase_stock_through_a_negative_decrement() {
+        for quantity in [-2.0, 0.0, 0.001, f64::INFINITY, f64::NAN] {
+            let mut input: CreateOrderInput = serde_json::from_value(order(100.0)).unwrap();
+            input.material_amount = quantity;
+            assert!(validate_order(&input).is_err());
+        }
+    }
+
     fn customer(orders: Vec<serde_json::Value>) -> serde_json::Value {
         serde_json::json!({
             "existingCustomerId": "0197fdd2-6a67-7000-8000-000000000002",
-            "measurement": { "date": "2026-07-19" },
+            "measurement": { "date": "2026-07-19", "type": "body", "fit": "medium" },
             "orders": orders,
         })
     }
@@ -778,6 +858,30 @@ mod tests {
     }
 
     #[test]
+    fn rejects_a_measurement_without_a_canonical_type_and_fit() {
+        for measurement in [
+            serde_json::json!({ "date": "2026-07-19", "fit": "medium" }),
+            serde_json::json!({ "date": "2026-07-19", "type": "sample" }),
+            serde_json::json!({ "date": "2026-07-19", "type": "shirt", "fit": "medium" }),
+            serde_json::json!({ "date": "2026-07-19", "type": "body", "fit": "tight" }),
+            serde_json::json!({ "date": "2026-07-19", "type": " body ", "fit": "medium" }),
+            serde_json::json!({ "date": "2026-07-19", "type": "body", "fit": " medium " }),
+        ] {
+            let invoice = invoice(
+                0.0,
+                "amount",
+                vec![serde_json::json!({
+                    "existingCustomerId": "0197fdd2-6a67-7000-8000-000000000002",
+                    "measurement": measurement,
+                    "orders": [order(100.0)],
+                })],
+            );
+            let error = validate(&invoice).unwrap_err();
+            assert!(matches!(error, AppError::BadRequest(_)), "{measurement}");
+        }
+    }
+
+    #[test]
     fn rejects_invoice_with_no_customers() {
         let invoice = invoice(0.0, "amount", vec![]);
         assert!(validate(&invoice).is_err());
@@ -955,28 +1059,33 @@ async fn write_customer_orders(
     orders: &[CreateOrderInput],
 ) -> Result<(), AppError> {
     for order in orders {
-        // The decrement is guarded in SQL, so `false` means the
-        // production location either never stocked this material or no
-        // longer holds enough of it. Reading the name for the message
-        // costs an extra query only on that path.
-        let decremented = materials_repository::decrement_stock(
-            tx,
-            order.material_id,
-            order.production_location_id,
-            order.material_amount,
-        )
-        .await?;
-
-        if !decremented {
-            let name = materials_repository::material_name(tx, order.material_id)
-                .await?
-                .ok_or_else(|| {
-                    AppError::BadRequest(format!("no material with id {}", order.material_id))
-                })?;
-
-            return Err(AppError::BadRequest(format!(
-                "not enough {name} in stock at the selected location"
-            )));
+        // Customer fabric is allocated to this garment, never entered into shop stock.
+        if let Some(material_id) = order.material_id {
+            let decremented = materials_repository::decrement_stock(
+                tx,
+                material_id,
+                order.production_location_id,
+                order.material_amount,
+            )
+            .await?;
+            if !decremented {
+                let name = materials_repository::material_name(tx, material_id)
+                    .await?
+                    .ok_or_else(|| {
+                        AppError::BadRequest(format!("no material with id {material_id}"))
+                    })?;
+                return Err(AppError::BadRequest(format!(
+                    "not enough {name} in stock at the selected location"
+                )));
+            }
+        } else {
+            let usable =
+                repository::is_production_location(tx, order.production_location_id).await?;
+            if !usable {
+                return Err(AppError::BadRequest(
+                    "pick an active production location for customer material".into(),
+                ));
+            }
         }
 
         repository::insert_order(tx, invoice_id, measurement_id, order).await?;
@@ -1259,10 +1368,11 @@ pub async fn update_invoice(
     // schema for legacy rows; a missing one has no stock row to restore to, so
     // it is skipped rather than failing the edit.
     for line in &order_lines {
-        if let Some(branch_id) = line.production_branch_id {
+        if let (Some(material_id), Some(branch_id)) = (line.material_id, line.production_branch_id)
+        {
             repository::restore_material_stock(
                 &mut tx,
-                line.material_id,
+                material_id,
                 branch_id,
                 line.material_amount,
             )

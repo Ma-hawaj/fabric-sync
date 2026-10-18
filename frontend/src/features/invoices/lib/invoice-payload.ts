@@ -27,12 +27,18 @@ function blankToNull(value: string): string | null {
 
 function orderPayload(order: InvoiceOrderDraft) {
   return {
-    materialId: order.materialId,
+    materialSource: order.materialSource,
+    materialId: order.materialSource === 'shop' ? order.materialId : null,
+    customerMaterialDescription:
+      order.materialSource === 'customer'
+        ? order.customerMaterialDescription.trim()
+        : null,
     materialAmount: numberOrZero(order.materialAmount),
     productionLocationId: order.productionLocationId,
     price: numberOrZero(order.price),
     thobeType: blankToNull(order.thobeType),
     fPocket: blankToNull(order.fPocket),
+    sPocket: blankToNull(order.sPocket),
     collar: blankToNull(order.collar),
     sleeve: blankToNull(order.sleeve),
     patti: blankToNull(order.patti),
@@ -84,7 +90,7 @@ function redemptionPayload(redemption: GiftCardRedemptionDraft) {
 // and the backend rebuilds the invoice from it.
 export function invoicePayload(values: InvoiceFormValues) {
   return {
-    targetDate: values.targetDate,
+    targetDate: values.targetDate || null,
     branchId: values.receivingBranch || null,
     discount: numberOrZero(values.discount),
     discountUnit: values.discountUnit,

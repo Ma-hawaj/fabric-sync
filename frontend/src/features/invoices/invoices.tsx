@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getInvoiceColumns } from './components/invoice-columns'
+import { InvoiceOrderBreakdown } from './components/invoice-order-breakdown'
 import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
 import { useListParams } from '@/hooks/use-list-params'
@@ -46,7 +47,10 @@ export function InvoicesPage() {
   const { data: locations = [] } = useAllLocations()
   const columns = React.useMemo(() => {
     const names = [
-      ...new Set(materials.map((material) => material.name)),
+      ...new Set([
+        'Customer-provided material',
+        ...materials.map((material) => material.name),
+      ]),
     ].sort()
     const receiving = orderReceivingLocations(locations).map((location) => ({
       label: location.name,
@@ -89,6 +93,10 @@ export function InvoicesPage() {
     columns,
     pageCount,
     rowCount: total,
+    getRowId: (invoice) => invoice.id,
+    getRowCanExpand: (row) => row.original.orderCount > 0,
+    manualExpanding: true,
+    initialState: { columnVisibility: { customerMobile: false } },
   })
 
   return (
@@ -111,7 +119,12 @@ export function InvoicesPage() {
           Loading invoices...
         </div>
       ) : (
-        <DataTable table={table}>
+        <DataTable
+          table={table}
+          renderExpandedRow={(row) => (
+            <InvoiceOrderBreakdown invoiceId={row.original.id} />
+          )}
+        >
           <DataTableToolbar table={table} />
         </DataTable>
       )}

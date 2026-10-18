@@ -237,6 +237,21 @@ export function CustomerDetailsSheet({
                   <div className="@container animate-in fade-in slide-in-from-bottom-2 duration-200">
                     <div className="grid gap-5 @2xl:grid-cols-[minmax(0,1fr)_16rem] @4xl:grid-cols-[minmax(0,1fr)_21rem]">
                       <div className="order-2 space-y-6 @2xl:order-1">
+                        {/* Record-level choices, not lengths: what was
+                            measured and how to cut it. Legacy snapshots
+                            predate them and simply show nothing here. */}
+                        {(activeMeasurement.type ?? activeMeasurement.fit) && (
+                          <StyleSection title="Record Details">
+                            <MetricItem
+                              label="Type"
+                              value={activeMeasurement.type ?? undefined}
+                            />
+                            <MetricItem
+                              label="Fit"
+                              value={activeMeasurement.fit ?? undefined}
+                            />
+                          </StyleSection>
+                        )}
                         {MEASUREMENT_GROUPS.map((group) => {
                           const fields = fieldsInGroup(group.id)
                           return (
@@ -264,7 +279,7 @@ export function CustomerDetailsSheet({
                           onSelectField={(name) => setHoveredField(name)}
                         />
                         <p className="mt-1 text-center text-xs text-muted-foreground">
-                          Hover a measurement to locate it on the thob.
+                          Hover a measurement to locate it on the thobe sheet.
                         </p>
                       </aside>
                     </div>
@@ -295,11 +310,12 @@ function MetricItem({
     <div
       className={cn(
         'flex flex-col border-b border-border/30 pb-2 transition-colors',
-        !empty && 'hover:border-info/60',
+        'hover:border-info/60',
       )}
-      // No diagram callout for a value that was never recorded.
-      onMouseEnter={empty ? undefined : onHover}
-      onMouseLeave={empty ? undefined : onLeave}
+      // Empty rows hover too: the sheet draws a ghost where the value would
+      // sit, showing where that measurement is taken.
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
     >
       <span className="text-xs text-muted-foreground font-medium">{label}</span>
       <span

@@ -57,9 +57,9 @@ CREATE TABLE invoices (
     -- Server-set at creation and immutable afterwards: staff never enter this.
     -- What they do promise is target_date below, the editable delivery date.
     invoice_date TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- When the garment is promised for. Required and staff-editable, unlike
-    -- invoice_date above.
-    target_date DATE NOT NULL,
+    -- When the garment is promised for, if at all. Staff-editable, unlike
+    -- invoice_date above; blank means no committed pickup.
+    target_date DATE,
     branch_id UUID REFERENCES branch(id),
     discount NUMERIC(10, 2) NOT NULL DEFAULT 0,
     discount_unit TEXT NOT NULL DEFAULT 'amount' CHECK (discount_unit IN ('amount', 'percent')),
@@ -80,47 +80,60 @@ CREATE TABLE measurements (
     customer_id UUID NOT NULL REFERENCES customers(id),
     measurement_date DATE NOT NULL DEFAULT CURRENT_DATE,
 
-    length_fl NUMERIC(6, 2),
-    length_bl NUMERIC(6, 2),
+    front_height NUMERIC(6, 2),
+    back_height NUMERIC(6, 2),
     chest NUMERIC(6, 2),
     waist NUMERIC(6, 2),
-    hips NUMERIC(6, 2),
+    hip NUMERIC(6, 2),
     shoulder NUMERIC(6, 2),
     shoulder_down NUMERIC(6, 2),
     sleeve_length NUMERIC(6, 2),
-    neck NUMERIC(6, 2),
+    neck_size NUMERIC(6, 2),
     open_hand NUMERIC(6, 2),
-    open_hand_folding NUMERIC(6, 2),
     chest_up NUMERIC(6, 2),
     cuff_width NUMERIC(6, 2),
-    cuffling NUMERIC(6, 2),
+    cuff_size NUMERIC(6, 2),
     neck_width NUMERIC(6, 2),
-    arm_hole NUMERIC(6, 2),
+    armhole NUMERIC(6, 2),
     fo_width NUMERIC(6, 2),
     fo NUMERIC(6, 2),
     bottom NUMERIC(6, 2),
-    bottom_folding NUMERIC(6, 2),
+    bottom_fold NUMERIC(6, 2),
     full_body NUMERIC(6, 2),
     sleeve_half NUMERIC(6, 2),
-    button NUMERIC(6, 2),
-    button_fold NUMERIC(6, 2),
     open_fold NUMERIC(6, 2),
     front_pocket_length NUMERIC(6, 2),
     front_pocket_length_by_width TEXT,
-    side_pocket_length NUMERIC(6, 2),
+    side_pocket NUMERIC(6, 2),
     side_pocket_length_by_width TEXT,
-    mobile_pocket_length_by_width TEXT
+    mobile_pocket_length_by_width TEXT,
+    -- Record-level choices rather than lengths: what was measured (the
+    -- customer's body, an existing thobe, a sample) and how to cut it.
+    -- Nullable so rows written before these existed keep reading — every
+    -- new write has to set them (see validate_measurement).
+    type TEXT CHECK (type IN ('body', 'thobe', 'sample')),
+    fit TEXT CHECK (fit IN ('loose', 'fit', 'medium'))
 );
 
 CREATE TABLE orders (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     measurement_id UUID NOT NULL REFERENCES measurements(id),
-    material_id UUID NOT NULL REFERENCES materials(id),
-    material_amount NUMERIC(10, 2) NOT NULL,
+    material_source TEXT NOT NULL DEFAULT 'shop' CHECK (material_source IN ('shop', 'customer')),
+    material_id UUID REFERENCES materials(id),
+    customer_material_description TEXT,
+    material_amount NUMERIC(10, 2) NOT NULL CHECK (material_amount > 0),
+    CONSTRAINT orders_material_details_check CHECK (
+        (material_source = 'shop' AND material_id IS NOT NULL AND customer_material_description IS NULL)
+        OR
+        (material_source = 'customer' AND material_id IS NULL
+         AND customer_material_description IS NOT NULL
+         AND length(btrim(customer_material_description)) > 0)
+    ),
     invoice_id UUID NOT NULL REFERENCES invoices(id),
     price NUMERIC(10, 2) NOT NULL,
     thobe_type TEXT,
     f_pocket TEXT,
+    s_pocket TEXT,
     collar TEXT,
     sleeve TEXT,
     patti TEXT,
@@ -171,14 +184,6 @@ CREATE TABLE order_stages (
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
--- Seeded in the migration rather than a dev seed, so every environment starts
--- with a usable list. Staff are free to rename, reorder, or retire these.
-INSERT INTO order_stages (name, sort_order, requires_delivery) VALUES
-    ('Cutting', 1, FALSE),
-    ('Sewing', 2, FALSE),
-    ('Finishing', 3, FALSE),
-    ('Location delivery', 4, TRUE);
-
 -- A finished order brought back for modification or repair. Each return is its
 -- own record with its own pass through the stage checklist, so an order
 -- repaired twice keeps both histories. `charge` is recorded for the books;
@@ -228,7 +233,7 @@ CREATE TABLE order_stage_progress (
 --
 -- assignee_id is TEXT rather than a foreign key because there is no local
 -- user table yet (see features/users) — it is mocked pending real auth and a
--- Authentik-backed directory. assignee_name is denormalized alongside it so a
+-- Zitadel-backed directory. assignee_name is denormalized alongside it so a
 -- past assignment still reads sensibly if that directory ever changes.
 CREATE TABLE order_stage_assignments (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -318,3 +323,42 @@ CREATE TABLE invoice_items (
         OR (kind = 'gift_card' AND gift_card_id IS NOT NULL AND product_id IS NULL)
     )
 );
+
+
+-- Staff-editable thob design catalog: the choices inside each fixed
+-- order slot (thobe type, collar, sleeve, front pocket, side pocket, patti, EMD).
+--
+-- The slots themselves stay fixed columns on `orders` — only the options
+-- live here, one row each, mirroring `order_stages` and its retirement
+-- rule: `is_active` retires an option without disturbing the orders that
+-- already stored its slug. `orders` keeps storing the bare slug as TEXT
+-- (no foreign key), so a legacy value that matches nothing still prints
+-- as a text-only chip rather than disappearing.
+--
+-- Images live beside the row as BYTEA so the printed invoice stays
+-- self-contained (rendered to `data:` URIs, like the old compiled-in
+-- catalog). SVG sits beside the rasters the same way — the documents carry
+-- the stored mime into the data URI, so vectors replace illustrations option
+-- by option with no pipeline change. Seeded NULL: until staff upload an illustration the
+-- documents fall back to the compiled-in catalog for the matching
+-- section+slug, so this seed changes no printed output on its own.
+CREATE TABLE design_options (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    category TEXT NOT NULL CHECK (category IN
+        ('thob_type', 'neck', 'sleeve', 'front_pocket', 'side_pocket', 'patti', 'emd')),
+    slug TEXT NOT NULL,
+    label TEXT NOT NULL,
+    image BYTEA,
+    image_mime TEXT NOT NULL DEFAULT 'image/webp',
+    image_version BIGINT NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 1,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    UNIQUE (category, slug)
+);
+
+-- Picker order per category, and the admin table's default sort.
+CREATE INDEX IF NOT EXISTS design_options_category_idx
+    ON design_options (category, sort_order);
+
+-- Catalog rows and bundled illustrations live in backend/seeds/design_options.sql
+-- and are loaded explicitly after migrations when the deployment needs them.

@@ -1,6 +1,6 @@
 use crate::auth::TokenIntrospection;
 use crate::config::{Config, InvoiceBranding};
-use crate::features::users::authentik::AuthentikUserDirectory;
+use crate::features::users::zitadel::ZitadelUserDirectory;
 use sqlx::PgPool;
 
 #[derive(Clone, Debug)]
@@ -8,7 +8,7 @@ pub struct AppState {
     config: Config,
     db: PgPool,
     token_introspection: TokenIntrospection,
-    authentik_users: AuthentikUserDirectory,
+    zitadel_users: ZitadelUserDirectory,
 }
 
 impl AppState {
@@ -16,13 +16,13 @@ impl AppState {
         config: Config,
         db: PgPool,
         token_introspection: TokenIntrospection,
-        authentik_users: AuthentikUserDirectory,
+        zitadel_users: ZitadelUserDirectory,
     ) -> Self {
         Self {
             config,
             db,
             token_introspection,
-            authentik_users,
+            zitadel_users,
         }
     }
 
@@ -46,7 +46,14 @@ impl AppState {
         &self.config.invoice_branding
     }
 
-    pub fn authentik_users(&self) -> &AuthentikUserDirectory {
-        &self.authentik_users
+    /// The zone printed documents write dates in, validated at boot.
+    pub fn timezone(&self) -> Result<chrono_tz::Tz, crate::error::AppError> {
+        self.config
+            .timezone()
+            .map_err(crate::error::AppError::Config)
+    }
+
+    pub fn zitadel_users(&self) -> &ZitadelUserDirectory {
+        &self.zitadel_users
     }
 }

@@ -23,34 +23,33 @@ function measurementToDraft(
   return {
     loadedFromId: measurementId,
     date: measurement.date,
-    lengthFl: measurement.lengthFl ?? '',
-    lengthBl: measurement.lengthBl ?? '',
+    type: nullToBlank(measurement.type),
+    fit: nullToBlank(measurement.fit),
+    frontHeight: measurement.frontHeight ?? '',
+    backHeight: measurement.backHeight ?? '',
     chest: measurement.chest ?? '',
     waist: measurement.waist ?? '',
-    hips: measurement.hips ?? '',
+    hip: measurement.hip ?? '',
     shoulder: measurement.shoulder ?? '',
     shoulderDown: measurement.shoulderDown ?? '',
     sleeveLength: measurement.sleeveLength ?? '',
-    neck: measurement.neck ?? '',
+    neckSize: measurement.neckSize ?? '',
     openHand: measurement.openHand ?? '',
-    openHandFolding: measurement.openHandFolding ?? '',
     chestUp: measurement.chestUp ?? '',
     cuffWidth: measurement.cuffWidth ?? '',
-    cuffling: measurement.cuffling ?? '',
+    cuffSize: measurement.cuffSize ?? '',
     neckWidth: measurement.neckWidth ?? '',
-    armHole: measurement.armHole ?? '',
+    armhole: measurement.armhole ?? '',
     foWidth: measurement.foWidth ?? '',
     fo: measurement.fo ?? '',
     sleeveHalf: measurement.sleeveHalf ?? '',
-    button: measurement.button ?? '',
-    buttonFold: measurement.buttonFold ?? '',
     openFold: measurement.openFold ?? '',
     bottom: measurement.bottom ?? '',
-    bottomFolding: measurement.bottomFolding ?? '',
+    bottomFold: measurement.bottomFold ?? '',
     fullBody: measurement.fullBody ?? '',
     frontPocketLength: measurement.frontPocketLength ?? '',
     frontPocketLengthByWidth: nullToBlank(measurement.frontPocketLengthByWidth),
-    sidePocketLength: measurement.sidePocketLength ?? '',
+    sidePocket: measurement.sidePocket ?? '',
     sidePocketLengthByWidth: nullToBlank(measurement.sidePocketLengthByWidth),
     mobilePocketLengthByWidth: nullToBlank(
       measurement.mobilePocketLengthByWidth,
@@ -112,7 +111,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
     )
 
     const orders: InvoiceOrderDraft[] = block.orders.map((line) => {
-      if (!seeds.materials.has(line.materialId)) {
+      if (line.materialId && !seeds.materials.has(line.materialId)) {
         seeds.materials.set(line.materialId, {
           id: line.materialId,
           name: line.materialName,
@@ -130,7 +129,8 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
                 ],
         })
       }
-      seeds.materialLabels.set(line.materialId, line.materialName)
+      if (line.materialId)
+        seeds.materialLabels.set(line.materialId, line.materialName)
       if (line.productionLocationId) {
         seeds.locationLabels.set(
           line.productionLocationId,
@@ -142,12 +142,15 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
         key: crypto.randomUUID(),
         thobeType: nullToBlank(line.thobeType),
         fPocket: nullToBlank(line.fPocket),
+        sPocket: nullToBlank(line.sPocket),
         collar: nullToBlank(line.collar),
         sleeve: nullToBlank(line.sleeve),
         patti: nullToBlank(line.patti),
         emd: nullToBlank(line.emd),
         moreDetails: nullToBlank(line.moreDetails),
-        materialId: line.materialId,
+        materialSource: line.materialSource,
+        customerMaterialDescription: line.customerMaterialDescription ?? '',
+        materialId: line.materialId ?? '',
         materialAmount: line.materialAmount,
         productionLocationId: line.productionLocationId ?? '',
         price: line.price,
@@ -232,7 +235,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
   }))
 
   const values: InvoiceFormValues = {
-    targetDate: edit.targetDate,
+    targetDate: edit.targetDate ?? '',
     receivingBranch: edit.branchId ?? '',
     customerId: edit.customerId ?? '',
     productBranch,

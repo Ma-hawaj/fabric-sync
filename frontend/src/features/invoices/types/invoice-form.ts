@@ -16,19 +16,19 @@ export interface InvoiceOrderDraft {
 
   thobeType: string
   fPocket: string
+  sPocket: string
   collar: string
   sleeve: string
   patti: string
   emd: string
   moreDetails: string
 
+  materialSource: 'shop' | 'customer'
+  customerMaterialDescription: string
   materialId: string
   materialAmount: NumberInput
-  // Where materialAmount comes off — material stock is held per location, and
-  // different orders on the same invoice can use materials stocked at
-  // different locations, so this has to be per order rather than one
-  // invoice-wide field (unlike productBranch, where every product line
-  // sells from the same register).
+  // Where the garment is made. Shop material needs stock at this location;
+  // customer fabric can use any active production location.
   productionLocationId: string
   // Entered by staff per order line — materials carry no unit price to derive
   // it from.
@@ -86,8 +86,9 @@ export interface PaymentDraft {
 }
 
 export interface InvoiceFormValues {
-  // When the garment is promised for. Required and staff-editable. The
-  // invoice's own date is server-set at creation and never enters the form.
+  // When the garment is promised for, if at all — blank means no committed
+  // pickup. Staff-editable; the invoice's own date is server-set at
+  // creation and never enters the form.
   targetDate: string
   receivingBranch: string
   // Who a sale with no tailoring orders is billed to; a tailoring invoice
@@ -129,11 +130,14 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     key: crypto.randomUUID(),
     thobeType: '',
     fPocket: '',
+    sPocket: '',
     collar: '',
     sleeve: '',
     patti: '',
     emd: '',
     moreDetails: '',
+    materialSource: 'shop',
+    customerMaterialDescription: '',
     materialId: '',
     materialAmount: '',
     productionLocationId: '',
@@ -153,19 +157,14 @@ export function createEmptyCustomer(): InvoiceCustomerDraft {
   }
 }
 
-// A week out by default: the form promises delivery, it doesn't record when
-// the invoice was opened (the backend stamps that itself).
-function defaultTargetDate(): string {
-  return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10)
-}
-
 // The form page and the schema tests both build from here, so a new field
 // can't be added to InvoiceFormValues without both picking it up.
 export function createEmptyInvoiceForm(): InvoiceFormValues {
   return {
-    targetDate: defaultTargetDate(),
+    // Blank: a target date is promised explicitly, not assumed. The form
+    // never records when the invoice was opened (the backend stamps that
+    // itself).
+    targetDate: '',
     receivingBranch: '',
     customerId: '',
     productBranch: '',

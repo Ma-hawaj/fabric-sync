@@ -4,40 +4,41 @@ import type { InvoicePayment } from './invoice-detail'
 /** Backend measurement fields as serialized camelCase (numbers stay null). */
 export interface InvoiceEditMeasurement {
   date: string
-  lengthFl: number | null
-  lengthBl: number | null
+  type: string | null
+  fit: string | null
+  frontHeight: number | null
+  backHeight: number | null
   chest: number | null
   waist: number | null
-  hips: number | null
+  hip: number | null
   shoulder: number | null
   shoulderDown: number | null
   sleeveLength: number | null
-  neck: number | null
+  neckSize: number | null
   openHand: number | null
-  openHandFolding: number | null
   chestUp: number | null
   cuffWidth: number | null
-  cuffling: number | null
+  cuffSize: number | null
   neckWidth: number | null
-  armHole: number | null
+  armhole: number | null
   foWidth: number | null
   fo: number | null
   sleeveHalf: number | null
-  button: number | null
-  buttonFold: number | null
   openFold: number | null
   bottom: number | null
-  bottomFolding: number | null
+  bottomFold: number | null
   fullBody: number | null
   frontPocketLength: number | null
   frontPocketLengthByWidth: string | null
-  sidePocketLength: number | null
+  sidePocket: number | null
   sidePocketLengthByWidth: string | null
   mobilePocketLengthByWidth: string | null
 }
 
 export interface InvoiceEditOrder {
-  materialId: string
+  materialSource: 'shop' | 'customer'
+  customerMaterialDescription: string | null
+  materialId: string | null
   materialName: string
   materialUnit: string
   materialAmount: number
@@ -48,6 +49,7 @@ export interface InvoiceEditOrder {
   price: number
   thobeType: string | null
   fPocket: string | null
+  sPocket: string | null
   collar: string | null
   sleeve: string | null
   patti: string | null
@@ -93,8 +95,8 @@ export interface InvoiceEdit {
   invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */
   date: string
-  /** The promised delivery date — the editable date on the form. */
-  targetDate: string
+  /** The promised delivery date — the editable date on the form. Null when none was promised. */
+  targetDate: string | null
   branchId: string | null
   branchName: string | null
   discount: number

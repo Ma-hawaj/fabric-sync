@@ -42,6 +42,9 @@ async fn main() -> Result<(), error::AppError> {
 
 async fn run() -> Result<(), error::AppError> {
     let config = Config::from_env();
+    // A misspelled TIMEZONE must refuse to boot rather than silently print
+    // UTC on every document.
+    config.timezone().map_err(error::AppError::Config)?;
     let address = SocketAddr::from(([0, 0, 0, 0], config.port));
     let listener = tokio::net::TcpListener::bind(address).await?;
     let db = PgPoolOptions::new()
@@ -50,6 +53,12 @@ async fn run() -> Result<(), error::AppError> {
         .await?;
     sqlx::migrate!().run(&db).await?;
 
+    seed::run_reference_data(&db).await?;
+
+    if config.seed_design_options {
+        seed::run_design_options(&db).await?;
+    }
+
     if config.seed_dev_data {
         seed::run(&db).await?;
     }
@@ -57,14 +66,14 @@ async fn run() -> Result<(), error::AppError> {
     let token_introspection = auth::TokenIntrospection::discover(&config)
         .await
         .map_err(error::AppError::Auth)?;
-    let authentik_users = features::users::authentik::AuthentikUserDirectory::discover(&config)
+    let zitadel_users = features::users::zitadel::ZitadelUserDirectory::discover(&config)
         .await
         .map_err(error::AppError::Auth)?;
     let app = app::router(AppState::new(
         config,
         db,
         token_introspection,
-        authentik_users,
+        zitadel_users,
     ));
 
     tracing::info!("Listening on: {}", address);

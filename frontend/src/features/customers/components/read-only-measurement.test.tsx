@@ -26,11 +26,11 @@ describe('ReadOnlyMeasurement', () => {
     // land on the empty state, not on blank rows.
     const measurement = {
       ...blankMeasurement(),
-      lengthFl: null,
-      lengthBl: null,
+      frontHeight: null,
+      backHeight: null,
       chest: null,
       waist: null,
-      sidePocketLength: null,
+      sidePocket: null,
     } as unknown as Measurement
 
     render(<ReadOnlyMeasurement measurement={measurement} />)
@@ -40,19 +40,62 @@ describe('ReadOnlyMeasurement', () => {
     ).toBeTruthy()
   })
 
+  it.each([
+    { type: 'body', fit: 'medium', expected: 'body · medium' },
+    { type: 'thobe', expected: 'thobe' },
+    { fit: 'loose', expected: 'loose' },
+  ] as const)(
+    'shows available type and fit without diagram fields: $expected',
+    ({ expected, ...choices }) => {
+      render(
+        <ReadOnlyMeasurement
+          measurement={{ ...blankMeasurement(), ...choices }}
+        />,
+      )
+
+      expect(
+        screen.queryByText('No measurements on record for this garment.'),
+      ).toBeTruthy()
+      expect(
+        screen.queryByText(
+          `Measured ${blankMeasurement().date.toLocaleDateString()} (${expected})`,
+        ),
+      ).toBeTruthy()
+      expect(screen.queryByText('Front of Thob')).toBeNull()
+    },
+  )
+
   it('lists recorded values and skips the blank fields', () => {
     render(
       <ReadOnlyMeasurement
         measurement={{
           ...blankMeasurement(),
-          lengthFl: 120,
-          sidePocketLength: 9,
+          type: 'sample',
+          fit: 'fit',
+          frontHeight: 120,
+          sidePocket: 9,
         }}
       />,
     )
 
-    expect(screen.queryByText('Length (Front)')).toBeTruthy()
-    expect(screen.queryByText('Side Pocket Length')).toBeTruthy()
+    expect(screen.queryAllByText('Front Height').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('Side Pocket').length).toBeGreaterThan(0)
     expect(screen.queryByText('Chest')).toBeNull()
+    expect(
+      screen.queryByText(
+        `Measured ${blankMeasurement().date.toLocaleDateString()} — the cut-to spec for this order. (sample · fit)`,
+      ),
+    ).toBeTruthy()
+  })
+
+  it('draws the recorded values on a single thobe sheet', () => {
+    render(
+      <ReadOnlyMeasurement
+        measurement={{ ...blankMeasurement(), chest: 42 }}
+      />,
+    )
+
+    expect(screen.queryByText('Thobe Sheet')).toBeTruthy()
+    expect(screen.queryAllByText('42').length).toBeGreaterThan(0)
   })
 })

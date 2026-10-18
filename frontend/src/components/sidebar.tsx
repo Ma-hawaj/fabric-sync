@@ -45,6 +45,7 @@ import {
   LogInIcon,
   LogOutIcon,
   SettingsIcon,
+  PaletteIcon,
   SunIcon,
 } from 'lucide-react'
 
@@ -60,6 +61,11 @@ const navItems = [
     to: '/order-stages',
     label: 'Order Stages',
     icon: ListChecksIcon,
+  },
+  {
+    to: '/design-options',
+    label: 'Design Options',
+    icon: PaletteIcon,
   },
   { to: '/users', label: 'Users', icon: UsersIcon },
 ] as const

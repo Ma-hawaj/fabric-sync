@@ -40,7 +40,9 @@ const SPEC: ListSpec = ListSpec {
             o.measurement_id,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile,
-            mat.name AS material,
+            COALESCE(mat.name, o.customer_material_description) AS material,
+            o.material_source,
+            CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END AS material_filter,
             mat.sku AS material_sku,
             o.material_id,
             o.material_amount::float8 AS material_amount,
@@ -49,6 +51,7 @@ const SPEC: ListSpec = ListSpec {
             o.received_at,
             o.thobe_type,
             o.f_pocket,
+            o.s_pocket,
             o.collar,
             o.sleeve,
             o.patti,
@@ -85,7 +88,7 @@ const SPEC: ListSpec = ListSpec {
         JOIN invoices i ON i.id = o.invoice_id
         JOIN measurements m ON m.id = o.measurement_id
         JOIN customers c ON c.id = m.customer_id
-        JOIN materials mat ON mat.id = o.material_id
+        LEFT JOIN materials mat ON mat.id = o.material_id
         LEFT JOIN branch prod ON prod.id = o.production_branch_id
         LEFT JOIN branch recv ON recv.id = i.branch_id
         -- The invoice's money state, derived from the payments ledger: the
@@ -173,7 +176,10 @@ const SPEC: ListSpec = ListSpec {
             "customerMobile",
             ColumnDef::new("customer_mobile", ColumnKind::Text),
         ),
-        ("material", ColumnDef::new("material", ColumnKind::Text)),
+        (
+            "material",
+            ColumnDef::new("material_filter", ColumnKind::Text),
+        ),
         (
             "materialAmount",
             ColumnDef::new("material_amount", ColumnKind::Number),

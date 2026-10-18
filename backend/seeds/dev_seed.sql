@@ -71,8 +71,8 @@ INSERT INTO product_stock (id, product_id, branch_id, quantity) VALUES
 -- json_agg(... ORDER BY measurement_date DESC) has more than one row to sort.
 INSERT INTO measurements (
     id, customer_id, measurement_date,
-    length_fl, length_bl, chest, waist, hips, shoulder, sleeve_length, neck,
-    open_hand, chest_up, cuff_width, neck_width, arm_hole, fo_width,
+    front_height, back_height, chest, waist, hip, shoulder, sleeve_length, neck_size,
+    open_hand, chest_up, cuff_width, neck_width, armhole, fo_width,
     front_pocket_length, front_pocket_length_by_width,
     mobile_pocket_length_by_width
 ) VALUES
@@ -133,11 +133,11 @@ INSERT INTO invoice_payments (id, invoice_id, order_id, amount, payment_type, pa
 -- delivery stage is reported as not applicable), and 11 and 12 have no
 -- production location assigned yet.
 --
--- The five design columns hold the DESIGN CATALOG SLUGS (see
--- frontend/src/features/invoices/data/design-catalog.ts), not free text — the
+-- The six design columns hold the DESIGN CATALOG SLUGS (see the
+-- `design_options` table, managed at /design-options), not free text — the
 -- printed invoice looks each one up against the catalog and embeds the
 -- matching illustration; a value that matches nothing prints without a
--- picture. Pick options from those arrays when editing this import.
+-- picture. Pick options from that table when editing this import.
 INSERT INTO orders (
     id, measurement_id, material_id, material_amount, invoice_id, price,
     thobe_type, f_pocket, collar, sleeve, patti, more_details,

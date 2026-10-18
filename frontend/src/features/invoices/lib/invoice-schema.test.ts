@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createEmptyMeasurement } from '@/features/customers/types/measurement-form'
 import { invoiceFormSchema } from './invoice-schema'
 import {
   createEmptyCustomer,
@@ -24,14 +25,24 @@ function validOrder() {
   }
 }
 
+// Type and fit are the only required measurement fields, so a customer that
+// is otherwise valid carries them — mirroring what the form's selects hold
+// once picked.
+function validMeasurement() {
+  return { ...createEmptyMeasurement(), type: 'body', fit: 'medium' }
+}
+
 function validProductLine() {
   return { ...createEmptyProductLine(), productId: 'prod-1', unitPrice: 40 }
 }
 
 function values(overrides: Partial<InvoiceFormValues> = {}): InvoiceFormValues {
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10)
   return {
     ...createEmptyInvoiceForm(),
-    targetDate: '2026-07-25',
+    targetDate: tomorrow,
     customers: [],
     ...overrides,
   }
@@ -51,7 +62,74 @@ function firstError(customers: InvoiceCustomerDraft[]) {
 }
 
 describe('invoiceFormSchema', () => {
-  it('requires a target date', () => {
+  it('accepts customer fabric without an inventory material and requires its description', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
+      orders: [
+        {
+          ...validOrder(),
+          materialSource: 'customer' as const,
+          materialId: '',
+          customerMaterialDescription: 'White linen',
+        },
+      ],
+    }
+    expect(firstError([customer])).toBeNull()
+    customer.orders[0].customerMaterialDescription = '  '
+    expect(firstError([customer])?.path).toEqual([
+      'customers',
+      0,
+      'orders',
+      0,
+      'customerMaterialDescription',
+    ])
+  })
+
+  it('rejects zero and negative fabric quantities for either source', () => {
+    for (const materialSource of ['shop', 'customer'] as const) {
+      for (const materialAmount of [0, -1, 0.001]) {
+        const customer = {
+          ...createEmptyCustomer(),
+          existingCustomerId: 'cust-1',
+          measurement: validMeasurement(),
+          orders: [
+            {
+              ...validOrder(),
+              materialSource,
+              materialAmount,
+              customerMaterialDescription: 'Linen',
+            },
+          ],
+        }
+        expect(firstError([customer])?.path).toEqual([
+          'customers',
+          0,
+          'orders',
+          0,
+          'materialAmount',
+        ])
+      }
+    }
+  })
+
+  it('passes without a target date', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
+      orders: [validOrder()],
+    }
+    expect(
+      invoiceFormSchema.safeParse(
+        values({ customers: [customer], targetDate: '' }),
+      ).success,
+    ).toBe(true)
+  })
+
+  it('rejects a malformed target date', () => {
     const customer = {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
@@ -59,10 +137,62 @@ describe('invoiceFormSchema', () => {
       orders: [validOrder()],
     }
     const error = firstErrorFor(
-      values({ customers: [customer], targetDate: '' }),
+      values({ customers: [customer], targetDate: 'not-a-date' }),
     )
-    expect(error?.message).toMatch(/enter a target date/i)
+    expect(error?.message).toMatch(/valid date/i)
     expect(error?.path).toEqual(['targetDate'])
+  })
+
+  it('rejects a target date in the past', () => {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10)
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
+      orders: [validOrder()],
+    }
+    const error = firstErrorFor(
+      values({ customers: [customer], targetDate: yesterday }),
+    )
+    expect(error?.message).toMatch(/in the future/i)
+    expect(error?.path).toEqual(['targetDate'])
+  })
+
+  it('rejects today as a target date', () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
+      orders: [validOrder()],
+    }
+    const error = firstErrorFor(
+      values({ customers: [customer], targetDate: today }),
+    )
+    expect(error?.message).toMatch(/in the future/i)
+    expect(error?.path).toEqual(['targetDate'])
+  })
+
+  it('passes for a target date tomorrow', () => {
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10)
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
+      orders: [validOrder()],
+    }
+    expect(
+      invoiceFormSchema.safeParse(
+        values({ customers: [customer], targetDate: tomorrow }),
+      ).success,
+    ).toBe(true)
   })
 
   it('passes for a fully filled existing customer with a valid order', () => {
@@ -70,6 +200,7 @@ describe('invoiceFormSchema', () => {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
       existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
       orders: [validOrder()],
     }
     expect(invoiceFormSchema.safeParse(baseValues([customer])).success).toBe(
@@ -117,6 +248,7 @@ describe('invoiceFormSchema', () => {
       mode: 'new' as const,
       name: 'Ahmed Al-Mansoori',
       mobileNo: '+966501234567',
+      measurement: validMeasurement(),
       orders: [validOrder()],
     }
     expect(invoiceFormSchema.safeParse(baseValues([customer])).success).toBe(
@@ -303,6 +435,7 @@ describe('invoiceFormSchema', () => {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
       existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
       orders: [validOrder()],
     }
     const withPaymentType = {
@@ -319,6 +452,7 @@ describe('invoiceFormSchema', () => {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
       existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
       orders: [validOrder()], // 150 gross
     }
     const overpaid = {
@@ -342,6 +476,7 @@ describe('invoiceFormSchema', () => {
       ...createEmptyCustomer(),
       mode: 'existing' as const,
       existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
       orders: [validOrder()],
     }
     const bad = {
@@ -352,5 +487,62 @@ describe('invoiceFormSchema', () => {
     }
     const error = firstError([good, bad])
     expect(error?.path).toEqual(['customers', 1, 'existingCustomerId'])
+  })
+
+  it('rejects a measurement without a type', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: { ...validMeasurement(), type: '' },
+      orders: [validOrder()],
+    }
+    const error = firstError([customer])
+    expect(error?.message).toMatch(/measurement type/i)
+    expect(error?.path).toEqual(['customers', 0, 'measurement', 'type'])
+  })
+
+  it('rejects a measurement without a fit', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      mode: 'new' as const,
+      name: 'Ahmed',
+      mobileNo: '+966501234567',
+      measurement: { ...validMeasurement(), fit: '' },
+      orders: [validOrder()],
+    }
+    const error = firstError([customer])
+    expect(error?.message).toMatch(/pick a fit/i)
+    expect(error?.path).toEqual(['customers', 0, 'measurement', 'fit'])
+  })
+
+  it('rejects a measurement with an unknown type or fit', () => {
+    const badType = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: { ...validMeasurement(), type: 'shirt' },
+      orders: [validOrder()],
+    }
+    expect(firstError([badType])?.path).toEqual([
+      'customers',
+      0,
+      'measurement',
+      'type',
+    ])
+
+    const badFit = {
+      ...createEmptyCustomer(),
+      mode: 'existing' as const,
+      existingCustomerId: 'cust-1',
+      measurement: { ...validMeasurement(), fit: 'tight' },
+      orders: [validOrder()],
+    }
+    expect(firstError([badFit])?.path).toEqual([
+      'customers',
+      0,
+      'measurement',
+      'fit',
+    ])
   })
 })

@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 import {
+  MEASUREMENT_FITS,
+  MEASUREMENT_TYPES,
+} from '@/features/customers/types/measurement-form'
+import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
   computeOrderLineTotal,
@@ -12,33 +16,64 @@ import {
 // types/invoice-form.ts.
 const numberInputSchema = z.union([z.number(), z.literal('')])
 
-// Measurements have no validation rules — every field is optional free
-// text/numbers — so there's nothing for zod to check. `z.custom` keeps the
-// real MeasurementDraft type flowing through without enumerating all 24
-// fields for no benefit.
+// Numeric and text measurement fields have no validation rules — every one
+// is optional free text/numbers — so there's nothing for zod to check there
+// and `z.custom` keeps the real MeasurementDraft type flowing through without
+// enumerating them. The record-level type/fit choices are required instead,
+// checked in customerDraftSchema's superRefine below.
 const measurementDraftSchema = z.custom<MeasurementDraft>()
+
+const MEASUREMENT_TYPE_VALUES = MEASUREMENT_TYPES as readonly string[]
+const MEASUREMENT_FIT_VALUES = MEASUREMENT_FITS as readonly string[]
 
 const orderDraftSchema = z
   .object({
     key: z.string(),
     thobeType: z.string(),
     fPocket: z.string(),
+    sPocket: z.string(),
     collar: z.string(),
     sleeve: z.string(),
     patti: z.string(),
     emd: z.string(),
     moreDetails: z.string(),
+    materialSource: z.enum(['shop', 'customer']),
+    customerMaterialDescription: z.string(),
     materialId: z.string(),
     materialAmount: numberInputSchema,
     productionLocationId: z.string(),
     price: numberInputSchema,
   })
   .superRefine((order, ctx) => {
-    if (!order.materialId || order.materialAmount === '') {
+    if (
+      order.materialSource === 'shop' &&
+      (!order.materialId || order.materialAmount === '')
+    ) {
       ctx.addIssue({
         code: 'custom',
         message: 'Pick a material and quantity.',
         path: ['materialId'],
+      })
+    }
+    if (
+      order.materialSource === 'customer' &&
+      !order.customerMaterialDescription.trim()
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Describe the customer-provided material.',
+        path: ['customerMaterialDescription'],
+      })
+    }
+    if (
+      order.materialAmount === '' ||
+      !Number.isFinite(order.materialAmount) ||
+      order.materialAmount < 0.01
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter a quantity of at least 0.01.',
+        path: ['materialAmount'],
       })
     }
     // Material stock is held per location, and comes off automatically when
@@ -50,7 +85,11 @@ const orderDraftSchema = z
         path: ['productionLocationId'],
       })
     }
-    if (order.price === '') {
+    if (
+      order.price === '' ||
+      !Number.isFinite(order.price) ||
+      order.price < 0
+    ) {
       ctx.addIssue({
         code: 'custom',
         message: 'Enter a price.',
@@ -78,22 +117,41 @@ const customerDraftSchema = z
           path: ['existingCustomerId'],
         })
       }
-      return
+    } else {
+      if (!customer.name.trim()) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Enter a full name.',
+          path: ['name'],
+        })
+      }
+
+      if (!customer.mobileNo.trim()) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Enter a phone number.',
+          path: ['mobileNo'],
+        })
+      }
     }
 
-    if (!customer.name.trim()) {
+    // Type and fit describe the measurement record itself, so they are the
+    // only measurement fields the form requires — a legacy snapshot predates
+    // them and arrives blank, to be picked before saving. Checked for both
+    // new and existing customers, after the identity checks above so those
+    // keep reporting first: either block writes a snapshot.
+    if (!MEASUREMENT_TYPE_VALUES.includes(customer.measurement.type)) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Enter a full name.',
-        path: ['name'],
+        message: 'Pick a measurement type.',
+        path: ['measurement', 'type'],
       })
     }
-
-    if (!customer.mobileNo.trim()) {
+    if (!MEASUREMENT_FIT_VALUES.includes(customer.measurement.fit)) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Enter a phone number.',
-        path: ['mobileNo'],
+        message: 'Pick a fit.',
+        path: ['measurement', 'fit'],
       })
     }
   })
@@ -209,10 +267,28 @@ const paymentDraftSchema = z
 
 export const invoiceFormSchema = z
   .object({
-    // The promised delivery date. Required: an invoice without one has no
-    // committed pickup. The invoice's own date is server-set and never
-    // validated here.
-    targetDate: z.string().min(1, 'Enter a target date.'),
+    // The promised delivery date, if one was promised at all. Blank means
+    // no committed pickup; the invoice's own date is server-set and never
+    // validated here. The picker only writes valid ISO dates, so this
+    // just guards against a malformed string.
+    targetDate: z
+      .string()
+      .refine((value) => value === '' || !Number.isNaN(Date.parse(value)), {
+        message: 'Enter a valid date.',
+      })
+      .refine(
+        (value) => {
+          if (value === '') return true
+          const [year, month, day] = value.split('-').map(Number)
+          const chosen = new Date(year, month - 1, day)
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          return chosen > today
+        },
+        {
+          message: 'The target date must be in the future.',
+        },
+      ),
     receivingBranch: z.string(),
     customerId: z.string(),
     productBranch: z.string(),

@@ -77,6 +77,7 @@ export interface Order {
   customerName: string
   customerMobile: string
   material: string
+  materialSource: 'shop' | 'customer'
   /** The material's SKU — what the printed order sheet shows instead of the name. */
   materialSku: string | null
   materialAmount: number
@@ -95,6 +96,7 @@ export interface Order {
    */
   thobeType: string | null
   fPocket: string | null
+  sPocket: string | null
   collar: string | null
   sleeve: string | null
   patti: string | null

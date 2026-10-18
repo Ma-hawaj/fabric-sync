@@ -1,6 +1,8 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { Link } from '@tanstack/react-router'
 import {
+  ChevronDownIcon,
+  ChevronRightIcon,
   EyeIcon,
   FileDownIcon,
   CheckIcon,
@@ -8,6 +10,7 @@ import {
   WalletIcon,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
 import { CURRENCY } from '@/lib/currency'
@@ -26,12 +29,6 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: CURRENCY,
 })
-
-// Invoice ids are uuidv7 — time-ordered, so the short prefix still sorts by
-// creation and is unique enough to identify an invoice at a glance.
-function shortId(id: string) {
-  return id.slice(0, 8).toUpperCase()
-}
 
 const PAYMENT_STATUS_VARIANT: Record<
   PaymentStatus,
@@ -53,7 +50,28 @@ export const getInvoiceColumns = (
   onRecordPayment: (invoice: Invoice) => void,
 ): ColumnDef<Invoice, any>[] => [
   {
-    accessorKey: 'id',
+    id: 'expand',
+    header: () => <span className="sr-only">Order breakdown</span>,
+    cell: ({ row }) =>
+      row.getCanExpand() ? (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          type="button"
+          aria-label={`${row.getIsExpanded() ? 'Hide' : 'Show'} orders for invoice INV-${row.original.invoiceNumber}`}
+          aria-expanded={row.getIsExpanded()}
+          aria-controls={`invoice-orders-${row.original.id}`}
+          onClick={row.getToggleExpandedHandler()}
+        >
+          {row.getIsExpanded() ? <ChevronDownIcon /> : <ChevronRightIcon />}
+        </Button>
+      ) : null,
+    enableSorting: false,
+    enableHiding: false,
+    size: 40,
+  },
+  {
+    accessorKey: 'invoiceNumber',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Invoice" />
     ),
@@ -63,7 +81,7 @@ export const getInvoiceColumns = (
         params={{ invoiceId: row.original.id }}
         className="font-mono font-medium text-info hover:underline"
       >
-        {shortId(row.getValue('id'))}
+        INV-{row.getValue<number>('invoiceNumber')}
       </Link>
     ),
     enableSorting: true,
@@ -86,13 +104,15 @@ export const getInvoiceColumns = (
   },
   {
     id: 'targetDate',
-    accessorFn: (invoice) => new Date(invoice.targetDate),
+    accessorFn: (invoice) =>
+      invoice.targetDate ? new Date(invoice.targetDate) : null,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Target Date" />
     ),
-    cell: ({ row }) => (
-      <div>{row.getValue<Date>('targetDate').toLocaleDateString()}</div>
-    ),
+    cell: ({ row }) => {
+      const value = row.getValue<Date | null>('targetDate')
+      return <div>{value ? value.toLocaleDateString() : '—'}</div>
+    },
     enableSorting: true,
     enableColumnFilter: false,
   },
@@ -100,9 +120,24 @@ export const getInvoiceColumns = (
     id: 'customerName',
     accessorFn: (invoice) => invoice.customers.map((c) => c.name).join(', '),
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Customer Name" />
+      <DataTableColumnHeader column={column} label="Customers" />
     ),
-    cell: ({ row }) => <div>{row.getValue('customerName')}</div>,
+    cell: ({ row }) => (
+      <div className="min-w-40 space-y-2">
+        {row.original.customers.length === 0 ? (
+          <span className="text-muted-foreground">Walk-in customer</span>
+        ) : (
+          row.original.customers.map((customer) => (
+            <div key={JSON.stringify([customer.name, customer.mobileNo])}>
+              <div className="font-medium">{customer.name}</div>
+              <div dir="ltr" className="text-xs text-muted-foreground">
+                {customer.mobileNo}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    ),
     enableSorting: true,
     enableColumnFilter: true,
     meta: {
@@ -110,6 +145,28 @@ export const getInvoiceColumns = (
       placeholder: 'Filter customer...',
       variant: 'text',
     },
+  },
+  {
+    accessorKey: 'received',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Collected" />
+    ),
+    cell: ({ row }) => {
+      const { orderCount, collectedOrderCount } = row.original
+      if (orderCount === 0)
+        return (
+          <span className="text-muted-foreground">No tailoring orders</span>
+        )
+      return (
+        <Badge
+          variant={collectedOrderCount === orderCount ? 'default' : 'secondary'}
+        >
+          {collectedOrderCount} of {orderCount} collected
+        </Badge>
+      )
+    },
+    enableSorting: true,
+    enableColumnFilter: false,
   },
   {
     id: 'customerMobile',
@@ -253,22 +310,6 @@ export const getInvoiceColumns = (
     enableColumnFilter: false,
   },
   {
-    accessorKey: 'received',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Collected" />
-    ),
-    cell: ({ row }) => {
-      const received = row.getValue<boolean>('received')
-      return (
-        <Badge variant={received ? 'default' : 'secondary'}>
-          {received ? 'Received' : 'Pending'}
-        </Badge>
-      )
-    },
-    enableSorting: true,
-    enableColumnFilter: false,
-  },
-  {
     id: 'lastReceivedAt',
     accessorFn: (invoice) =>
       invoice.lastReceivedAt ? new Date(invoice.lastReceivedAt) : null,
@@ -328,7 +369,7 @@ export const getInvoiceColumns = (
               // the ledger survives a rebuild untouched.
               label: 'Edit',
               icon: PencilIcon,
-              disabled: invoice.received,
+              disabled: invoice.received || invoice.collectedOrderCount > 0,
               onClick: () => onEdit(invoice),
             },
             {

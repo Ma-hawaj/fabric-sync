@@ -13,15 +13,18 @@ pub enum AppError {
     NotFound(String),
     Conflict(String),
     BadRequest(String),
+    /// Boot-time configuration failure (e.g. an unknown TIMEZONE) — never a
+    /// response in practice, since the server refuses to start.
+    Config(String),
     /// The invoice document template failed to load or render. A server fault
     /// like the others above it, but worth its own variant because the
     /// template can be replaced at runtime (INVOICE_TEMPLATE_DIR), so this is
     /// the one 500 an operator can cause — and fix — without a deploy.
     Template(String),
-    /// A per-request call to Authentik's Users API failed (network error or
-    /// an unexpected response shape) — a 500, but distinct from `Auth`,
-    /// which is boot-time OIDC-discovery failure only.
-    Authentik(String),
+    /// A per-request call to Zitadel's Users API failed (token exchange,
+    /// network error, or an unexpected response shape) — a 500, but distinct
+    /// from `Auth`, which is boot-time OIDC-discovery failure only.
+    Zitadel(String),
 }
 
 impl From<std::io::Error> for AppError {
@@ -84,8 +87,9 @@ impl IntoResponse for AppError {
             Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
             Self::Conflict(message) => (StatusCode::CONFLICT, message),
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
+            Self::Config(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
             Self::Template(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
-            Self::Authentik(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
+            Self::Zitadel(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
         };
 
         // Folded into the canonical "request completed" line (see

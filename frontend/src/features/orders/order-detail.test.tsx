@@ -46,6 +46,7 @@ const ORDER: OrderDetail = {
   customerName: 'Ahmed Al-Mansoori',
   customerMobile: '+973-3311-2233',
   material: 'Japanese Toray Cotton',
+  materialSource: 'shop',
   materialSku: 'JTC-001',
   materialAmount: 3.5,
   price: 100,
@@ -53,6 +54,7 @@ const ORDER: OrderDetail = {
   receivedAt: null,
   thobeType: 'thobx',
   fPocket: 'round',
+  sPocket: 'type-2',
   collar: '3',
   sleeve: 'open',
   patti: 'normal',
@@ -93,14 +95,51 @@ const ORDER: OrderDetail = {
     id: 'm-1',
     customerId: 'c-1',
     date: new Date('2026-07-28'),
-    lengthFl: 120,
+    frontHeight: 120,
     chest: 50,
   },
 }
 
-function renderPage() {
+function designCatalogFixture() {
+  const option = (
+    id: string,
+    category: string,
+    slug: string,
+    label: string,
+    sortOrder: number,
+    isActive = true,
+  ) => ({
+    id,
+    category,
+    slug,
+    label,
+    sortOrder,
+    isActive,
+    hasImage: false,
+    imageUrl: `/design-options/${id}/image`,
+  })
+  return {
+    data: [
+      option('o1', 'thob_type', 'thobx', 'Thobx', 1),
+      option('o2', 'front_pocket', 'round', 'Round', 1),
+      option('o2b', 'side_pocket', 'type-2', '2', 2),
+      option('o3', 'neck', '3', '3', 1),
+      option('o4', 'sleeve', 'open', 'Open', 1),
+      option('o5', 'patti', 'normal', 'Normal', 1),
+      option('o6', 'emd', '6', '6', 6),
+      option('o7', 'emd', 'retired-emd', 'Retired EMD', 7, false),
+    ],
+    page: 1,
+    perPage: 6,
+    total: 6,
+    pageCount: 1,
+  }
+}
+
+function renderPage(order = ORDER) {
   const client = new QueryClient()
-  client.setQueryData(['orders', ORDER.id], ORDER)
+  client.setQueryData(['orders', order.id], order)
+  client.setQueryData(['design-options', ''], designCatalogFixture())
   return render(
     <QueryClientProvider client={client}>
       <OrderDetailPage orderId="order-1" />
@@ -136,6 +175,7 @@ function renderDeliveryOrder(overrides: Partial<OrderDetail> = {}) {
   }
   const client = new QueryClient()
   client.setQueryData(['orders', order.id], order)
+  client.setQueryData(['design-options', ''], designCatalogFixture())
   return render(
     <QueryClientProvider client={client}>
       <OrderDetailPage orderId={order.id} />
@@ -166,15 +206,13 @@ describe('OrderDetailPage', () => {
 
     // Group title and the two recorded values.
     expect(screen.queryByText('Body Dimensions')).toBeTruthy()
-    expect(screen.queryByText('Length (Front)')).toBeTruthy()
-    expect(screen.queryByText('120')).toBeTruthy()
-    expect(screen.queryByText('Chest')).toBeTruthy()
-    expect(screen.queryByText('50')).toBeTruthy()
+    expect(screen.queryAllByText('Front Height').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('120').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('Chest').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('50').length).toBeGreaterThan(0)
 
-    // The measurement template draws the thob from both silhouettes.
-    expect(screen.queryByText('Front of Thob')).toBeTruthy()
-    expect(screen.queryByText('Back of Thob')).toBeTruthy()
-    expect(screen.queryByText('120 inch · Front Length')).toBeTruthy()
+    // The measurement template draws the thobe sheet with its values.
+    expect(screen.queryByText('Thobe Sheet')).toBeTruthy()
   })
 
   it('renders the production checklist with its stages', () => {
@@ -240,12 +278,13 @@ describe('OrderDetailPage', () => {
     // Catalog ids resolve to their display labels.
     expect(screen.queryByText('Thobx')).toBeTruthy()
     expect(screen.queryByText('Round')).toBeTruthy()
-    // EMD has no catalog illustrations, so it shows as text.
+    // EMD resolves like every other slot.
     expect(screen.queryByText('EMD')).toBeTruthy()
     expect(screen.queryByText('6')).toBeTruthy()
     // Slot titles stay visible so staff can quote each choice back.
     expect(screen.queryByText('Thobe Type')).toBeTruthy()
     expect(screen.queryByText('Front Pocket')).toBeTruthy()
+    expect(screen.queryByText('Side Pocket')).toBeTruthy()
     expect(screen.queryByText('Double stitching on hem.')).toBeTruthy()
   })
 
@@ -253,6 +292,7 @@ describe('OrderDetailPage', () => {
     renderDeliveryOrder({
       thobeType: 'Saudi',
       fPocket: null,
+      sPocket: null,
       collar: null,
       sleeve: null,
       patti: null,
@@ -263,10 +303,17 @@ describe('OrderDetailPage', () => {
     expect(screen.queryByText('Saudi')).toBeTruthy()
   })
 
+  it('keeps retired catalog labels on historical orders', () => {
+    renderPage({ ...ORDER, emd: 'retired-emd' })
+
+    expect(screen.queryByText('Retired EMD')).toBeTruthy()
+  })
+
   it('notes when an order carries no design choices at all', () => {
     renderDeliveryOrder({
       thobeType: null,
       fPocket: null,
+      sPocket: null,
       collar: null,
       sleeve: null,
       patti: null,

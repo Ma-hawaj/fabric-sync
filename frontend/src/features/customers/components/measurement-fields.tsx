@@ -7,7 +7,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { NumberField, SelectField, TextField } from '@/components/form/fields'
+import { SegmentedOptions } from '@/components/form/segmented-options'
 import type { AnyFormApi } from '@/components/form/fields'
+import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Label } from '@/components/ui/label'
 import { ThobDiagram } from './thob-diagram'
 import type { MeasurementValues } from './thob-diagram'
@@ -20,7 +22,11 @@ import {
 import type { MeasurementField } from '../data/measurement-fields'
 import type { Measurement } from '../types/customers'
 import type { MeasurementDraft } from '../types/measurement-form'
-import { createEmptyMeasurement } from '../types/measurement-form'
+import {
+  MEASUREMENT_FITS,
+  MEASUREMENT_TYPES,
+  createEmptyMeasurement,
+} from '../types/measurement-form'
 
 export function snapshotLabel(
   snapshot: Measurement,
@@ -50,6 +56,12 @@ export function measurementFromSnapshot(
       // signature: each field's own type is narrower than the union.
       if (value !== undefined) draft[name as string] = value
     }
+    // Type and fit live on the draft but outside the diagram catalog (plain
+    // choices, no sketch callouts), so they don't ride the loop above.
+    // A legacy snapshot predates them and arrives null — blank, for the form
+    // to require before saving.
+    draft.type = snapshot.type ?? ''
+    draft.fit = snapshot.fit ?? ''
   }
 
   return draft
@@ -111,7 +123,7 @@ export function MeasurementFields({
   const base = basePath
   // Hover wins over focus so pointing at one field while another is focused
   // shows what the pointer is on, and dropping the pointer falls back to the
-  // focused field rather than clearing the sketch.
+  // focused field rather than clearing the sheet.
   const [hovered, setHovered] = useState<string | null>(null)
   const [focused, setFocused] = useState<string | null>(null)
   const activeField = hovered ?? focused
@@ -163,6 +175,45 @@ export function MeasurementFields({
       <div className="@container">
         <div className="grid gap-5 @2xl:grid-cols-[minmax(16rem,35%)_1fr]">
           <div className="order-2 space-y-5 @2xl:order-1">
+            {/* Record-level choices, not lengths: what was measured and how
+                to cut it. Segmented choices with no sketch callout — they
+                describe the record rather than a point on the garment. */}
+            <div className="space-y-2.5">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Record Details
+              </h4>
+              <div className="grid gap-3">
+                {[
+                  { name: 'type', label: 'Type', options: MEASUREMENT_TYPES },
+                  { name: 'fit', label: 'Fit', options: MEASUREMENT_FITS },
+                ].map(({ name, label, options }) => (
+                  <form.Field key={name} name={`${base}.${name}` as never}>
+                    {(field: any) => (
+                      <Field data-invalid={field.state.meta.errors.length > 0}>
+                        <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
+                        <SegmentedOptions
+                          id={field.name}
+                          ariaLabel={label}
+                          columns={3}
+                          options={options.map(
+                            (option) =>
+                              option.charAt(0).toUpperCase() + option.slice(1),
+                          )}
+                          value={
+                            field.state.value.charAt(0).toUpperCase() +
+                            field.state.value.slice(1)
+                          }
+                          onChange={(value) =>
+                            field.handleChange(value.toLowerCase())
+                          }
+                        />
+                        <FieldError errors={field.state.meta.errors} />
+                      </Field>
+                    )}
+                  </form.Field>
+                ))}
+              </div>
+            </div>
             {MEASUREMENT_GROUPS.map((group) => (
               <div key={group.id} className="space-y-2.5">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
