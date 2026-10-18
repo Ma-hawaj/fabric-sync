@@ -37,9 +37,8 @@ pub struct Config {
     pub oauth_client_secret: Option<String>,
     pub oauth_introspection_url: Option<String>,
     pub oauth_resource_audience: Option<String>,
-    /// IANA timezone the printed documents write dates in (e.g.
-    /// `Asia/Bahrain`) — the database stores UTC, and a date printed in the
-    /// wrong zone is a wrong date on the paper. Unset means Bahrain.
+    /// IANA timezone for business calendar rules and printed documents
+    /// (e.g. `Asia/Bahrain`). Unset means Bahrain.
     pub timezone: String,
     /// Credentials for a dedicated Zitadel machine user used only to back
     /// `GET /users` (see `features::users::zitadel`) — separate from
@@ -94,7 +93,7 @@ impl InvoiceBranding {
 }
 
 impl Config {
-    /// The zone printed documents write dates in. Checked once at startup —
+    /// The zone for business dates and printed documents. Checked at startup —
     /// a misspelled TIMEZONE must refuse to boot rather than silently print
     /// UTC again.
     pub fn timezone(&self) -> Result<chrono_tz::Tz, String> {

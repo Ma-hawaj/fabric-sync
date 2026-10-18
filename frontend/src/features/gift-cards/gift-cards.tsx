@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
+import { localDateString } from '@/lib/date'
 import { useDataTable } from '@/hooks/use-data-table'
 import { useListParams } from '@/hooks/use-list-params'
 import { Button } from '@/components/ui/button'
@@ -14,7 +15,7 @@ import type { GiftCard } from './types/gift-card'
 
 export function GiftCardsPage() {
   const updateGiftCard = useUpdateGiftCard()
-  const today = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const today = localDateString()
 
   const toggleActive = React.useCallback(
     (card: GiftCard) => {

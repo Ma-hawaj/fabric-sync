@@ -168,7 +168,7 @@ const SPEC: ListSpec = ListSpec {
         ),
         (
             "invoiceDate",
-            ColumnDef::new("invoice_date", ColumnKind::Date),
+            ColumnDef::new("invoice_date", ColumnKind::DateTime),
         ),
         (
             "customerName",
@@ -190,7 +190,7 @@ const SPEC: ListSpec = ListSpec {
         ("status", ColumnDef::new("status", ColumnKind::Text)),
         (
             "collectedAt",
-            ColumnDef::new("collected_at", ColumnKind::Date),
+            ColumnDef::new("collected_at", ColumnKind::DateTime),
         ),
         (
             "invoicePaymentStatus",

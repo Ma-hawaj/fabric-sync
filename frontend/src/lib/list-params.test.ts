@@ -121,6 +121,12 @@ describe('toApiSearchParams', () => {
     expect(search.get('filters')).toBeNull()
   })
 
+  it('sends the viewer time zone so date filters agree with local displays', () => {
+    expect(toApiSearchParams(base).get('timeZone')).toBe(
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    )
+  })
+
   it('serializes sorting as the JSON the backend parses', () => {
     const search = toApiSearchParams({
       ...base,

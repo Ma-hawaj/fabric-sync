@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { measurementFromSnapshot, snapshotLabel } from './measurement-fields'
 import type { Measurement } from '@/features/customers/types/customers'
+import { localDateString } from '@/lib/date'
 
 function makeSnapshot(overrides: Partial<Measurement> = {}): Measurement {
   return {
@@ -25,7 +26,7 @@ describe('measurementFromSnapshot', () => {
   it("dates the draft today, not the snapshot's original date", () => {
     const snapshot = makeSnapshot({ date: new Date('2020-01-01') })
     const draft = measurementFromSnapshot(snapshot)
-    expect(draft.date).toBe(new Date().toISOString().slice(0, 10))
+    expect(draft.date).toBe(localDateString())
   })
 
   it('fills unset numeric/string fields with blanks, not undefined or 0', () => {

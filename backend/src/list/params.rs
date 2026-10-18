@@ -233,6 +233,7 @@ pub struct RawListParams {
     pub sort: Option<String>,
     pub filters: Option<String>,
     pub join_operator: Option<JoinOperator>,
+    pub time_zone: Option<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -244,6 +245,7 @@ pub struct ListParams {
     pub sort: Vec<SortItem>,
     pub filters: Vec<FilterItem>,
     pub join: JoinOperator,
+    pub time_zone: chrono_tz::Tz,
 }
 
 impl ListParams {
@@ -290,6 +292,12 @@ pub fn parse(raw: RawListParams) -> Result<ListParams, AppError> {
 
     let sort = parse_json_param(raw.sort.as_deref(), "sort")?;
     let filters = parse_json_param(raw.filters.as_deref(), "filters")?;
+    let time_zone = raw
+        .time_zone
+        .as_deref()
+        .unwrap_or("UTC")
+        .parse()
+        .map_err(|_| AppError::BadRequest("timeZone must be an IANA time zone".to_string()))?;
 
     Ok(ListParams {
         page,
@@ -297,6 +305,7 @@ pub fn parse(raw: RawListParams) -> Result<ListParams, AppError> {
         sort,
         filters,
         join: raw.join_operator.unwrap_or_default(),
+        time_zone,
     })
 }
 
@@ -334,6 +343,19 @@ mod tests {
 
     fn raw(query: &str) -> RawListParams {
         serde_urlencoded::from_str(query).unwrap()
+    }
+
+    #[test]
+    fn time_zone_is_validated_and_defaults_to_utc_for_existing_clients() {
+        assert_eq!(parse(raw("")).unwrap().time_zone, chrono_tz::UTC);
+        assert_eq!(
+            parse(raw("timeZone=Asia%2FBahrain")).unwrap().time_zone,
+            chrono_tz::Asia::Bahrain
+        );
+        assert!(matches!(
+            parse(raw("timeZone=unknown")),
+            Err(AppError::BadRequest(_))
+        ));
     }
 
     #[test]

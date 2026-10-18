@@ -13,7 +13,11 @@
 //! &sort=[{"id":"date","desc":true}]
 //! &filters=[{"id":"name","value":"ali","variant":"text","operator":"iLike"}]
 //! &joinOperator=and
+//! &timeZone=Asia/Bahrain
 //! ```
+//!
+//! `timeZone` is the viewer's IANA zone. Date filters compare complete local
+//! days; omitting it keeps UTC semantics for existing API clients.
 //!
 //! Omitting `perPage` returns every row rather than defaulting to a page size.
 //! That keeps the form pickers — which need a whole table to populate a combobox

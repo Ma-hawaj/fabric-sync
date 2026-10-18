@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import { ApiError } from '@/lib/api'
+import { localDateString, parseDate } from '@/lib/date'
 import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
 import { STOCK_FILTERS } from '@/features/locations/lib/location-filters'
@@ -98,7 +99,9 @@ export function InvoiceForm({
   // Gift card expiry is checked against the sale date, not the promised
   // target: on create the sale is today, on edit it is the stored invoice
   // date (matching the backend, which re-checks against that date).
-  const redemptionDate = invoiceDate ?? new Date().toISOString().slice(0, 10)
+  const redemptionDate = invoiceDate
+    ? localDateString(parseDate(invoiceDate))
+    : localDateString()
 
   // Which of the two submit buttons was pressed. A ref rather than state
   // because it is read once inside onSubmit and must not re-render the form.

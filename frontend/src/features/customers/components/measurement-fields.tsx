@@ -47,7 +47,6 @@ export function measurementFromSnapshot(
   draft.loadedFromId = snapshot?.id ?? null
   // Saving always creates a new record, dated today, regardless of which
   // historical snapshot it started from.
-  draft.date = new Date().toISOString().slice(0, 10)
 
   if (snapshot) {
     for (const { name } of MEASUREMENT_FIELDS) {

@@ -18,6 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { CURRENCY } from '@/lib/currency'
+import { parseDate } from '@/lib/date'
 import {
   ArrowLeftIcon,
   FileDownIcon,
@@ -99,7 +100,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
             <p className="text-muted-foreground">
               {new Date(invoice.date).toLocaleString()}
               {invoice.targetDate
-                ? ` · Target ${new Date(invoice.targetDate).toLocaleDateString()}`
+                ? ` · Target ${parseDate(invoice.targetDate).toLocaleDateString()}`
                 : ''}
               {detail.branchName ? ` · ${detail.branchName}` : ''}
             </p>
