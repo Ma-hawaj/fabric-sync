@@ -77,18 +77,18 @@ fn measurement_changes(
         return Vec::new();
     };
 
-    let numbers: [(&'static str, &'static str, Option<f64>, Option<f64>); 27] = [
+    let numbers = [
         (
-            "lengthFl",
-            "Length (Front)",
-            before.length_fl,
-            after.length_fl,
+            "frontHeight",
+            "Front Height",
+            before.front_height,
+            after.front_height,
         ),
         (
-            "lengthBl",
-            "Length (Back)",
-            before.length_bl,
-            after.length_bl,
+            "backHeight",
+            "Back Height",
+            before.back_height,
+            after.back_height,
         ),
         ("shoulder", "Shoulder", before.shoulder, after.shoulder),
         (
@@ -100,43 +100,37 @@ fn measurement_changes(
         ("chest", "Chest", before.chest, after.chest),
         ("chestUp", "Chest (Upper)", before.chest_up, after.chest_up),
         ("waist", "Waist", before.waist, after.waist),
-        ("hips", "Hips", before.hips, after.hips),
+        ("hip", "Hip", before.hip, after.hip),
         (
             "sleeveLength",
             "Sleeve Length",
             before.sleeve_length,
             after.sleeve_length,
         ),
-        ("neck", "Neck", before.neck, after.neck),
-        (
-            "neckWidth",
-            "Neck Width",
-            before.neck_width,
-            after.neck_width,
-        ),
+        ("neckSize", "Neck Size", before.neck_size, after.neck_size),
         ("openHand", "Open Hand", before.open_hand, after.open_hand),
-        (
-            "openHandFolding",
-            "Open Hand Folding",
-            before.open_hand_folding,
-            after.open_hand_folding,
-        ),
         (
             "cuffWidth",
             "Cuff Width",
             before.cuff_width,
             after.cuff_width,
         ),
-        ("cuffling", "Cuffling", before.cuffling, after.cuffling),
-        ("armHole", "Armhole", before.arm_hole, after.arm_hole),
+        ("cuffSize", "Cuff Size", before.cuff_size, after.cuff_size),
+        (
+            "neckWidth",
+            "Neck Width",
+            before.neck_width,
+            after.neck_width,
+        ),
+        ("armhole", "Armhole", before.armhole, after.armhole),
         ("foWidth", "FO Width", before.fo_width, after.fo_width),
         ("fo", "Fo", before.fo, after.fo),
         ("bottom", "Bottom", before.bottom, after.bottom),
         (
-            "bottomFolding",
-            "Bottom Folding",
-            before.bottom_folding,
-            after.bottom_folding,
+            "bottomFold",
+            "Bottom Fold",
+            before.bottom_fold,
+            after.bottom_fold,
         ),
         ("fullBody", "Full Body", before.full_body, after.full_body),
         (
@@ -144,13 +138,6 @@ fn measurement_changes(
             "Sleeve Half",
             before.sleeve_half,
             after.sleeve_half,
-        ),
-        ("button", "Button", before.button, after.button),
-        (
-            "buttonFold",
-            "Button Fold",
-            before.button_fold,
-            after.button_fold,
         ),
         ("openFold", "Open Fold", before.open_fold, after.open_fold),
         (
@@ -160,10 +147,10 @@ fn measurement_changes(
             after.front_pocket_length,
         ),
         (
-            "sidePocketLength",
-            "Side Pocket Length",
-            before.side_pocket_length,
-            after.side_pocket_length,
+            "sidePocket",
+            "Side Pocket",
+            before.side_pocket,
+            after.side_pocket,
         ),
     ];
 
@@ -244,6 +231,7 @@ pub async fn render_repair_document(
     };
 
     let branding = state.invoice_branding();
+    let timezone = state.timezone()?;
     let env = environment(branding)?;
     let template = env.get_template(TEMPLATE_NAME)?;
 
@@ -261,8 +249,14 @@ pub async fn render_repair_document(
         currency => CURRENCY,
         amounts => minijinja::Value::from_serialize(&amounts),
         reported_on => repair.reported_on.to_string(),
-        completed_at => repair.completed_at.as_ref().map(format_datetime),
-        received_at => repair.received_at.as_ref().map(format_datetime),
+        completed_at => repair
+            .completed_at
+            .as_ref()
+            .map(|value| format_datetime(value, timezone)),
+        received_at => repair
+            .received_at
+            .as_ref()
+            .map(|value| format_datetime(value, timezone)),
         measurement_changes => minijinja::Value::from_serialize(&measurement_changes(&detail.measurement, fixed.as_ref())),
         has_fix => fixed.is_some(),
     })?)
@@ -279,34 +273,33 @@ mod tests {
             id: Uuid::nil(),
             customer_id: Uuid::nil(),
             date: NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
-            length_fl: None,
-            length_bl: None,
+            r#type: Some("body".to_string()),
+            fit: Some("medium".to_string()),
+            front_height: None,
+            back_height: None,
             chest,
             waist,
-            hips: None,
+            hip: None,
             shoulder: None,
             shoulder_down: None,
             sleeve_length: None,
-            neck: None,
+            neck_size: None,
             open_hand: None,
-            open_hand_folding: None,
             chest_up: None,
             cuff_width: None,
-            cuffling: None,
+            cuff_size: None,
             neck_width: None,
-            arm_hole: None,
+            armhole: None,
             fo_width: None,
             fo: None,
             bottom: None,
-            bottom_folding: None,
+            bottom_fold: None,
             full_body: None,
             sleeve_half: None,
-            button: None,
-            button_fold: None,
             open_fold: None,
             front_pocket_length: None,
             front_pocket_length_by_width: None,
-            side_pocket_length: None,
+            side_pocket: None,
             side_pocket_length_by_width: None,
             mobile_pocket_length_by_width: None,
         }
