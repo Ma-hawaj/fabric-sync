@@ -4,10 +4,12 @@ import { apiClient } from '@/lib/api'
 import type {
   CreateRefundInput,
   CreateReturnInput,
+  CreateCancellationInput,
+  CancellationContext,
   ReturnContext,
 } from '../types/returns'
 
-export function useReturns(invoiceId: string) {
+export function useReturns(invoiceId: string | null) {
   return useQuery({
     queryKey: ['invoices', invoiceId, 'returns'],
     queryFn: async () => {
@@ -17,10 +19,11 @@ export function useReturns(invoiceId: string) {
       return data
     },
     staleTime: 1000 * 60 * 5,
+    enabled: invoiceId !== null,
   })
 }
 
-function useAdjustment<T>(invoiceId: string, endpoint: 'returns' | 'refunds') {
+function useAdjustment<T>(path: string) {
   const client = useQueryClient()
   // Retrying unchanged values after a lost response uses the same request ID.
   // Each dialog mounts a fresh hook for the next intentional operation.
@@ -30,28 +33,51 @@ function useAdjustment<T>(invoiceId: string, endpoint: 'returns' | 'refunds') {
       const key = JSON.stringify(input)
       const requestId = requests.current.get(key) ?? crypto.randomUUID()
       requests.current.set(key, requestId)
-      const { data } = await apiClient.post<{ id: string }>(
-        `/invoices/${invoiceId}/${endpoint}`,
-        { ...input, requestId },
-      )
+      const { data } = await apiClient.post<{ id: string }>(path, {
+        ...input,
+        requestId,
+      })
       return data
     },
     // A failed response can still mean the server committed the operation.
     // Refresh the history and stock even when the outcome was uncertain.
     onSettled: async () => {
       await Promise.all(
-        ['invoices', 'orders', 'products', 'gift-cards', 'gift-card'].map(
-          (key) => client.invalidateQueries({ queryKey: [key] }),
-        ),
+        [
+          'invoices',
+          'orders',
+          'products',
+          'materials',
+          'gift-cards',
+          'gift-card',
+        ].map((key) => client.invalidateQueries({ queryKey: [key] })),
       )
     },
   })
 }
 
 export function useCreateReturn(invoiceId: string) {
-  return useAdjustment<CreateReturnInput>(invoiceId, 'returns')
+  return useAdjustment<CreateReturnInput>(`/invoices/${invoiceId}/returns`)
 }
 
 export function useCreateRefund(invoiceId: string) {
-  return useAdjustment<CreateRefundInput>(invoiceId, 'refunds')
+  return useAdjustment<CreateRefundInput>(`/invoices/${invoiceId}/refunds`)
+}
+
+export function useCancelOrder(orderId: string) {
+  return useAdjustment<CreateCancellationInput>(`/orders/${orderId}/cancel`)
+}
+
+export function useCancellation(orderId: string | null) {
+  return useQuery({
+    queryKey: ['orders', orderId, 'cancellation'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<CancellationContext>(
+        `/orders/${orderId}/cancel`,
+      )
+      return data
+    },
+    enabled: orderId !== null,
+    staleTime: 1000 * 60 * 5,
+  })
 }

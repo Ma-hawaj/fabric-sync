@@ -221,7 +221,7 @@ describe('InvoiceDetailPage', () => {
       collected: true,
     })
 
-    expect(screen.queryByText('Collected')).toBeTruthy()
+    expect(screen.queryByText('Collection complete')).toBeTruthy()
     expect(
       screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
     ).toBe(false)
@@ -251,7 +251,7 @@ describe('InvoiceDetailPage', () => {
   })
 
   it('protects the original sale after a return even when its credit was zero', () => {
-    renderPage({ ...DETAIL, received: false, hasAdjustments: true })
+    renderPage({ ...DETAIL, collected: false, hasAdjustments: true })
     expect(
       screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
     ).toBe(true)

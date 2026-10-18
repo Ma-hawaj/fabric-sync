@@ -77,7 +77,7 @@ pub async fn get_material(
     list::fetch_by_id(state.db(), &SPEC, material_id).await
 }
 
-async fn upsert_stock(
+pub(crate) async fn upsert_stock(
     tx: &mut sqlx::PgTransaction<'_>,
     material_id: Uuid,
     entries: &[StockEntryInput],

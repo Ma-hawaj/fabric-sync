@@ -30,6 +30,7 @@ import { toast } from 'sonner'
 import { CollectInvoiceDialog } from './components/collect-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
 import { ReturnsPanel } from '@/features/returns/components/returns-panel'
+import { useReturns } from '@/features/returns/hooks/use-returns'
 import { useInvoice } from './hooks/use-invoice'
 import { downloadInvoicePdf } from './lib/print-invoice'
 import type { Invoice, InvoiceCustomer } from './types/invoices'
@@ -48,6 +49,7 @@ const LINE_KIND_LABELS: Record<InvoiceLine['kind'], string> = {
 
 export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
   const { data: detail, isLoading, isError } = useInvoice(invoiceId)
+  const { data: adjustments } = useReturns(invoiceId)
   const navigate = useNavigate()
   const [resendOpen, setResendOpen] = useState(false)
 
@@ -124,7 +126,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                 : 'Unpaid'}
           </Badge>
           <Badge variant={invoice.collected ? 'default' : 'secondary'}>
-            {invoice.collected ? 'Collected' : 'Pending collection'}
+            {invoice.collected ? 'Collection complete' : 'Pending collection'}
           </Badge>
         </div>
 
@@ -227,6 +229,22 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                         <span>{line.description}</span>
                         <OrderPriorityIndicator isUrgent={line.isUrgent} />
                       </div>
+                      {line.orderId &&
+                        adjustments?.returns.some((entry) =>
+                          entry.lines.some(
+                            (item) => item.lineId === line.orderId,
+                          ),
+                        ) && (
+                          <Badge variant="secondary">
+                            {adjustments.returns.find((entry) =>
+                              entry.lines.some(
+                                (item) => item.lineId === line.orderId,
+                              ),
+                            )?.kind === 'cancellation'
+                              ? 'Cancelled'
+                              : 'Returned'}
+                          </Badge>
+                        )}
                       {line.customer && (
                         <div className="text-xs text-muted-foreground">
                           {line.customer.name}

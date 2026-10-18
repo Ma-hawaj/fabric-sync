@@ -619,7 +619,11 @@
             <dt>Order status</dt>
             <dd>
               {%- set status = order_status_labels[order.status] -%}
-              {% if status %}
+              {% if order.outcome == "cancelled" %}
+                Cancelled
+              {% elif order.outcome == "returned" %}
+                Returned
+              {% elif status %}
                 {{ status }}
               {% else %}
                 {{ order.status }}
@@ -630,6 +634,12 @@
           <div class="row">
             <dt>Priority</dt>
             <dd>Urgent</dd>
+          </div>
+          {% endif %}
+          {% if order.closureReason %}
+          <div class="row">
+            <dt>Closure reason</dt>
+            <dd>{{ order.closureReason }}</dd>
           </div>
           {% endif %}
         </dl>

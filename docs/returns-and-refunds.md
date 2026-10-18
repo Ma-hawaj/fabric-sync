@@ -1,65 +1,94 @@
-# Returns and refunds
+# Cancellations, returns and refunds
 
-Open an invoice and use **Returns & Refunds**:
+[UI screenshots](screenshots/returns-and-cancellations/README.md) show the combined forms and audit history using sample data.
 
-1. Choose **Return Items**, enter the quantities and a reason, and optionally restock retail products at their original sale location.
-2. The return credit reduces the unpaid balance first. Any excess becomes **Refund due**.
-3. Pay the customer through Cash, Benefit or Card, then use **Record Refund** to record that payment. These methods record a manual payout; they do not call a payment provider. Choosing an original redeemed gift card restores its balance immediately.
+## Staff workflow
 
-Collected tailoring garments can be returned once as whole garments. Their consumed fabric is never restocked. Retail quantities can be returned in parts, to two decimal places. Gift card **sales** cannot be returned through this flow; gift card **tender** can be refunded to the original card. Rework continues to use the existing garment repair flow.
+On an invoice, choose **Return & Refund**, select the merchandise, enter a reason, and confirm the refund in the same form. Retail products can optionally be restocked at their original sale location. Collected tailoring garments are returned once as whole garments; their consumed fabric is preserved.
 
-Returns use the original discounted, VAT-inclusive selling value. The backend allocates the stored taxable gross across the original merchandise lines in stable line-ID order, preserving every cent. Partial returns use cumulative quantity rounding, so returning a three-unit line in three parts credits exactly the same amount as returning it at once. The original invoice, payments, lines and collection timestamps remain intact. An invoice with a return or refund cannot be rebuilt through editing.
+The credit uses the original discounted, VAT-inclusive selling value plus that order's original urgency fee. Urgency fees are added after discounts and stay with their own garment. Credit first reduces the invoice's unpaid balance. Any excess, including earlier pending customer credit, is refunded at confirmation. The form shows the split between external payment and original gift cards. Staff select Cash, Benefit or Card for the external portion and pay the customer before confirming; the application records that manual payout and does not call a payment provider. Gift card refunds restore the original cards atomically. **Refund later** is an explicit exception: the credit remains visible as refund due and can be paid through **Refund Pending Credit**.
+
+On an order, the action depends on collection:
+
+- **Cancel Order** closes an uncollected garment. Before production starts, it receives full credit. After a non-delivery production stage is done, or a repair has been recorded, staff enter the retained work/material charge and confirm it was agreed with the customer. The credit is the discounted order value less that charge. Cancellation and any refund use one confirmation.
+- **Return Order** closes a collected garment and credits its full discounted selling value, using the same combined refund form. Rework without a financial return continues through the repair flow.
+
+Cancellation never assumes fabric is reusable. Staff may restore only the quantity confirmed unused, up to the original quantity, to the recorded original deduction location. New shop-fabric orders record that location separately from the editable production location. Older orders without a recorded origin, inactive stock locations, and customer-provided fabric cannot be automatically restocked through cancellation; verified legacy stock corrections use Inventory.
+
+An order's outcome (**Active**, **Cancelled**, **Returned**) is separate from its lifecycle (**Pending**, **Ready**, **Collected**) and payment. Both pending and ready garments can be cancelled. Closed orders retain collection timestamps, production records, assignments and repair history, but cannot receive production, assignment, repair, location, readiness or collection updates. Cancelled orders are excluded from pending collection counts and bulk collection. Closed orders are excluded from pickup readiness and cannot be marked ready or reopened. Cancelling a pending garment can make the remaining garments ready, advancing the invoice's readiness generation. A return retains the original collection date. The invoice and order show the outcome and financial history; printed orders show closure and reason.
+
+Retail quantities can be returned in parts to two decimal places. Gift card **sales** cannot be returned through this flow. Gift card **tender** can only be restored to original redeemed cards. An invoice with any cancellation, return or refund cannot be rebuilt through editing.
 
 ## Balances and safeguards
 
-`invoice_balances` is the shared definition used by invoices, orders, payments and refunds:
+`invoice_balances` is shared by invoices, orders, payments and refunds:
 
 ```text
-net total = original total − return credits
+net total = original total − cancellation/return credits
 net tender = payments − cash/card/Benefit refunds
            + gift card redemptions − gift card refunds
 balance due = max(net total − net tender, 0)
 refund due  = max(net tender − net total, 0)
 ```
 
-A refund is limited both by refund due and by the remaining tender in its channel. Gift card tender cannot be cashed out: external refunds cannot exceed external payments still held, and each gift card refund cannot exceed that card's original redemption less earlier refunds on this invoice. Restoring a card does not reactivate it or extend its expiry.
+Discounted merchandise credit is allocated across original lines in stable line-ID order using cumulative integer cents, then each garment's original urgency fee is added to that garment's credit limit. Fees are never discounted or redistributed to other garments or retail items. Partial returns preserve rounding remainders, so returning a three-unit line in three parts credits the same total as one full return. Retained charges cannot exceed the order's credit limit.
 
-Every write holds the same invoice row lock used by payments, pickups and invoice edits. Returns, their stock movements, and gift card refunds commit atomically. Ledger records retain a required reason, timestamp, authenticated user subject and original request. There are no edit or delete endpoints for these records.
+A refund is limited by refund due and remaining tender. External refunds cannot exceed external payments still held, and each gift card refund cannot exceed that card's original redemption less earlier refunds on this invoice. Restoring a card does not reactivate it or extend its expiry. An immediate refund must cover the exact refund due; partial payouts are supported when settling explicitly deferred credit.
+
+Every operational order write and financial adjustment locks the parent invoice in the same order. The credit, closure, stock movements and all refund tenders commit in one database transaction. A failure rolls back the whole operation. Internally, append-only credit and payout records remain separate and linked by `adjustment_id`, preserving accurate unpaid returns, mixed tender and audit history. Records retain the required reason, authenticated user subject, timestamp and original request. There are no ledger edit or delete endpoints.
+
+Credits and refunds also advance the invoice's notification revision. WhatsApp previews and queued notifications using older invoice figures become stale and require a fresh preview; no notification is sent automatically by a return or cancellation.
 
 ## API
 
-All endpoints require the existing bearer authentication. Writes also require a user subject for the audit trail.
+All endpoints require bearer authentication; financial writes also require a user subject.
 
-- `GET /api/invoices/:id/returns` — settlement, returnable merchandise with quantity and credit limits, return/refund history, and original redeemed gift cards with remaining refund limits.
-- `POST /api/invoices/:id/returns` — credit selected merchandise and optionally restock products.
-- `POST /api/invoices/:id/refunds` — record a payout or restore a redeemed gift card.
+- `GET /api/invoices/:id/returns` — settlement, merchandise with remaining quantity, outcome and credit limits, adjustment/refund history, and original redeemed cards with remaining refund limits.
+- `POST /api/invoices/:id/returns` — credit selected merchandise, optionally restock products, and apply the refund plan atomically.
+- `GET /api/orders/:id/cancel` — production state, stock provenance and current invoice return/refund context.
+- `POST /api/orders/:id/cancel` — close an uncollected order, credit its discounted value less any agreed retained charge, restore confirmed unused fabric if eligible, and apply the refund plan atomically.
+- `POST /api/invoices/:id/refunds` — settle explicitly deferred customer credit with a payout or original gift card restoration.
 
-Example return:
+Example combined return:
 
 ```json
 {
   "requestId": "3d22cc6e-222c-4fc1-a185-dd859641ec49",
   "reason": "Wrong size",
   "lines": [
-    { "lineId": "f753e482-3b82-4c83-9363-c26f23667f36", "quantity": 1, "restock": true }
-  ]
+    {
+      "lineId": "f753e482-3b82-4c83-9363-c26f23667f36",
+      "quantity": 1,
+      "restock": true
+    }
+  ],
+  "refund": {
+    "timing": "now",
+    "payments": [
+      { "amount": 10.0, "paymentType": "benefit", "giftCardId": null }
+    ]
+  }
 }
 ```
 
-Example refund:
+Example cancellation after production starts:
 
 ```json
 {
-  "requestId": "f0286eb0-0909-482f-997b-6905084341fa",
-  "reason": "Returned merchandise",
-  "amount": 10.00,
-  "paymentType": "cash",
-  "giftCardId": null
+  "requestId": "0924fe0f-680d-43dc-a3fa-cb3bdbdf5d93",
+  "reason": "Customer changed plans; retained charge agreed",
+  "retainedCharge": 25.0,
+  "workChargeConfirmed": true,
+  "restoredMaterialQuantity": 1.5,
+  "unusedMaterialConfirmed": true,
+  "refund": { "timing": "later" }
 }
 ```
 
-`paymentType` is `cash`, `benefit`, `card` or `gift_card`. The last requires `giftCardId` from this invoice's redeemed cards; other methods require it to be null. Both writes return `{ "id": "..." }`. Reasons contain 1–1000 nonblank characters; monetary amounts and quantities use at most two decimal places, matching existing storage.
+A refund plan is either `{ "timing": "now", "payments": [...] }` or `{ "timing": "later" }`. No payout is needed when credit only offsets debt: use `now` with an empty array. Omitting the plan defaults to that empty immediate plan, so a paid return cannot accidentally leave its payout pending. Each tender's `paymentType` is `cash`, `benefit`, `card` or `gift_card`; the last requires `giftCardId` from this invoice's redeemed cards and other methods require it to be null. A deferred payout uses `requestId`, `reason`, `amount`, `paymentType`, and `giftCardId` directly at `/refunds`.
 
-Generate one UUID `requestId` for each intended operation. Retry an unchanged request using that same ID: it returns the original record without another credit, stock movement or payout. Reusing an ID with different values returns 409. Invalid quantities, methods or refund limits return 400. After an uncertain response, refresh the history and retry the original request. The frontend does this refresh and retains the ID for unchanged retries.
+All writes return `{ "id": "..." }`. Reasons contain 1–1000 nonblank characters. Monetary amounts and quantities use at most two decimal places, matching existing storage.
 
-The new migration runs on backend startup. Apply it before serving the updated code; regenerated SQLx metadata is included. Existing invoices begin with zero returns and refunds. The invoice page and printable invoice show the original sale figures together with return credits, money paid back, and any refund still due.
+Generate one UUID `requestId` per intended operation. Retrying unchanged values with the same ID returns the original result without another credit, stock movement, closure or payout. Reusing an ID with different values, including a different cancellation order, returns 409. Invalid eligibility, quantities or refund limits return 400. After an uncertain response, refresh the history and retry the original request. The frontend refreshes affected data and preserves the original form context and request ID for unchanged retries.
+
+Migrations run on backend startup. The new migrations are `0005_invoice_returns.sql` and `0006_order_closures.sql`, following the consolidated core/notification baseline. Apply both before serving the updated code; regenerated SQLx metadata is included. Original invoices, payments and sale lines are preserved. The invoice page and printable invoice show original figures together with credits, money paid back and any refund still due.

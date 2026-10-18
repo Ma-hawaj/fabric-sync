@@ -23,13 +23,20 @@ describe('return rules', () => {
 
   it('requires a reason and an eligible selected quantity', () => {
     const values = createReturnForm([PRODUCT])
-    expect(returnSchema([PRODUCT]).safeParse(values).success).toBe(false)
+    expect(
+      returnSchema({ ...CONTEXT, lines: [PRODUCT] }).safeParse(values).success,
+    ).toBe(false)
     values.reason = 'Wrong size'
+    values.refundMethod = 'cash'
     values.lines[0].quantity = 1
-    expect(returnSchema([PRODUCT]).safeParse(values).success).toBe(true)
+    expect(
+      returnSchema({ ...CONTEXT, lines: [PRODUCT] }).safeParse(values).success,
+    ).toBe(true)
     for (const quantity of [4, -1, 0.001, Infinity]) {
       values.lines[0].quantity = quantity
-      const result = returnSchema([PRODUCT]).safeParse(values)
+      const result = returnSchema({ ...CONTEXT, lines: [PRODUCT] }).safeParse(
+        values,
+      )
       expect(result.success).toBe(false)
       if (!result.success)
         expect(
@@ -49,13 +56,20 @@ describe('return rules', () => {
     }
     const values = createReturnForm([order])
     values.reason = 'Fit issue'
+    values.refundMethod = 'cash'
     values.lines[0].quantity = 0.5
-    expect(returnSchema([order]).safeParse(values).success).toBe(false)
+    expect(
+      returnSchema({ ...CONTEXT, lines: [order] }).safeParse(values).success,
+    ).toBe(false)
     values.lines[0].quantity = 1
     values.lines[0].restock = true
-    expect(returnSchema([order]).safeParse(values).success).toBe(false)
+    expect(
+      returnSchema({ ...CONTEXT, lines: [order] }).safeParse(values).success,
+    ).toBe(false)
     values.lines[0].restock = false
-    expect(returnSchema([order]).safeParse(values).success).toBe(true)
+    expect(
+      returnSchema({ ...CONTEXT, lines: [order] }).safeParse(values).success,
+    ).toBe(true)
   })
 
   it('preserves rounding remainders on repeated partial returns', () => {

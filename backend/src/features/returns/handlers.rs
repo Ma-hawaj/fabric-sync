@@ -6,6 +6,26 @@ use axum::{
 };
 use uuid::Uuid;
 
+pub async fn cancellation_context(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<CancellationContext>, AppError> {
+    Ok(Json(service::cancellation_context(&state, id).await?))
+}
+
+pub async fn cancel_order(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(id): Path<Uuid>,
+    Json(input): Json<CreateCancellationInput>,
+) -> Result<Json<RecordedAdjustment>, AppError> {
+    let actor = user.subject().ok_or_else(|| {
+        AppError::Unauthorized("a user identity is required to cancel an order".into())
+    })?;
+    Ok(Json(service::cancel_order(&state, id, input, actor).await?))
+}
+
 pub async fn context(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,

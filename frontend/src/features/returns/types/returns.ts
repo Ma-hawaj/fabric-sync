@@ -22,6 +22,7 @@ export interface ReturnableLine {
   creditLimit: number
   collected: boolean
   canRestock: boolean
+  outcome: 'active' | 'cancelled' | 'returned'
 }
 
 export interface ReturnContext {
@@ -30,10 +31,12 @@ export interface ReturnContext {
   returns: {
     id: string
     reason: string
+    kind: 'return' | 'cancellation'
     amount: number
     createdAt: string
     createdBy: string
     lines: {
+      lineId: string
       description: string
       quantity: number
       amount: number
@@ -46,6 +49,7 @@ export interface ReturnContext {
     amount: number
     paymentType: string
     giftCardCode: string | null
+    adjustmentId: string | null
     createdAt: string
     createdBy: string
   }[]
@@ -55,6 +59,7 @@ export interface ReturnContext {
 export interface CreateReturnInput {
   reason: string
   lines: { lineId: string; quantity: number; restock: boolean }[]
+  refund: RefundPlan
 }
 
 export interface CreateRefundInput {
@@ -62,4 +67,34 @@ export interface CreateRefundInput {
   amount: number
   paymentType: 'cash' | 'card' | 'benefit' | 'gift_card'
   giftCardId: string | null
+}
+
+export type RefundPlan =
+  | { timing: 'later' }
+  | { timing: 'now'; payments: Omit<CreateRefundInput, 'reason'>[] }
+
+export interface CancellationDetails {
+  orderId: string
+  invoiceId: string
+  status: 'pending' | 'ready' | 'collected'
+  outcome: 'active' | 'cancelled' | 'returned'
+  productionStarted: boolean
+  materialSource: 'shop' | 'customer'
+  materialAmount: number
+  canRestoreMaterial: boolean
+  stockLocation: string | null
+}
+
+export interface CancellationContext {
+  order: CancellationDetails
+  invoice: ReturnContext
+}
+
+export interface CreateCancellationInput {
+  reason: string
+  retainedCharge: number
+  restoredMaterialQuantity: number
+  workChargeConfirmed: boolean
+  unusedMaterialConfirmed: boolean
+  refund: RefundPlan
 }

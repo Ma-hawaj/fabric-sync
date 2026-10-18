@@ -16,6 +16,11 @@ SQLx applies the files in version order:
    triggers that serialize related writes and invalidate outdated previews.
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins.
 
+5. `0005_invoice_returns.sql` adds return credits, line adjustments, refund payouts,
+   and shared invoice balances.
+6. `0006_order_closures.sql` adds cancellation details, order outcomes, original
+   fabric stock locations, and closure-aware readiness and preview invalidation.
+
 Reference data, the design catalog, and optional demo data live in `backend/seeds/`
 and are loaded separately. Future deployed schema changes should be added as new
 migrations rather than editing this baseline.

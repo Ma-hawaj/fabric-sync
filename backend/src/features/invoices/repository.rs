@@ -108,10 +108,10 @@ pub async fn fetch_invoice_detail(
         LEFT JOIN branch b ON b.id = i.branch_id
         LEFT JOIN customers c ON c.id = i.customer_id
         LEFT JOIN LATERAL (
-            SELECT count(*) AS order_count,
+            SELECT count(*) FILTER (WHERE oc.outcome <> 'cancelled') AS order_count,
                    count(*) FILTER (WHERE status = 'collected') AS collected_order_count,
                    max(collected_at) AS last_collected_at
-            FROM orders WHERE invoice_id = i.id
+            FROM orders o JOIN order_outcomes oc ON oc.order_id = o.id WHERE o.invoice_id = i.id
         ) collection ON true
         LEFT JOIN invoice_balances balance ON balance.invoice_id = i.id
         LEFT JOIN LATERAL (
@@ -345,12 +345,13 @@ const SPEC: ListSpec = ListSpec {
             NOT EXISTS(
                 SELECT 1 FROM orders o
                 WHERE o.invoice_id = i.id AND o.status <> 'collected'
+                  AND NOT EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id = o.id)
             ) AS collected,
             -- The latest collection across the invoice's tailoring lines.
             -- NULL until the first order is collected (and on retail-only
             -- invoices, which have no orders at all).
             agg.last_collected_at AS last_collected_at,
-            COALESCE(agg.item_count, 0) AS order_count,
+            COALESCE(agg.collectible_order_count, 0) AS order_count,
             ready.readiness_status, ready.ready_order_count, ready.pending_order_count, ready.readiness_generation,
             COALESCE(agg.collected_order_count, 0) AS collected_order_count,
             i.gift_card_redeemed::float8 AS gift_card_redeemed,
@@ -387,6 +388,7 @@ const SPEC: ListSpec = ListSpec {
         LEFT JOIN LATERAL (
             SELECT
                 count(*) AS item_count,
+                count(*) FILTER (WHERE NOT EXISTS(SELECT 1 FROM order_cancellations x WHERE x.order_id = o.id)) AS collectible_order_count,
                 count(*) FILTER (WHERE o.status = 'collected') AS collected_order_count,
                 json_agg(DISTINCT jsonb_build_object(
                     'name', c.name,
@@ -700,6 +702,7 @@ pub async fn mark_orders_collected(
         UPDATE orders
         SET status = 'collected', collected_at = now()
         WHERE invoice_id = $1 AND status <> 'collected'
+          AND NOT EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id = orders.id)
         "#,
         invoice_id,
     )
@@ -721,9 +724,9 @@ pub async fn insert_order(
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
             thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd, more_details,
-            production_branch_id, material_source, customer_material_description, base_price, is_urgent, urgent_charge
+            production_branch_id, material_source, customer_material_description, base_price, is_urgent, urgent_charge, material_stock_branch_id
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8, $18, $19::float8)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8, $18, $19::float8, CASE WHEN $15::text = 'shop' THEN $14::uuid ELSE NULL::uuid END)
         "#,
         measurement_id,
         order.material_id,
@@ -1180,7 +1183,7 @@ pub async fn old_order_lines(
     sqlx::query_as!(
         OldOrderLine,
         r#"
-        SELECT material_id, production_branch_id, material_amount::float8 AS "material_amount!"
+        SELECT material_id, COALESCE(material_stock_branch_id, production_branch_id) AS production_branch_id, material_amount::float8 AS "material_amount!"
         FROM orders
         WHERE invoice_id = $1
         "#,

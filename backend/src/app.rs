@@ -34,7 +34,8 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .merge(
             pricing::router().route_layer(middleware::from_fn_with_state(
-                state.clone(), auth::require_auth,
+                state.clone(),
+                auth::require_auth,
             )),
         )
         .merge(

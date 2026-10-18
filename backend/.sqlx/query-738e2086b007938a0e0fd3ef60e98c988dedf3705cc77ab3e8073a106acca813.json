@@ -1,0 +1,184 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            i.id,\n            i.invoice_number,\n            i.invoice_date,\n            i.target_date,\n            i.urgent_charge::float8 AS \"urgent_charge!\",\n            i.collection_method,\n            i.created_at,\n            i.discount::float8 AS \"discount!\",\n            i.discount_unit,\n            -- Money state is derived from the ledger: the table stores only\n            -- the total, so the paid sum, the status and the latest method\n            -- are worked out here. The NUMERIC arithmetic stays exact —\n            -- nothing is rounded until the service layer.\n            balance.amount_paid::float8 AS \"amount_paid!\",\n            balance.payment_status AS \"payment_status!\",\n            method.payment_type AS \"payment_method?\",\n            -- Goods receipt is separate from money: true once no order on\n            -- the invoice is still pending collection. A retail-only invoice\n            -- has no orders, so there is nothing to collect.\n            collection.order_count = collection.collected_order_count AS \"collected!\",\n            collection.order_count AS \"order_count!\",\n            collection.collected_order_count AS \"collected_order_count!\",\n            -- The latest collection across the invoice's tailoring lines\n            -- (see the list query's `agg` lateral for the same derivation).\n            collection.last_collected_at AS \"last_collected_at?\",\n            i.total_price::float8 AS \"total_price!\",\n            i.gift_card_redeemed::float8 AS \"gift_card_redeemed!\",\n            balance.amount_credited::float8 AS \"amount_credited!\",\n            balance.cash_refunded::float8 AS \"cash_refunded!\",\n            balance.gift_card_refunded::float8 AS \"gift_card_refunded!\",\n            balance.balance_due::float8 AS \"balance_due!\",\n            balance.refund_due::float8 AS \"refund_due!\",\n            (EXISTS(SELECT 1 FROM invoice_returns WHERE invoice_id = i.id)\n             OR EXISTS(SELECT 1 FROM invoice_refunds WHERE invoice_id = i.id)) AS \"has_adjustments!\",\n            -- The `?` suffixes are for sqlx: it reads nullability off the\n            -- column definition, which says NOT NULL, and can't see that a\n            -- LEFT JOIN may not match.\n            b.name AS \"branch_name?\",\n            c.name AS \"buyer_name?\",\n            c.mobile_no AS \"buyer_mobile_no?\",\n            c.address AS \"buyer_address?\"\n        FROM invoices i\n        LEFT JOIN branch b ON b.id = i.branch_id\n        LEFT JOIN customers c ON c.id = i.customer_id\n        LEFT JOIN LATERAL (\n            SELECT count(*) FILTER (WHERE oc.outcome <> 'cancelled') AS order_count,\n                   count(*) FILTER (WHERE status = 'collected') AS collected_order_count,\n                   max(collected_at) AS last_collected_at\n            FROM orders o JOIN order_outcomes oc ON oc.order_id = o.id WHERE o.invoice_id = i.id\n        ) collection ON true\n        LEFT JOIN invoice_balances balance ON balance.invoice_id = i.id\n        LEFT JOIN LATERAL (\n            SELECT payment_type\n            FROM invoice_payments\n            WHERE invoice_id = i.id\n            ORDER BY paid_at DESC, id DESC\n            LIMIT 1\n        ) method ON true\n        WHERE i.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "invoice_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "invoice_date",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "target_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 4,
+        "name": "urgent_charge!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "collection_method",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "discount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 8,
+        "name": "discount_unit",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "amount_paid!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 10,
+        "name": "payment_status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "payment_method?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "collected!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 13,
+        "name": "order_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 14,
+        "name": "collected_order_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 15,
+        "name": "last_collected_at?",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 16,
+        "name": "total_price!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 17,
+        "name": "gift_card_redeemed!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 18,
+        "name": "amount_credited!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 19,
+        "name": "cash_refunded!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 20,
+        "name": "gift_card_refunded!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 21,
+        "name": "balance_due!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 22,
+        "name": "refund_due!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 23,
+        "name": "has_adjustments!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 24,
+        "name": "branch_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 25,
+        "name": "buyer_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 26,
+        "name": "buyer_mobile_no?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 27,
+        "name": "buyer_address?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null,
+      false,
+      false,
+      null,
+      false,
+      null,
+      true,
+      true,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "738e2086b007938a0e0fd3ef60e98c988dedf3705cc77ab3e8073a106acca813"
+}

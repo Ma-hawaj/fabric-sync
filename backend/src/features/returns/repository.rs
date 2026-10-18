@@ -8,7 +8,7 @@ pub async fn returnable_total(
 ) -> Result<f64, sqlx::Error> {
     sqlx::query_scalar!(
         r#"
-        SELECT (i.total_price - COALESCE((
+        SELECT (i.total_price - i.urgent_charge - COALESCE((
             SELECT SUM(line_total) FROM invoice_items
             WHERE invoice_id = i.id AND kind = 'gift_card'
         ), 0))::float8 AS "total!" FROM invoices i WHERE i.id = $1
@@ -55,18 +55,18 @@ pub async fn returnable_lines(
                sold.description AS "description!", sold.quantity::float8 AS "quantity!",
                COALESCE(ret.quantity, 0)::float8 AS "returned_quantity!",
                COALESCE(ret.amount, 0)::float8 AS "credited_amount!",
-               sold.line_total::float8 AS "line_total!", sold.collected AS "collected!",
+               sold.line_total::float8 AS "line_total!", sold.urgent_charge::float8 AS "urgent_charge!", sold.collected AS "collected!",
                COALESCE(b.is_active AND b.holds_stock, false) AS "can_restock!",
                0::float8 AS "credit_limit!", sold.product_id AS "product_id?",
-               sold.branch_id AS "branch_id?"
+               sold.branch_id AS "branch_id?", sold.outcome AS "outcome!"
         FROM (
             SELECT o.id AS line_id, 'order' AS kind,
                    'Order #' || o.order_number AS description, 1::numeric AS quantity,
-                   o.price AS line_total, o.status = 'received' AS collected,
-                   NULL::uuid AS product_id, NULL::uuid AS branch_id
-            FROM orders o WHERE o.invoice_id = $1
+                   o.price AS line_total, o.urgent_charge, o.status = 'collected' AS collected,
+                   NULL::uuid AS product_id, NULL::uuid AS branch_id, oc.outcome
+            FROM orders o JOIN order_outcomes oc ON oc.order_id = o.id WHERE o.invoice_id = $1
             UNION ALL
-            SELECT id, 'product', description, quantity, line_total, true, product_id, branch_id
+            SELECT id, 'product', description, quantity, line_total, 0::numeric, true, product_id, branch_id, 'active'
             FROM invoice_items WHERE invoice_id = $1 AND kind = 'product'
         ) sold
         LEFT JOIN branch b ON b.id = sold.branch_id
@@ -90,9 +90,9 @@ pub async fn history(
     sqlx::query_as!(
         ReturnRecord,
         r#"
-        SELECT r.id, r.reason, r.amount::float8 AS "amount!", r.created_at, r.created_by,
+        SELECT r.id, r.reason, r.kind, r.amount::float8 AS "amount!", r.created_at, r.created_by,
                (SELECT jsonb_agg(jsonb_build_object(
-                   'description', l.description, 'quantity', l.quantity::float8,
+                   'lineId', COALESCE(l.order_id, l.item_id), 'description', l.description, 'quantity', l.quantity::float8,
                    'amount', l.amount::float8, 'restocked', l.restocked
                ) ORDER BY l.id) FROM invoice_return_lines l WHERE l.return_id = r.id)
                AS "lines!: sqlx::types::Json<Vec<ReturnedLine>>"
@@ -112,7 +112,7 @@ pub async fn refunds(
         RefundRecord,
         r#"
         SELECT r.id, r.reason, r.amount::float8 AS "amount!", r.payment_type,
-               g.code AS "gift_card_code?", r.created_at, r.created_by
+               g.code AS "gift_card_code?", r.created_at, r.created_by, r.adjustment_id
         FROM invoice_refunds r LEFT JOIN gift_cards g ON g.id = r.gift_card_id
         WHERE r.invoice_id = $1 ORDER BY r.created_at, r.id
         "#,
@@ -223,11 +223,12 @@ pub async fn insert_refund(
     input: &CreateRefundInput,
     payload: serde_json::Value,
     actor: &str,
+    adjustment_id: Option<Uuid>,
 ) -> Result<Uuid, sqlx::Error> {
     sqlx::query_scalar!(
         r#"
-        INSERT INTO invoice_refunds (invoice_id, request_id, request_payload, reason, amount, payment_type, gift_card_id, created_by)
-        VALUES ($1, $2, $3, $4, $5::float8, $6, $7, $8) RETURNING id
+        INSERT INTO invoice_refunds (invoice_id, request_id, request_payload, reason, amount, payment_type, gift_card_id, created_by, adjustment_id)
+        VALUES ($1, $2, $3, $4, $5::float8, $6, $7, $8, $9) RETURNING id
         "#,
         invoice_id,
         input.request_id,
@@ -237,6 +238,7 @@ pub async fn insert_refund(
         input.payment_type.as_str(),
         input.gift_card_id,
         actor,
+        adjustment_id,
     )
     .fetch_one(&mut **tx)
     .await
@@ -255,4 +257,83 @@ pub async fn has_adjustments(
     )
     .fetch_one(&mut **tx)
     .await?)
+}
+
+pub async fn order_outcome(
+    tx: &mut sqlx::PgTransaction<'_>,
+    order_id: Uuid,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT outcome AS "outcome!" FROM order_outcomes WHERE order_id = $1"#,
+        order_id
+    )
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+pub async fn readiness_status(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar("SELECT readiness_status FROM invoice_readiness WHERE invoice_id = $1")
+        .bind(invoice_id)
+        .fetch_one(&mut **tx)
+        .await
+}
+
+pub async fn advance_readiness_generation(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE invoices SET readiness_generation = readiness_generation + 1 WHERE id = $1",
+    )
+    .bind(invoice_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+pub async fn cancellation_details(
+    tx: &mut sqlx::PgTransaction<'_>,
+    order_id: Uuid,
+) -> Result<Option<CancellationDetails>, sqlx::Error> {
+    sqlx::query_as!(CancellationDetails, r#"
+        SELECT o.id AS order_id, o.invoice_id, o.status, oc.outcome AS "outcome!",
+               (EXISTS(SELECT 1 FROM order_stage_progress p JOIN order_stages s ON s.id = p.stage_id
+                       WHERE p.order_id = o.id AND p.status = 'done' AND NOT s.requires_delivery)
+                OR EXISTS(SELECT 1 FROM order_repairs WHERE order_id = o.id)) AS "production_started!",
+               o.material_source, o.material_amount::float8 AS "material_amount!",
+               COALESCE(o.material_source = 'shop' AND b.is_active AND b.holds_stock, false) AS "can_restore_material!",
+               b.name AS "stock_location?", o.material_id, o.material_stock_branch_id AS stock_branch_id
+        FROM orders o JOIN order_outcomes oc ON oc.order_id = o.id
+        LEFT JOIN branch b ON b.id = o.material_stock_branch_id
+        WHERE o.id = $1
+        "#, order_id).fetch_optional(&mut **tx).await
+}
+
+pub async fn insert_cancellation(
+    tx: &mut sqlx::PgTransaction<'_>,
+    details: &CancellationDetails,
+    input: &CreateCancellationInput,
+    payload: serde_json::Value,
+    amount: f64,
+    actor: &str,
+) -> Result<Uuid, sqlx::Error> {
+    let id = sqlx::query_scalar!(r#"
+        INSERT INTO invoice_returns (invoice_id, request_id, request_payload, reason, amount, created_by, kind)
+        VALUES ($1, $2, $3, $4, $5::float8, $6, 'cancellation') RETURNING id
+        "#, details.invoice_id, input.request_id, payload, input.reason.trim(), amount, actor)
+        .fetch_one(&mut **tx).await?;
+    let stock_branch_id = (input.restored_material_quantity > 0.0)
+        .then_some(details.stock_branch_id)
+        .flatten();
+    sqlx::query!(r#"
+        INSERT INTO order_cancellations (order_id, adjustment_id, retained_charge, restored_material_quantity,
+            stock_branch_id, work_charge_confirmed, unused_material_confirmed)
+        VALUES ($1, $2, $3::float8, $4::float8, $5, $6, $7)
+        "#, details.order_id, id, input.retained_charge, input.restored_material_quantity,
+        stock_branch_id, input.work_charge_confirmed, input.unused_material_confirmed)
+        .execute(&mut **tx).await?;
+    Ok(id)
 }

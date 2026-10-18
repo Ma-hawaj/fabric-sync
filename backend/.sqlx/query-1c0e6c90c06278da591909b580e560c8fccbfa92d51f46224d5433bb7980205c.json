@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO invoice_refunds (invoice_id, request_id, request_payload, reason, amount, payment_type, gift_card_id, created_by)\n        VALUES ($1, $2, $3, $4, $5::float8, $6, $7, $8) RETURNING id\n        ",
+  "query": "\n        INSERT INTO invoice_refunds (invoice_id, request_id, request_payload, reason, amount, payment_type, gift_card_id, created_by, adjustment_id)\n        VALUES ($1, $2, $3, $4, $5::float8, $6, $7, $8, $9) RETURNING id\n        ",
   "describe": {
     "columns": [
       {
@@ -18,12 +18,13 @@
         "Float8",
         "Text",
         "Uuid",
-        "Text"
+        "Text",
+        "Uuid"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "74a148674a316054cf5b38af079f744687e750cf16c6e824fccf39bba3131c2f"
+  "hash": "1c0e6c90c06278da591909b580e560c8fccbfa92d51f46224d5433bb7980205c"
 }

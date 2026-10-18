@@ -168,6 +168,7 @@ pub async fn reopen(
     let invoice_id = invoice_for_order(db, order_id).await?;
     let mut tx = db.begin().await?;
     repository::lock_invoice(&mut tx, invoice_id).await?;
+    crate::features::returns::service::ensure_order_active(&mut tx, order_id).await?;
     if !repository::reopen(&mut tx, order_id).await? {
         return Err(AppError::Conflict(
             "Only a ready, uncollected order can be reopened.".into(),

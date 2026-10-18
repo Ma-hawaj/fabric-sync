@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT r.id, r.reason, r.kind, r.amount::float8 AS \"amount!\", r.created_at, r.created_by,\n               (SELECT jsonb_agg(jsonb_build_object(\n                   'lineId', COALESCE(l.order_id, l.item_id), 'description', l.description, 'quantity', l.quantity::float8,\n                   'amount', l.amount::float8, 'restocked', l.restocked\n               ) ORDER BY l.id) FROM invoice_return_lines l WHERE l.return_id = r.id)\n               AS \"lines!: sqlx::types::Json<Vec<ReturnedLine>>\"\n        FROM invoice_returns r WHERE r.invoice_id = $1 ORDER BY r.created_at, r.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "lines!: sqlx::types::Json<Vec<ReturnedLine>>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "d2aaf43f60e9b6d16ccea54b822895e7aa5473a6c1fb439ac072b0c893a7111f"
+}

@@ -214,6 +214,7 @@ pub async fn record_payment(
                 "order {order_id} not found on invoice {invoice_id}"
             )));
         }
+        crate::features::returns::service::ensure_order_active(&mut tx, order_id).await?;
     }
 
     let balance = returns_repository::settlement(&mut tx, invoice_id).await?;

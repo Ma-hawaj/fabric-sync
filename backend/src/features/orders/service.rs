@@ -398,6 +398,13 @@ fn assemble_order(
         is_urgent: row.is_urgent,
         urgent_charge: row.urgent_charge,
         status: row.status,
+        outcome: row.outcome,
+        closure_reason: row.closure_reason,
+        closed_at: row.closed_at,
+        closed_by: row.closed_by,
+        credit_amount: row.credit_amount,
+        retained_charge: row.retained_charge,
+        restored_material_quantity: row.restored_material_quantity,
         collected_at: row.collected_at,
         ready_at: row.ready_at,
         ready_by: row.ready_by,
@@ -566,6 +573,7 @@ pub async fn collect_order(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
 
+    crate::features::returns::service::ensure_order_active(&mut tx, order_id).await?;
     if locked.status == "collected" {
         return Err(AppError::BadRequest(
             "this order is already collected".to_string(),
@@ -609,12 +617,31 @@ pub async fn collect_order(
     load_order(state, order_id).await
 }
 
+async fn active_order_transaction(
+    state: &AppState,
+    order_id: Uuid,
+) -> Result<sqlx::PgTransaction<'static>, AppError> {
+    let order = repository::get_order(state, order_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
+    let mut tx = state.db().begin().await?;
+    crate::features::invoices::repository::lock_invoice(&mut tx, order.invoice_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("invoice {} not found", order.invoice_id)))?;
+    repository::lock_order(&mut tx, order_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
+    crate::features::returns::service::ensure_order_active(&mut tx, order_id).await?;
+    Ok(tx)
+}
+
 pub async fn update_order(
     state: &AppState,
     order_id: Uuid,
     input: UpdateOrderInput,
 ) -> Result<OrderListItem, AppError> {
-    repository::update_order(state, order_id, input.production_location_id)
+    let mut tx = active_order_transaction(state, order_id).await?;
+    repository::update_order(&mut tx, order_id, input.production_location_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
 
@@ -623,6 +650,8 @@ pub async fn update_order(
         production_location_id = ?input.production_location_id,
         "order production location updated"
     );
+
+    tx.commit().await?;
 
     load_order(state, order_id).await
 }
@@ -654,8 +683,7 @@ pub async fn set_stage(
         &single_location_materials,
     );
 
-    let mut tx = state.db().begin().await?;
-    super::readiness_repository::lock_invoice(&mut tx, order.invoice_id).await?;
+    let mut tx = active_order_transaction(state, order_id).await?;
     let (current_production, current_receiving) =
         super::readiness_repository::locations(&mut tx, order_id).await?;
     let effective_production_id = current_production.or(effective_production_id);
@@ -729,15 +757,20 @@ pub async fn set_assignee(
         )));
     }
 
-    match input.assignee_id {
-        Some(assignee_id) => {
-            let users = users::service::list_users(state).await?;
-            let user = users
-                .iter()
+    let assignee = match input.assignee_id {
+        Some(assignee_id) => Some(
+            users::service::list_users(state)
+                .await?
+                .into_iter()
                 .find(|user| user.id == assignee_id)
-                .ok_or_else(|| AppError::BadRequest(format!("unknown user {assignee_id}")))?;
-
-            repository::set_assignee(state, order_id, stage_id, &user.id, &user.name).await?;
+                .ok_or_else(|| AppError::BadRequest(format!("unknown user {assignee_id}")))?,
+        ),
+        None => None,
+    };
+    let mut tx = active_order_transaction(state, order_id).await?;
+    match assignee {
+        Some(user) => {
+            repository::set_assignee(&mut tx, order_id, stage_id, &user.id, &user.name).await?;
 
             tracing::info!(
                 order_id = %order_id,
@@ -748,7 +781,7 @@ pub async fn set_assignee(
             );
         }
         None => {
-            repository::clear_assignee(state, order_id, stage_id).await?;
+            repository::clear_assignee(&mut tx, order_id, stage_id).await?;
 
             tracing::info!(
                 order_id = %order_id,
@@ -757,6 +790,8 @@ pub async fn set_assignee(
             );
         }
     }
+
+    tx.commit().await?;
 
     load_order(state, order_id).await
 }
@@ -776,7 +811,7 @@ pub async fn create_repair(
     let reason = normalized_reason(&input.reason)?;
     validate_charge(input.charge)?;
 
-    let mut tx = state.db().begin().await?;
+    let mut tx = active_order_transaction(state, order_id).await?;
     let repair_id = repository::create_repair(
         &mut tx,
         order_id,
@@ -828,7 +863,7 @@ pub async fn update_repair(
         .status
         .and_then(|status| repair_completion_time(status, Utc::now()));
 
-    let mut tx = state.db().begin().await?;
+    let mut tx = active_order_transaction(state, order_id).await?;
     let locked = repository::lock_repair(&mut tx, repair_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("repair {repair_id} not found")))?;
@@ -882,7 +917,7 @@ pub async fn receive_repair(
         )));
     }
 
-    let mut tx = state.db().begin().await?;
+    let mut tx = active_order_transaction(state, order_id).await?;
     let locked = repository::lock_repair(&mut tx, repair_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("repair {repair_id} not found")))?;
@@ -941,7 +976,7 @@ pub async fn set_repair_measurement(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
 
-    let mut tx = state.db().begin().await?;
+    let mut tx = active_order_transaction(state, order_id).await?;
     let measurement_id =
         save_repair_measurement(&mut tx, context.customer_id, repair_id, &measurement).await?;
     tx.commit().await?;
@@ -1630,6 +1665,38 @@ mod repair_collection_tests {
     use super::*;
     use crate::test_support;
     use sqlx::PgPool;
+
+    #[sqlx::test]
+    async fn cancelled_orders_block_repair_collection_and_measurement_fixes(db: PgPool) {
+        let (_, orders, _, _) = test_support::invoice(&db, 1, false).await;
+        let order_id = orders[0];
+        let repair_id: Uuid = sqlx::query_scalar("INSERT INTO order_repairs(order_id,reason,status) VALUES($1,'Fit adjustment','completed') RETURNING id")
+            .bind(order_id).fetch_one(&db).await.unwrap();
+        let state = test_support::state(db.clone(), None, None).await;
+        crate::features::returns::service::cancel_order(&state,order_id,serde_json::from_value(serde_json::json!({
+            "requestId":Uuid::new_v4(),"reason":"Customer cancellation","workChargeConfirmed":true
+        })).unwrap(),"staff").await.unwrap();
+        assert!(matches!(
+            receive_repair(&state, order_id, repair_id, 0.0, None).await,
+            Err(AppError::BadRequest(_))
+        ));
+        let measurement = serde_json::from_value(
+            serde_json::json!({"date":"2026-10-23","type":"body","fit":"medium","chest":52}),
+        )
+        .unwrap();
+        assert!(matches!(
+            set_repair_measurement(&state, order_id, repair_id, measurement).await,
+            Err(AppError::BadRequest(_))
+        ));
+        let saved: (String, Option<Uuid>, Option<DateTime<Utc>>) = sqlx::query_as(
+            "SELECT status,fixed_measurement_id,received_at FROM order_repairs WHERE id=$1",
+        )
+        .bind(repair_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(saved, ("completed".into(), None, None));
+    }
 
     #[sqlx::test]
     async fn collected_repairs_keep_their_status_and_original_payment(db: PgPool) {

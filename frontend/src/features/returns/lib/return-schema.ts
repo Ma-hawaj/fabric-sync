@@ -1,6 +1,13 @@
 import { z } from 'zod'
 import type { NumberInput } from '@/features/invoices/types/invoice-form'
 import type { ReturnableLine, ReturnContext } from '../types/returns'
+import {
+  adjustmentSummary,
+  createRefundSettings,
+  refundFields,
+  validateRefundSettings,
+} from './refund-plan'
+import type { RefundSettings } from './refund-plan'
 
 const cents = (value: number) => Math.round(value * 100)
 const twoDecimals = (value: number) =>
@@ -11,7 +18,12 @@ export function remainingQuantity(line: ReturnableLine) {
 }
 
 export function eligibleLines(lines: ReturnableLine[]) {
-  return lines.filter((line) => line.collected && remainingQuantity(line) > 0)
+  return lines.filter(
+    (line) =>
+      line.outcome === 'active' &&
+      line.collected &&
+      remainingQuantity(line) > 0,
+  )
 }
 
 export function previewCredit(line: ReturnableLine, quantity: number) {
@@ -22,25 +34,33 @@ export function previewCredit(line: ReturnableLine, quantity: number) {
   return (Number(target) - cents(line.creditedAmount)) / 100
 }
 
-interface ReturnFormValues {
+interface ReturnFormValues extends RefundSettings {
   reason: string
   lines: { lineId: string; quantity: NumberInput; restock: boolean }[]
 }
 
-export function createReturnForm(lines: ReturnableLine[]): ReturnFormValues {
+export function createReturnForm(
+  lines: ReturnableLine[],
+  orderId?: string,
+): ReturnFormValues {
   return {
     reason: '',
-    lines: eligibleLines(lines).map((line) => ({
-      lineId: line.lineId,
-      quantity: '',
-      restock: false,
-    })),
+    ...createRefundSettings(),
+    lines: eligibleLines(lines)
+      .filter((line) => !orderId || line.lineId === orderId)
+      .map((line) => ({
+        lineId: line.lineId,
+        quantity: orderId ? 1 : '',
+        restock: false,
+      })),
   }
 }
 
-export function returnSchema(lines: ReturnableLine[]) {
+export function returnSchema(context: ReturnContext) {
+  const lines = context.lines
   return z
     .object({
+      ...refundFields,
       reason: z
         .string()
         .trim()
@@ -63,6 +83,7 @@ export function returnSchema(lines: ReturnableLine[]) {
         const line = lines.find((entry) => entry.lineId === item.lineId)
         const valid =
           line &&
+          line.outcome === 'active' &&
           line.collected &&
           !seen.has(item.lineId) &&
           item.quantity > 0 &&
@@ -90,7 +111,33 @@ export function returnSchema(lines: ReturnableLine[]) {
           path: ['lines'],
           message: 'Select at least one item to return.',
         })
+      const credit = returnCredit(context.lines, value.lines)
+      validateRefundSettings(
+        context,
+        adjustmentSummary(context, credit).refundDue,
+        value,
+        ctx,
+      )
     })
+}
+
+export function returnCredit(
+  lines: ReturnableLine[],
+  items: ReturnFormValues['lines'],
+) {
+  const total = items.reduce((sum, item) => {
+    const line = lines.find((entry) => entry.lineId === item.lineId)
+    return (
+      sum +
+      (line &&
+      item.quantity !== '' &&
+      item.quantity > 0 &&
+      item.quantity <= remainingQuantity(line)
+        ? Math.round(previewCredit(line, item.quantity) * 100)
+        : 0)
+    )
+  }, 0)
+  return total / 100
 }
 
 export function refundLimit(context: ReturnContext, destination: string) {
