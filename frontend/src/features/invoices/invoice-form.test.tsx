@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { InvoiceFormPage } from './invoice-form'
 
@@ -18,6 +18,32 @@ function renderPage() {
 }
 
 describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
+  it('shows a missing target date error for urgent invoices and clears it for regular invoices', async () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('radio', { name: 'Urgent' }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    })
+
+    expect(
+      await screen.findByText('Pick a target date for urgent invoices.'),
+    ).toBeTruthy()
+    expect(
+      screen
+        .getByLabelText('Target Date (required)')
+        .getAttribute('aria-invalid'),
+    ).toBe('true')
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Regular' }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    })
+    await waitFor(() => {
+      expect(
+        screen.queryByText('Pick a target date for urgent invoices.'),
+      ).toBeNull()
+    })
+  })
   it('shows the zod error inline on the field and a banner, blocking submit', async () => {
     renderPage()
 

@@ -317,6 +317,13 @@ export const invoiceFormSchema = z
         path: ['urgentCharge'],
       })
     }
+    if (value.isUrgent && !value.targetDate) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick a target date for urgent invoices.',
+        path: ['targetDate'],
+      })
+    }
     const hasOrders = value.customers.some(
       (customer) => customer.orders.length > 0,
     )

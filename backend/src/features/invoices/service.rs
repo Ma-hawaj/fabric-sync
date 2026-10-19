@@ -456,6 +456,11 @@ fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
 }
 
 fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
+    if input.is_urgent && input.target_date.is_none() {
+        return Err(AppError::BadRequest(
+            "urgent invoices need a target date".to_string(),
+        ));
+    }
     if !input.urgent_charge.is_finite()
         || (input.is_urgent && round2(input.urgent_charge) <= 0.0)
         || (!input.is_urgent && input.urgent_charge != 0.0)
@@ -713,6 +718,22 @@ mod tests {
         assert!(validate(&invoice).is_ok());
         invoice.is_urgent = false;
         assert!(validate(&invoice).is_err());
+    }
+
+    #[test]
+    fn urgency_requires_a_target_date_but_regular_invoices_can_omit_it() {
+        let mut invoice = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
+        let target_date = invoice.target_date;
+        invoice.target_date = None;
+        assert!(validate(&invoice).is_ok());
+
+        invoice.is_urgent = true;
+        invoice.urgent_charge = 10.0;
+        let error = validate(&invoice).unwrap_err();
+        assert!(matches!(error, AppError::BadRequest(message) if message.contains("target date")));
+
+        invoice.target_date = target_date;
+        assert!(validate(&invoice).is_ok());
     }
 
     #[test]

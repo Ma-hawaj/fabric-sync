@@ -62,6 +62,24 @@ function firstError(customers: InvoiceCustomerDraft[]) {
 }
 
 describe('invoiceFormSchema', () => {
+  it('requires a target date only for urgent invoices', () => {
+    const input = values({
+      products: [validProductLine()],
+      productBranch: 'loc-1',
+    })
+    const targetDate = input.targetDate
+    input.targetDate = ''
+    expect(firstErrorFor(input)).toBeNull()
+
+    input.isUrgent = true
+    input.urgentCharge = 10
+    const issue = firstErrorFor(input)
+    expect(issue?.path).toEqual(['targetDate'])
+    expect(issue?.message).toMatch(/target date.*urgent/i)
+
+    input.targetDate = targetDate
+    expect(firstErrorFor(input)).toBeNull()
+  })
   it('requires a positive urgent charge and allows payments covering the surcharge', () => {
     for (const urgentCharge of ['', 0, -1, 0.004] as const) {
       const issue = firstErrorFor(

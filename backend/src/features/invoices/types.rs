@@ -183,8 +183,9 @@ pub struct CreateInvoiceInput {
     pub urgent_charge: f64,
     #[serde(default)]
     pub collection_method: CollectionMethod,
-    /// When the garment is promised for. Optional and staff-editable — this
-    /// is what the form's date picker writes. The invoice's own date
+    /// When the garment is promised for. Required for urgent invoices,
+    /// optional otherwise, and staff-editable — this is what the form's
+    /// date picker writes. The invoice's own date
     /// (`invoice_date`) is server-set at creation and never taken from input.
     #[serde(default)]
     pub target_date: Option<NaiveDate>,

@@ -137,12 +137,15 @@ describe('InvoiceSummary', () => {
     expect(
       screen.getByLabelText(`Urgent charge (${CURRENCY}, incl. VAT)`),
     ).toBeTruthy()
+    expect(screen.getByLabelText('Target Date (required)')).toBeTruthy()
     fireEvent.click(screen.getByRole('radio', { name: 'Regular' }))
+    expect(screen.getByLabelText('Target Date (optional)')).toBeTruthy()
     expect(rowValue('Total')).toBe(`${CURRENCY} 100.00`)
     expect(
       screen.queryByLabelText(`Urgent charge (${CURRENCY}, incl. VAT)`),
     ).toBeNull()
     fireEvent.click(screen.getByRole('radio', { name: 'Urgent' }))
+    expect(screen.getByLabelText('Target Date (required)')).toBeTruthy()
     expect(rowValue('Total')).toBe(`${CURRENCY} 100.00`)
   })
   it('extracts VAT from order line items instead of adding it', () => {

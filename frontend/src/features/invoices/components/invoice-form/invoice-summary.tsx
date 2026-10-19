@@ -162,6 +162,11 @@ export function InvoiceSummary({
                   field.handleChange(value === 'Urgent')
                   if (value === 'Regular')
                     form.setFieldValue('urgentCharge', '')
+                  // Priority changes the date and charge requirements. Refresh
+                  // their existing submit errors even if neither field changed.
+                  if (form.state.submissionAttempts > 0) {
+                    void form.validate('submit')
+                  }
                 }}
                 columns={2}
               />
@@ -182,12 +187,18 @@ export function InvoiceSummary({
       </form.Subscribe>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <DateField
-          form={form}
-          name="targetDate"
-          label="Target Date (optional)"
-          placeholder="Pick a target date"
-        />
+        <form.Subscribe selector={(state: any) => state.values.isUrgent}>
+          {(isUrgent: boolean) => (
+            <DateField
+              form={form}
+              name="targetDate"
+              label={
+                isUrgent ? 'Target Date (required)' : 'Target Date (optional)'
+              }
+              placeholder="Pick a target date"
+            />
+          )}
+        </form.Subscribe>
         <form.Field name={'receivingBranch' as never}>
           {(field: any) => (
             <div className="space-y-2">

@@ -93,8 +93,8 @@ export interface InvoiceFormValues {
   urgentCharge: NumberInput
   collectionMethod: CollectionMethod
   // When the garment is promised for, if at all — blank means no committed
-  // pickup. Staff-editable; the invoice's own date is server-set at
-  // creation and never enters the form.
+  // pickup. Required for urgent invoices. Staff-editable; the invoice's own
+  // date is server-set at creation and never enters the form.
   targetDate: string
   receivingBranch: string
   // Who a sale with no tailoring orders is billed to; a tailoring invoice
