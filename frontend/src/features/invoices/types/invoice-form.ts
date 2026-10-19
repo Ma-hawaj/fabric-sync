@@ -2,6 +2,8 @@ import type { ReactFormExtendedApi } from '@tanstack/react-form'
 import { createEmptyMeasurement } from '@/features/customers/types/measurement-form'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 
+export type CollectionMethod = 'delivery' | 'pickup'
+
 export type CustomerMode = 'existing' | 'new'
 export type PaymentType = 'benefit' | 'cash' | 'card'
 // A flat amount in the business currency, or a percentage of the subtotal —
@@ -45,6 +47,7 @@ export interface InvoiceCustomerDraft {
   // mode: 'new'
   name: string
   mobileNo: string
+  address: string
 
   measurement: MeasurementDraft
   orders: InvoiceOrderDraft[]
@@ -86,6 +89,9 @@ export interface PaymentDraft {
 }
 
 export interface InvoiceFormValues {
+  isUrgent: boolean
+  urgentCharge: NumberInput
+  collectionMethod: CollectionMethod
   // When the garment is promised for, if at all — blank means no committed
   // pickup. Staff-editable; the invoice's own date is server-set at
   // creation and never enters the form.
@@ -152,6 +158,7 @@ export function createEmptyCustomer(): InvoiceCustomerDraft {
     existingCustomerId: '',
     name: '',
     mobileNo: '',
+    address: '',
     measurement: createEmptyMeasurement(),
     orders: [createEmptyOrder()],
   }
@@ -165,6 +172,9 @@ export function createEmptyInvoiceForm(): InvoiceFormValues {
     // never records when the invoice was opened (the backend stamps that
     // itself).
     targetDate: '',
+    isUrgent: false,
+    urgentCharge: '',
+    collectionMethod: 'pickup',
     receivingBranch: '',
     customerId: '',
     productBranch: '',

@@ -71,12 +71,15 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         gift_card_sales,
         invoice.discount,
         discount_unit,
+        invoice.urgent_charge,
     );
 
     let payments = repository::list_payments(state, invoice_id).await?;
 
     Ok(InvoiceDetail {
         readiness: crate::features::orders::readiness::summary(state.db(), invoice_id).await?,
+        is_urgent: invoice.is_urgent,
+        collection_method: invoice.collection_method,
         id: invoice.id,
         invoice_number: invoice.invoice_number,
         date: invoice.date,
@@ -94,6 +97,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         redemptions: rows.redemptions,
         payments,
         totals: InvoiceTotalsBreakdown {
+            urgent_charge: invoice.urgent_charge,
             subtotal: totals.subtotal,
             discount: invoice.discount,
             discount_unit: invoice.discount_unit,
@@ -347,6 +351,7 @@ fn breakdown(
     gift_card_sales: f64,
     discount: f64,
     discount_unit: DiscountUnit,
+    urgent_charge: f64,
 ) -> Breakdown {
     let subtotal = round2(taxable_gross);
 
@@ -357,7 +362,8 @@ fn breakdown(
     // A discount bigger than the sale doesn't turn into a refund.
     .min(subtotal);
 
-    let gross = round2(subtotal - discount_amount);
+    // Urgency is an extra VAT-inclusive service charge, added after discounts.
+    let gross = round2(subtotal - discount_amount + round2(urgent_charge));
     let taxable = round2(gross / (1.0 + VAT_RATE));
     let vat = round2(gross - taxable);
     let gift_card_sales = round2(gift_card_sales);
@@ -401,6 +407,7 @@ fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
         gift_card_sales,
         input.discount,
         input.discount_unit,
+        input.urgent_charge,
     );
 
     InvoiceTotals {
@@ -449,6 +456,15 @@ fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
 }
 
 fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
+    if !input.urgent_charge.is_finite()
+        || (input.is_urgent && round2(input.urgent_charge) <= 0.0)
+        || (!input.is_urgent && input.urgent_charge != 0.0)
+    {
+        return Err(AppError::BadRequest(
+            "urgent invoices need a positive extra charge; regular invoices cannot have one"
+                .to_string(),
+        ));
+    }
     let has_orders = input
         .customers
         .iter()
@@ -556,6 +572,7 @@ async fn resolve_customer_id(
             &new_customer.name,
             &new_customer.mobile_no,
             true,
+            new_customer.address.as_deref(),
         )
         .await?),
         // Already rejected by validate().
@@ -670,6 +687,46 @@ mod tests {
     }
 
     #[test]
+    fn urgency_adds_a_taxable_charge_after_the_discount() {
+        let mut invoice = invoice(10.0, "percent", vec![customer(vec![order(100.0)])]);
+        invoice.is_urgent = true;
+        invoice.urgent_charge = 20.0;
+        assert!(validate(&invoice).is_ok());
+        assert_eq!(compute_totals(&invoice).total, 110.0);
+        let totals = breakdown(100.0, 50.0, 10.0, DiscountUnit::Percent, 20.0);
+        assert_eq!(totals.taxable, 100.0);
+        assert_eq!(totals.vat, 10.0);
+        assert_eq!(totals.total, 160.0);
+    }
+
+    #[test]
+    fn urgency_requires_a_positive_charge_and_regular_invoices_have_none() {
+        let mut invoice = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
+        assert!(!invoice.is_urgent);
+        assert_eq!(invoice.collection_method.as_str(), "pickup");
+        invoice.is_urgent = true;
+        for charge in [0.0, -1.0, 0.004, f64::NAN, f64::INFINITY] {
+            invoice.urgent_charge = charge;
+            assert!(validate(&invoice).is_err(), "{charge}");
+        }
+        invoice.urgent_charge = 0.01;
+        assert!(validate(&invoice).is_ok());
+        invoice.is_urgent = false;
+        assert!(validate(&invoice).is_err());
+    }
+
+    #[test]
+    fn collection_method_accepts_only_delivery_or_pickup() {
+        use super::super::types::CollectionMethod;
+        for method in ["delivery", "pickup"] {
+            let parsed: CollectionMethod =
+                serde_json::from_value(serde_json::json!(method)).unwrap();
+            assert_eq!(parsed.as_str(), method);
+        }
+        assert!(serde_json::from_value::<CollectionMethod>(serde_json::json!("courier")).is_err());
+    }
+
+    #[test]
     fn line_prices_are_gross_so_no_vat_is_added_on_top() {
         let input = invoice(
             0.0,
@@ -763,7 +820,7 @@ mod tests {
     // the extracted VAT always sum back to the discounted gross.
     #[test]
     fn the_breakdown_splits_the_discounted_gross_into_net_and_vat() {
-        let totals = breakdown(133.33, 0.0, 7.5, DiscountUnit::Percent);
+        let totals = breakdown(133.33, 0.0, 7.5, DiscountUnit::Percent, 0.0);
         assert_eq!(totals.subtotal, 133.33);
         assert_eq!(totals.discount_amount, 10.0);
         // 123.33 gross deflates to a 112.12 net with 11.21 of VAT inside it.
@@ -781,7 +838,7 @@ mod tests {
     fn the_breakdown_reports_the_discount_it_actually_applied() {
         // Asking for 500 off a 100 sale discounts 100, not 500 — otherwise the
         // document would print a discount line that overshoots the subtotal.
-        let totals = breakdown(100.0, 0.0, 500.0, DiscountUnit::Amount);
+        let totals = breakdown(100.0, 0.0, 500.0, DiscountUnit::Amount, 0.0);
         assert_eq!(totals.discount_amount, 100.0);
         assert_eq!(totals.taxable, 0.0);
         assert_eq!(totals.vat, 0.0);
@@ -790,7 +847,7 @@ mod tests {
 
     #[test]
     fn gift_card_sales_stay_out_of_the_vat_base_but_inside_the_total() {
-        let totals = breakdown(100.0, 200.0, 0.0, DiscountUnit::Amount);
+        let totals = breakdown(100.0, 200.0, 0.0, DiscountUnit::Amount, 0.0);
         // 100 gross holds 90.91 of net and 9.09 of VAT; the card joins
         // the total untaxed.
         assert_eq!(totals.taxable, 90.91);
@@ -849,6 +906,7 @@ mod tests {
         invoice.customers[0].new_customer = Some(super::super::types::NewCustomerInput {
             name: "Ahmed".to_string(),
             mobile_no: "0500000000".to_string(),
+            address: None,
         });
         assert!(validate(&invoice).is_err());
     }

@@ -78,13 +78,16 @@ export const getInvoiceColumns = (
       <DataTableColumnHeader column={column} label="Invoice" />
     ),
     cell: ({ row }) => (
-      <Link
-        to="/invoices/$invoiceId"
-        params={{ invoiceId: row.original.id }}
-        className="font-mono font-medium text-info hover:underline"
-      >
-        INV-{row.getValue<number>('invoiceNumber')}
-      </Link>
+      <div className="flex items-center gap-2">
+        <Link
+          to="/invoices/$invoiceId"
+          params={{ invoiceId: row.original.id }}
+          className="font-mono font-medium text-info hover:underline"
+        >
+          INV-{row.getValue<number>('invoiceNumber')}
+        </Link>
+        {row.original.isUrgent && <Badge variant="destructive">Urgent</Badge>}
+      </div>
     ),
     enableSorting: true,
     enableColumnFilter: true,
@@ -268,6 +271,27 @@ export const getInvoiceColumns = (
       placeholder: 'Filter production...',
       variant: 'multiSelect',
       options: productionOptions,
+    },
+  },
+  {
+    accessorKey: 'collectionMethod',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Collection Method" />
+    ),
+    cell: ({ row }) => (
+      <span>
+        {row.original.collectionMethod === 'delivery' ? 'Delivery' : 'Pickup'}
+      </span>
+    ),
+    enableSorting: true,
+    enableColumnFilter: true,
+    meta: {
+      label: 'Collection Method',
+      variant: 'multiSelect',
+      options: [
+        { label: 'Delivery', value: 'delivery' },
+        { label: 'Pickup', value: 'pickup' },
+      ],
     },
   },
   {

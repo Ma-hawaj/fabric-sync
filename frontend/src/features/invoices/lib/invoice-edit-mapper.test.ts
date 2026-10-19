@@ -6,6 +6,9 @@ function editFixture(): InvoiceEdit {
   return {
     id: '0197fdd2-6a67-7000-8000-000000000001',
     invoiceNumber: 42,
+    isUrgent: false,
+    collectionMethod: 'pickup',
+    urgentCharge: 0,
     date: '2026-07-19',
     targetDate: '2026-07-26',
     branchId: '0197fdd2-6a67-7000-8000-000000000005',
@@ -93,6 +96,22 @@ function editFixture(): InvoiceEdit {
 }
 
 describe('mapInvoiceEditToForm', () => {
+  it('restores urgency, collection method, and customer addresses when editing', () => {
+    const edit = editFixture()
+    edit.isUrgent = true
+    edit.urgentCharge = 12.5
+    edit.collectionMethod = 'delivery'
+    edit.customers[0].customerAddress = 'Building 1, Road 2'
+    const { values, seeds } = mapInvoiceEditToForm(edit)
+    expect(values).toMatchObject({
+      isUrgent: true,
+      urgentCharge: 12.5,
+      collectionMethod: 'delivery',
+    })
+    expect(
+      seeds.customers.get(edit.customers[0].existingCustomerId)?.address,
+    ).toBe('Building 1, Road 2')
+  })
   it('maps the header back onto the form fields', () => {
     const { values } = mapInvoiceEditToForm(editFixture())
 

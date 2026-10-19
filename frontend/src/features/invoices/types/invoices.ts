@@ -6,6 +6,7 @@ export type PaymentType = 'benefit' | 'cash' | 'card'
 export interface InvoiceCustomer {
   name: string
   mobileNo: string
+  address?: string | null
 }
 
 // Shape of GET /invoices — one row per invoice, with its customers and
@@ -13,6 +14,9 @@ export interface InvoiceCustomer {
 // payments (the ledger); `amountPaid` is their sum and `paymentMethod` the
 // most recent one's method.
 export interface Invoice extends ReadinessFields {
+  isUrgent: boolean
+  urgentCharge: number
+  collectionMethod: 'delivery' | 'pickup'
   id: string
   invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */

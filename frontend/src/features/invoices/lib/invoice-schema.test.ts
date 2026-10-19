@@ -62,6 +62,30 @@ function firstError(customers: InvoiceCustomerDraft[]) {
 }
 
 describe('invoiceFormSchema', () => {
+  it('requires a positive urgent charge and allows payments covering the surcharge', () => {
+    for (const urgentCharge of ['', 0, -1, 0.004] as const) {
+      const issue = firstErrorFor(
+        values({
+          products: [validProductLine()],
+          productBranch: 'loc-1',
+          isUrgent: true,
+          urgentCharge,
+        }),
+      )
+      expect(issue?.path).toEqual(['urgentCharge'])
+      expect(issue?.message).toMatch(/urgent charge/i)
+    }
+    const input = values({
+      products: [validProductLine()],
+      productBranch: 'loc-1',
+      isUrgent: true,
+      urgentCharge: 10,
+      payments: [{ ...createEmptyPayment(), amount: 50, paymentType: 'cash' }],
+    })
+    expect(firstErrorFor(input)).toBeNull()
+    input.payments[0].amount = 51
+    expect(firstErrorFor(input)?.path).toEqual(['payments'])
+  })
   it('accepts customer fabric without an inventory material and requires its description', () => {
     const customer = {
       ...createEmptyCustomer(),

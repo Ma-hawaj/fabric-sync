@@ -9,6 +9,7 @@ export interface UpdateCustomerInput {
   name?: string
   mobileNo?: string
   whatsappNotificationsEnabled?: boolean
+  address?: string
 }
 
 async function updateCustomer({

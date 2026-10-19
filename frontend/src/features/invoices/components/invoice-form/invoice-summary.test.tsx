@@ -117,6 +117,34 @@ function rowValue(label: string) {
 // Line prices are gross (VAT included): a 90 order holds 81.82 of net and
 // 8.18 of VAT, and the total is the 90 quoted — never 90 plus tax.
 describe('InvoiceSummary', () => {
+  it('shows urgency in totals and removes the charge when switched to regular', () => {
+    render(
+      <Harness
+        defaultValues={baseValues({
+          customers: [customerWithOrder(100)],
+          isUrgent: true,
+          urgentCharge: 10,
+          collectionMethod: 'delivery',
+        })}
+      />,
+    )
+    expect(rowValue('Total')).toBe(`${CURRENCY} 110.00`)
+    expect(
+      screen
+        .getByRole('radio', { name: 'Delivery' })
+        .getAttribute('aria-checked'),
+    ).toBe('true')
+    expect(
+      screen.getByLabelText(`Urgent charge (${CURRENCY}, incl. VAT)`),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: 'Regular' }))
+    expect(rowValue('Total')).toBe(`${CURRENCY} 100.00`)
+    expect(
+      screen.queryByLabelText(`Urgent charge (${CURRENCY}, incl. VAT)`),
+    ).toBeNull()
+    fireEvent.click(screen.getByRole('radio', { name: 'Urgent' }))
+    expect(rowValue('Total')).toBe(`${CURRENCY} 100.00`)
+  })
   it('extracts VAT from order line items instead of adding it', () => {
     render(
       <Harness

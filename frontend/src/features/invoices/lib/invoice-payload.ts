@@ -53,7 +53,11 @@ function customerPayload(customer: InvoiceCustomerDraft) {
       customer.mode === 'existing' ? customer.existingCustomerId : null,
     newCustomer:
       customer.mode === 'new'
-        ? { name: customer.name, mobileNo: customer.mobileNo }
+        ? {
+            name: customer.name,
+            mobileNo: customer.mobileNo,
+            address: customer.address.trim(),
+          }
         : null,
     measurement: measurementPayload(customer.measurement),
     orders: customer.orders.map(orderPayload),
@@ -91,6 +95,9 @@ function redemptionPayload(redemption: GiftCardRedemptionDraft) {
 export function invoicePayload(values: InvoiceFormValues) {
   return {
     targetDate: values.targetDate || null,
+    isUrgent: values.isUrgent,
+    urgentCharge: values.isUrgent ? numberOrZero(values.urgentCharge) : 0,
+    collectionMethod: values.collectionMethod,
     branchId: values.receivingBranch || null,
     discount: numberOrZero(values.discount),
     discountUnit: values.discountUnit,

@@ -105,6 +105,7 @@ const customerDraftSchema = z
     existingCustomerId: z.string(),
     name: z.string(),
     mobileNo: z.string(),
+    address: z.string(),
     measurement: measurementDraftSchema,
     orders: z.array(orderDraftSchema).min(1, 'Add at least one order.'),
   })
@@ -290,6 +291,9 @@ export const invoiceFormSchema = z
         },
       ),
     receivingBranch: z.string(),
+    isUrgent: z.boolean(),
+    urgentCharge: numberInputSchema,
+    collectionMethod: z.enum(['delivery', 'pickup']),
     customerId: z.string(),
     productBranch: z.string(),
     discount: numberInputSchema,
@@ -301,6 +305,18 @@ export const invoiceFormSchema = z
     redemptions: z.array(redemptionDraftSchema),
   })
   .superRefine((value, ctx) => {
+    if (
+      value.isUrgent &&
+      (value.urgentCharge === '' ||
+        !Number.isFinite(value.urgentCharge) ||
+        Math.round(value.urgentCharge * 100) <= 0)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter an urgent charge greater than 0.',
+        path: ['urgentCharge'],
+      })
+    }
     const hasOrders = value.customers.some(
       (customer) => customer.orders.length > 0,
     )
@@ -360,6 +376,8 @@ export const invoiceFormSchema = z
       ),
       discount: value.discount === '' ? 0 : value.discount,
       discountUnit: value.discountUnit,
+      urgentCharge:
+        value.isUrgent && value.urgentCharge !== '' ? value.urgentCharge : 0,
       redeemed: value.redemptions.reduce(
         (sum, redemption) => sum + computeRedemptionTotal(redemption),
         0,

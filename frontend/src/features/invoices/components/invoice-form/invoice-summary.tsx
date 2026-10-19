@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { SegmentedOptions } from '@/components/form/segmented-options'
 import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
 import { ORDER_RECEIVING_FILTERS } from '@/features/locations/lib/location-filters'
@@ -133,6 +134,52 @@ export function InvoiceSummary({
   return (
     <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
       <h3 className="text-sm font-semibold">Invoice Summary</h3>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <form.Field name={'collectionMethod' as never}>
+          {(field: any) => (
+            <Field>
+              <FieldLabel id="collection-method-label">Collection</FieldLabel>
+              <SegmentedOptions
+                ariaLabel="Collection"
+                options={['Pickup', 'Delivery']}
+                value={field.state.value === 'delivery' ? 'Delivery' : 'Pickup'}
+                onChange={(value) => field.handleChange(value.toLowerCase())}
+                columns={2}
+              />
+            </Field>
+          )}
+        </form.Field>
+        <form.Field name={'isUrgent' as never}>
+          {(field: any) => (
+            <Field>
+              <FieldLabel id="invoice-priority-label">Priority</FieldLabel>
+              <SegmentedOptions
+                ariaLabel="Priority"
+                options={['Regular', 'Urgent']}
+                value={field.state.value ? 'Urgent' : 'Regular'}
+                onChange={(value) => {
+                  field.handleChange(value === 'Urgent')
+                  if (value === 'Regular')
+                    form.setFieldValue('urgentCharge', '')
+                }}
+                columns={2}
+              />
+            </Field>
+          )}
+        </form.Field>
+      </div>
+      <form.Subscribe selector={(state: any) => state.values.isUrgent}>
+        {(isUrgent: boolean) =>
+          isUrgent && (
+            <NumberField
+              form={form}
+              name="urgentCharge"
+              label={`Urgent charge (${CURRENCY}, incl. VAT)`}
+            />
+          )
+        }
+      </form.Subscribe>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <DateField
@@ -305,16 +352,26 @@ export function InvoiceSummary({
                   state.values.discountUnit,
                   state.values.payments,
                   state.values.redemptions,
+                  state.values.isUrgent,
+                  state.values.urgentCharge,
                 ]}
               >
                 {(subscribed: any) => {
-                  const [discount, discountUnit, payments, redemptions] =
-                    subscribed as [
-                      number | '',
-                      DiscountUnit,
-                      PaymentDraft[],
-                      GiftCardRedemptionDraft[],
-                    ]
+                  const [
+                    discount,
+                    discountUnit,
+                    payments,
+                    redemptions,
+                    isUrgent,
+                    urgentCharge,
+                  ] = subscribed as [
+                    number | '',
+                    DiscountUnit,
+                    PaymentDraft[],
+                    GiftCardRedemptionDraft[],
+                    boolean,
+                    number | '',
+                  ]
                   // Line prices are gross (VAT included): the discount comes
                   // off the gross and VAT is extracted from it — the shared
                   // computeInvoiceTotals keeps this in step with the backend's
@@ -325,6 +382,8 @@ export function InvoiceSummary({
                     giftCardSales,
                     discount: discount === '' ? 0 : discount,
                     discountUnit,
+                    urgentCharge:
+                      isUrgent && urgentCharge !== '' ? urgentCharge : 0,
                     redeemed: redemptions.reduce(
                       (sum, redemption) =>
                         sum + computeRedemptionTotal(redemption),
@@ -342,6 +401,16 @@ export function InvoiceSummary({
 
                   return (
                     <>
+                      {isUrgent && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            Urgent charge (incl. VAT)
+                          </span>
+                          <span>
+                            {CURRENCY} {(urgentCharge || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">
                           VAT ({Math.round(VAT_RATE * 100)}%, incl.)

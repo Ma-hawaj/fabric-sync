@@ -97,6 +97,11 @@ export function CustomerDetailsSheet({
                   <SheetDescription className="text-muted-foreground mt-0.5">
                     Phone: {customer.mobileNo}
                   </SheetDescription>
+                  {customer.address && (
+                    <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">
+                      Address: {customer.address}
+                    </p>
+                  )}
                 </div>
                 {customer.measurements.length > 0 && (
                   <Button

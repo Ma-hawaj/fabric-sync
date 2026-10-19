@@ -97,6 +97,25 @@ describe('computeInvoiceTotals', () => {
     expect(totals.vat).toBe(18.18)
   })
 
+  it('adds urgency after discounts and includes it in VAT and the balance', () => {
+    const totals = computeInvoiceTotals({
+      ...base,
+      orderTotal: 100,
+      productTotal: 0,
+      discount: 10,
+      discountUnit: 'percent',
+      urgentCharge: 20,
+      giftCardSales: 50,
+      redeemed: 10,
+      paid: 30,
+    })
+    expect(totals.discountAmount).toBe(10)
+    expect(totals.taxable).toBe(100)
+    expect(totals.vat).toBe(10)
+    expect(totals.total).toBe(160)
+    expect(totals.balanceDue).toBe(120)
+  })
+
   it('takes the discount off the gross before extracting VAT', () => {
     const totals = computeInvoiceTotals({ ...base, discount: 20 })
     expect(totals.total).toBe(180)

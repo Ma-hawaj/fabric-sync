@@ -59,6 +59,7 @@ function CustomerForm({ existing }: { existing?: Customer }) {
             name: value.name,
             mobileNo: value.mobileNo,
             whatsappNotificationsEnabled: value.whatsappNotificationsEnabled,
+            address: value.address,
           })
         : createCustomer.mutateAsync(value)
       toast.promise(pending, {
@@ -120,6 +121,7 @@ function CustomerForm({ existing }: { existing?: Customer }) {
               </label>
             )}
           </form.Field>
+          <TextField form={form} name="address" label="Address (optional)" />
         </div>
 
         {!existing && (

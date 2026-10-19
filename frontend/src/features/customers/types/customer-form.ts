@@ -6,6 +6,7 @@ export interface CustomerFormValues {
   name: string
   mobileNo: string
   whatsappNotificationsEnabled: boolean
+  address: string
   addMeasurement: boolean
   measurement: MeasurementDraft
 }
@@ -15,6 +16,7 @@ export function createEmptyCustomerForm(): CustomerFormValues {
     name: '',
     mobileNo: '',
     whatsappNotificationsEnabled: true,
+    address: '',
     addMeasurement: false,
     measurement: createEmptyMeasurement(),
   }
@@ -27,6 +29,7 @@ export function customerToFormValues(customer: Customer): CustomerFormValues {
     name: customer.name,
     mobileNo: customer.mobileNo,
     whatsappNotificationsEnabled: customer.whatsappNotificationsEnabled ?? true,
+    address: customer.address ?? '',
     addMeasurement: false,
     measurement: createEmptyMeasurement(),
   }

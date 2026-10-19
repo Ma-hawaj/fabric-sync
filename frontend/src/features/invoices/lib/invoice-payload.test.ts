@@ -7,6 +7,22 @@ import {
 } from '../types/invoice-form'
 
 describe('invoice material payload', () => {
+  it('saves customer addresses, collection, and urgency and clears a regular surcharge', () => {
+    const values = createEmptyInvoiceForm()
+    values.isUrgent = true
+    values.urgentCharge = 15
+    values.collectionMethod = 'delivery'
+    values.customers[0].mode = 'new'
+    values.customers[0].address = '  Building 1, Road 2  '
+    expect(invoicePayload(values)).toMatchObject({
+      isUrgent: true,
+      urgentCharge: 15,
+      collectionMethod: 'delivery',
+      customers: [{ newCustomer: { address: 'Building 1, Road 2' } }],
+    })
+    values.isUrgent = false
+    expect(invoicePayload(values).urgentCharge).toBe(0)
+  })
   it('sends only the details belonging to each material source', () => {
     const values = createEmptyInvoiceForm()
     values.customers = [

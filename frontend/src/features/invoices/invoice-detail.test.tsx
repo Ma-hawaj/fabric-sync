@@ -39,6 +39,8 @@ vi.mock('@tanstack/react-router', () => ({
 const DETAIL: InvoiceDetail = {
   id: 'inv-1',
   invoiceNumber: 42,
+  isUrgent: false,
+  collectionMethod: 'pickup',
   date: '2026-07-28T09:30:00Z',
   targetDate: '2026-08-04',
   createdAt: '2026-07-28T09:30:00Z',
@@ -87,6 +89,7 @@ const DETAIL: InvoiceDetail = {
     },
   ],
   totals: {
+    urgentCharge: 0,
     subtotal: 100,
     discount: 0,
     discountUnit: 'amount',
@@ -115,6 +118,28 @@ function renderPage(detail: InvoiceDetail | null) {
 }
 
 describe('InvoiceDetailPage', () => {
+  it('shows delivery, priority, addresses, and the urgent charge on saved invoices', () => {
+    renderPage({
+      ...DETAIL,
+      isUrgent: true,
+      collectionMethod: 'delivery',
+      buyer: {
+        name: 'Buyer',
+        mobileNo: '12345',
+        address: 'Building 1, Road 2',
+      },
+      totals: {
+        ...DETAIL.totals,
+        urgentCharge: 10,
+        total: 310,
+        balanceDue: 250,
+      },
+    })
+    expect(screen.getByText('Urgent')).toBeTruthy()
+    expect(screen.getByText('Delivery')).toBeTruthy()
+    expect(screen.getByText('Building 1, Road 2')).toBeTruthy()
+    expect(screen.getByText('Urgent charge (incl. VAT)')).toBeTruthy()
+  })
   beforeEach(() => {
     navigateMock.mockClear()
   })

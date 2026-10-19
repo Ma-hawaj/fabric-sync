@@ -151,6 +151,11 @@ export function CustomerBlock({
                             <p className="text-xs text-muted-foreground">
                               {picked.mobileNo}
                             </p>
+                            {picked.address && (
+                              <p className="text-xs whitespace-pre-line text-muted-foreground">
+                                {picked.address}
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -168,6 +173,12 @@ export function CustomerBlock({
                       form={form}
                       name={`${base}.mobileNo`}
                       label="Phone"
+                    />
+
+                    <TextField
+                      form={form}
+                      name={`${base}.address`}
+                      label="Address (optional)"
                     />
 
                     <p className="text-xs text-muted-foreground">

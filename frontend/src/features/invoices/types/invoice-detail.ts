@@ -6,6 +6,7 @@ export type InvoiceLineKind = 'order' | 'product' | 'gift_card'
 export interface InvoiceParty {
   name: string
   mobileNo: string
+  address?: string | null
 }
 
 /**
@@ -40,6 +41,7 @@ export interface InvoiceRedemption {
 
 /** The arithmetic behind the total, as the backend computed it. */
 export interface InvoiceTotals {
+  urgentCharge: number
   subtotal: number
   discount: number
   discountUnit: 'amount' | 'percent'
@@ -67,6 +69,8 @@ export interface InvoicePayment {
 
 /** Shape of GET /invoices/:id. */
 export interface InvoiceDetail extends ReadinessFields {
+  isUrgent: boolean
+  collectionMethod: 'delivery' | 'pickup'
   id: string
   invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */

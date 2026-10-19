@@ -88,6 +88,7 @@ export function computeInvoiceTotals(input: {
   giftCardSales: number
   discount: number
   discountUnit: 'amount' | 'percent'
+  urgentCharge?: number
   redeemed: number
   paid: number
 }): InvoiceGrossTotals {
@@ -98,7 +99,9 @@ export function computeInvoiceTotals(input: {
     input.discount,
     input.discountUnit,
   )
-  const gross = Math.round((grossSubtotal - discountAmount) * 100) / 100
+  const urgentCharge = Math.round((input.urgentCharge ?? 0) * 100) / 100
+  const gross =
+    Math.round((grossSubtotal - discountAmount + urgentCharge) * 100) / 100
   const taxable = extractNet(gross)
   const vat = extractVat(gross)
   const giftCardSales = Math.round(input.giftCardSales * 100) / 100

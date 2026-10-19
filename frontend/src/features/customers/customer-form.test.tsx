@@ -63,6 +63,7 @@ describe('saving the customer WhatsApp preference', () => {
         name: 'Ahmed Hassan',
         mobileNo: '+97333112233',
         whatsappNotificationsEnabled: false,
+        address: '',
       }),
     )
     expect(apiClient.patch).toHaveBeenCalledTimes(1)
@@ -107,6 +108,7 @@ describe('saving the customer WhatsApp preference', () => {
       name: 'Ahmed',
       mobileNo: '+97333112233',
       whatsappNotificationsEnabled: false,
+      address: '',
     })
     await waitFor(() => expect(navigate).toHaveBeenCalled())
   })
@@ -129,6 +131,7 @@ describe('saving the customer WhatsApp preference', () => {
         name: 'Ahmed',
         mobileNo: '+97333112233',
         whatsappNotificationsEnabled: false,
+        address: '',
         measurement: null,
       }),
     )

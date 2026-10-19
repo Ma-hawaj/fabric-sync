@@ -61,6 +61,7 @@ export interface InvoiceEditCustomer {
   existingCustomerId: string
   customerName: string
   customerMobileNo: string
+  customerAddress?: string | null
   /** The row an edit rewrites in place. */
   measurementId: string | null
   measurement: InvoiceEditMeasurement
@@ -91,6 +92,9 @@ export interface InvoiceEditRedemption {
 
 /** Shape of GET /invoices/:id/edit — the invoice as entered, not as printed. */
 export interface InvoiceEdit {
+  isUrgent: boolean
+  urgentCharge: number
+  collectionMethod: 'delivery' | 'pickup'
   id: string
   invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */

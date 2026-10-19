@@ -53,6 +53,7 @@ async function createCustomer(values: CustomerFormValues): Promise<Customer> {
     name: values.name,
     mobileNo: values.mobileNo,
     whatsappNotificationsEnabled: values.whatsappNotificationsEnabled,
+    address: values.address.trim(),
     measurement: values.addMeasurement
       ? measurementPayload(values.measurement)
       : null,

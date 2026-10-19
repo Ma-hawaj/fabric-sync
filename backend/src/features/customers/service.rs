@@ -40,6 +40,7 @@ pub async fn create_customer(
         &name,
         &mobile_no,
         input.whatsapp_notifications_enabled,
+        input.address.as_deref(),
         input.measurement.as_ref(),
     )
     .await?;
@@ -79,7 +80,11 @@ pub async fn update_customer(
         .map(|mobile_no| normalized_field(mobile_no, "phone number"))
         .transpose()?;
 
-    if name.is_none() && mobile_no.is_none() && input.whatsapp_notifications_enabled.is_none() {
+    if name.is_none()
+        && mobile_no.is_none()
+        && input.whatsapp_notifications_enabled.is_none()
+        && input.address.is_none()
+    {
         return Err(AppError::BadRequest("nothing to update".to_string()));
     }
 
@@ -89,6 +94,7 @@ pub async fn update_customer(
         name.as_deref(),
         mobile_no.as_deref(),
         input.whatsapp_notifications_enabled,
+        input.address.as_deref(),
     )
     .await?
     .ok_or_else(|| AppError::NotFound(format!("customer {customer_id} not found")))?;

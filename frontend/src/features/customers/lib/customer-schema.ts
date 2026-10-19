@@ -17,6 +17,7 @@ export const customerFormSchema = z
     name: z.string().trim().min(1, 'Enter a full name.'),
     mobileNo: z.string().trim().min(1, 'Enter a phone number.'),
     whatsappNotificationsEnabled: z.boolean(),
+    address: z.string(),
     addMeasurement: z.boolean(),
     measurement: measurementDraftSchema,
   })

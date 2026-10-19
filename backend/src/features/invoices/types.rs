@@ -4,6 +4,23 @@ use uuid::Uuid;
 
 use crate::features::customers::types::CreateMeasurementInput;
 
+#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CollectionMethod {
+    Delivery,
+    #[default]
+    Pickup,
+}
+
+impl CollectionMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Delivery => "delivery",
+            Self::Pickup => "pickup",
+        }
+    }
+}
+
 // Deliberately not tied to a specific currency code — a flat amount in
 // whatever the business currency is, or a percentage of the subtotal.
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -129,6 +146,7 @@ pub struct GiftCardRedemptionInput {
 pub struct NewCustomerInput {
     pub name: String,
     pub mobile_no: String,
+    pub address: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -159,6 +177,12 @@ pub struct CreatePaymentInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateInvoiceInput {
+    #[serde(default)]
+    pub is_urgent: bool,
+    #[serde(default)]
+    pub urgent_charge: f64,
+    #[serde(default)]
+    pub collection_method: CollectionMethod,
     /// When the garment is promised for. Optional and staff-editable — this
     /// is what the form's date picker writes. The invoice's own date
     /// (`invoice_date`) is server-set at creation and never taken from input.
@@ -239,6 +263,7 @@ pub struct InvoiceEditCustomer {
     pub existing_customer_id: Uuid,
     pub customer_name: String,
     pub customer_mobile_no: String,
+    pub customer_address: Option<String>,
     pub measurement_id: Option<Uuid>,
     pub measurement: CreateMeasurementInput,
     pub orders: Vec<InvoiceEditOrder>,
@@ -294,6 +319,9 @@ pub struct InvoicePayment {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEdit {
+    pub is_urgent: bool,
+    pub urgent_charge: f64,
+    pub collection_method: String,
     pub id: Uuid,
     /// Sequential and human-readable, unlike `id` — for the edit page title.
     pub invoice_number: i64,
@@ -386,6 +414,7 @@ pub struct RecordedPayment {
 pub struct InvoiceParty {
     pub name: String,
     pub mobile_no: String,
+    pub address: Option<String>,
 }
 
 /// What kind of line this is. Tailoring orders and `invoice_items` rows are
@@ -465,6 +494,7 @@ pub struct InvoiceRedemptionLine {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceTotalsBreakdown {
+    pub urgent_charge: f64,
     pub subtotal: f64,
     pub discount: f64,
     pub discount_unit: String,
@@ -488,6 +518,9 @@ pub struct InvoiceTotalsBreakdown {
 /// the table no longer stores them.
 #[derive(Clone, Debug)]
 pub struct InvoiceRecord {
+    pub is_urgent: bool,
+    pub urgent_charge: f64,
+    pub collection_method: String,
     pub id: Uuid,
     pub invoice_number: i64,
     /// Server-set at creation, with the time of day — never taken from input.
@@ -524,6 +557,8 @@ pub struct InvoiceRecord {
 pub struct InvoiceDetail {
     #[serde(flatten)]
     pub readiness: crate::features::orders::readiness::Summary,
+    pub is_urgent: bool,
+    pub collection_method: String,
     pub id: Uuid,
     /// Sequential and human-readable, unlike `id`. Formatted for display by
     /// the consumer, which is why it stays a number here.
@@ -563,6 +598,9 @@ pub struct InvoiceListItem {
     #[sqlx(flatten)]
     #[serde(flatten)]
     pub readiness: crate::features::orders::readiness::Summary,
+    pub is_urgent: bool,
+    pub urgent_charge: f64,
+    pub collection_method: String,
     pub id: Uuid,
     /// The human-readable invoice identity shown as `INV-###` in the UI.
     pub invoice_number: i64,

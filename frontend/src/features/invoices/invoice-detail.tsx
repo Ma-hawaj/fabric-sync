@@ -108,6 +108,10 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 
         <div className="flex flex-wrap items-center gap-2">
           <ReadinessBadge {...detail} />
+          {detail.isUrgent && <Badge variant="destructive">Urgent</Badge>}
+          <Badge variant="outline">
+            {detail.collectionMethod === 'delivery' ? 'Delivery' : 'Pickup'}
+          </Badge>
           <Badge
             variant={invoice.paymentStatus === 'paid' ? 'default' : 'outline'}
             className="capitalize"
@@ -174,6 +178,11 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                   <div className="text-xs text-muted-foreground">
                     {customer.mobileNo}
                   </div>
+                  {customer.address && (
+                    <div className="text-xs whitespace-pre-line text-muted-foreground">
+                      {customer.address}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -269,6 +278,12 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
             <TotalRow
               label="Gift cards sold"
               value={detail.totals.giftCardSales}
+            />
+          )}
+          {detail.isUrgent && (
+            <TotalRow
+              label="Urgent charge (incl. VAT)"
+              value={detail.totals.urgentCharge}
             />
           )}
           <TotalRow label="Total" value={detail.totals.total} emphasis />
@@ -435,6 +450,9 @@ function toInvoice(detail: InvoiceDetail): Invoice {
       ),
     ],
     totalPrice: detail.totals.total,
+    isUrgent: detail.isUrgent,
+    urgentCharge: detail.totals.urgentCharge,
+    collectionMethod: detail.collectionMethod,
     paymentStatus: detail.paymentStatus,
     amountPaid: detail.totals.amountPaid,
     balanceDue: detail.totals.balanceDue,

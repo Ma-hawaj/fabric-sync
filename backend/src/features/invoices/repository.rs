@@ -67,6 +67,9 @@ pub async fn fetch_invoice_detail(
             i.invoice_number,
             i.invoice_date,
             i.target_date,
+            i.is_urgent,
+            i.urgent_charge::float8 AS "urgent_charge!",
+            i.collection_method,
             i.created_at,
             i.discount::float8 AS "discount!",
             i.discount_unit,
@@ -93,7 +96,8 @@ pub async fn fetch_invoice_detail(
             -- LEFT JOIN may not match.
             b.name AS "branch_name?",
             c.name AS "buyer_name?",
-            c.mobile_no AS "buyer_mobile_no?"
+            c.mobile_no AS "buyer_mobile_no?",
+            c.address AS "buyer_address?"
         FROM invoices i
         LEFT JOIN branch b ON b.id = i.branch_id
         LEFT JOIN customers c ON c.id = i.customer_id
@@ -142,6 +146,7 @@ pub async fn fetch_invoice_detail(
             o.id AS order_id,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile_no,
+            c.address AS customer_address,
             CASE WHEN o.material_source = 'customer'
                 THEN 'Customer-provided material: ' || o.customer_material_description
                 ELSE mat.name END AS "material_name!",
@@ -231,6 +236,7 @@ pub async fn fetch_invoice_detail(
                 customer: Some(InvoiceParty {
                     name: row.customer_name,
                     mobile_no: row.customer_mobile_no,
+                    address: row.customer_address,
                 }),
                 quantity: row.material_amount,
                 unit: Some(row.material_unit),
@@ -272,12 +278,19 @@ pub async fn fetch_invoice_detail(
             invoice_number: invoice.invoice_number,
             date: invoice.invoice_date,
             target_date: invoice.target_date,
+            is_urgent: invoice.is_urgent,
+            urgent_charge: invoice.urgent_charge,
+            collection_method: invoice.collection_method,
             created_at: invoice.created_at,
             branch_name: invoice.branch_name,
             buyer: invoice
                 .buyer_name
                 .zip(invoice.buyer_mobile_no)
-                .map(|(name, mobile_no)| InvoiceParty { name, mobile_no }),
+                .map(|(name, mobile_no)| InvoiceParty {
+                    name,
+                    mobile_no,
+                    address: invoice.buyer_address,
+                }),
             discount: invoice.discount,
             discount_unit: invoice.discount_unit,
             payment_status: invoice.payment_status,
@@ -318,6 +331,9 @@ const SPEC: ListSpec = ListSpec {
             i.invoice_number,
             i.invoice_date,
             i.target_date,
+            i.is_urgent,
+            i.urgent_charge::float8 AS urgent_charge,
+            i.collection_method,
             pay.status AS payment_status,
             i.total_price::float8 AS total_price,
             pay.paid AS amount_paid,
@@ -429,6 +445,11 @@ const SPEC: ListSpec = ListSpec {
             ColumnDef::new("invoice_number", ColumnKind::Number),
         ),
         ("date", ColumnDef::new("invoice_date", ColumnKind::Date)),
+        ("isUrgent", ColumnDef::new("is_urgent", ColumnKind::Bool)),
+        (
+            "collectionMethod",
+            ColumnDef::new("collection_method", ColumnKind::Text),
+        ),
         (
             "targetDate",
             ColumnDef::new("target_date", ColumnKind::Date),
@@ -506,10 +527,12 @@ pub async fn insert_invoice(
         r#"
         INSERT INTO invoices (
             target_date, branch_id, discount, discount_unit,
-            total_price, customer_id, gift_card_redeemed
+            total_price, customer_id, gift_card_redeemed,
+            is_urgent, urgent_charge, collection_method
         )
         VALUES (
-            $1, $2, $3::float8, $4, $5::float8, $6, $7::float8
+            $1, $2, $3::float8, $4, $5::float8, $6, $7::float8,
+            $8, $9::float8, $10
         )
         RETURNING id, invoice_date
         "#,
@@ -520,6 +543,9 @@ pub async fn insert_invoice(
         total_price,
         input.customer_id,
         gift_card_redeemed,
+        input.is_urgent,
+        input.urgent_charge,
+        input.collection_method.as_str(),
     )
     .fetch_one(&mut **tx)
     .await
@@ -840,6 +866,9 @@ pub async fn fetch_invoice_edit(
             i.invoice_number,
             i.invoice_date,
             i.target_date,
+            i.is_urgent,
+            i.urgent_charge::float8 AS "urgent_charge!",
+            i.collection_method,
             i.branch_id,
             b.name AS "branch_name?",
             i.discount::float8 AS "discount!",
@@ -865,6 +894,7 @@ pub async fn fetch_invoice_edit(
             m.customer_id,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile_no,
+            c.address AS customer_address,
             m.id AS measurement_id,
             m.measurement_date,
             m.type,
@@ -996,6 +1026,7 @@ pub async fn fetch_invoice_edit(
                 existing_customer_id: row.customer_id,
                 customer_name: row.customer_name,
                 customer_mobile_no: row.customer_mobile_no,
+                customer_address: row.customer_address,
                 measurement_id: Some(row.measurement_id),
                 measurement,
                 orders: vec![order],
@@ -1062,6 +1093,9 @@ pub async fn fetch_invoice_edit(
         invoice_number: header.invoice_number,
         date: header.invoice_date,
         target_date: header.target_date,
+        is_urgent: header.is_urgent,
+        urgent_charge: header.urgent_charge,
+        collection_method: header.collection_method,
         branch_id: header.branch_id,
         branch_name: header.branch_name,
         discount: header.discount,
@@ -1515,7 +1549,10 @@ pub async fn update_invoice_header(
             discount_unit = $5,
             customer_id = $6,
             total_price = $7::float8,
-            gift_card_redeemed = $8::float8
+            gift_card_redeemed = $8::float8,
+            is_urgent = $9,
+            urgent_charge = $10::float8,
+            collection_method = $11
         WHERE id = $1
         "#,
         invoice_id,
@@ -1526,6 +1563,9 @@ pub async fn update_invoice_header(
         input.customer_id,
         total_price,
         gift_card_redeemed,
+        input.is_urgent,
+        input.urgent_charge,
+        input.collection_method.as_str(),
     )
     .execute(&mut **tx)
     .await?;
