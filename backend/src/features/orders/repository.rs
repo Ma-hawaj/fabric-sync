@@ -406,14 +406,9 @@ pub async fn list_repairs(
     .await
 }
 
-/// Every repair with its order context, for the global `/repairs` tracking
-/// page. One query rather than one per order — the page filters and sorts
-/// without joining client-side.
-pub async fn list_all_repairs(
-    state: &AppState,
-) -> Result<Vec<super::types::RepairListItem>, AppError> {
-    let rows = sqlx::query!(
-        r#"
+/// Repair rows use the same server-side list contract as orders and invoices.
+const REPAIR_SPEC: ListSpec = ListSpec {
+    base_sql: r#"
         SELECT
             r.id,
             r.order_id,
@@ -422,14 +417,14 @@ pub async fn list_all_repairs(
             i.invoice_number,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile,
-            mat.name AS material,
+            COALESCE(mat.name, o.customer_material_description) AS material,
             r.reason,
             r.reported_on,
-            r.charge::float8 AS "charge!",
+            r.charge::float8 AS charge,
             r.status,
             r.completed_at,
             r.received_at,
-            r.received_amount::float8 AS "received_amount!",
+            r.received_amount::float8 AS received_amount,
             r.received_payment_type,
             r.fixed_measurement_id,
             r.notes
@@ -438,36 +433,33 @@ pub async fn list_all_repairs(
         JOIN invoices i ON i.id = o.invoice_id
         JOIN measurements m ON m.id = o.measurement_id
         JOIN customers c ON c.id = m.customer_id
-        JOIN materials mat ON mat.id = o.material_id
-        ORDER BY r.reported_on DESC, r.id DESC
-        "#,
-    )
-    .fetch_all(state.db())
-    .await?;
+        LEFT JOIN materials mat ON mat.id = o.material_id
+    "#,
+    columns: &[
+        (
+            "orderNumber",
+            ColumnDef::new("order_number", ColumnKind::Number),
+        ),
+        (
+            "customerName",
+            ColumnDef::new("customer_name", ColumnKind::Text),
+        ),
+        ("reason", ColumnDef::new("reason", ColumnKind::Text)),
+        (
+            "reportedOn",
+            ColumnDef::new("reported_on", ColumnKind::Date),
+        ),
+        ("status", ColumnDef::new("status", ColumnKind::Text)),
+        ("charge", ColumnDef::new("charge", ColumnKind::Number)),
+    ],
+    default_order: "reported_on DESC, id DESC",
+};
 
-    Ok(rows
-        .into_iter()
-        .map(|row| super::types::RepairListItem {
-            id: row.id,
-            order_id: row.order_id,
-            order_number: row.order_number,
-            invoice_id: row.invoice_id,
-            invoice_number: row.invoice_number,
-            customer_name: row.customer_name,
-            customer_mobile: row.customer_mobile,
-            material: row.material,
-            reason: row.reason,
-            reported_on: row.reported_on,
-            charge: row.charge,
-            status: row.status,
-            completed_at: row.completed_at,
-            received_at: row.received_at,
-            received_amount: row.received_amount,
-            received_payment_type: row.received_payment_type,
-            fixed_measurement_id: row.fixed_measurement_id,
-            notes: row.notes,
-        })
-        .collect())
+pub async fn list_all_repairs(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<super::types::RepairListItem>, AppError> {
+    list::fetch_page(state.db(), &REPAIR_SPEC, params).await
 }
 
 /// The repair row locked. The service refuses a receive on a repair that is

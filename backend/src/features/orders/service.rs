@@ -956,8 +956,11 @@ pub async fn set_repair_measurement(
     load_order(state, order_id).await
 }
 
-pub async fn list_all_repairs(state: &AppState) -> Result<Vec<RepairListItem>, AppError> {
-    repository::list_all_repairs(state).await
+pub async fn list_all_repairs(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<RepairListItem>, AppError> {
+    repository::list_all_repairs(state, params).await
 }
 
 #[cfg(test)]

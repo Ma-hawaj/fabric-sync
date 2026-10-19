@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { toast } from 'sonner'
+import { useListParams } from '@/hooks/use-list-params'
 import { useDataTable } from '@/hooks/use-data-table'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
@@ -11,7 +12,6 @@ import { printRepairDocument } from './lib/print-repair'
 import type { RepairListItem } from './types/orders'
 
 export function RepairsPage() {
-  const { data: repairs = [], isLoading } = useRepairs()
   const [receiveRepair, setReceiveRepair] =
     React.useState<RepairListItem | null>(null)
   const [fixRepair, setFixRepair] = React.useState<RepairListItem | null>(null)
@@ -38,12 +38,19 @@ export function RepairsPage() {
     [],
   )
 
+  const { searchParams } = useListParams({ columns })
+  const {
+    data: repairs,
+    pageCount,
+    total,
+    isLoading,
+  } = useRepairs(searchParams)
+
   const { table } = useDataTable({
     data: repairs,
     columns,
-    manualFiltering: false,
-    manualSorting: false,
-    manualPagination: false,
+    pageCount,
+    rowCount: total,
   })
 
   return (

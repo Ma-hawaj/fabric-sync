@@ -149,8 +149,9 @@ pub async fn reopen(
 pub async fn list_all_repairs(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,
-) -> Result<Json<Vec<RepairListItem>>, AppError> {
-    Ok(Json(service::list_all_repairs(&state).await?))
+    params: ListParams,
+) -> Result<Json<Page<RepairListItem>>, AppError> {
+    Ok(Json(service::list_all_repairs(&state, &params).await?))
 }
 
 pub async fn receive_repair(

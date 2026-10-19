@@ -376,7 +376,7 @@ pub struct RepairMeasurementFixInput {
 /// One repair with the order/customer context a global tracking page needs —
 /// the shape `GET /repairs` returns. Flat on purpose: the page filters and
 /// sorts without joining client-side.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct RepairListItem {
     pub id: Uuid,
