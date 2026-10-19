@@ -110,3 +110,38 @@ pub async fn update_repair(
         service::update_repair(&state, order_id, repair_id, input).await?,
     ))
 }
+
+pub async fn mark_ready(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(order_id): Path<Uuid>,
+    Json(input): Json<super::readiness::ConfirmInput>,
+) -> Result<Json<super::readiness::ReadyResult>, AppError> {
+    let invoice_id = super::readiness::invoice_for_order(state.db(), order_id).await?;
+    Ok(Json(
+        super::readiness::confirm(
+            state.db(),
+            invoice_id,
+            Some(order_id),
+            user.subject().unwrap_or("staff"),
+            input.confirmed_at_pickup_branch,
+        )
+        .await?,
+    ))
+}
+
+pub async fn reopen(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(order_id): Path<Uuid>,
+    Json(input): Json<super::readiness::ReopenInput>,
+) -> Result<Json<OrderListItem>, AppError> {
+    super::readiness::reopen(
+        state.db(),
+        order_id,
+        user.subject().unwrap_or("staff"),
+        &input.reason,
+    )
+    .await?;
+    Ok(Json(service::get_order(&state, order_id).await?.order))
+}

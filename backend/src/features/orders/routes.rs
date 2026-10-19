@@ -20,6 +20,8 @@ pub fn router() -> Router<AppState> {
         // be handed later.
         .route("/orders/:id/document", get(handlers::order_document))
         .route("/orders/:id/receive", post(handlers::receive_order))
+        .route("/orders/:id/ready", post(handlers::mark_ready))
+        .route("/orders/:id/reopen", post(handlers::reopen))
         .route("/orders/:id/stages/:stageId", post(handlers::set_stage))
         .route(
             "/orders/:id/stages/:stageId/assignee",

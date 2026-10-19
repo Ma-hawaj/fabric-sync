@@ -1,3 +1,4 @@
+import { ReadinessBadge } from '@/features/notifications/readiness-controls'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Link } from '@tanstack/react-router'
 import {
@@ -48,6 +49,7 @@ export const getInvoiceColumns = (
   onExportPdf: (invoice: Invoice) => void,
   onEdit: (invoice: Invoice) => void,
   onRecordPayment: (invoice: Invoice) => void,
+  onResend?: (invoice: Invoice) => void,
 ): ColumnDef<Invoice, any>[] => [
   {
     id: 'expand',
@@ -344,6 +346,25 @@ export const getInvoiceColumns = (
     },
   },
   {
+    id: 'readinessStatus',
+    accessorKey: 'readinessStatus',
+    header: 'Readiness',
+    cell: ({ row }) => <ReadinessBadge {...row.original} />,
+    enableSorting: false,
+    enableColumnFilter: true,
+    meta: {
+      label: 'Readiness',
+      variant: 'multiSelect',
+      options: [
+        { label: 'In progress', value: 'in_progress' },
+        { label: 'Partially ready', value: 'partially_ready' },
+        { label: 'Ready for pickup', value: 'ready' },
+        { label: 'Collected', value: 'collected' },
+        { label: 'No garments', value: 'not_applicable' },
+      ],
+    },
+  },
+  {
     id: 'actions',
     header: 'Actions',
     enablePinning: true,
@@ -352,6 +373,11 @@ export const getInvoiceColumns = (
       return (
         <RowActions
           items={[
+            {
+              label: 'Resend invoice via WhatsApp',
+              icon: FileDownIcon,
+              onClick: () => onResend?.(invoice),
+            },
             {
               label: 'View Details',
               icon: EyeIcon,

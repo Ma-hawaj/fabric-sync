@@ -90,6 +90,14 @@ If a valid access token gets a 401 from the backend unexpectedly, check the `aud
 
 ## Backend
 
+Invoice creation and editing offer a WhatsApp preview before sending. Orders
+have an explicit **Ready for pickup** confirmation, with invoice readiness
+calculated from the remaining uncollected orders. All invoice customers are
+selected by default and destinations are deduplicated by normalized mobile.
+Invoice PDF exports and notification attachments share stored, server-rendered
+Chromium PDFs. See [notification setup and verification](docs/whatsapp-notifications.md)
+for sender templates, renderer configuration, delivery history, and retries.
+
 The backend reads configuration from environment variables (`backend/.env`
 via `dotenvy` when running locally — copy `backend/.env.example` there
 first).

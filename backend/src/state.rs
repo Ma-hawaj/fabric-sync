@@ -38,6 +38,10 @@ impl AppState {
         &self.token_introspection
     }
 
+    pub fn notifications(&self) -> &crate::features::notifications::Config {
+        &self.config.notifications
+    }
+
     pub fn db(&self) -> &PgPool {
         &self.db
     }

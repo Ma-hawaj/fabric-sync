@@ -1099,6 +1099,8 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         price: 100.0,
         status: "pending".to_string(),
         received_at: None,
+        ready_at: None,
+        ready_by: None,
         thobe_type: None,
         f_pocket: None,
         s_pocket: None,

@@ -63,6 +63,16 @@ VITE_API_BASE_URL=http://localhost:8000 pnpm run dev
 
 ## Backend architecture
 
+Invoice notifications use `features/notifications` with mandatory draft approval,
+immutable PDF artifacts, normalized unique mobile destinations, a durable worker,
+and signed Meta status webhooks. Order readiness logic is in `orders/readiness.rs`
+with queries in `orders/readiness_repository.rs`. The private Gotenberg service
+in compose renders invoice PDFs; `DOCUMENT_RENDERER_PROFILE` must change with
+renderer/font changes. Operational setup is in `docs/whatsapp-notifications.md`.
+Delivery defaults off until a sender and the exact approved templates are
+configured. Never send test notifications to real customers; provider tests use
+local HTTP mocks and Chromium verification uses a dedicated test database.
+
 - **Feature-module layout**: each domain feature lives under `backend/src/features/<name>/` with `routes.rs` (axum `Router`), `handlers.rs` (extract request data, call service), `service.rs` (business logic), `repository.rs` (sqlx queries), `types.rs` (DTOs). Follow this layering for new features — don't put query logic in handlers or business logic in repository.
 - `app.rs` merges each feature's router (health, customers, materials, locations, invoices, orders) and applies `CorsLayer` (permissive `Any` origin/methods/headers — the frontend origin is never known at compile time and auth is bearer-token rather than cookie based) then `TraceLayer`, onto `AppState`.
 - `AppState` (`state.rs`) holds `Config`, the `PgPool`, and `TokenIntrospection`, and is the single piece of shared state injected into handlers via axum's `State` extractor.

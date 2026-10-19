@@ -248,9 +248,15 @@ pub async fn render_invoice_document(
     invoice_id: uuid::Uuid,
 ) -> Result<String, AppError> {
     let detail = service::get_invoice(state, invoice_id).await?;
+    render_snapshot(state, &detail).await
+}
+
+pub(crate) async fn render_snapshot(
+    state: &AppState,
+    detail: &InvoiceDetail,
+) -> Result<String, AppError> {
     let branding = state.invoice_branding();
     let timezone = state.timezone()?;
-
     let env = environment(branding)?;
     let template = env.get_template(TEMPLATE_NAME)?;
 
@@ -710,6 +716,7 @@ mod tests_support {
 
     pub fn detail() -> InvoiceDetail {
         InvoiceDetail {
+            readiness: Default::default(),
             id: uuid::Uuid::nil(),
             invoice_number: 1,
             date: Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),

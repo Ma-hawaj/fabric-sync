@@ -76,6 +76,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
     let payments = repository::list_payments(state, invoice_id).await?;
 
     Ok(InvoiceDetail {
+        readiness: crate::features::orders::readiness::summary(state.db(), invoice_id).await?,
         id: invoice.id,
         invoice_number: invoice.invoice_number,
         date: invoice.date,

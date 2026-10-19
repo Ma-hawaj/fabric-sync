@@ -8,7 +8,7 @@ use crate::{
     auth,
     features::{
         customers, design_options, gift_cards, health, invoices, locations, materials,
-        order_stages, orders, preferences, products, users,
+        notifications, order_stages, orders, preferences, products, users,
     },
     request_log,
     state::AppState,
@@ -97,6 +97,13 @@ pub fn router(state: AppState) -> Router {
                 auth::require_auth,
             )),
         )
+        .merge(
+            notifications::router().route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::require_auth,
+            )),
+        )
+        .merge(notifications::webhook_router())
         .fallback(|| async { (StatusCode::NOT_FOUND, "not found") });
 
     // The built SPA (`vite build` output, see STATIC_DIR). Unknown non-API

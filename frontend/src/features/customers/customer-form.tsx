@@ -1,3 +1,4 @@
+import { CustomerNotificationPreference } from '@/features/notifications/customer-preference'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -104,6 +105,7 @@ function CustomerForm({ existing }: { existing?: Customer }) {
         <div className="max-w-3xl space-y-4 rounded-xl border border-border/60 bg-card p-5">
           <TextField form={form} name="name" label="Full Name" />
           <PhoneField form={form} name="mobileNo" label="Phone" />
+          {existing && <CustomerNotificationPreference customer={existing} />}
         </div>
 
         {!existing && (

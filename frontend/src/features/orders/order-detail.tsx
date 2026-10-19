@@ -1,3 +1,4 @@
+import { ReadinessControls } from '@/features/notifications/readiness-controls'
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import { Badge } from '@/components/ui/badge'
@@ -89,7 +90,11 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             <Badge
               variant={order.status === 'received' ? 'default' : 'secondary'}
             >
-              {order.status === 'received' ? 'Received' : 'Pending'}
+              {order.status === 'received'
+                ? 'Received'
+                : order.status === 'ready'
+                  ? 'Ready for pickup'
+                  : 'Pending'}
             </Badge>
             <Badge
               variant={
@@ -114,6 +119,14 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
 
         <div className="flex items-center gap-2">
           <ExportPdfButton order={order} />
+          <ReadinessControls
+            id={order.id}
+            invoiceId={order.invoiceId}
+            scope="orders"
+            status={order.status}
+            readyAt={order.readyAt}
+            readyBy={order.readyBy}
+          />
           <Button
             variant="outline"
             className="text-info hover:text-info/80 hover:bg-info/5 dark:hover:bg-info/10"

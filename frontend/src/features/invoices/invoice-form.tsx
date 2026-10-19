@@ -1,3 +1,4 @@
+import { NotificationDialog } from '@/features/notifications/notification-dialog'
 import * as React from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
@@ -22,7 +23,7 @@ import { useCreateInvoice } from './hooks/use-create-invoice'
 import type { CreatedInvoice } from './lib/invoice-payload'
 import type { InvoiceEditSeeds } from './lib/invoice-edit-mapper'
 import { invoiceFormSchema } from './lib/invoice-schema'
-import { printInvoiceDocument } from './lib/print-invoice'
+import { downloadInvoicePdf } from './lib/print-invoice'
 import {
   createEmptyCustomer,
   createEmptyGiftCardLine,
@@ -106,6 +107,9 @@ export function InvoiceForm({
   // Which of the two submit buttons was pressed. A ref rather than state
   // because it is read once inside onSubmit and must not re-render the form.
   const exportAfterSave = React.useRef(false)
+  const [notificationInvoiceId, setNotificationInvoiceId] = React.useState<
+    string | null
+  >(null)
 
   // The user's default location pre-fills the two branch pickers below —
   // receiving when it takes orders, sold-from when it holds stock. Only empty
@@ -145,7 +149,7 @@ export function InvoiceForm({
       if (exportAfterSave.current) {
         exportAfterSave.current = false
         try {
-          await printInvoiceDocument(saved.id)
+          await downloadInvoicePdf(saved.id)
         } catch {
           toast.error(
             `The invoice was ${savedVerb}, but the PDF could not be opened.`,
@@ -153,7 +157,7 @@ export function InvoiceForm({
         }
       }
 
-      await navigate({ to: '/invoices' })
+      setNotificationInvoiceId(saved.id)
     },
   })
 
@@ -174,6 +178,14 @@ export function InvoiceForm({
 
   return (
     <div className="space-y-6">
+      <NotificationDialog
+        invoiceId={notificationInvoiceId}
+        kind={editing ? 'invoice_updated' : 'invoice_created'}
+        onClose={() => {
+          setNotificationInvoiceId(null)
+          void navigate({ to: '/invoices' })
+        }}
+      />
       <div>
         <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
         <p className="text-muted-foreground">{subtitle}</p>

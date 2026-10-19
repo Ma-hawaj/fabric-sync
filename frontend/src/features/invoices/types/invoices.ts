@@ -1,3 +1,5 @@
+import type { ReadinessFields } from '@/features/notifications/readiness-controls'
+
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
 export type PaymentType = 'benefit' | 'cash' | 'card'
 
@@ -10,7 +12,7 @@ export interface InvoiceCustomer {
 // material names aggregated. An invoice is settled through any number of
 // payments (the ledger); `amountPaid` is their sum and `paymentMethod` the
 // most recent one's method.
-export interface Invoice {
+export interface Invoice extends ReadinessFields {
   id: string
   invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */

@@ -61,7 +61,7 @@ pub struct StageRow {
 /// A recorded stage action, flat as it comes out of the database. One
 /// checklist per order — a repair is tracked by its own record and status,
 /// not by a second pass through these stages.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, sqlx::FromRow)]
 pub struct ProgressRow {
     pub order_id: Uuid,
     pub stage_id: Uuid,
@@ -122,6 +122,8 @@ pub struct OrderRow {
     /// When the customer collected the garment, stamped automatically when
     /// the order is received. Null while the order is still pending.
     pub received_at: Option<DateTime<Utc>>,
+    pub ready_at: Option<DateTime<Utc>>,
+    pub ready_by: Option<String>,
     /// The made-to-measure design choices, as stored on `orders` — the same
     /// columns the invoice document already renders per line. Exposed here so
     /// the order detail page and the printed order sheet can show them without
@@ -220,6 +222,8 @@ pub struct OrderListItem {
     /// When the customer collected the garment, stamped automatically when
     /// the order is received. Null while the order is still pending.
     pub received_at: Option<DateTime<Utc>>,
+    pub ready_at: Option<DateTime<Utc>>,
+    pub ready_by: Option<String>,
     /// The made-to-measure design choices, as stored on `orders` — the same
     /// values the invoice document renders as chips per line. Carried on the
     /// list row (not just the detail) so the tracking sheet and the printed

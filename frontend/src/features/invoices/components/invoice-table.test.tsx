@@ -177,7 +177,7 @@ describe('Invoice table', () => {
     expect(within(ahmed).queryByRole('link', { name: 'ORD-103' })).toBeNull()
     expect(within(ahmed).getByText('BHD 45.000')).toBeTruthy()
     expect(within(ahmed).getByText('Collected')).toBeTruthy()
-    expect(within(ahmed).getByText('Pending')).toBeTruthy()
+    expect(within(ahmed).getByText('In progress')).toBeTruthy()
     expect(within(ahmed).getByText('White cotton')).toBeTruthy()
     expect(within(ahmed).getByText('Blue cotton')).toBeTruthy()
     const omar = screen

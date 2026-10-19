@@ -61,6 +61,7 @@ pub struct Measurement {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Customer {
+    pub whatsapp_notifications_enabled: bool,
     pub id: Uuid,
     pub name: String,
     pub mobile_no: String,

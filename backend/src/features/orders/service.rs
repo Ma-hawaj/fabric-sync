@@ -368,6 +368,8 @@ fn assemble_order(
         price: row.price,
         status: row.status,
         received_at: row.received_at,
+        ready_at: row.ready_at,
+        ready_by: row.ready_by,
         thobe_type: row.thobe_type,
         f_pocket: row.f_pocket,
         s_pocket: row.s_pocket,
@@ -621,28 +623,31 @@ pub async fn set_stage(
         &single_location_materials,
     );
 
+    let mut tx = state.db().begin().await?;
+    super::readiness_repository::lock_invoice(&mut tx, order.invoice_id).await?;
+    let (current_production, current_receiving) =
+        super::readiness_repository::locations(&mut tx, order_id).await?;
+    let effective_production_id = current_production.or(effective_production_id);
     validate_delivery_location(
         stage.requires_delivery,
         stage_applies(
             stage.requires_delivery,
             effective_production_id,
-            order.receiving_location_id,
+            current_receiving,
         ),
         input.status,
         input.location_id,
     )?;
 
-    let progress = repository::list_progress(state, std::slice::from_ref(&order_id)).await?;
+    let progress = super::readiness_repository::progress(&mut tx, order_id).await?;
     validate_stage_sequence(
         &catalog,
         &progress,
         effective_production_id,
-        order.receiving_location_id,
+        current_receiving,
         stage_id,
         input.status,
     )?;
-
-    let mut tx = state.db().begin().await?;
 
     if input.status == StageStatus::Pending {
         repository::clear_stage(&mut tx, order_id, stage_id).await?;

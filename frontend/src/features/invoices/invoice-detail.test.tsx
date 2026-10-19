@@ -5,6 +5,20 @@ import { InvoiceDetailPage } from './invoice-detail'
 import type { InvoiceDetail } from './types/invoice-detail'
 
 const navigateMock = vi.fn()
+vi.mock('@/features/notifications/notification-dialog', () => ({
+  NotificationDialog: ({
+    invoiceId,
+    kind,
+  }: {
+    invoiceId: string | null
+    kind: string
+  }) =>
+    invoiceId ? (
+      <p>
+        Preview {kind} for {invoiceId}
+      </p>
+    ) : null,
+}))
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigateMock,
   Link: ({
@@ -103,6 +117,16 @@ function renderPage(detail: InvoiceDetail | null) {
 describe('InvoiceDetailPage', () => {
   beforeEach(() => {
     navigateMock.mockClear()
+  })
+
+  it('opens a separate resend preview without editing the invoice', () => {
+    renderPage(DETAIL)
+    expect(screen.queryByText('Preview manual_resend for inv-1')).toBeNull()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Resend invoice via WhatsApp' }),
+    )
+    expect(screen.getByText('Preview manual_resend for inv-1')).toBeTruthy()
+    expect(navigateMock).not.toHaveBeenCalled()
   })
 
   it('titles the page with the human-readable invoice number', () => {

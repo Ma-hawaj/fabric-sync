@@ -1,3 +1,4 @@
+import type { ReadinessFields } from '@/features/notifications/readiness-controls'
 import type { PaymentStatus, PaymentType } from './invoices'
 
 export type InvoiceLineKind = 'order' | 'product' | 'gift_card'
@@ -65,7 +66,7 @@ export interface InvoicePayment {
 }
 
 /** Shape of GET /invoices/:id. */
-export interface InvoiceDetail {
+export interface InvoiceDetail extends ReadinessFields {
   id: string
   invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */

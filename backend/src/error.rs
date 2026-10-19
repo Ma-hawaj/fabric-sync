@@ -5,6 +5,8 @@ use axum::{
 
 #[derive(Debug)]
 pub enum AppError {
+    Unavailable(String),
+    External(String),
     Auth(String),
     Unauthorized(String),
     Io(std::io::Error),
@@ -79,6 +81,8 @@ impl From<sqlx::migrate::MigrateError> for AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
+            Self::Unavailable(message) => (StatusCode::SERVICE_UNAVAILABLE, message),
+            Self::External(message) => (StatusCode::BAD_GATEWAY, message),
             Self::Auth(error) => (StatusCode::INTERNAL_SERVER_ERROR, error),
             Self::Unauthorized(message) => (StatusCode::UNAUTHORIZED, message),
             Self::Io(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),

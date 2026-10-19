@@ -23,6 +23,7 @@ const SPEC: ListSpec = ListSpec {
             c.id,
             c.name,
             c.mobile_no,
+            c.whatsapp_notifications_enabled,
             max(m.measurement_date) AS last_measured_on,
             count(m.id) AS measurement_count,
             COALESCE(
@@ -330,4 +331,20 @@ pub async fn update_customer(
     }
 
     get_customer(state, customer_id).await
+}
+
+pub async fn set_whatsapp_preference(
+    state: &AppState,
+    id: Uuid,
+    enabled: bool,
+) -> Result<bool, sqlx::Error> {
+    Ok(
+        sqlx::query("UPDATE customers SET whatsapp_notifications_enabled=$2 WHERE id=$1")
+            .bind(id)
+            .bind(enabled)
+            .execute(state.db())
+            .await?
+            .rows_affected()
+            > 0,
+    )
 }

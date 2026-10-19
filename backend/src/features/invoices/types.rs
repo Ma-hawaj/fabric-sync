@@ -522,6 +522,8 @@ pub struct InvoiceRecord {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceDetail {
+    #[serde(flatten)]
+    pub readiness: crate::features::orders::readiness::Summary,
     pub id: Uuid,
     /// Sequential and human-readable, unlike `id`. Formatted for display by
     /// the consumer, which is why it stays a number here.
@@ -558,6 +560,9 @@ pub struct InvoiceDetail {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceListItem {
+    #[sqlx(flatten)]
+    #[serde(flatten)]
+    pub readiness: crate::features::orders::readiness::Summary,
     pub id: Uuid,
     /// The human-readable invoice identity shown as `INV-###` in the UI.
     pub invoice_number: i64,

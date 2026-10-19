@@ -21,6 +21,18 @@
 name: fabric-sync
 
 services:
+  document-renderer:
+    image: gotenberg/gotenberg:8.38.0@sha256:c36cdd730893e3941d27a196ff8b68675e473642d067ec7ee3668b9adaa37b75
+    restart: unless-stopped
+    command:
+      - gotenberg
+      - --api-timeout=45s
+      - --chromium-deny-list=^https?://.*
+    networks:
+      - document-rendering
+    ports:
+      - 127.0.0.1:${DOCUMENT_RENDERER_PORT:-53000}:3000
+
   proxy:
     image: ${TRAEFIK_IMAGE}
     restart: unless-stopped
@@ -256,6 +268,8 @@ services:
       - zitadel
 
 networks:
+  document-rendering:
+    internal: true
   zitadel:
     name: fabric-sync
 

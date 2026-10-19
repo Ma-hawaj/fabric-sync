@@ -122,7 +122,11 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
                           order.status === 'received' ? 'default' : 'secondary'
                         }
                       >
-                        {order.status === 'received' ? 'Collected' : 'Pending'}
+                        {order.status === 'received'
+                          ? 'Collected'
+                          : order.status === 'ready'
+                            ? 'Ready for pickup'
+                            : 'In progress'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-end tabular-nums">

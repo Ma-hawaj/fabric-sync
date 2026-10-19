@@ -49,6 +49,8 @@ const SPEC: ListSpec = ListSpec {
             o.price::float8 AS price,
             o.status,
             o.received_at,
+            o.ready_at,
+            o.ready_by,
             o.thobe_type,
             o.f_pocket,
             o.s_pocket,
@@ -478,7 +480,18 @@ pub async fn update_order(
     order_id: Uuid,
     production_location_id: Option<Uuid>,
 ) -> Result<Option<Uuid>, sqlx::Error> {
-    sqlx::query_scalar!(
+    let mut tx = state.db().begin().await?;
+    let invoice_id: Option<Uuid> = sqlx::query_scalar("SELECT invoice_id FROM orders WHERE id=$1")
+        .bind(order_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+    if let Some(invoice_id) = invoice_id {
+        sqlx::query("SELECT id FROM invoices WHERE id=$1 FOR UPDATE")
+            .bind(invoice_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    let result = sqlx::query_scalar!(
         r#"
         UPDATE orders
         SET production_branch_id = COALESCE($2, production_branch_id)
@@ -488,8 +501,10 @@ pub async fn update_order(
         order_id,
         production_location_id,
     )
-    .fetch_optional(state.db())
-    .await
+    .fetch_optional(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(result)
 }
 
 /// Records a stage as done or skipped. The upsert leans on the unique index,
@@ -585,7 +600,18 @@ pub async fn create_repair(
     charge: f64,
     notes: Option<&str>,
 ) -> Result<Uuid, sqlx::Error> {
-    sqlx::query_scalar!(
+    let mut tx = state.db().begin().await?;
+    let invoice_id: Option<Uuid> = sqlx::query_scalar("SELECT invoice_id FROM orders WHERE id=$1")
+        .bind(order_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+    if let Some(invoice_id) = invoice_id {
+        sqlx::query("SELECT id FROM invoices WHERE id=$1 FOR UPDATE")
+            .bind(invoice_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    let result = sqlx::query_scalar!(
         r#"
         INSERT INTO order_repairs (order_id, reason, charge, notes)
         VALUES ($1, $2, $3::float8, $4)
@@ -596,8 +622,10 @@ pub async fn create_repair(
         charge,
         notes,
     )
-    .fetch_one(state.db())
-    .await
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(result)
 }
 
 /// `completed_at` is written explicitly rather than COALESCEd, because moving a
@@ -613,7 +641,20 @@ pub async fn update_repair(
     notes: Option<&str>,
     completed_at: Option<DateTime<Utc>>,
 ) -> Result<Option<Uuid>, sqlx::Error> {
-    sqlx::query_scalar!(
+    let mut tx = state.db().begin().await?;
+    let invoice_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT o.invoice_id FROM orders o JOIN order_repairs r ON r.order_id=o.id WHERE r.id=$1",
+    )
+    .bind(repair_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(invoice_id) = invoice_id {
+        sqlx::query("SELECT id FROM invoices WHERE id=$1 FOR UPDATE")
+            .bind(invoice_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    let result = sqlx::query_scalar!(
         r#"
         UPDATE order_repairs
         SET reason = COALESCE($2, reason),
@@ -631,6 +672,8 @@ pub async fn update_repair(
         notes,
         completed_at,
     )
-    .fetch_optional(state.db())
-    .await
+    .fetch_optional(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(result)
 }

@@ -332,6 +332,7 @@ const SPEC: ListSpec = ListSpec {
             -- invoices, which have no orders at all).
             agg.last_received_at AS last_received_at,
             COALESCE(agg.item_count, 0) AS order_count,
+            ready.readiness_status, ready.ready_order_count, ready.pending_order_count, ready.readiness_generation,
             COALESCE(agg.collected_order_count, 0) AS collected_order_count,
             i.gift_card_redeemed::float8 AS gift_card_redeemed,
             i.branch_id AS receiving_location_id,
@@ -363,6 +364,7 @@ const SPEC: ListSpec = ListSpec {
             COALESCE(agg.material_names, ARRAY[]::text[]) AS material_names
         FROM invoices i
         LEFT JOIN branch recv ON recv.id = i.branch_id
+        JOIN invoice_readiness ready ON ready.invoice_id = i.id
         LEFT JOIN LATERAL (
             SELECT
                 count(*) AS item_count,
@@ -464,6 +466,10 @@ const SPEC: ListSpec = ListSpec {
             ColumnDef::new("payment_method", ColumnKind::Text),
         ),
         ("received", ColumnDef::new("received", ColumnKind::Bool)),
+        (
+            "readinessStatus",
+            ColumnDef::new("readiness_status", ColumnKind::Text),
+        ),
         (
             "lastReceivedAt",
             ColumnDef::new("last_received_at", ColumnKind::Date),

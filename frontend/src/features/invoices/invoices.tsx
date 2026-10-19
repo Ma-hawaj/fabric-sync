@@ -1,3 +1,4 @@
+import { NotificationDialog } from '@/features/notifications/notification-dialog'
 import * as React from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
@@ -18,7 +19,7 @@ import {
   orderReceivingLocations,
   productionLocations as productionLocationOptions,
 } from '@/features/locations/lib/location-filters'
-import { printInvoiceDocument } from './lib/print-invoice'
+import { downloadInvoicePdf } from './lib/print-invoice'
 import type { Invoice } from './types/invoices'
 
 export function InvoicesPage() {
@@ -29,11 +30,12 @@ export function InvoicesPage() {
     null,
   )
   const navigate = useNavigate()
+  const [resendId, setResendId] = React.useState<string | null>(null)
 
   const exportPdf = React.useCallback((invoice: Invoice) => {
-    toast.promise(printInvoiceDocument(invoice.id), {
+    toast.promise(downloadInvoicePdf(invoice.id), {
       loading: 'Preparing the invoice...',
-      success: 'Invoice ready — choose "Save as PDF" to download it.',
+      success: 'Invoice PDF downloaded.',
       error: 'Could not prepare this invoice. Please try again.',
     })
   }, [])
@@ -77,6 +79,7 @@ export function InvoicesPage() {
           params: { invoiceId: invoice.id },
         }),
       setPaymentInvoice,
+      (invoice) => setResendId(invoice.id),
     )
   }, [materials, locations, exportPdf, navigate])
 
@@ -101,6 +104,11 @@ export function InvoicesPage() {
 
   return (
     <div className="space-y-4">
+      <NotificationDialog
+        invoiceId={resendId}
+        kind="manual_resend"
+        onClose={() => setResendId(null)}
+      />
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Invoices</h1>

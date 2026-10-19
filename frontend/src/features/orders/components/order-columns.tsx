@@ -19,6 +19,7 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 
 const statusOptions = [
   { label: 'Pending', value: 'pending' },
+  { label: 'Ready for pickup', value: 'ready' },
   { label: 'Received', value: 'received' },
 ]
 
@@ -240,7 +241,11 @@ export function getOrderColumns(
         const status = row.getValue<Order['status']>('status')
         return (
           <Badge variant={status === 'received' ? 'default' : 'secondary'}>
-            {status === 'received' ? 'Received' : 'Pending'}
+            {status === 'received'
+              ? 'Received'
+              : status === 'ready'
+                ? 'Ready for pickup'
+                : 'Pending'}
           </Badge>
         )
       },

@@ -1,5 +1,5 @@
 pub(crate) mod designs;
-mod document;
+pub(crate) mod document;
 mod handlers;
 mod routes;
 pub(crate) mod service;

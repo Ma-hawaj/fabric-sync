@@ -107,3 +107,15 @@ mod tests {
         }
     }
 }
+
+pub async fn set_whatsapp_preference(
+    state: &AppState,
+    id: Uuid,
+    enabled: bool,
+) -> Result<(), AppError> {
+    let changed = repository::set_whatsapp_preference(state, id, enabled).await?;
+    if !changed {
+        return Err(AppError::NotFound("Customer not found.".into()));
+    }
+    Ok(())
+}

@@ -1,3 +1,9 @@
+import { NotificationDialog } from '@/features/notifications/notification-dialog'
+import { NotificationHistory } from '@/features/notifications/notification-history'
+import {
+  ReadinessBadge,
+  ReadinessControls,
+} from '@/features/notifications/readiness-controls'
 import * as React from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Badge } from '@/components/ui/badge'
@@ -22,7 +28,7 @@ import { toast } from 'sonner'
 import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
 import { useInvoice } from './hooks/use-invoice'
-import { printInvoiceDocument } from './lib/print-invoice'
+import { downloadInvoicePdf } from './lib/print-invoice'
 import type { Invoice, InvoiceCustomer } from './types/invoices'
 import type { InvoiceDetail, InvoiceLine } from './types/invoice-detail'
 
@@ -40,6 +46,7 @@ const LINE_KIND_LABELS: Record<InvoiceLine['kind'], string> = {
 export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
   const { data: detail, isLoading, isError } = useInvoice(invoiceId)
   const navigate = useNavigate()
+  const [resendOpen, setResendOpen] = React.useState(false)
 
   // The receive dialog was built around the list row's `Invoice`, so the
   // detail is narrowed into that shape for it — the arithmetic it shows comes
@@ -64,6 +71,11 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 
   return (
     <div className="space-y-6">
+      <NotificationDialog
+        invoiceId={resendOpen ? invoiceId : null}
+        kind="manual_resend"
+        onClose={() => setResendOpen(false)}
+      />
       <div>
         <Link
           to="/invoices"
@@ -93,7 +105,8 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <ReadinessBadge {...detail} />
           <Badge
             variant={invoice.paymentStatus === 'paid' ? 'default' : 'outline'}
             className="capitalize"
@@ -109,8 +122,23 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           </Badge>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ExportPdfButton invoiceId={invoice.id} />
+          <Button variant="outline" onClick={() => setResendOpen(true)}>
+            Resend invoice via WhatsApp
+          </Button>
+          {detail.orderCount > 0 && (
+            <ReadinessControls
+              id={invoiceId}
+              invoiceId={invoiceId}
+              scope="invoices"
+              status={
+                detail.readinessStatus ??
+                (detail.received ? 'collected' : 'in_progress')
+              }
+            />
+          )}
+
           <Button
             variant="outline"
             disabled={detail.received}
@@ -129,6 +157,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
         </div>
       </div>
 
+      <NotificationHistory invoiceId={invoiceId} />
       <div>
         <SectionHeading icon={<Users className="h-3.5 w-3.5" />}>
           Customers
@@ -365,12 +394,12 @@ function ExportPdfButton({ invoiceId }: { invoiceId: string }) {
       disabled={isPrinting}
       onClick={() => {
         setIsPrinting(true)
-        const pending = printInvoiceDocument(invoiceId).finally(() =>
+        const pending = downloadInvoicePdf(invoiceId).finally(() =>
           setIsPrinting(false),
         )
         toast.promise(pending, {
           loading: 'Preparing the invoice...',
-          success: 'Invoice ready — choose "Save as PDF" to download it.',
+          success: 'Invoice PDF downloaded.',
           error: 'Could not prepare this invoice. Please try again.',
         })
       }}

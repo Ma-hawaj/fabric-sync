@@ -2,9 +2,10 @@
 # .github/workflows/docker.yml):
 #   ghcr.io/ma-hawaj/fabric-sync:<tag>   (latest, main, sha-<short>, or v*.*.*)
 #
-# One service serves everything: the backend serves the built SPA and the
+# The app serves the built SPA and the
 # JSON API on the same origin (:8000/, :8000/api/*, :8000/health), so there
-# is no CORS and no frontend/backend split to wire up.
+# is no CORS and no frontend/backend split to wire up. A private Chromium
+# service renders invoice PDFs for downloads and notification previews.
 #
 # Postgres is NOT in this file — it uses your Dokploy-managed database via
 # its internal host (reachable because the app is attached to Dokploy's
@@ -29,6 +30,16 @@
 name: fabric-sync-prod
 
 services:
+  document-renderer:
+    image: gotenberg/gotenberg:8.38.0@sha256:c36cdd730893e3941d27a196ff8b68675e473642d067ec7ee3668b9adaa37b75
+    restart: unless-stopped
+    command:
+      - gotenberg
+      - --api-timeout=45s
+      - --chromium-deny-list=^https?://.*
+    networks:
+      - document-rendering
+
   app:
     image: ghcr.io/ma-hawaj/fabric-sync:${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -36,8 +47,27 @@ services:
       - ${APP_PUBLISHED_PORT:-8000}:8000
     networks:
       - dokploy-network
+      - document-rendering
     environment:
       # Fixed at 8000: the image's baked HEALTHCHECK probes localhost:8000.
+      DOCUMENT_RENDERER_URL: http://document-renderer:3000
+      DOCUMENT_RENDERER_PROFILE: gotenberg-8.38.0-noto-sans-arabic
+      WHATSAPP_DELIVERY_ENABLED: ${WHATSAPP_DELIVERY_ENABLED:-false}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_API_VERSION: ${WHATSAPP_API_VERSION:-v23.0}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
+      WHATSAPP_DEFAULT_REGION: ${WHATSAPP_DEFAULT_REGION:-BH}
+      WHATSAPP_TEMPLATE_LANGUAGE: ${WHATSAPP_TEMPLATE_LANGUAGE:-en_US}
+      WHATSAPP_INVOICE_TEMPLATE: ${WHATSAPP_INVOICE_TEMPLATE:-invoice_document_v1}
+      WHATSAPP_READY_TEMPLATE: ${WHATSAPP_READY_TEMPLATE:-invoice_ready_v1}
+      WHATSAPP_INVOICE_BODY: ${WHATSAPP_INVOICE_BODY:-}
+      WHATSAPP_READY_BODY: ${WHATSAPP_READY_BODY:-}
+      NOTIFICATION_MAX_ATTEMPTS: ${NOTIFICATION_MAX_ATTEMPTS:-5}
+      NOTIFICATION_DRAFT_RETENTION_DAYS: ${NOTIFICATION_DRAFT_RETENTION_DAYS:-30}
+      DOCUMENT_ORPHAN_RETENTION_DAYS: ${DOCUMENT_ORPHAN_RETENTION_DAYS:-30}
+      WHATSAPP_WEBHOOK_RETENTION_DAYS: ${WHATSAPP_WEBHOOK_RETENTION_DAYS:-90}
       PORT: 8000
       STATIC_DIR: /app/static
       # Your Dokploy Postgres. All four must be set in the Environment tab —
@@ -72,5 +102,7 @@ services:
     # (wget localhost:8000/health expecting {"status":"ok"}).
 
 networks:
+  document-rendering:
+    internal: true
   dokploy-network:
     external: true

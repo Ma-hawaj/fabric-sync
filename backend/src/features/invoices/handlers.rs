@@ -112,3 +112,21 @@ pub async fn record_payment(
         .await?,
     ))
 }
+
+pub async fn mark_ready(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(invoice_id): Path<Uuid>,
+    Json(input): Json<crate::features::orders::readiness::ConfirmInput>,
+) -> Result<Json<crate::features::orders::readiness::ReadyResult>, AppError> {
+    Ok(Json(
+        crate::features::orders::readiness::confirm(
+            state.db(),
+            invoice_id,
+            None,
+            user.subject().unwrap_or("staff"),
+            input.confirmed_at_pickup_branch,
+        )
+        .await?,
+    ))
+}
