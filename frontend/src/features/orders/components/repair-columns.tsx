@@ -1,6 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { Link } from '@tanstack/react-router'
-import { CheckIcon, FileDownIcon, LinkIcon, RulerIcon } from 'lucide-react'
+import { CheckIcon, FileDownIcon, LinkIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
@@ -35,7 +35,6 @@ const statusOptions = [
 
 export function getRepairColumns(
   onReceive: (repair: RepairListItem) => void,
-  onFixMeasurement: (repair: RepairListItem) => void,
   onPrint: (repair: RepairListItem) => void,
 ): ColumnDef<RepairListItem, any>[] {
   return [
@@ -199,13 +198,6 @@ export function getRepairColumns(
                 disabled: !canReceive,
                 onClick: () => onReceive(repair),
                 separatorBefore: true,
-              },
-              {
-                label: repair.fixedMeasurementId
-                  ? 'Update measurements'
-                  : 'Record measurements',
-                icon: RulerIcon,
-                onClick: () => onFixMeasurement(repair),
               },
               {
                 label: 'Print receipt',

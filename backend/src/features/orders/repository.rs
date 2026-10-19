@@ -727,15 +727,6 @@ pub async fn clear_stage(
     Ok(())
 }
 
-pub async fn order_exists(state: &AppState, order_id: Uuid) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar!(
-        r#"SELECT EXISTS (SELECT 1 FROM orders WHERE id = $1) AS "exists!""#,
-        order_id,
-    )
-    .fetch_one(state.db())
-    .await
-}
-
 /// Guards the repair endpoints: a repair belonging to another order must not be
 /// addressable through this order's URL.
 pub async fn repair_belongs_to_order(
@@ -757,24 +748,23 @@ pub async fn repair_belongs_to_order(
 }
 
 pub async fn create_repair(
-    state: &AppState,
+    tx: &mut sqlx::PgTransaction<'_>,
     order_id: Uuid,
     reason: &str,
     charge: f64,
     notes: Option<&str>,
 ) -> Result<Uuid, sqlx::Error> {
-    let mut tx = state.db().begin().await?;
     let invoice_id: Option<Uuid> = sqlx::query_scalar("SELECT invoice_id FROM orders WHERE id=$1")
         .bind(order_id)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut **tx)
         .await?;
     if let Some(invoice_id) = invoice_id {
         sqlx::query("SELECT id FROM invoices WHERE id=$1 FOR UPDATE")
             .bind(invoice_id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
     }
-    let result = sqlx::query_scalar!(
+    sqlx::query_scalar!(
         r#"
         INSERT INTO order_repairs (order_id, reason, charge, notes)
         VALUES ($1, $2, $3::float8, $4)
@@ -785,10 +775,8 @@ pub async fn create_repair(
         charge,
         notes,
     )
-    .fetch_one(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(result)
+    .fetch_one(&mut **tx)
+    .await
 }
 
 /// `completed_at` is written explicitly rather than COALESCEd, because moving a

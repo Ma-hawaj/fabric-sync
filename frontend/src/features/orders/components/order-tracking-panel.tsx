@@ -33,7 +33,6 @@ import { useUpdateOrder } from '../hooks/use-update-order'
 import { useUpdateRepair } from '../hooks/use-update-repair'
 import { printRepairDocument } from '../lib/print-repair'
 import { ReceiveRepairDialog } from './receive-repair-dialog'
-import { FixRepairMeasurementDialog } from './fix-repair-measurement-dialog'
 import type {
   Order,
   OrderDetail,
@@ -432,7 +431,6 @@ function RepairsSection({
 function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
   const updateRepair = useUpdateRepair()
   const [receiveOpen, setReceiveOpen] = React.useState(false)
-  const [fixOpen, setFixOpen] = React.useState(false)
   const [isPrinting, setIsPrinting] = React.useState(false)
   const finished = isRepairFinished(repair.status)
 
@@ -571,16 +569,6 @@ function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
           size="sm"
           variant="ghost"
           className="h-8 w-auto px-2"
-          onClick={() => setFixOpen(true)}
-        >
-          {repair.fixedMeasurementId
-            ? 'Update Measurements'
-            : 'Record Measurements'}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-8 w-auto px-2"
           disabled={isPrinting}
           onClick={handlePrint}
         >
@@ -591,10 +579,6 @@ function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
       <ReceiveRepairDialog
         repair={receiveOpen ? asListItem(repair) : null}
         onOpenChange={(open) => !open && setReceiveOpen(false)}
-      />
-      <FixRepairMeasurementDialog
-        repair={fixOpen ? asListItem(repair) : null}
-        onOpenChange={(open) => !open && setFixOpen(false)}
       />
     </div>
   )

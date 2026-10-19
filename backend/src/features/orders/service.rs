@@ -764,21 +764,29 @@ pub async fn create_repair(
     order_id: Uuid,
     input: CreateRepairInput,
 ) -> Result<OrderListItem, AppError> {
-    if !repository::order_exists(state, order_id).await? {
-        return Err(AppError::NotFound(format!("order {order_id} not found")));
+    let context = repository::repair_order_context(state, order_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
+    if let Some(measurement) = &input.measurement {
+        crate::features::customers::types::validate_measurement(measurement)?;
     }
 
     let reason = normalized_reason(&input.reason)?;
     validate_charge(input.charge)?;
 
-    repository::create_repair(
-        state,
+    let mut tx = state.db().begin().await?;
+    let repair_id = repository::create_repair(
+        &mut tx,
         order_id,
         &reason,
         input.charge,
         input.notes.as_deref(),
     )
     .await?;
+    if let Some(measurement) = &input.measurement {
+        save_repair_measurement(&mut tx, context.customer_id, repair_id, measurement).await?;
+    }
+    tx.commit().await?;
 
     tracing::info!(
         order_id = %order_id,
@@ -920,30 +928,8 @@ pub async fn set_repair_measurement(
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
 
     let mut tx = state.db().begin().await?;
-    let measurement_id = match crate::features::customers::repository::latest_measurement(
-        &mut tx,
-        context.customer_id,
-    )
-    .await?
-    {
-        Some((id, ref values))
-            if crate::features::customers::types::measurement_values_equal(
-                values,
-                &measurement,
-            ) =>
-        {
-            id
-        }
-        _ => {
-            crate::features::customers::repository::insert_measurement(
-                &mut tx,
-                context.customer_id,
-                &measurement,
-            )
-            .await?
-        }
-    };
-    repository::set_repair_fixed_measurement(&mut tx, repair_id, measurement_id).await?;
+    let measurement_id =
+        save_repair_measurement(&mut tx, context.customer_id, repair_id, &measurement).await?;
     tx.commit().await?;
 
     tracing::info!(
@@ -954,6 +940,36 @@ pub async fn set_repair_measurement(
     );
 
     load_order(state, order_id).await
+}
+
+async fn save_repair_measurement(
+    tx: &mut sqlx::PgTransaction<'_>,
+    customer_id: Uuid,
+    repair_id: Uuid,
+    measurement: &crate::features::customers::types::CreateMeasurementInput,
+) -> Result<Uuid, AppError> {
+    crate::features::customers::types::validate_measurement(measurement)?;
+    let measurement_id =
+        match crate::features::customers::repository::latest_measurement(tx, customer_id).await? {
+            Some((id, ref values))
+                if crate::features::customers::types::measurement_values_equal(
+                    values,
+                    measurement,
+                ) =>
+            {
+                id
+            }
+            _ => {
+                crate::features::customers::repository::insert_measurement(
+                    tx,
+                    customer_id,
+                    measurement,
+                )
+                .await?
+            }
+        };
+    repository::set_repair_fixed_measurement(tx, repair_id, measurement_id).await?;
+    Ok(measurement_id)
 }
 
 pub async fn list_all_repairs(

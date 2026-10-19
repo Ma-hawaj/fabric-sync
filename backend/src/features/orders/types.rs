@@ -334,6 +334,7 @@ pub struct AssignStageInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateRepairInput {
+    pub measurement: Option<crate::features::customers::types::CreateMeasurementInput>,
     pub reason: String,
     #[serde(default)]
     pub charge: f64,

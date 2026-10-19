@@ -16,7 +16,8 @@ use super::{
     document, repair_document, service,
     types::{
         AssignStageInput, CollectOrderInput, CreateRepairInput, OrderDetail, OrderListItem,
-        ReceiveRepairInput, RepairListItem, RepairMeasurementFixInput, SetStageInput, UpdateOrderInput, UpdateRepairInput,
+        ReceiveRepairInput, RepairListItem, RepairMeasurementFixInput, SetStageInput,
+        UpdateOrderInput, UpdateRepairInput,
     },
 };
 

@@ -6,7 +6,6 @@ import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getRepairColumns } from './components/repair-columns'
 import { ReceiveRepairDialog } from './components/receive-repair-dialog'
-import { FixRepairMeasurementDialog } from './components/fix-repair-measurement-dialog'
 import { useRepairs } from './hooks/use-repairs'
 import { printRepairDocument } from './lib/print-repair'
 import type { RepairListItem } from './types/orders'
@@ -14,13 +13,11 @@ import type { RepairListItem } from './types/orders'
 export function RepairsPage() {
   const [receiveRepair, setReceiveRepair] =
     React.useState<RepairListItem | null>(null)
-  const [fixRepair, setFixRepair] = React.useState<RepairListItem | null>(null)
 
   const columns = React.useMemo(
     () =>
       getRepairColumns(
         (repair) => setReceiveRepair(repair),
-        (repair) => setFixRepair(repair),
         (repair) => {
           const pending = printRepairDocument(repair.orderId, repair.id).catch(
             () => {
@@ -76,10 +73,6 @@ export function RepairsPage() {
       <ReceiveRepairDialog
         repair={receiveRepair}
         onOpenChange={(open) => !open && setReceiveRepair(null)}
-      />
-      <FixRepairMeasurementDialog
-        repair={fixRepair}
-        onOpenChange={(open) => !open && setFixRepair(null)}
       />
     </div>
   )
