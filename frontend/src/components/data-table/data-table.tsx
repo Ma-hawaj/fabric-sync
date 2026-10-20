@@ -62,7 +62,7 @@ export function DataTable<TData>({
         data-density={density}
         aria-busy={isLoading}
         className={cn(
-          'data-table flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-background',
+          'group/data-table flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-background',
           renderExpandedRow && '[container-type:inline-size]',
           className,
         )}
@@ -72,8 +72,8 @@ export function DataTable<TData>({
         <Table
           containerRef={scrollRef}
           containerClassName="min-h-0 flex-1 overflow-auto overscroll-contain"
-          className="table-fixed"
-          style={{ width: table.getTotalSize(), minWidth: '100%' }}
+          className="min-w-full table-fixed"
+          style={{ width: table.getTotalSize() }}
           aria-label="Records"
         >
           <TableHeader className="sticky top-0 z-20">
@@ -122,7 +122,7 @@ export function DataTable<TData>({
                             ),
                           }))
                         }}
-                        className="column-resizer"
+                        className="absolute inset-y-0 end-0 w-[5px] cursor-col-resize touch-none hover:bg-ring focus-visible:bg-ring"
                       />
                     )}
                   </TableHead>

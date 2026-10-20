@@ -48,9 +48,6 @@ export function getColumnPinningStyle<TData>({
     left: isPinned === 'left' ? `${column.getStart('left')}px` : undefined,
     right: isPinned === 'right' ? `${column.getAfter('right')}px` : undefined,
     position: isPinned ? 'sticky' : 'relative',
-    background: isPinned
-      ? 'var(--table-row-background, var(--background))'
-      : undefined,
     width: column.getSize(),
     zIndex: isPinned ? 1 : undefined,
   }

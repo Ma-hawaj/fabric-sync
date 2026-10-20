@@ -51,7 +51,7 @@ function RootComponent() {
       <Sidebar />
       <SidebarInset className="min-w-0 overflow-hidden">
         <Header />
-        <div className="workspace-content min-h-0 flex-1 overflow-y-auto p-3 md:p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3 md:p-4 [&>:not([data-slot=list-page])]:mx-auto [&>:not([data-slot=list-page])]:max-w-6xl">
           <Outlet />
         </div>
       </SidebarInset>

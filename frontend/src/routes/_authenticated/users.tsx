@@ -24,10 +24,15 @@ function Users() {
   })
 
   return (
-    <div className="list-page">
+    <div
+      data-slot="list-page"
+      className="flex h-full min-h-0 min-w-0 flex-col gap-3 [&>:first-child]:shrink-0"
+    >
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Users</h1>
-        <p className="list-description">View all Users.</p>
+        <p className="mt-0.5 hidden text-xs leading-relaxed text-muted-foreground sm:block">
+          View all Users.
+        </p>
       </div>
 
       <DataTable isLoading={isLoading} table={table}>
