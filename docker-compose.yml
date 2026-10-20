@@ -28,6 +28,7 @@ services:
       - gotenberg
       - --api-timeout=45s
       - --chromium-deny-list=^https?://.*
+      - '--chromium-deny-list=^file:(?!//\/tmp/).*'
     networks:
       - document-rendering
     ports:

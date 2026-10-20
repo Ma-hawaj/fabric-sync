@@ -565,6 +565,26 @@ async fn private_routes_require_staff_auth_and_webhooks_require_meta_auth(pool: 
         1
     );
     assert_eq!(client.get(format!("{url}/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=test-verify-token&hub.challenge=challenge")).send().await.unwrap().text().await.unwrap(), "challenge");
+    for (mode, token) in [
+        ("subscribe", "test-verify-tokeN"),
+        ("subscribe", ""),
+        ("invalid", "test-verify-token"),
+    ] {
+        assert_eq!(
+            client
+                .get(format!("{url}/webhooks/whatsapp"))
+                .query(&[
+                    ("hub.mode", mode),
+                    ("hub.verify_token", token),
+                    ("hub.challenge", "challenge")
+                ])
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
 }
 
 #[sqlx::test(migrations = false)]

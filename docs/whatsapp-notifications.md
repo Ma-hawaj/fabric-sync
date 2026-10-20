@@ -22,6 +22,8 @@ local development. The production compose file supplies the internal URL.
 
 The pinned Gotenberg 8.38.0 image includes Noto Sans Arabic. Its browser cannot
 fetch remote HTTP assets; invoice HTML, designs, logo, and QR are self-contained.
+Its deny list also retains Gotenberg's default restriction on file URLs outside
+`/tmp/`, alongside the HTTP(S) restriction.
 The backend allows two simultaneous conversions, a 45-second HTTP timeout, and
 a 20 MB PDF limit. It stores generated PDFs privately in Postgres with an input
 fingerprint, byte count, and SHA-256. Preview/download/upload use those stored
@@ -37,7 +39,12 @@ under a different renderer. Back up document artifacts with the database.
 
 ## Sender setup
 
-Configure a Meta WhatsApp Business sender using the variables in `.env.example`.
+Configure a Meta WhatsApp Business sender using the variables in
+`backend/.env.example`. For local `cargo run`, copy that file to `backend/.env`.
+The root `.env.example` contains compose infrastructure settings only, including
+the renderer's published port. For production compose, supply the backend runtime
+variables through the deployment environment; the compose file passes them into
+the app container.
 Set `WHATSAPP_DELIVERY_ENABLED=true` only when the sender and approved templates
 are available. Unconfigured delivery never reports simulated success. PDF
 previews and invoice work are available independently of delivery configuration.
@@ -111,20 +118,24 @@ embeds the Arabic font. Provider tests use controlled local HTTP servers and
 never contact Meta. Actual delivery still needs a staging smoke test with the
 configured approved templates and a designated test recipient.
 
-### Verified locally on 19 October 2026
+### Verified locally on 20 October 2026
 
-- Backend: 226 tests passed, including upgrading a database with existing
+- Backend: 227 tests passed, including upgrading a database with existing
   customers, pending/collected orders, and payments. Formatting, compilation,
   fresh migrations, and `cargo sqlx prepare --check` passed.
-- Frontend: 284 tests across 40 files passed; lint, formatting, and production
+- Frontend: 285 tests across 41 files passed; lint, formatting, and production
   build passed. Tests cover explicit approval, recipient grouping/selection,
   stale previews, successful/failed edits, skipping, and the separate resend
-  button.
+  button. A readiness transition preserves the open preview and its recipient
+  selection without preparing it again.
 - Real Chromium: rendered a two-page A4 bilingual invoice with embedded
   Noto Sans Arabic fonts. The renderer test passed separately from the default
   backend suite.
 - Local and production compose configurations validated. No deployment or real
   WhatsApp send was performed.
+- The root env example contains only compose inputs. The production-configured
+  renderer rejects HTTP(S) URLs and the URL route rejects local-file navigation;
+  self-contained invoice conversion still passes with the file deny rule retained.
 - The branch was rebased onto `ebd1b8a`, including the dynamic design catalog.
   The catalog integration test checks invalidation after a label change while
   retaining the original PDF.

@@ -129,7 +129,10 @@ pub async fn verify(
     Query(query): Query<Challenge>,
 ) -> Result<String, AppError> {
     if query.mode != "subscribe"
-        || state.notifications().verification_token.as_deref() != Some(query.token.as_str())
+        || !worker::valid_verification_token(
+            state.notifications().verification_token.as_deref(),
+            &query.token,
+        )
     {
         return Err(AppError::Unauthorized(
             "Invalid webhook verification token.".into(),

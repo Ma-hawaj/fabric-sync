@@ -90,21 +90,26 @@ export function ReadinessControls({
     status === 'not_applicable'
   )
     return null
+  const notificationDialog = (
+    <NotificationDialog
+      key="ready-notification"
+      invoiceId={notify ? invoiceId : null}
+      kind="invoice_ready"
+      onClose={() => setNotify(false)}
+    />
+  )
   if (scope === 'invoices' && status === 'ready')
     return (
       <>
+        {notificationDialog}
         <Button variant="outline" onClick={() => setNotify(true)}>
           Notify ready for pickup
         </Button>
-        <NotificationDialog
-          invoiceId={notify ? invoiceId : null}
-          kind="invoice_ready"
-          onClose={() => setNotify(false)}
-        />
       </>
     )
   return (
     <>
+      {notificationDialog}
       <Button
         variant="outline"
         onClick={() => {
@@ -186,11 +191,6 @@ export function ReadinessControls({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <NotificationDialog
-        invoiceId={notify ? invoiceId : null}
-        kind="invoice_ready"
-        onClose={() => setNotify(false)}
-      />
     </>
   )
 }

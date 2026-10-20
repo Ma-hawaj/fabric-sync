@@ -2,6 +2,7 @@ use hmac::{Hmac, Mac};
 use serde_json::{json, Value};
 use sha2::Sha256;
 use sqlx::PgPool;
+use subtle::ConstantTimeEq;
 
 use super::{
     repository::{self, Job},
@@ -266,6 +267,10 @@ async fn graph_response(
     Err(error)
 }
 
+pub fn valid_verification_token(expected: Option<&str>, candidate: &str) -> bool {
+    expected.is_some_and(|token| bool::from(token.as_bytes().ct_eq(candidate.as_bytes())))
+}
+
 pub fn valid_signature(secret: &str, body: &[u8], signature: &str) -> bool {
     let Some(hex) = signature.strip_prefix("sha256=") else {
         return false;
@@ -336,6 +341,23 @@ async fn process_webhooks(db: &PgPool) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn webhook_challenge_requires_the_exact_configured_token() {
+        assert!(valid_verification_token(Some("test-token"), "test-token"));
+        for candidate in [
+            "",
+            "test-toke",
+            "test-token-extra",
+            "Test-token",
+            "test-Token",
+            "test-tokeN",
+        ] {
+            assert!(!valid_verification_token(Some("test-token"), candidate));
+        }
+        assert!(!valid_verification_token(None, "test-token"));
+        assert!(!valid_verification_token(None, ""));
+    }
+
     #[test]
     fn late_statuses_never_downgrade_confirmed_delivery() {
         assert_eq!(next_status("read", "sent"), None);

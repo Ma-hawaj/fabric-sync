@@ -37,6 +37,7 @@ services:
       - gotenberg
       - --api-timeout=45s
       - --chromium-deny-list=^https?://.*
+      - '--chromium-deny-list=^file:(?!//\/tmp/).*'
     networks:
       - document-rendering
 
@@ -81,10 +82,10 @@ services:
       # Only set if Zitadel uses a non-standard introspection endpoint —
       # otherwise discovery advertises it.
       OAUTH_INTROSPECTION_URL: ${OAUTH_INTROSPECTION_URL:-}
-      # Leave unset unless verified (see .env.example).
+      # Leave unset unless verified (see backend/.env.example).
       OAUTH_RESOURCE_AUDIENCE: ${OAUTH_RESOURCE_AUDIENCE:-}
       # Dedicated Zitadel machine user backing GET /users (see
-      # .env.example). Required — the app refuses to boot without both.
+      # backend/.env.example). Required — the app refuses to boot without both.
       ZITADEL_USERS_CLIENT_ID: ${ZITADEL_USERS_CLIENT_ID:?set ZITADEL_USERS_CLIENT_ID}
       ZITADEL_USERS_CLIENT_SECRET: ${ZITADEL_USERS_CLIENT_SECRET:?set ZITADEL_USERS_CLIENT_SECRET}
       SEED_DEV_DATA: ${SEED_DEV_DATA:-false}
