@@ -50,7 +50,11 @@ import {
 } from '@/components/ui/select'
 import { dataTableConfig } from '@/config/data-table'
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
-import { getDefaultFilterOperator, getFilterOperators } from '@/lib/data-table'
+import {
+  getDefaultFilterOperator,
+  getFilterOperators,
+  getFilterValueForOperator,
+} from '@/lib/data-table'
 import { formatDate } from '@/lib/format'
 import { generateId } from '@/lib/id'
 import { useTableFilters } from '@/hooks/use-table-filters'
@@ -484,8 +488,7 @@ function DataTableFilterItem<TData>({
           value &&
           onFilterUpdate(filter.filterId, {
             operator: value,
-            value:
-              value === 'isEmpty' || value === 'isNotEmpty' ? '' : filter.value,
+            value: getFilterValueForOperator(filter.value, value),
           })
         }
       >
