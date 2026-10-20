@@ -74,8 +74,11 @@ pub struct CreateOrderInput {
     // customer fabric needs an active production location without a stock row.
     // Stored directly as orders.production_branch_id for delivery tracking.
     pub production_location_id: Uuid,
-    // Entered by staff per order line; materials carry no unit price to derive
-    // it from.
+    pub customer_base_price: Option<f64>,
+    // Resolved by the service, never accepted from a client.
+    #[serde(skip_deserializing)]
+    pub base_price: f64,
+    #[serde(skip_deserializing)]
     pub price: f64,
     pub thobe_type: Option<String>,
     pub f_pocket: Option<String>,
@@ -206,6 +209,7 @@ pub struct CreatedInvoice {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEditOrder {
+    pub base_price: f64,
     pub material_source: String,
     pub material_id: Option<Uuid>,
     pub customer_material_description: Option<String>,

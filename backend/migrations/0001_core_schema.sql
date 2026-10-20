@@ -29,7 +29,12 @@ CREATE TABLE materials (
     -- Fabric family grouping a fabric's colour variants ("Zabrjad 1" and
     -- "Zabrjad 2" are both family "Zabrjad"), so the inventory table can
     -- cluster them behind one filter. NULL on rows that need no grouping.
-    family TEXT
+    family TEXT,
+    junior_price NUMERIC(10, 2) CHECK (junior_price >= 0),
+    normal_price NUMERIC(10, 2) CHECK (normal_price >= 0),
+    large_price NUMERIC(10, 2) CHECK (large_price >= 0),
+    CHECK ((junior_price IS NULL AND normal_price IS NULL AND large_price IS NULL)
+        OR (junior_price IS NOT NULL AND normal_price IS NOT NULL AND large_price IS NOT NULL))
 );
 
 -- A material can be stocked at more than one location (branch), so stock is
@@ -136,6 +141,7 @@ CREATE TABLE orders (
     ),
     invoice_id UUID NOT NULL REFERENCES invoices(id),
     price NUMERIC(10, 2) NOT NULL,
+    base_price NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (base_price >= 0),
     thobe_type TEXT,
     f_pocket TEXT,
     s_pocket TEXT,
@@ -366,6 +372,7 @@ CREATE TABLE design_options (
         ('thob_type', 'neck', 'sleeve', 'front_pocket', 'side_pocket', 'patti', 'emd')),
     slug TEXT NOT NULL,
     label TEXT NOT NULL,
+    cost NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (cost >= 0),
     image BYTEA,
     image_mime TEXT NOT NULL DEFAULT 'image/webp',
     image_version BIGINT NOT NULL DEFAULT 1,

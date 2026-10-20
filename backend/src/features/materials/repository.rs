@@ -6,7 +6,7 @@ use crate::{
     state::AppState,
 };
 
-use super::types::{Material, StockEntryInput};
+use super::types::{Material, MaterialPrices, StockEntryInput};
 
 // `total_quantity` and `location_names` mirror what the inventory table derives
 // per row in the browser. They are computed by the same `GROUP BY` that builds
@@ -19,6 +19,9 @@ const SPEC: ListSpec = ListSpec {
             m.sku,
             m.unit,
             m.family,
+            m.junior_price::float8 AS junior_price,
+            m.normal_price::float8 AS normal_price,
+            m.large_price::float8 AS large_price,
             COALESCE(sum(ms.quantity), 0)::float8 AS total_quantity,
             COALESCE(
                 array_agg(b.name ORDER BY b.name) FILTER (WHERE ms.id IS NOT NULL),
@@ -102,20 +105,24 @@ pub async fn create_material(
     sku: Option<&str>,
     unit: &str,
     family: Option<&str>,
+    prices: &MaterialPrices,
     entries: &[StockEntryInput],
 ) -> Result<Uuid, sqlx::Error> {
     let mut tx = state.db().begin().await?;
 
     let material_id = sqlx::query_scalar!(
         r#"
-        INSERT INTO materials (name, sku, unit, family)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO materials (name, sku, unit, family, junior_price, normal_price, large_price)
+        VALUES ($1, $2, $3, $4, $5::float8, $6::float8, $7::float8)
         RETURNING id
         "#,
         name,
         sku,
         unit,
         family,
+        prices.junior_price,
+        prices.normal_price,
+        prices.large_price,
     )
     .fetch_one(&mut *tx)
     .await?;
@@ -125,6 +132,17 @@ pub async fn create_material(
     tx.commit().await?;
 
     Ok(material_id)
+}
+
+pub async fn update_prices(
+    state: &AppState,
+    id: Uuid,
+    prices: &MaterialPrices,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query!(
+        "UPDATE materials SET junior_price = $2::float8, normal_price = $3::float8, large_price = $4::float8 WHERE id = $1",
+        id, prices.junior_price, prices.normal_price, prices.large_price
+    ).execute(state.db()).await?.rows_affected() > 0)
 }
 
 pub async fn add_stock(

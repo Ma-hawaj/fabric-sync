@@ -22,6 +22,9 @@ pub struct Material {
     // Fabric family shared by a fabric's colour variants ("Zabrjad 1" and
     // "Zabrjad 2" are both family "Zabrjad"); NULL on pre-existing rows.
     pub family: Option<String>,
+    pub junior_price: Option<f64>,
+    pub normal_price: Option<f64>,
+    pub large_price: Option<f64>,
     #[sqlx(json)]
     pub locations: Vec<MaterialLocationStock>,
 }
@@ -42,8 +45,18 @@ pub struct CreateMaterialInput {
     // Fabric family grouping this material's colour variants; absent on
     // older clients, which simply create ungrouped materials.
     pub family: Option<String>,
+    #[serde(flatten)]
+    pub prices: MaterialPrices,
     #[serde(default)]
     pub entries: Vec<StockEntryInput>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterialPrices {
+    pub junior_price: f64,
+    pub normal_price: f64,
+    pub large_price: f64,
 }
 
 #[derive(Clone, Debug, Deserialize)]

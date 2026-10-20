@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE materials SET junior_price = $2::float8, normal_price = $3::float8, large_price = $4::float8 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Float8",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "97d196205cd488de8e5c067eb1e923b73837a4539cbf05dead2efd412c040b62"
+}

@@ -16,6 +16,9 @@ const MATERIALS: Material[] = [
     name: 'Cotton Poplin — White',
     sku: 'FB-CTN-WHT-01',
     unit: 'meters',
+    juniorPrice: 10,
+    normalPrice: 20,
+    largePrice: 30,
     family: 'Cotton Poplin',
     locations: [
       { locationId: 'loc-1', location: 'Main Warehouse', quantity: 100 },
@@ -27,6 +30,9 @@ const MATERIALS: Material[] = [
     name: 'Wool Blend — Grey',
     sku: null,
     unit: 'meters',
+    juniorPrice: 10,
+    normalPrice: 20,
+    largePrice: 30,
     family: 'Wool Blend',
     locations: [],
   },
@@ -37,6 +43,7 @@ const DESIGN_OPTIONS = [
     id: 'emd-6',
     category: 'emd',
     slug: '6',
+    cost: 2.5,
     label: '6',
     sortOrder: 6,
     isActive: true,
@@ -65,21 +72,27 @@ function Harness({ order = {} }: { order?: Partial<InvoiceOrderDraft> } = {}) {
       ],
     },
   })
-  apiGet.mockImplementation(
-    apiGetMock({
-      '/materials': MATERIALS,
-      '/locations': [
-        {
-          id: 'workshop',
-          name: 'Customer Fabric Workshop',
-          receivesOrders: false,
-          holdsStock: true,
-          isActive: true,
-        },
-      ],
-      '/design-options': DESIGN_OPTIONS,
-    }),
-  )
+  const listGet = apiGetMock({
+    '/materials': MATERIALS,
+    '/locations': [
+      {
+        id: 'workshop',
+        name: 'Customer Fabric Workshop',
+        receivesOrders: false,
+        holdsStock: true,
+        isActive: true,
+      },
+    ],
+    '/design-options': DESIGN_OPTIONS,
+  })
+  apiGet.mockImplementation(async (url: string) => {
+    const id = new URL(url, 'http://localhost').pathname.match(
+      /^\/materials\/([^/]+)$/,
+    )?.[1]
+    return id
+      ? { data: MATERIALS.find((material) => material.id === id) }
+      : listGet(url)
+  })
   const client = new QueryClient()
   return (
     <QueryClientProvider client={client}>
@@ -186,7 +199,7 @@ describe('OrderBlock', () => {
         customerMaterialDescription: '',
         productionLocationId: '',
         materialAmount: 3,
-        price: 40,
+        price: '',
       })
     })
   })
@@ -279,9 +292,95 @@ describe('OrderBlock', () => {
     ).toBeTruthy()
   })
 
-  it('has a manual price field for the order line', () => {
+  it('shows a read-only automatic price for shop fabric', () => {
     render(<Harness />)
-    expect(screen.getByLabelText(`Price incl. VAT (${CURRENCY})`)).toBeTruthy()
+    expect(screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).tagName).toBe(
+      'OUTPUT',
+    )
+  })
+
+  it('updates the price when quantity crosses a threshold or a design changes', async () => {
+    render(<Harness />)
+    await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')
+    fireEvent.change(screen.getByLabelText('Quantity (m)'), {
+      target: { value: '2.99' },
+    })
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
+      ).toContain('10.00'),
+    )
+    fireEvent.change(screen.getByLabelText('Quantity (m)'), {
+      target: { value: '3' },
+    })
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
+      ).toContain('20.00'),
+    )
+    fireEvent.click(await screen.findByRole('radio', { name: /6 \(\+/ }))
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
+      ).toContain('22.50'),
+    )
+    fireEvent.change(screen.getByLabelText('Quantity (m)'), {
+      target: { value: '4.01' },
+    })
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
+      ).toContain('32.50'),
+    )
+    fireEvent.click(screen.getByRole('radio', { name: 'None' }))
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
+      ).toContain('30.00'),
+    )
+  })
+
+  it('recalculates an existing garment from current catalog prices', async () => {
+    render(
+      <Harness
+        order={{ materialId: 'mat-1', materialAmount: 3, price: 9999 }}
+      />,
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
+      ).toContain('20.00'),
+    )
+    expect(
+      screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
+    ).not.toContain('9999')
+  })
+
+  it('adds designs to the editable customer-fabric tailoring base', async () => {
+    render(
+      <Harness
+        order={{
+          materialSource: 'customer',
+          materialAmount: 3,
+          customerBasePrice: 15,
+        }}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('radio', { name: /6 \(\+/ }))
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
+      ).toContain('17.50'),
+    )
+    fireEvent.change(
+      screen.getByLabelText(`Tailoring base incl. VAT (${CURRENCY})`),
+      { target: { value: '20' } },
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
+      ).toContain('22.50'),
+    )
   })
 
   it('lets staff clear a stored EMD value', async () => {

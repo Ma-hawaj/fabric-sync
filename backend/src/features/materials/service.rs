@@ -8,7 +8,7 @@ use crate::{
 
 use super::{
     repository,
-    types::{AddStockInput, CreateMaterialInput, Material, StockEntryInput},
+    types::{AddStockInput, CreateMaterialInput, Material, MaterialPrices, StockEntryInput},
 };
 
 pub async fn list_materials(
@@ -28,12 +28,14 @@ pub async fn create_material(
     state: &AppState,
     input: CreateMaterialInput,
 ) -> Result<Material, AppError> {
+    validate_prices(&input.prices)?;
     let material_id = repository::create_material(
         state,
         &input.name,
         input.sku.as_deref(),
         &input.unit,
         input.family.as_deref(),
+        &input.prices,
         &input.entries,
     )
     .await?;
@@ -43,6 +45,25 @@ pub async fn create_material(
     Ok(repository::get_material(state, material_id)
         .await?
         .expect("material was just created"))
+}
+
+fn validate_prices(prices: &MaterialPrices) -> Result<(), AppError> {
+    for value in [prices.junior_price, prices.normal_price, prices.large_price] {
+        crate::features::pricing::service::validate_amount(value)?;
+    }
+    Ok(())
+}
+
+pub async fn update_prices(
+    state: &AppState,
+    id: Uuid,
+    input: MaterialPrices,
+) -> Result<Material, AppError> {
+    validate_prices(&input)?;
+    if !repository::update_prices(state, id, &input).await? {
+        return Err(AppError::NotFound(format!("material {id} not found")));
+    }
+    get_material(state, id).await
 }
 
 pub async fn add_stock(

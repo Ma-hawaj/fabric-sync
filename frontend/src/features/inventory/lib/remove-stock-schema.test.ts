@@ -8,6 +8,9 @@ const MATERIAL: Material = {
   name: 'Japanese Toray Cotton',
   sku: null,
   unit: 'meters',
+  juniorPrice: 10,
+  normalPrice: 20,
+  largePrice: 30,
   family: null,
   locations: [
     { locationId: 'loc-1', location: 'Manama', quantity: 10 },

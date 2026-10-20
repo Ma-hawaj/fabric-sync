@@ -1,3 +1,4 @@
+import { MaterialPricesForm } from './material-prices-form'
 import {
   Sheet,
   SheetContent,
@@ -53,6 +54,8 @@ export function InventoryDetailsSheet({
                 </div>
               </div>
             </SheetHeader>
+
+            <MaterialPricesForm key={material.id} material={material} />
 
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2.5 flex items-center gap-1.5">

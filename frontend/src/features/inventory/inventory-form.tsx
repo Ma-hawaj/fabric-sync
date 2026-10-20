@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { TextField } from '@/components/form/fields'
+import { NumberField, TextField } from '@/components/form/fields'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { StockEntryRow } from './components/stock-entry-row'
@@ -167,6 +167,30 @@ export function InventoryFormPage() {
                       </Field>
                     )}
                   </form.Field>
+                </div>
+              )
+            }
+          </form.Subscribe>
+
+          <form.Subscribe selector={(state) => state.values.mode}>
+            {(mode) =>
+              mode === 'new' && (
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <NumberField
+                    form={form}
+                    name="juniorPrice"
+                    label="Junior price incl. VAT"
+                  />
+                  <NumberField
+                    form={form}
+                    name="normalPrice"
+                    label="Normal price incl. VAT"
+                  />
+                  <NumberField
+                    form={form}
+                    name="largePrice"
+                    label="Large price incl. VAT"
+                  />
                 </div>
               )
             }

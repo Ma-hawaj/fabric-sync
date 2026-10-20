@@ -13,6 +13,9 @@ export interface Material {
   // Fabric family shared by a fabric's colour variants; null on
   // pre-existing rows. Mirrors the inventory type above.
   family: string | null
+  juniorPrice: number | null
+  normalPrice: number | null
+  largePrice: number | null
   locations: MaterialLocationStock[]
 }
 
