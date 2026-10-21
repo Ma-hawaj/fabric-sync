@@ -64,9 +64,8 @@ pub async fn recipients(db: &PgPool, id: Uuid) -> Result<Vec<Recipient>, AppErro
                selected,
                status,
                error_message,
-               sent_at,
-               messages
-          FROM notification_recipient_status
+               sent_at
+          FROM notification_recipients
          WHERE notification_id = $1
          ORDER BY normalized_mobile
         "#,
@@ -108,7 +107,7 @@ pub async fn history(db: &PgPool, invoice_id: Uuid) -> Result<Vec<History>, AppE
                count(r.id) FILTER (WHERE r.selected AND r.status = 'cancelled') AS cancelled_count
           FROM notifications n
           JOIN versions v ON v.id = n.id
-          LEFT JOIN notification_recipient_status r
+          LEFT JOIN notification_recipients r
             ON r.notification_id = n.id
          WHERE n.invoice_id = $1
            AND n.approved_at IS NOT NULL
@@ -399,13 +398,18 @@ pub async fn insert_recipient(
     conn: &mut PgConnection,
     id: Uuid,
     recipient: &Destination,
-    message_count: usize,
 ) -> Result<(), AppError> {
-    let recipient_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO notification_recipients(notification_id,normalized_mobile,customers) VALUES($1,$2,$3) RETURNING id"
-    ).bind(id).bind(&recipient.mobile).bind(sqlx::types::Json(&recipient.customers)).fetch_one(&mut *conn).await?;
-    sqlx::query("INSERT INTO notification_deliveries(recipient_id,message_index) SELECT $1,generate_series(0,$2-1)")
-        .bind(recipient_id).bind(message_count as i32).execute(conn).await?;
+    sqlx::query(
+        r#"
+        INSERT INTO notification_recipients(notification_id,normalized_mobile,customers)
+        VALUES($1,$2,$3)
+        "#,
+    )
+    .bind(id)
+    .bind(&recipient.mobile)
+    .bind(sqlx::types::Json(&recipient.customers))
+    .execute(conn)
+    .await?;
     Ok(())
 }
 
@@ -434,12 +438,21 @@ pub async fn select_recipients(
     selected: &[String],
     queue: bool,
 ) -> Result<(), AppError> {
-    sqlx::query("UPDATE notification_recipients SET selected = normalized_mobile = ANY($2) WHERE notification_id=$1")
-        .bind(id).bind(selected).execute(&mut *conn).await?;
     sqlx::query(
-        "UPDATE notification_deliveries d SET status = CASE WHEN $2 AND r.selected THEN 'queued' ELSE 'draft' END
-         FROM notification_recipients r WHERE r.id=d.recipient_id AND r.notification_id=$1"
-    ).bind(id).bind(queue).execute(conn).await?;
+        r#"
+        UPDATE notification_recipients
+           SET selected = normalized_mobile = ANY($2),
+               status = CASE WHEN $3 AND normalized_mobile = ANY($2) THEN 'queued'
+                    ELSE 'draft'
+                     END
+         WHERE notification_id = $1
+        "#,
+    )
+    .bind(id)
+    .bind(selected)
+    .bind(queue)
+    .execute(conn)
+    .await?;
     Ok(())
 }
 
@@ -471,16 +484,33 @@ pub async fn refresh_version(conn: &mut PgConnection, id: Uuid) -> Result<(), Ap
 
 pub async fn has_started(conn: &mut PgConnection, id: Uuid) -> Result<bool, AppError> {
     Ok(sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM notification_deliveries d JOIN notification_recipients r ON r.id=d.recipient_id
-         WHERE r.notification_id=$1 AND d.status IN ('submitting','accepted','delivered','read','uncertain'))"
-    ).bind(id).fetch_one(conn).await?)
+        r#"
+        SELECT EXISTS(
+                SELECT 1
+                  FROM notification_recipients
+                 WHERE notification_id = $1
+                   AND status IN ('submitting','accepted','delivered','read','uncertain')
+               )
+        "#,
+    )
+    .bind(id)
+    .fetch_one(conn)
+    .await?)
 }
 
 pub async fn cancel_unstarted(conn: &mut PgConnection, id: Uuid) -> Result<(), AppError> {
     sqlx::query(
-        "UPDATE notification_deliveries d SET status='cancelled',updated_at=now()
-         FROM notification_recipients r WHERE r.id=d.recipient_id AND r.notification_id=$1 AND d.status IN ('draft','queued')"
-    ).bind(id).execute(conn).await?;
+        r#"
+        UPDATE notification_recipients
+           SET status = 'cancelled',
+               updated_at = now()
+         WHERE notification_id = $1
+           AND status IN ('draft','queued')
+        "#,
+    )
+    .bind(id)
+    .execute(conn)
+    .await?;
     Ok(())
 }
 
@@ -523,14 +553,13 @@ pub struct Job {
     pub id: Uuid,
     pub notification_id: Uuid,
     pub normalized_mobile: String,
-    pub message_index: i32,
     pub attempt_count: i32,
 }
 
 pub async fn recover_leases(db: &PgPool) -> Result<(), AppError> {
     sqlx::query(
         r#"
-        UPDATE notification_deliveries
+        UPDATE notification_recipients
            SET status = 'uncertain',
                error_message = 'The sender stopped before the result was recorded. Check delivery before explicitly resending.',
                updated_at = now()
@@ -545,45 +574,50 @@ pub async fn recover_leases(db: &PgPool) -> Result<(), AppError> {
 pub async fn next_job(db: &PgPool) -> Result<Option<(Uuid, Uuid)>, AppError> {
     Ok(sqlx::query_as(
         r#"
-        SELECT d.id, n.invoice_id
-          FROM notification_deliveries d
-          JOIN notification_recipients r ON r.id = d.recipient_id
-          JOIN notifications n ON n.id = r.notification_id
-         WHERE d.status = 'queued' AND r.selected AND n.state = 'approved'
-           AND d.next_attempt_at <= now()
-           AND NOT EXISTS (
-               SELECT 1 FROM notification_deliveries earlier
-                WHERE earlier.recipient_id = d.recipient_id AND earlier.message_index < d.message_index
-                  AND earlier.status NOT IN ('accepted','delivered','read')
-           )
-         ORDER BY d.next_attempt_at, d.id LIMIT 1
+        SELECT r.id,
+               n.invoice_id
+          FROM notification_recipients r
+          JOIN notifications n
+            ON n.id = r.notification_id
+         WHERE r.status = 'queued'
+           AND n.state = 'approved'
+           AND r.next_attempt_at <= now()
+         ORDER BY r.next_attempt_at,
+                  r.id
+         LIMIT 1
         "#,
-    ).fetch_optional(db).await?)
+    )
+    .fetch_optional(db)
+    .await?)
 }
 
 pub async fn lock_job(conn: &mut PgConnection, id: Uuid) -> Result<Option<Job>, AppError> {
     Ok(sqlx::query_as(
         r#"
-        SELECT d.id, r.notification_id, r.normalized_mobile, d.message_index, d.attempt_count
-          FROM notification_deliveries d
-          JOIN notification_recipients r ON r.id = d.recipient_id
-          JOIN notifications n ON n.id = r.notification_id
-         WHERE d.id = $1 AND d.status = 'queued' AND r.selected AND n.state = 'approved'
-           AND d.next_attempt_at <= now()
-           AND NOT EXISTS (
-               SELECT 1 FROM notification_deliveries earlier
-                WHERE earlier.recipient_id = d.recipient_id AND earlier.message_index < d.message_index
-                  AND earlier.status NOT IN ('accepted','delivered','read')
-           )
-           FOR UPDATE OF n, d SKIP LOCKED
+        SELECT r.id,
+               r.notification_id,
+               r.normalized_mobile,
+               r.attempt_count
+          FROM notification_recipients r
+          JOIN notifications n
+            ON n.id = r.notification_id
+         WHERE r.id = $1
+           AND r.status = 'queued'
+           AND n.state = 'approved'
+           AND r.next_attempt_at <= now()
+           FOR UPDATE OF n,
+               r SKIP LOCKED
         "#,
-    ).bind(id).fetch_optional(conn).await?)
+    )
+    .bind(id)
+    .fetch_optional(conn)
+    .await?)
 }
 
 pub async fn start_attempt(conn: &mut PgConnection, job: &Job) -> Result<(), AppError> {
     sqlx::query(
         r#"
-        UPDATE notification_deliveries
+        UPDATE notification_recipients
            SET status = 'submitting',
                claimed_at = now(),
                attempt_count = $2,
@@ -597,7 +631,7 @@ pub async fn start_attempt(conn: &mut PgConnection, job: &Job) -> Result<(), App
     .await?;
     sqlx::query(
         r#"
-        INSERT INTO notification_attempts(delivery_id,attempt_number,outcome)
+        INSERT INTO notification_attempts(recipient_id,attempt_number,outcome)
         VALUES($1,$2,'preparing')
         "#,
     )
@@ -619,7 +653,7 @@ pub async fn finish_attempt(
 ) -> Result<(), AppError> {
     sqlx::query(
         r#"
-        UPDATE notification_deliveries
+        UPDATE notification_recipients
            SET status = $2,
                provider_message_id = COALESCE($3,provider_message_id),
                error_message = $4,
@@ -646,7 +680,7 @@ pub async fn finish_attempt(
                outcome = $3,
                provider_message_id = $4,
                error_message = $5
-         WHERE delivery_id = $1
+         WHERE recipient_id = $1
            AND attempt_number = $2
         "#,
     )
@@ -665,7 +699,7 @@ pub async fn request_started(db: &PgPool, job: &Job) -> Result<(), AppError> {
         r#"
         UPDATE notification_attempts
            SET outcome = 'request_started'
-         WHERE delivery_id = $1
+         WHERE recipient_id = $1
            AND attempt_number = $2
         "#,
     )
@@ -714,12 +748,12 @@ pub async fn pending_webhooks(
     .await?)
 }
 
-pub async fn lock_provider_delivery(
+pub async fn lock_provider_recipient(
     conn: &mut PgConnection,
     message: &str,
 ) -> Result<Option<(Uuid, String)>, AppError> {
     Ok(sqlx::query_as(
-        "SELECT id,status FROM notification_deliveries WHERE provider_message_id=$1 FOR UPDATE",
+        "SELECT id,status FROM notification_recipients WHERE provider_message_id=$1 FOR UPDATE",
     )
     .bind(message)
     .fetch_optional(conn)
@@ -734,7 +768,7 @@ pub async fn delivery_status(
 ) -> Result<(), AppError> {
     sqlx::query(
         r#"
-        UPDATE notification_deliveries
+        UPDATE notification_recipients
            SET status = $2,
                error_message = $3,
                updated_at = now()
@@ -811,7 +845,7 @@ pub async fn sends(db: &PgPool, id: Uuid) -> Result<Vec<History>, AppError> {
                count(r.id) FILTER (WHERE r.status = 'uncertain') AS uncertain_count,
                count(r.id) FILTER (WHERE r.selected AND r.status = 'cancelled') AS cancelled_count
           FROM notifications n
-          LEFT JOIN notification_recipient_status r ON r.notification_id = n.id
+          LEFT JOIN notification_recipients r ON r.notification_id = n.id
          WHERE (n.invoice_id, n.source_hash) = (
                    SELECT invoice_id, source_hash FROM notifications WHERE id = $1
                )
@@ -821,21 +855,4 @@ pub async fn sends(db: &PgPool, id: Uuid) -> Result<Vec<History>, AppError> {
          ORDER BY n.approved_at DESC, n.id DESC
         "#,
     ).bind(id).fetch_all(db).await?)
-}
-
-pub async fn cancel_blocked(db: &PgPool) -> Result<(), AppError> {
-    sqlx::query(
-        r#"
-        UPDATE notification_deliveries d
-           SET status = 'cancelled', updated_at = now(),
-               error_message = 'An earlier message failed or has an uncertain result. Review delivery before resending.'
-         WHERE d.status = 'queued'
-           AND EXISTS (
-               SELECT 1 FROM notification_deliveries earlier
-                WHERE earlier.recipient_id = d.recipient_id AND earlier.message_index < d.message_index
-                  AND earlier.status IN ('failed','uncertain','cancelled')
-           )
-        "#,
-    ).execute(db).await?;
-    Ok(())
 }

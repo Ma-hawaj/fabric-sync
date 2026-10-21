@@ -27,18 +27,11 @@ pub struct Snapshot {
     pub invoice_number: i64,
     pub source_hash: String,
     pub revision: i64,
-    pub messages: Vec<MessageSnapshot>,
-    pub exclusions: Vec<Destination>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MessageSnapshot {
     pub body: String,
     pub template_name: String,
     pub language: String,
     pub parameters: Vec<String>,
-    pub attach_invoice: bool,
+    pub exclusions: Vec<Destination>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,8 +66,6 @@ pub struct Recipient {
     pub status: String,
     pub error_message: Option<String>,
     pub sent_at: Option<DateTime<Utc>>,
-    #[sqlx(json)]
-    pub messages: Value,
 }
 
 #[derive(Clone, Debug, FromRow)]

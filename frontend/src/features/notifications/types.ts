@@ -18,16 +18,6 @@ export interface Recipient {
   selected: boolean
   status: string
   errorMessage: string | null
-  messages: {
-    messageIndex: number
-    status: string
-    errorMessage: string | null
-  }[]
-}
-export interface NotificationMessage {
-  body: string
-  language: string
-  attachInvoice: boolean
 }
 export interface NotificationDraft {
   id: string
@@ -39,7 +29,8 @@ export interface NotificationDraft {
   canSend: boolean
   snapshot: {
     invoiceNumber: number
-    messages: NotificationMessage[]
+    body: string
+    language: string
     exclusions: {
       mobile: string
       customers: NotificationCustomer[]

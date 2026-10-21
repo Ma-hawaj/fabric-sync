@@ -57,14 +57,6 @@ CREATE TABLE notification_recipients (
     normalized_mobile TEXT NOT NULL CHECK (normalized_mobile ~ '^\+[1-9][0-9]{7,14}$'),
     customers JSONB NOT NULL,
     selected BOOLEAN NOT NULL DEFAULT TRUE,
-    UNIQUE(notification_id, normalized_mobile)
-);
-
--- One immutable approved sequence, one unique destination, one delivery per part.
-CREATE TABLE notification_deliveries (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    recipient_id UUID NOT NULL REFERENCES notification_recipients(id) ON DELETE CASCADE,
-    message_index INTEGER NOT NULL CHECK (message_index >= 0 AND message_index < 10),
     status TEXT NOT NULL DEFAULT 'draft' CHECK (
         status IN (
             'draft', 'queued', 'submitting', 'accepted', 'delivered',
@@ -78,46 +70,23 @@ CREATE TABLE notification_deliveries (
     error_message TEXT,
     sent_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(recipient_id, message_index)
+    UNIQUE(notification_id, normalized_mobile)
 );
 
 CREATE INDEX notification_delivery_queue
-    ON notification_deliveries (next_attempt_at)
+    ON notification_recipients (next_attempt_at)
     WHERE status = 'queued';
-
--- Derive a destination's overall result without duplicating mutable queue state.
-CREATE VIEW notification_recipient_status AS
-SELECT r.id, r.notification_id, r.normalized_mobile, r.customers, r.selected,
-       CASE
-           WHEN bool_or(d.status = 'uncertain') THEN 'uncertain'
-           WHEN bool_or(d.status = 'failed') THEN 'failed'
-           WHEN bool_or(d.status = 'cancelled') THEN 'cancelled'
-           WHEN bool_or(d.status IN ('queued', 'submitting')) THEN 'queued'
-           WHEN bool_and(d.status = 'read') THEN 'read'
-           WHEN bool_and(d.status IN ('delivered', 'read')) THEN 'delivered'
-           WHEN bool_and(d.status IN ('accepted', 'delivered', 'read')) THEN 'accepted'
-           ELSE 'draft'
-       END AS status,
-       (array_agg(d.error_message ORDER BY d.message_index) FILTER (WHERE d.error_message IS NOT NULL))[1] AS error_message,
-       max(d.sent_at) AS sent_at,
-       coalesce(jsonb_agg(jsonb_build_object(
-           'messageIndex', d.message_index, 'status', d.status,
-           'errorMessage', d.error_message, 'sentAt', d.sent_at
-       ) ORDER BY d.message_index) FILTER (WHERE d.id IS NOT NULL), '[]'::jsonb) AS messages
-  FROM notification_recipients r
-  LEFT JOIN notification_deliveries d ON d.recipient_id = r.id
- GROUP BY r.id;
 
 CREATE TABLE notification_attempts (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
-    delivery_id UUID NOT NULL REFERENCES notification_deliveries(id),
+    recipient_id UUID NOT NULL REFERENCES notification_recipients(id),
     attempt_number INTEGER NOT NULL,
     started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     finished_at TIMESTAMPTZ,
     outcome TEXT,
     provider_message_id TEXT,
     error_message TEXT,
-    UNIQUE(delivery_id, attempt_number)
+    UNIQUE(recipient_id, attempt_number)
 );
 
 CREATE TABLE whatsapp_webhook_events (

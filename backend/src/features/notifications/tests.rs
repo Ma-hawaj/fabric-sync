@@ -15,7 +15,6 @@ struct Mock {
     uploads: Arc<Mutex<Vec<Vec<u8>>>>,
     messages: Arc<Mutex<Vec<Value>>>,
     reject_next: Arc<AtomicBool>,
-    deny_next: Arc<AtomicBool>,
     missing_id: Arc<AtomicBool>,
 }
 async fn mock_renderer(
@@ -35,13 +34,6 @@ async fn mock_send(
     Json(value): Json<Value>,
 ) -> (StatusCode, [(&'static str, &'static str); 1], Json<Value>) {
     mock.messages.lock().unwrap().push(value);
-    if mock.deny_next.swap(false, Ordering::SeqCst) {
-        return (
-            StatusCode::FORBIDDEN,
-            [("retry-after", "0")],
-            Json(json!({"error":{"message":"Template rejected","code":132001}})),
-        );
-    }
     if mock.reject_next.swap(false, Ordering::SeqCst) {
         return (
             StatusCode::TOO_MANY_REQUESTS,
@@ -221,10 +213,7 @@ async fn selection_changes_version_and_stale_content_cannot_be_approved(pool: Pg
         .await
         .unwrap();
     assert_ne!(draft.artifact_id, refreshed.artifact_id);
-    assert_ne!(
-        draft.snapshot.messages[0].body,
-        refreshed.snapshot.messages[0].body
-    );
+    assert_ne!(draft.snapshot.body, refreshed.snapshot.body);
 }
 
 #[sqlx::test]
@@ -295,11 +284,11 @@ async fn a_known_rate_limit_retries_but_an_unknown_submission_never_does(pool: P
         service::get(&state, draft.id).await.unwrap().recipients[0].status,
         "queued"
     );
-    let delay: f64 = sqlx::query_scalar("SELECT extract(epoch FROM d.next_attempt_at-now())::float8 FROM notification_deliveries d JOIN notification_recipients r ON r.id=d.recipient_id WHERE r.notification_id=$1")
+    let delay: f64 = sqlx::query_scalar("SELECT extract(epoch FROM next_attempt_at-now())::float8 FROM notification_recipients WHERE notification_id=$1")
         .bind(draft.id).fetch_one(&pool).await.unwrap();
     assert!(delay > 590., "Retry-After must postpone the next attempt");
     sqlx::query(
-        "UPDATE notification_deliveries d SET next_attempt_at=now() FROM notification_recipients r WHERE r.id=d.recipient_id AND r.notification_id=$1",
+        "UPDATE notification_recipients SET next_attempt_at=now() WHERE notification_id=$1",
     )
     .bind(draft.id)
     .execute(&pool)
@@ -1019,249 +1008,4 @@ async fn resends_update_one_version_entry_and_reject_older_links(pool: PgPool) {
         Err(AppError::Conflict(_))
     ));
     assert_eq!(mock.renders.load(Ordering::SeqCst), 2);
-}
-
-fn invoice_sequence() -> String {
-    json!([
-        {"templateName":"invoice_greeting_v1","body":"Hello! Invoice {{1}} follows.","parameters":["invoiceReference"]},
-        {"templateName":"invoice_document_v1","body":"Invoice {{1}} is attached. Balance {{2}}.","parameters":["invoiceReference","balanceDue"],"attachInvoice":true},
-        {"templateName":"invoice_help_v1","body":"Contact us about invoice {{1}}.","parameters":["invoiceReference"]}
-    ]).to_string()
-}
-
-#[sqlx::test]
-async fn a_sequence_has_one_destination_and_retries_only_the_failed_part(pool: PgPool) {
-    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
-    let (url, mock) = mock_server().await;
-    let state = test_support::state_with_notifications(
-        pool.clone(),
-        Some(url.clone()),
-        Some(url),
-        |config| {
-            config.invoice_messages = Some(invoice_sequence());
-        },
-    )
-    .await;
-    let draft = service::prepare(&state, invoice, prepare("invoice_created"), "staff")
-        .await
-        .unwrap();
-    assert_eq!(draft.snapshot.messages.len(), 3);
-    assert_eq!(draft.recipients.len(), 1);
-    assert_eq!(draft.recipients[0].messages.as_array().unwrap().len(), 3);
-    assert_eq!(
-        draft.snapshot.messages[0].body,
-        "Hello! Invoice INV-1 follows."
-    );
-    assert!(mock.messages.lock().unwrap().is_empty());
-    service::approve(&state, draft.id, send(&draft), "staff", true)
-        .await
-        .unwrap();
-    worker::tick(&state).await.unwrap();
-    assert_eq!(mock.messages.lock().unwrap().len(), 1);
-    assert!(mock.uploads.lock().unwrap().is_empty());
-    mock.reject_next.store(true, Ordering::SeqCst);
-    worker::tick(&state).await.unwrap();
-    worker::tick(&state).await.unwrap();
-    assert_eq!(
-        mock.messages.lock().unwrap().len(),
-        2,
-        "the last part must wait for the document retry"
-    );
-    let partial = service::get(&state, draft.id).await.unwrap();
-    assert_eq!(partial.recipients[0].status, "queued");
-    assert_eq!(partial.recipients[0].messages[0]["status"], "accepted");
-    assert_eq!(partial.recipients[0].messages[1]["status"], "queued");
-    sqlx::query("UPDATE notification_deliveries SET next_attempt_at=now() WHERE status='queued'")
-        .execute(&pool)
-        .await
-        .unwrap();
-    worker::tick(&state).await.unwrap();
-    worker::tick(&state).await.unwrap();
-    let names: Vec<String> = mock
-        .messages
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|message| message["template"]["name"].as_str().unwrap().to_owned())
-        .collect();
-    assert_eq!(
-        names,
-        [
-            "invoice_greeting_v1",
-            "invoice_document_v1",
-            "invoice_document_v1",
-            "invoice_help_v1"
-        ]
-    );
-    let history = repository::history(&pool, invoice).await.unwrap();
-    assert_eq!(history.len(), 1);
-    assert_eq!(history[0].recipient_count, 1);
-    assert_eq!(history[0].accepted_count, 1);
-    assert_eq!(history[0].send_count, 1);
-    let duplicates: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM notification_recipients WHERE notification_id=$1")
-            .bind(draft.id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(duplicates, 1);
-    assert_eq!(mock.renders.load(Ordering::SeqCst), 1);
-    // Provider callbacks identify the exact part, and overall delivery waits for all parts.
-    for index in [1, 3, 4] {
-        let body = serde_json::to_vec(&json!({"entry":[{"changes":[{"value":{"statuses":[{"id":format!("wamid.test.{index}"),"status":"delivered"}]}}]}]})).unwrap();
-        worker::receive_webhook(&pool, &body).await.unwrap();
-        worker::tick(&state).await.unwrap();
-        assert_eq!(
-            repository::history(&pool, invoice).await.unwrap()[0].delivered_count,
-            if index == 4 { 1 } else { 0 }
-        );
-    }
-    let resent = service::resend(&state, draft.id, Uuid::new_v4(), "staff")
-        .await
-        .unwrap();
-    service::approve(&state, resent.id, send(&resent), "staff", true)
-        .await
-        .unwrap();
-    for _ in 0..3 {
-        let (first, second) = tokio::join!(worker::tick(&state), worker::tick(&state));
-        first.unwrap();
-        second.unwrap();
-    }
-    let names: Vec<String> = mock
-        .messages
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|message| message["template"]["name"].as_str().unwrap().to_owned())
-        .collect();
-    assert_eq!(
-        &names[4..],
-        [
-            "invoice_greeting_v1",
-            "invoice_document_v1",
-            "invoice_help_v1"
-        ]
-    );
-    let history = repository::history(&pool, invoice).await.unwrap();
-    assert_eq!(history.len(), 1);
-    assert_eq!(history[0].send_count, 2);
-}
-
-#[sqlx::test]
-async fn failed_parts_stop_the_remaining_sequence(pool: PgPool) {
-    assert_sequence_stops(pool, false).await;
-}
-
-#[sqlx::test]
-async fn uncertain_parts_stop_the_remaining_sequence(pool: PgPool) {
-    assert_sequence_stops(pool, true).await;
-}
-
-async fn assert_sequence_stops(pool: PgPool, uncertain: bool) {
-    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
-    let (url, mock) = mock_server().await;
-    let state = test_support::state_with_notifications(
-        pool.clone(),
-        Some(url.clone()),
-        Some(url),
-        |config| {
-            config.invoice_messages = Some(invoice_sequence());
-        },
-    )
-    .await;
-    let draft = service::prepare(&state, invoice, prepare("invoice_created"), "staff")
-        .await
-        .unwrap();
-    service::approve(&state, draft.id, send(&draft), "staff", true)
-        .await
-        .unwrap();
-    worker::tick(&state).await.unwrap();
-    if uncertain {
-        mock.missing_id.store(true, Ordering::SeqCst);
-    } else {
-        mock.deny_next.store(true, Ordering::SeqCst);
-    }
-    worker::tick(&state).await.unwrap();
-    worker::tick(&state).await.unwrap();
-    assert_eq!(mock.messages.lock().unwrap().len(), 2);
-    let result = service::get(&state, draft.id).await.unwrap();
-    assert_eq!(result.recipients[0].messages[0]["status"], "accepted");
-    assert_eq!(
-        result.recipients[0].messages[1]["status"],
-        if uncertain { "uncertain" } else { "failed" }
-    );
-    assert_eq!(result.recipients[0].messages[2]["status"], "cancelled");
-    assert_eq!(
-        result.recipients[0].status,
-        if uncertain { "uncertain" } else { "failed" }
-    );
-}
-
-#[sqlx::test]
-async fn changing_an_invoice_between_parts_stops_the_old_sequence(pool: PgPool) {
-    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
-    let (url, mock) = mock_server().await;
-    let state = test_support::state_with_notifications(
-        pool.clone(),
-        Some(url.clone()),
-        Some(url),
-        |config| {
-            config.invoice_messages = Some(invoice_sequence());
-        },
-    )
-    .await;
-    let draft = service::prepare(&state, invoice, prepare("invoice_created"), "staff")
-        .await
-        .unwrap();
-    service::approve(&state, draft.id, send(&draft), "staff", true)
-        .await
-        .unwrap();
-    worker::tick(&state).await.unwrap();
-    sqlx::query("UPDATE invoices SET total_price=120 WHERE id=$1")
-        .bind(invoice)
-        .execute(&pool)
-        .await
-        .unwrap();
-    worker::tick(&state).await.unwrap();
-    worker::tick(&state).await.unwrap();
-    assert_eq!(mock.messages.lock().unwrap().len(), 1);
-    assert!(mock.uploads.lock().unwrap().is_empty());
-    let stopped = service::get(&state, draft.id).await.unwrap();
-    assert_eq!(stopped.state, "stale");
-    assert_eq!(stopped.recipients[0].messages[0]["status"], "accepted");
-    assert_eq!(stopped.recipients[0].messages[1]["status"], "cancelled");
-    assert_eq!(stopped.recipients[0].messages[2]["status"], "cancelled");
-}
-
-#[sqlx::test]
-async fn pickup_events_support_their_own_message_sequence_without_a_pdf(pool: PgPool) {
-    let (invoice, orders, _, pickup) = test_support::invoice(&pool, 1, false).await;
-    test_support::finish_stages(&pool, orders[0], pickup).await;
-    crate::features::orders::readiness::confirm(&pool, invoice, None, "staff", true)
-        .await
-        .unwrap();
-    let (url, mock) = mock_server().await;
-    let state = test_support::state_with_notifications(pool.clone(), Some(url.clone()), Some(url), |config| {
-        config.ready_messages = Some(json!([
-            {"templateName":"pickup_greeting_v1","body":"Hello! Your order is ready."},
-            {"templateName":"pickup_details_v1","body":"Collect invoice {{1}} from {{2}}.","parameters":["invoiceReference","pickupBranch"]}
-        ]).to_string());
-    }).await;
-    let draft = service::prepare(&state, invoice, prepare("invoice_ready"), "staff")
-        .await
-        .unwrap();
-    assert_eq!(draft.snapshot.messages.len(), 2);
-    assert!(draft.artifact_id.is_none());
-    service::approve(&state, draft.id, send(&draft), "staff", true)
-        .await
-        .unwrap();
-    worker::tick(&state).await.unwrap();
-    worker::tick(&state).await.unwrap();
-    let messages = mock.messages.lock().unwrap();
-    assert_eq!(messages.len(), 2);
-    assert_eq!(messages[0]["template"]["name"], "pickup_greeting_v1");
-    assert!(messages[0]["template"].get("components").is_none());
-    assert_eq!(messages[1]["template"]["name"], "pickup_details_v1");
-    assert!(mock.uploads.lock().unwrap().is_empty());
-    assert_eq!(mock.renders.load(Ordering::SeqCst), 0);
 }
