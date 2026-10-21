@@ -61,6 +61,14 @@ export interface InvoiceProductDraft {
 
 // A gift card sold on this invoice. Selling stored value is not a taxable
 // supply, so its amount is added to the total outside the VAT base.
+export interface InvoiceMaterialDraft {
+  key: string
+  materialId: string
+  branchId: string
+  quantity: NumberInput
+  unitPrice: NumberInput
+}
+
 export interface InvoiceGiftCardDraft {
   key: string
   code: string
@@ -103,6 +111,7 @@ export interface InvoiceFormValues {
   payments: PaymentDraft[]
   customers: InvoiceCustomerDraft[]
   products: InvoiceProductDraft[]
+  materials: InvoiceMaterialDraft[]
   giftCards: InvoiceGiftCardDraft[]
   redemptions: GiftCardRedemptionDraft[]
 }
@@ -176,6 +185,7 @@ export function createEmptyInvoiceForm(): InvoiceFormValues {
     payments: [createEmptyPayment()],
     customers: [createEmptyCustomer()],
     products: [],
+    materials: [],
     giftCards: [],
     redemptions: [],
   }
@@ -212,5 +222,15 @@ export function createEmptyRedemption(): GiftCardRedemptionDraft {
     key: crypto.randomUUID(),
     code: '',
     amount: '',
+  }
+}
+
+export function createEmptyMaterialLine(): InvoiceMaterialDraft {
+  return {
+    key: crypto.randomUUID(),
+    materialId: '',
+    branchId: '',
+    quantity: 1,
+    unitPrice: '',
   }
 }

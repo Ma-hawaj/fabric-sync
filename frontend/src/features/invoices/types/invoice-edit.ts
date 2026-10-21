@@ -78,6 +78,17 @@ export interface InvoiceEditProductLine {
   stockQuantity: number | null
 }
 
+export interface InvoiceEditMaterialLine {
+  materialId: string | null
+  materialName: string
+  unit: string
+  branchId: string | null
+  branchName: string | null
+  quantity: number
+  unitPrice: number
+  stockQuantity: number | null
+}
+
 export interface InvoiceEditGiftCardLine {
   code: string
   amount: number
@@ -106,6 +117,7 @@ export interface InvoiceEdit {
   customerId: string | null
   customers: InvoiceEditCustomer[]
   products: InvoiceEditProductLine[]
+  materials: InvoiceEditMaterialLine[]
   giftCards: InvoiceEditGiftCardLine[]
   giftCardRedemptions: InvoiceEditRedemption[]
 }

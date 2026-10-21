@@ -297,3 +297,24 @@ describe('InvoiceSummary', () => {
     expect(screen.queryByText('Cash')).toBeTruthy()
   })
 })
+
+it('includes direct material sales in the summary and VAT total', () => {
+  render(
+    <Harness
+      defaultValues={baseValues({
+        materials: [
+          {
+            key: 'm',
+            materialId: 'mat-1',
+            branchId: 'loc-1',
+            quantity: 2.5,
+            unitPrice: 11,
+          },
+        ],
+      })}
+    />,
+  )
+  expect(screen.getByText('Material 1')).toBeTruthy()
+  expect(screen.getByText(`${CURRENCY} 2.50`)).toBeTruthy()
+  expect(screen.getAllByText(`${CURRENCY} 27.50`).length).toBeGreaterThan(0)
+})

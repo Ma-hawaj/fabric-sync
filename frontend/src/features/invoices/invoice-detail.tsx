@@ -34,6 +34,7 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 const LINE_KIND_LABELS: Record<InvoiceLine['kind'], string> = {
   order: 'Tailoring',
   product: 'Product',
+  material: 'Material',
   gift_card: 'Gift Card',
 }
 

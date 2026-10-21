@@ -1,6 +1,6 @@
 import type { PaymentStatus, PaymentType } from './invoices'
 
-export type InvoiceLineKind = 'order' | 'product' | 'gift_card'
+export type InvoiceLineKind = 'order' | 'product' | 'material' | 'gift_card'
 
 export interface InvoiceParty {
   name: string

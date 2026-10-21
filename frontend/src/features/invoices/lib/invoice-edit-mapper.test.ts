@@ -14,6 +14,7 @@ function editFixture(): InvoiceEdit {
     discountUnit: 'amount',
     payments: [],
     customerId: null,
+    materials: [],
     customers: [
       {
         existingCustomerId: '0197fdd2-6a67-7000-8000-000000000002',
@@ -219,4 +220,45 @@ describe('mapInvoiceEditToForm', () => {
     expect(values.productBranch).toBe('')
     expect(seeds.soldFromBranchName).toBe('')
   })
+})
+
+it('round trips direct material sales and seeds multiple stock locations', () => {
+  const edit = editFixture()
+  edit.customers = []
+  edit.products = []
+  edit.materials = [
+    {
+      materialId: 'mat-1',
+      materialName: 'Linen',
+      unit: 'meters',
+      branchId: 'loc-1',
+      branchName: 'Main',
+      quantity: 2.5,
+      unitPrice: 11,
+      stockQuantity: 7.5,
+    },
+    {
+      materialId: 'mat-1',
+      materialName: 'Linen',
+      unit: 'meters',
+      branchId: 'loc-2',
+      branchName: 'Store',
+      quantity: 1,
+      unitPrice: 11,
+      stockQuantity: 9,
+    },
+  ]
+  const { values, seeds } = mapInvoiceEditToForm(edit)
+  expect(values.customers).toEqual([])
+  expect(values.materials[0]).toEqual(
+    expect.objectContaining({
+      materialId: 'mat-1',
+      branchId: 'loc-1',
+      quantity: 2.5,
+      unitPrice: 11,
+    }),
+  )
+  expect(values.materials[1].branchId).toBe('loc-2')
+  expect(seeds.materials.get('mat-1')?.locations).toHaveLength(2)
+  expect(seeds.locationLabels.get('loc-2')).toBe('Store')
 })

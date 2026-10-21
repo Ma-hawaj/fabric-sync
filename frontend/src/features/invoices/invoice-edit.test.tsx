@@ -20,6 +20,7 @@ const EDIT_FIXTURE: InvoiceEdit = {
   discountUnit: 'amount',
   payments: [],
   customerId: null,
+  materials: [],
   customers: [],
   products: [],
   giftCards: [{ code: 'GC-1', amount: 150, expiresOn: null }],

@@ -14,6 +14,7 @@ import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
 import { ORDER_RECEIVING_FILTERS } from '@/features/locations/lib/location-filters'
 import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
+import type { Material } from '../../types/materials'
 import type { Product } from '@/features/products/types/product'
 import { CURRENCY } from '@/lib/currency'
 import { PlusIcon, XIcon } from 'lucide-react'
@@ -33,6 +34,7 @@ import type {
   InvoiceFormApi,
   InvoiceGiftCardDraft,
   InvoiceProductDraft,
+  InvoiceMaterialDraft,
   PaymentDraft,
   PaymentType,
 } from '../../types/invoice-form'
@@ -107,6 +109,7 @@ interface InvoiceSummaryProps {
   /** Rows the pickers handed over, read at render time for the line labels. */
   customerNames: React.MutableRefObject<Map<string, Customer>>
   productNames: React.MutableRefObject<Map<string, Product>>
+  materialNames?: React.MutableRefObject<Map<string, Material>>
   /** Labels for stored ids whose rows aren't loaded yet (edit forms). */
   locationLabelForId?: (id: string) => string | null
   customerLabelForId?: (id: string) => string | null
@@ -122,6 +125,7 @@ export function InvoiceSummary({
   form,
   customerNames,
   productNames,
+  materialNames,
   locationLabelForId,
   customerLabelForId,
   paymentsLocked = false,
@@ -209,17 +213,29 @@ export function InvoiceSummary({
           state.values.customers,
           state.values.products,
           state.values.giftCards,
+          state.values.materials ?? [],
         ]}
       >
         {(subscribedLines: any) => {
-          const [customers, products, giftCards] = subscribedLines as [
-            InvoiceCustomerDraft[],
-            InvoiceProductDraft[],
-            InvoiceGiftCardDraft[],
-          ]
+          const [customers, products, giftCards, materials] =
+            subscribedLines as [
+              InvoiceCustomerDraft[],
+              InvoiceProductDraft[],
+              InvoiceGiftCardDraft[],
+              InvoiceMaterialDraft[],
+            ]
 
           const lineItems = buildLineItems(customers, customerNames.current)
-          const productRows = buildProductRows(products, productNames.current)
+          const productRows = [
+            ...buildProductRows(products, productNames.current),
+            ...materials.map((line, index) => ({
+              key: line.key,
+              label:
+                materialNames?.current.get(line.materialId)?.name ??
+                `Material ${index + 1}`,
+              total: computeProductLineTotal(line),
+            })),
+          ]
           const giftCardRows = buildGiftCardRows(giftCards)
 
           // Orders and products are both goods, so they share one taxable

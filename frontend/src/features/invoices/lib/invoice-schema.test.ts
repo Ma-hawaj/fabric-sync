@@ -301,7 +301,9 @@ describe('invoiceFormSchema', () => {
 
   it('rejects an invoice with no lines of any kind', () => {
     const error = firstError([])
-    expect(error?.message).toMatch(/at least one order, product, or gift card/i)
+    expect(error?.message).toMatch(
+      /at least one order, material, product, or gift card/i,
+    )
     expect(error?.path).toEqual(['customers'])
   })
 
@@ -544,5 +546,62 @@ describe('invoiceFormSchema', () => {
       'measurement',
       'fit',
     ])
+  })
+})
+
+describe('direct material sales', () => {
+  const material = {
+    key: 'material-1',
+    materialId: 'mat-1',
+    branchId: 'loc-1',
+    quantity: 2.5,
+    unitPrice: 11,
+  }
+  it('accepts material-only invoices without measurements or orders', () => {
+    expect(
+      invoiceFormSchema.safeParse(values({ materials: [material] })).success,
+    ).toBe(true)
+  })
+  it('requires material and stock location selections', () => {
+    for (const field of ['materialId', 'branchId'] as const) {
+      const result = invoiceFormSchema.safeParse(
+        values({ materials: [{ ...material, [field]: '' }] }),
+      )
+      expect(result.success).toBe(false)
+      if (!result.success)
+        expect(result.error.issues[0].path).toEqual(['materials', 0, field])
+    }
+  })
+  it('rejects invalid quantities and prices', () => {
+    for (const quantity of [0, -1, '', Infinity, NaN, 0.001, 1.234] as const) {
+      expect(
+        invoiceFormSchema.safeParse(
+          values({ materials: [{ ...material, quantity }] }),
+        ).success,
+      ).toBe(false)
+    }
+    for (const unitPrice of [-1, '', Infinity, NaN, 1.234] as const) {
+      expect(
+        invoiceFormSchema.safeParse(
+          values({ materials: [{ ...material, unitPrice }] }),
+        ).success,
+      ).toBe(false)
+    }
+    expect(
+      invoiceFormSchema.safeParse(
+        values({ materials: [{ ...material, unitPrice: 0 }] }),
+      ).success,
+    ).toBe(true)
+  })
+  it('counts material totals when validating payments and allows mixed invoices', () => {
+    const input = values({
+      materials: [material],
+      products: [validProductLine()],
+      productBranch: 'loc-1',
+      payments: [{ key: 'p', amount: 67.5, paymentType: 'cash' }],
+    })
+    expect(invoiceFormSchema.safeParse(input).success).toBe(true)
+    input.payments[0].amount = 67.51
+    expect(firstErrorFor(input)?.path).toEqual(['payments'])
   })
 })
