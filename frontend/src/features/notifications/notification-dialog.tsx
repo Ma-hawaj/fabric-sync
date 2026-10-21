@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { apiClient } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -138,6 +139,8 @@ function Preview({
     onClose()
   }
   const selectedCount = draft?.recipients.filter((r) => r.selected).length ?? 0
+  const recipientsDisabled =
+    selection.isPending || send.isPending || draft?.state !== 'draft'
   const ready =
     draft && (!draft.artifactId || pdfUrl) && draft.state === 'draft'
   const title =
@@ -179,9 +182,7 @@ function Preview({
             </p>
             <fieldset
               className="space-y-2 rounded-lg border p-3"
-              disabled={
-                selection.isPending || send.isPending || draft.state !== 'draft'
-              }
+              disabled={recipientsDisabled}
             >
               <legend className="px-1 text-sm font-semibold">Recipients</legend>
               {draft.recipients.map((recipient) => (
@@ -189,14 +190,15 @@ function Preview({
                   key={recipient.normalizedMobile}
                   className="flex items-start gap-2 text-sm"
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
+                    className="mt-0.5"
                     checked={recipient.selected}
-                    onChange={(event) => {
+                    disabled={recipientsDisabled}
+                    onCheckedChange={(checked) => {
                       const mobiles = draft.recipients
                         .filter((r) =>
                           r.normalizedMobile === recipient.normalizedMobile
-                            ? event.target.checked
+                            ? checked
                             : r.selected,
                         )
                         .map((r) => r.normalizedMobile)

@@ -127,4 +127,76 @@ describe('readiness notification lifecycle', () => {
         .mock.calls.some(([path]) => String(path).endsWith('/send')),
     ).toBe(false)
   })
+
+  it.each([true, false])(
+    'only opens the pickup preview when the order makes its invoice ready (becameReady=%s)',
+    async (becameReady) => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({
+        data: { becameReady },
+      })
+      const client = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      })
+      const controls = (status: string) => (
+        <QueryClientProvider client={client}>
+          <ReadinessControls
+            id="order-1"
+            invoiceId="invoice-1"
+            scope="orders"
+            status={status}
+          />
+        </QueryClientProvider>
+      )
+      const { rerender } = render(controls('in_progress'))
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Mark ready for pickup' }),
+      )
+      fireEvent.click(
+        screen.getByRole('checkbox', {
+          name: 'I confirm the garments are available at the pickup branch.',
+        }),
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm ready' }))
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('heading', { name: 'Confirm ready for pickup' }),
+        ).toBeNull(),
+      )
+      expect(apiClient.post).toHaveBeenCalledWith('/orders/order-1/ready', {
+        confirmedAtPickupBranch: true,
+      })
+      rerender(controls('ready'))
+      if (becameReady) {
+        await screen.findByRole('heading', {
+          name: 'Ready for pickup — notify customers',
+        })
+        await screen.findByText(/1 unique mobile selected/)
+        expect(apiClient.post).toHaveBeenCalledWith(
+          '/invoices/invoice-1/notifications',
+          expect.objectContaining({ kind: 'invoice_ready' }),
+        )
+      } else {
+        expect(
+          screen.queryByRole('heading', {
+            name: 'Ready for pickup — notify customers',
+          }),
+        ).toBeNull()
+        expect(
+          vi
+            .mocked(apiClient.post)
+            .mock.calls.some(
+              ([path]) => path === '/invoices/invoice-1/notifications',
+            ),
+        ).toBe(false)
+      }
+      expect(
+        vi
+          .mocked(apiClient.post)
+          .mock.calls.some(([path]) => String(path).endsWith('/send')),
+      ).toBe(false)
+    },
+  )
 })

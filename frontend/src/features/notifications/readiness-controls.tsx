@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -152,10 +153,11 @@ export function ReadinessControls({
             </label>
           ) : (
             <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Checkbox
+                className="mt-0.5"
                 checked={confirmed}
-                onChange={(event) => setConfirmed(event.target.checked)}
+                disabled={mutation.isPending}
+                onCheckedChange={setConfirmed}
               />
               I confirm the garments are available at the pickup branch.
             </label>

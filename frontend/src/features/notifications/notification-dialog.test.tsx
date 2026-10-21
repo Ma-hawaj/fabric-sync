@@ -96,9 +96,11 @@ describe('notification preview and approval', () => {
     await screen.findByTitle('Invoice PDF preview')
     expect(screen.getByText(/2 unique mobiles selected/)).toBeTruthy()
     expect(screen.getByText(/Ahmed, Ali/)).toBeTruthy()
-    const checkboxes = screen.getAllByRole<HTMLInputElement>('checkbox')
+    const checkboxes = screen.getAllByRole('checkbox')
     expect(checkboxes).toHaveLength(2)
-    expect(checkboxes.every((box) => box.checked)).toBe(true)
+    expect(
+      checkboxes.every((box) => box.getAttribute('aria-checked') === 'true'),
+    ).toBe(true)
     expect(
       vi
         .mocked(apiClient.post)

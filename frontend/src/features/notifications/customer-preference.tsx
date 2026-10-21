@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { apiClient } from '@/lib/api'
+import { Checkbox } from '@/components/ui/checkbox'
 import type { Customer } from '@/features/customers/types/customers'
 
 export function CustomerNotificationPreference({
@@ -24,11 +25,11 @@ export function CustomerNotificationPreference({
   })
   return (
     <label className="flex items-start gap-2 text-sm">
-      <input
-        type="checkbox"
+      <Checkbox
+        className="mt-0.5"
         checked={customer.whatsappNotificationsEnabled ?? true}
         disabled={mutation.isPending}
-        onChange={(event) => mutation.mutate(event.target.checked)}
+        onCheckedChange={(checked) => mutation.mutate(checked)}
       />
       Receive invoice and pickup updates via WhatsApp
     </label>
