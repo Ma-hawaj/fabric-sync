@@ -69,8 +69,8 @@ Configure a Meta WhatsApp Business sender using the variables in
 The root `.env.example` contains compose infrastructure settings only, including
 the renderer's published port. For production compose, supply the backend runtime
 variables through the deployment environment; the compose file passes them into
-the app container. `TIMEZONE` is also a root Compose setting and is forwarded to
-the backend for printed-document dates; standalone runs use `backend/.env`.
+the app container. Printed-document timezone configuration stays in
+`backend/.env.example`; standalone runs read it from `backend/.env`.
 Set `WHATSAPP_DELIVERY_ENABLED=true` only when the sender and approved templates
 are available. Unconfigured delivery never reports simulated success. PDF
 previews and invoice work are available independently of delivery configuration.
