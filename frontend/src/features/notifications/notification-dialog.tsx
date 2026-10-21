@@ -1,7 +1,5 @@
-import * as React from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { apiClient } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -13,18 +11,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { NotificationDraft, NotificationKind } from './types'
+import { usePrepareNotification } from './hooks/use-prepare-notification'
+import { useSelectNotificationRecipients } from './hooks/use-select-notification-recipients'
+import { useSendNotification } from './hooks/use-send-notification'
+import { useDiscardNotificationPreview } from './hooks/use-discard-notification-preview'
+import { useNotificationDocument } from './hooks/use-notification-document'
 
 interface Props {
   invoiceId: string | null
   kind: NotificationKind
   onClose: () => void
   resendOf?: string
-}
-
-function discard(id: string) {
-  // Approval may have completed while the page was closing. The server only
-  // deletes never-approved previews.
-  void apiClient.delete(`/notifications/${id}`).catch(() => {})
 }
 
 export function NotificationDialog(props: Props) {
@@ -43,16 +40,18 @@ function Preview({
   onClose,
   resendOf,
 }: Props & { invoiceId: string }) {
-  const client = useQueryClient()
-  const [requestId] = React.useState(() => crypto.randomUUID())
-  const [draft, setDraft] = React.useState<NotificationDraft | null>(null)
-  const active = React.useRef(false)
-  const currentDraft = React.useRef<NotificationDraft | null>(null)
+  const { mutate: discard } = useDiscardNotificationPreview()
+  const selection = useSelectNotificationRecipients()
+  const send = useSendNotification()
+  const [requestId] = useState(() => crypto.randomUUID())
+  const [draft, setDraft] = useState<NotificationDraft | null>(null)
+  const active = useRef(false)
+  const currentDraft = useRef<NotificationDraft | null>(null)
   const updateDraft = (value: NotificationDraft) => {
     currentDraft.current = value
     setDraft(value)
   }
-  const [pdfPreview, setPdfPreview] = React.useState<{
+  const [pdfPreview, setPdfPreview] = useState<{
     artifactId: string
     url: string
   } | null>(null)
@@ -60,51 +59,31 @@ function Preview({
     pdfPreview?.artifactId === draft?.artifactId
       ? (pdfPreview?.url ?? null)
       : null
-  const [problem, setProblem] = React.useState('')
+  const [problem, setProblem] = useState('')
   const {
     mutate: prepare,
     isPending: preparing,
     error: prepareError,
-  } = useMutation({
-    mutationFn: async () =>
-      (
-        await apiClient.post<NotificationDraft>(
-          `/invoices/${invoiceId}/notifications`,
-          { kind, requestId, resendOf },
-        )
-      ).data,
-    onSuccess: (value) => {
-      if (!active.current) {
-        discard(value.id)
-        return
-      }
-      if (currentDraft.current && currentDraft.current.id !== value.id)
-        discard(currentDraft.current.id)
-      updateDraft(value)
-      setProblem('')
-    },
+  } = usePrepareNotification((value) => {
+    if (!active.current) {
+      discard(value.id)
+      return
+    }
+    if (currentDraft.current && currentDraft.current.id !== value.id)
+      discard(currentDraft.current.id)
+    updateDraft(value)
+    setProblem('')
   })
-  React.useEffect(() => {
+  useEffect(() => {
     active.current = true
-    prepare()
+    prepare({ invoiceId, kind, requestId, resendOf })
     return () => {
       active.current = false
       if (currentDraft.current) discard(currentDraft.current.id)
     }
-  }, [prepare])
-  const pdf = useQuery({
-    queryKey: ['notification-document', draft?.artifactId],
-    queryFn: async () =>
-      (
-        await apiClient.get<Blob>(`/documents/${draft?.artifactId}/content`, {
-          responseType: 'blob',
-        })
-      ).data,
-    enabled: Boolean(draft?.artifactId),
-    staleTime: Infinity,
-    gcTime: 0,
-  })
-  React.useEffect(() => {
+  }, [prepare, discard, invoiceId, kind, requestId, resendOf])
+  const pdf = useNotificationDocument(draft?.artifactId)
+  useEffect(() => {
     if (!pdf.data) {
       setPdfPreview(null)
       return
@@ -113,47 +92,11 @@ function Preview({
     setPdfPreview({ artifactId: draft?.artifactId ?? '', url })
     return () => URL.revokeObjectURL(url)
   }, [pdf.data, draft?.artifactId])
-  const selection = useMutation({
-    mutationFn: async (mobiles: string[]) =>
-      (
-        await apiClient.post<NotificationDraft>(
-          `/notifications/${draft?.id}/selection`,
-          { previewVersion: draft?.previewVersion, selectedMobiles: mobiles },
-        )
-      ).data,
-    onSuccess: updateDraft,
-    onError: (error) => {
-      setProblem(error.message)
-      if ('status' in error && (error.status === 409 || error.status === 404))
-        setDraft((value) => (value ? { ...value, state: 'stale' } : value))
-    },
-  })
-  const send = useMutation({
-    mutationFn: async () =>
-      (
-        await apiClient.post<NotificationDraft>(
-          `/notifications/${draft?.id}/send`,
-          {
-            previewVersion: draft?.previewVersion,
-            selectedMobiles: draft?.recipients
-              .filter((r) => r.selected)
-              .map((r) => r.normalizedMobile),
-          },
-        )
-      ).data,
-    onSuccess: (value) => {
-      updateDraft(value)
-      void client.invalidateQueries({ queryKey: ['notifications', invoiceId] })
-      toast.success(
-        'Notification queued. Delivery status is shown in notification history.',
-      )
-    },
-    onError: (error) => {
-      setProblem(error.message)
-      if ('status' in error && (error.status === 409 || error.status === 404))
-        setDraft((value) => (value ? { ...value, state: 'stale' } : value))
-    },
-  })
+  const handlePreviewError = (error: Error) => {
+    setProblem(error.message)
+    if ('status' in error && (error.status === 409 || error.status === 404))
+      setDraft((value) => (value ? { ...value, state: 'stale' } : value))
+  }
   const close = () => {
     if (send.isPending || selection.isPending) return
     active.current = false
@@ -224,7 +167,14 @@ function Preview({
                             : r.selected,
                         )
                         .map((r) => r.normalizedMobile)
-                      selection.mutate(mobiles)
+                      selection.mutate(
+                        {
+                          id: draft.id,
+                          previewVersion: draft.previewVersion,
+                          selectedMobiles: mobiles,
+                        },
+                        { onSuccess: updateDraft, onError: handlePreviewError },
+                      )
                     }}
                   />
                   <span>
@@ -328,7 +278,7 @@ function Preview({
               onClick={() => {
                 setProblem('')
                 if (draft?.artifactId) void pdf.refetch()
-                prepare()
+                prepare({ invoiceId, kind, requestId, resendOf })
               }}
             >
               Refresh preview
@@ -343,7 +293,28 @@ function Preview({
               selection.isPending ||
               send.isPending
             }
-            onClick={() => send.mutate()}
+            onClick={() => {
+              if (!draft) return
+              send.mutate(
+                {
+                  id: draft.id,
+                  invoiceId,
+                  previewVersion: draft.previewVersion,
+                  selectedMobiles: draft.recipients
+                    .filter((r) => r.selected)
+                    .map((r) => r.normalizedMobile),
+                },
+                {
+                  onSuccess: (value) => {
+                    updateDraft(value)
+                    toast.success(
+                      'Notification queued. Delivery status is shown in notification history.',
+                    )
+                  },
+                  onError: handlePreviewError,
+                },
+              )
+            }}
           >
             {send.isPending
               ? 'Queuing…'

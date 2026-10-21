@@ -1,6 +1,4 @@
-import * as React from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiClient } from '@/lib/api'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { NotificationDialog } from './notification-dialog'
+import { useChangeReadiness } from './hooks/use-change-readiness'
 
 export interface ReadinessFields {
   readinessStatus?: string
@@ -63,28 +62,12 @@ export function ReadinessControls({
   readyAt,
   readyBy,
 }: Props) {
-  const client = useQueryClient()
-  const [open, setOpen] = React.useState(false)
-  const [confirmed, setConfirmed] = React.useState(false)
-  const [reason, setReason] = React.useState('')
-  const [notify, setNotify] = React.useState(false)
+  const [open, setOpen] = useState(false)
+  const [confirmed, setConfirmed] = useState(false)
+  const [reason, setReason] = useState('')
+  const [notify, setNotify] = useState(false)
   const reopening = scope === 'orders' && status === 'ready'
-  const mutation = useMutation({
-    mutationFn: async () =>
-      (
-        await apiClient.post<{ becameReady?: boolean }>(
-          `/${scope}/${id}/${reopening ? 'reopen' : 'ready'}`,
-          reopening ? { reason } : { confirmedAtPickupBranch: confirmed },
-        )
-      ).data,
-    onSuccess: (result) => {
-      void client.invalidateQueries({ queryKey: ['orders'] })
-      void client.invalidateQueries({ queryKey: ['invoices'] })
-      setOpen(false)
-      setConfirmed(false)
-      if (result.becameReady) setNotify(true)
-    },
-  })
+  const mutation = useChangeReadiness()
   if (status === 'collected' || status === 'not_applicable') return null
   const notificationDialog = (
     <NotificationDialog
@@ -174,7 +157,30 @@ export function ReadinessControls({
               Cancel
             </Button>
             <Button
-              onClick={() => mutation.mutate()}
+              onClick={() =>
+                mutation.mutate(
+                  reopening
+                    ? {
+                        id,
+                        scope: 'orders',
+                        action: 'reopen',
+                        body: { reason },
+                      }
+                    : {
+                        id,
+                        scope,
+                        action: 'ready',
+                        body: { confirmedAtPickupBranch: confirmed },
+                      },
+                  {
+                    onSuccess: (result) => {
+                      setOpen(false)
+                      setConfirmed(false)
+                      if (result.becameReady) setNotify(true)
+                    },
+                  },
+                )
+              }
               disabled={
                 mutation.isPending || (reopening ? !reason.trim() : !confirmed)
               }

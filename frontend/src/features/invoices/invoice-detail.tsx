@@ -4,7 +4,8 @@ import {
   ReadinessBadge,
   ReadinessControls,
 } from '@/features/notifications/readiness-controls'
-import * as React from 'react'
+import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -46,7 +47,7 @@ const LINE_KIND_LABELS: Record<InvoiceLine['kind'], string> = {
 export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
   const { data: detail, isLoading, isError } = useInvoice(invoiceId)
   const navigate = useNavigate()
-  const [resendOpen, setResendOpen] = React.useState(false)
+  const [resendOpen, setResendOpen] = useState(false)
 
   // The collect dialog was built around the list row's `Invoice`, so the
   // detail is narrowed into that shape for it — the arithmetic it shows comes
@@ -344,7 +345,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 // The collect dialog needs its trigger; keep it self-contained here rather
 // than a separate dialog state in this page.
 function CollectInvoiceButton({ invoice }: { invoice: Invoice }) {
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = useState(false)
 
   return (
     <>
@@ -366,7 +367,7 @@ function CollectInvoiceButton({ invoice }: { invoice: Invoice }) {
 // Money without collecting anything — an advance now, or the remainder after
 // everything was already collected. Disabled once nothing is left to pay.
 function RecordPaymentButton({ invoice }: { invoice: Invoice }) {
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = useState(false)
 
   return (
     <>
@@ -386,7 +387,7 @@ function RecordPaymentButton({ invoice }: { invoice: Invoice }) {
 }
 
 function ExportPdfButton({ invoiceId }: { invoiceId: string }) {
-  const [isPrinting, setIsPrinting] = React.useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
 
   return (
     <Button
@@ -463,8 +464,8 @@ function SectionHeading({
   icon,
   children,
 }: {
-  icon: React.ReactNode
-  children: React.ReactNode
+  icon: ReactNode
+  children: ReactNode
 }) {
   return (
     <h2 className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">

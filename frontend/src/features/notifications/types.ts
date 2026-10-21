@@ -1,5 +1,10 @@
 export type NotificationKind =
   'invoice_created' | 'invoice_updated' | 'invoice_ready' | 'manual_resend'
+export interface NotificationSelectionInput {
+  id: string
+  previewVersion: string
+  selectedMobiles: string[]
+}
 export interface NotificationCustomer {
   id: string
   name: string
@@ -39,6 +44,7 @@ export interface NotificationHistoryRow {
   kind: NotificationKind
   state: string
   createdAt: string
+  sendCount: number
   recipientCount: number
   queuedCount: number
   acceptedCount: number

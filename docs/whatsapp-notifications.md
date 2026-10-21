@@ -106,19 +106,26 @@ unique mobile. A Postgres-backed worker claims jobs across application
 instances. Notification history distinguishes queued, provider-accepted,
 delivered/read, failed, and uncertain results. Accepted does not mean delivered.
 The invoice page shows the latest invoice and pickup notification statuses;
-**View history** expands approved sends and their individual delivery results.
+**View history** expands one entry per approved content version. Resending
+unchanged content updates that entry's latest status and send count. Its
+**Delivery details** retains every approved send, with recipient results under
+each send. Earlier versions are read-only; resend is available from the latest
+invoice and pickup entries and always previews the current invoice content.
+The server rejects older resend links and a preview superseded by another send.
 Opening, changing recipients, refreshing, or closing a preview adds no delivery
-history. The history timestamp is when staff approved Send.
-The page loads the 100 most recent approved sends and always includes the latest
-invoice and pickup sends, so a long resend history cannot hide either status.
+history. The history timestamp is the latest Send approval for that version.
+The page loads the 100 most recent versions and always includes the latest
+invoice and pickup entries, so a long history cannot hide either status.
 
 Known transient failures retry the same approved payload with bounded backoff,
 respecting `Retry-After` (up to 24 hours). `NOTIFICATION_MAX_ATTEMPTS` defaults
 to five and supports 1–10 attempts. An interrupted message submission or an expired worker
 lease is marked uncertain and is not automatically replayed: check delivery
 before approving an explicit resend. Other accepted destinations are not
-repeated when one destination fails. A resend has its own reviewed draft and
-delivery identity and retains earlier history.
+repeated when one destination fails. Each approved resend retains its own
+delivery identity internally so late provider callbacks and retries cannot
+overwrite a different send's results. The invoice page groups those sends under
+their content version instead of adding a new history entry for each resend.
 
 Changes to invoice content, payment, recipients, or pickup readiness make old
 previews stale. Refresh and approve the current version. Reopening production
@@ -159,15 +166,18 @@ configured approved templates and a designated test recipient.
 
 ### Verified locally on 21 October 2026
 
-- Backend: 234 tests passed, including temporary-preview disposal, approval races,
-  cleanup, and retaining both latest statuses in long histories. Formatting, compilation,
+- Backend: 235 tests passed, including temporary-preview disposal, approval races,
+  cleanup, grouping resends by version, rejecting older resend links, and retaining
+  both latest statuses in long histories. Formatting, compilation,
   fresh migrations, and `cargo sqlx prepare --check` passed.
-- Frontend: 296 tests across 43 files passed; lint, formatting, and production
+- Frontend: 297 tests across 43 files passed; lint, formatting, and production
   build passed. Tests cover explicit approval, recipient grouping/selection,
   stale previews, successful/failed edits, skipping, and the separate resend
   button. A readiness transition preserves the open preview and its recipient
   selection without preparing it again. Closed and late-arriving previews are
   discarded; older sends and recipient delivery details expand on demand.
+  Notification queries and mutations use separate hook files, and the touched
+  screens use named React imports.
 - Real Chromium (verified on 20 October): rendered a two-page A4 bilingual invoice with embedded
   Noto Sans Arabic fonts. The renderer test passed separately from the default
   backend suite.

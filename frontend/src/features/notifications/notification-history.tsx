@@ -1,9 +1,10 @@
-import * as React from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { apiClient } from '@/lib/api'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { NotificationDialog } from './notification-dialog'
-import type { NotificationDraft, NotificationHistoryRow } from './types'
+import type { NotificationHistoryRow } from './types'
+import { useNotificationHistory } from './hooks/use-notification-history'
+import { useNotificationDelivery } from './hooks/use-notification-delivery'
+import { useNotificationSends } from './hooks/use-notification-sends'
 
 function deliverySummary(row: NotificationHistoryRow) {
   return [
@@ -27,21 +28,9 @@ const kindLabels = {
 }
 
 export function NotificationHistory({ invoiceId }: { invoiceId: string }) {
-  const [resend, setResend] = React.useState<NotificationHistoryRow | null>(
-    null,
-  )
-  const [historyOpen, setHistoryOpen] = React.useState(false)
-  const query = useQuery({
-    queryKey: ['notifications', invoiceId],
-    queryFn: async () =>
-      (
-        await apiClient.get<NotificationHistoryRow[]>(
-          `/invoices/${invoiceId}/notifications`,
-        )
-      ).data,
-    staleTime: 5000,
-    refetchInterval: 10000,
-  })
+  const [resend, setResend] = useState<NotificationHistoryRow | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const query = useNotificationHistory(invoiceId)
   const latestInvoice = query.data?.find((row) => row.kind !== 'invoice_ready')
   const latestReady = query.data?.find((row) => row.kind === 'invoice_ready')
   return (
@@ -103,6 +92,11 @@ export function NotificationHistory({ invoiceId }: { invoiceId: string }) {
                   {query.data.map((row) => (
                     <div key={row.id} className="rounded-lg border p-3 text-sm">
                       <p className="font-medium">{kindLabels[row.kind]}</p>
+                      {row.sendCount > 1 && (
+                        <p className="text-muted-foreground">
+                          {row.sendCount} sends
+                        </p>
+                      )}
                       <p className="text-muted-foreground">
                         {new Date(row.createdAt).toLocaleString()} ·{' '}
                         {deliverySummary(row)}
@@ -113,7 +107,7 @@ export function NotificationHistory({ invoiceId }: { invoiceId: string }) {
                           changed.
                         </p>
                       )}
-                      <DeliveryDetails id={row.id} />
+                      <VersionDeliveryDetails id={row.id} />
                     </div>
                   ))}
                 </div>
@@ -134,16 +128,10 @@ export function NotificationHistory({ invoiceId }: { invoiceId: string }) {
   )
 }
 
-function DeliveryDetails({ id }: { id: string }) {
-  const [open, setOpen] = React.useState(false)
-  const query = useQuery({
-    queryKey: ['notification-delivery', id],
-    queryFn: async () =>
-      (await apiClient.get<NotificationDraft>(`/notifications/${id}`)).data,
-    enabled: open,
-    staleTime: 5000,
-    refetchInterval: open ? 10000 : false,
-  })
+function VersionDeliveryDetails({ id }: { id: string }) {
+  const [open, setOpen] = useState(false)
+  const query = useNotificationSends(id, open)
+  const sends = query.data ?? []
   return (
     <details
       className="mt-2"
@@ -151,6 +139,33 @@ function DeliveryDetails({ id }: { id: string }) {
     >
       <summary className="cursor-pointer text-muted-foreground">
         Delivery details
+      </summary>
+      {query.isLoading && <p>Loading sends…</p>}
+      {query.isError && <p>Could not load sends.</p>}
+      {sends.map((send, index) => (
+        <div key={send.id} className="mt-2 rounded border p-2">
+          <p className="font-medium">Send {sends.length - index}</p>
+          <p className="text-muted-foreground">
+            {new Date(send.createdAt).toLocaleString()} ·{' '}
+            {deliverySummary(send)}
+          </p>
+          <RecipientDeliveryDetails id={send.id} />
+        </div>
+      ))}
+    </details>
+  )
+}
+
+function RecipientDeliveryDetails({ id }: { id: string }) {
+  const [open, setOpen] = useState(false)
+  const query = useNotificationDelivery(id, open)
+  return (
+    <details
+      className="mt-2"
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer text-muted-foreground">
+        Recipients
       </summary>
       {query.isLoading && <p>Loading delivery status…</p>}
       {query.isError && <p>Could not load delivery status.</p>}

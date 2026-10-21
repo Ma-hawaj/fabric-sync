@@ -225,7 +225,9 @@ pub async fn prepare(
         }
     };
     if let Some(existing) = repository::event(state.db(), invoice_id, &event_key).await? {
-        if existing.source_hash == source.snapshot.source_hash {
+        if existing.source_hash == source.snapshot.source_hash
+            && (existing.state == "approved" || input.resend_of.is_none())
+        {
             return get(state, existing.id).await;
         }
         if existing.state == "approved" && input.kind == "invoice_created" {
@@ -252,12 +254,7 @@ pub async fn prepare(
         return Err(AppError::Conflict("This event already has an approved notification. Use Preview resend in notification history to review a new message.".into()));
     }
     if let Some(original) = input.resend_of {
-        let belongs = repository::belongs_to_invoice(&mut tx, original, invoice_id).await?;
-        if !belongs {
-            return Err(AppError::BadRequest(
-                "Choose an approved notification from this invoice to resend.".into(),
-            ));
-        }
+        validate_resend(&mut tx, invoice_id, &input.kind, original).await?;
     }
     // A second request may have prepared the same event while rendering.
     let existing = repository::lock_event(&mut tx, invoice_id, &event_key).await?;
@@ -348,6 +345,15 @@ pub async fn approve(
             "Only a current draft can be approved. Prepare a new preview.".into(),
         ));
     }
+    if let Some(original) = notification.resend_of {
+        validate_resend(
+            &mut tx,
+            notification.invoice_id,
+            &notification.kind,
+            original,
+        )
+        .await?;
+    }
     let selected: Vec<String> = selected.into_iter().collect();
     repository::select_recipients(&mut tx, id, &selected, send).await?;
     if send {
@@ -357,6 +363,27 @@ pub async fn approve(
     }
     tx.commit().await?;
     get(state, id).await
+}
+
+async fn validate_resend(
+    conn: &mut sqlx::PgConnection,
+    invoice_id: Uuid,
+    kind: &str,
+    original: Uuid,
+) -> Result<(), AppError> {
+    if !repository::belongs_to_invoice(conn, original, invoice_id).await? {
+        return Err(AppError::BadRequest(
+            "Choose an approved notification from this invoice to resend.".into(),
+        ));
+    }
+    if repository::latest_approved(conn, invoice_id, kind == "invoice_ready").await?
+        != Some(original)
+    {
+        return Err(AppError::Conflict(
+            "Only the latest invoice or pickup notification can be resent. Refresh the notification history.".into(),
+        ));
+    }
+    Ok(())
 }
 
 pub async fn cancel(state: &AppState, id: Uuid) -> Result<Notification, AppError> {

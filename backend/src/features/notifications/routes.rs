@@ -20,6 +20,7 @@ pub fn router() -> Router<AppState> {
         .route("/notifications/:id/selection", post(handlers::selection))
         .route("/notifications/:id/cancel", post(handlers::cancel))
         .route("/notifications/:id/resend", post(handlers::resend))
+        .route("/notifications/:id/sends", get(handlers::sends))
         .route("/invoices/:id/documents", post(handlers::document))
         .route("/documents/:id", get(handlers::metadata))
         .route("/documents/:id/content", get(handlers::content))

@@ -43,6 +43,7 @@ pub async fn get(db: &PgPool, id: Uuid) -> Result<NotificationRow, AppError> {
                preview_version,
                snapshot,
                artifact_id,
+               resend_of,
                created_at
           FROM notifications
          WHERE id = $1
@@ -77,20 +78,26 @@ pub async fn recipients(db: &PgPool, id: Uuid) -> Result<Vec<Recipient>, AppErro
 pub async fn history(db: &PgPool, invoice_id: Uuid) -> Result<Vec<History>, AppError> {
     Ok(sqlx::query_as(
         r#"
-        WITH recent AS (
-            SELECT id FROM notifications
+        WITH versions AS (
+            SELECT DISTINCT ON ((kind = 'invoice_ready'), source_hash) id, kind, approved_at,
+                   count(*) OVER (PARTITION BY (kind = 'invoice_ready'), source_hash) AS send_count,
+                   first_value(kind) OVER (PARTITION BY (kind = 'invoice_ready'), source_hash ORDER BY approved_at, id) AS original_kind
+              FROM notifications
              WHERE invoice_id = $1 AND approved_at IS NOT NULL
+             ORDER BY (kind = 'invoice_ready'), source_hash, approved_at DESC, id DESC
+        ), recent AS (
+            SELECT id FROM versions
              ORDER BY approved_at DESC, id DESC
              LIMIT 100
         ), latest AS (
-            SELECT DISTINCT ON (kind = 'invoice_ready') id FROM notifications
-             WHERE invoice_id = $1 AND approved_at IS NOT NULL
+            SELECT DISTINCT ON (kind = 'invoice_ready') id FROM versions
              ORDER BY (kind = 'invoice_ready'), approved_at DESC, id DESC
         )
         SELECT n.id,
-               n.kind,
+               v.original_kind AS kind,
                n.state,
                n.approved_at AS created_at,
+               v.send_count,
                count(r.id) FILTER (WHERE r.selected) AS recipient_count,
                count(r.id) FILTER (WHERE r.status IN ('queued','submitting')) AS queued_count,
                count(r.id) FILTER (WHERE r.status = 'accepted') AS accepted_count,
@@ -99,12 +106,13 @@ pub async fn history(db: &PgPool, invoice_id: Uuid) -> Result<Vec<History>, AppE
                count(r.id) FILTER (WHERE r.status = 'uncertain') AS uncertain_count,
                count(r.id) FILTER (WHERE r.selected AND r.status = 'cancelled') AS cancelled_count
           FROM notifications n
+          JOIN versions v ON v.id = n.id
           LEFT JOIN notification_recipients r
             ON r.notification_id = n.id
          WHERE n.invoice_id = $1
            AND n.approved_at IS NOT NULL
            AND n.id IN (SELECT id FROM recent UNION SELECT id FROM latest)
-         GROUP BY n.id
+         GROUP BY n.id, v.send_count, v.original_kind
          ORDER BY n.approved_at DESC, n.id DESC
         "#,
     )
@@ -214,6 +222,7 @@ pub async fn event(
                preview_version,
                snapshot,
                artifact_id,
+               resend_of,
                created_at
           FROM notifications
          WHERE invoice_id = $1
@@ -256,6 +265,26 @@ pub async fn belongs_to_invoice(
     .await?)
 }
 
+pub async fn latest_approved(
+    conn: &mut PgConnection,
+    invoice: Uuid,
+    ready: bool,
+) -> Result<Option<Uuid>, AppError> {
+    Ok(sqlx::query_scalar(
+        r#"
+        SELECT id FROM notifications
+         WHERE invoice_id = $1 AND approved_at IS NOT NULL
+           AND (kind = 'invoice_ready') = $2
+         ORDER BY approved_at DESC, id DESC
+         LIMIT 1
+        "#,
+    )
+    .bind(invoice)
+    .bind(ready)
+    .fetch_optional(conn)
+    .await?)
+}
+
 pub async fn lock_event(
     conn: &mut PgConnection,
     invoice: Uuid,
@@ -293,6 +322,7 @@ pub async fn approved_event(
                preview_version,
                snapshot,
                artifact_id,
+               resend_of,
                created_at
           FROM notifications
          WHERE invoice_id = $1
@@ -800,4 +830,29 @@ pub async fn cleanup(db: &PgPool, config: &super::Config) -> Result<(), AppError
     .await?;
     tx.commit().await?;
     Ok(())
+}
+
+pub async fn sends(db: &PgPool, id: Uuid) -> Result<Vec<History>, AppError> {
+    Ok(sqlx::query_as(
+        r#"
+        SELECT n.id, n.kind, n.state, n.approved_at AS created_at,
+               1::BIGINT AS send_count,
+               count(r.id) FILTER (WHERE r.selected) AS recipient_count,
+               count(r.id) FILTER (WHERE r.status IN ('queued','submitting')) AS queued_count,
+               count(r.id) FILTER (WHERE r.status = 'accepted') AS accepted_count,
+               count(r.id) FILTER (WHERE r.status IN ('delivered','read')) AS delivered_count,
+               count(r.id) FILTER (WHERE r.status = 'failed') AS failed_count,
+               count(r.id) FILTER (WHERE r.status = 'uncertain') AS uncertain_count,
+               count(r.id) FILTER (WHERE r.selected AND r.status = 'cancelled') AS cancelled_count
+          FROM notifications n
+          LEFT JOIN notification_recipients r ON r.notification_id = n.id
+         WHERE (n.invoice_id, n.source_hash) = (
+                   SELECT invoice_id, source_hash FROM notifications WHERE id = $1
+               )
+           AND (n.kind = 'invoice_ready') = (SELECT kind = 'invoice_ready' FROM notifications WHERE id = $1)
+           AND n.approved_at IS NOT NULL
+         GROUP BY n.id
+         ORDER BY n.approved_at DESC, n.id DESC
+        "#,
+    ).bind(id).fetch_all(db).await?)
 }

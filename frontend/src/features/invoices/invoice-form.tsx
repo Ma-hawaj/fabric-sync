@@ -1,5 +1,5 @@
 import { NotificationDialog } from '@/features/notifications/notification-dialog'
-import * as React from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { FileDownIcon, PlusIcon } from 'lucide-react'
@@ -77,18 +77,14 @@ export function InvoiceForm({
   // render (its own subscriptions to the line items already re-render it).
   // On edit they start seeded from the loaded invoice, so the summary reads
   // correctly before anything is re-picked.
-  const pickedCustomersRef = React.useRef(
-    new Map<string, Customer>(seeds?.customers),
-  )
-  const pickedProductsRef = React.useRef(
-    new Map<string, Product>(seeds?.products),
-  )
-  const rememberCustomer = React.useCallback((customer: Customer | null) => {
+  const pickedCustomersRef = useRef(new Map<string, Customer>(seeds?.customers))
+  const pickedProductsRef = useRef(new Map<string, Product>(seeds?.products))
+  const rememberCustomer = useCallback((customer: Customer | null) => {
     if (customer) {
       pickedCustomersRef.current.set(customer.id, customer)
     }
   }, [])
-  const rememberProduct = React.useCallback((product: Product | null) => {
+  const rememberProduct = useCallback((product: Product | null) => {
     if (product) {
       pickedProductsRef.current.set(product.id, product)
     }
@@ -96,7 +92,7 @@ export function InvoiceForm({
   // The picked "Sold From" branch's name feeds each product line's
   // availability text, which needs a named location the way the old whole-list
   // lookup provided it.
-  const [soldFromBranchName, setSoldFromBranchName] = React.useState(
+  const [soldFromBranchName, setSoldFromBranchName] = useState(
     seeds?.soldFromBranchName ?? '',
   )
   // Gift card expiry is checked against the sale date, not the promised
@@ -106,8 +102,8 @@ export function InvoiceForm({
 
   // Which of the two submit buttons was pressed. A ref rather than state
   // because it is read once inside onSubmit and must not re-render the form.
-  const exportAfterSave = React.useRef(false)
-  const [notificationInvoiceId, setNotificationInvoiceId] = React.useState<
+  const exportAfterSave = useRef(false)
+  const [notificationInvoiceId, setNotificationInvoiceId] = useState<
     string | null
   >(null)
 
@@ -161,7 +157,7 @@ export function InvoiceForm({
     },
   })
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (receivingDefault && form.state.values.receivingBranch === '') {
       form.setFieldValue(
         'receivingBranch' as never,

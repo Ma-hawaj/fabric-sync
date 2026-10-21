@@ -152,7 +152,9 @@ describe('notification preview and approval', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
     expect(onClose).toHaveBeenCalled()
-    expect(apiClient.delete).toHaveBeenCalledWith('/notifications/draft-1')
+    await waitFor(() =>
+      expect(apiClient.delete).toHaveBeenCalledWith('/notifications/draft-1'),
+    )
     expect(
       vi
         .mocked(apiClient.post)
@@ -163,7 +165,9 @@ describe('notification preview and approval', () => {
     const { unmount } = mount()
     await screen.findByTitle('Invoice PDF preview')
     unmount()
-    expect(apiClient.delete).toHaveBeenCalledWith('/notifications/draft-1')
+    await waitFor(() =>
+      expect(apiClient.delete).toHaveBeenCalledWith('/notifications/draft-1'),
+    )
     expect(apiClient.post).not.toHaveBeenCalledWith(
       '/notifications/draft-1/send',
       expect.anything(),

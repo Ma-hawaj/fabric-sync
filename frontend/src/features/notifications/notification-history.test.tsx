@@ -24,6 +24,7 @@ function row(
     kind: 'manual_resend',
     state: 'approved',
     createdAt: '2026-10-21T10:00:00Z',
+    sendCount: 1,
     recipientCount: 1,
     queuedCount: 0,
     acceptedCount: 0,
@@ -69,6 +70,9 @@ describe('compact notification history', () => {
     fireEvent.click(screen.getByText('View history (3)'))
     await screen.findByText('Updated invoice')
     expect(apiClient.get).not.toHaveBeenCalled()
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      data: [row('old-invoice', { failedCount: 1 })],
+    })
     vi.mocked(apiClient.get).mockResolvedValue({
       data: {
         recipients: [
@@ -92,8 +96,18 @@ describe('compact notification history', () => {
     })
     const olderEntry = screen.getByText('Updated invoice').parentElement!
     fireEvent.click(within(olderEntry).getByText('Delivery details'))
+    await screen.findByText('Send 1')
+    expect(
+      within(olderEntry).queryByRole('button', { name: 'Preview resend' }),
+    ).toBeNull()
+    fireEvent.click(within(olderEntry).getByText('Recipients'))
     await screen.findByText('Provider rejected the message.')
-    expect(apiClient.get).toHaveBeenCalledExactlyOnceWith(
+    expect(apiClient.get).toHaveBeenNthCalledWith(
+      1,
+      '/notifications/old-invoice/sends',
+    )
+    expect(apiClient.get).toHaveBeenNthCalledWith(
+      2,
       '/notifications/old-invoice',
     )
     expect(screen.queryByText(/Excluded customer/)).toBeNull()
@@ -150,5 +164,81 @@ describe('compact notification history', () => {
       ),
     )
     expect(apiClient.post).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps one version entry after an approved resend and expands the earlier delivery under it', async () => {
+    let history = [
+      row('original-ready', { kind: 'invoice_ready', deliveredCount: 1 }),
+    ]
+    const draft = {
+      id: 'resent-ready',
+      invoiceId: 'invoice-1',
+      kind: 'invoice_ready',
+      state: 'draft',
+      previewVersion: 'v1',
+      canSend: true,
+      artifactId: null,
+      snapshot: {
+        invoiceNumber: 42,
+        body: 'Ready for pickup.',
+        language: 'en_US',
+        exclusions: [],
+      },
+      recipients: [
+        {
+          id: 'recipient',
+          normalizedMobile: '+97333112233',
+          selected: true,
+          customers: [
+            {
+              id: 'customer',
+              name: 'Ahmed',
+              mobileNo: '33112233',
+              enabled: true,
+            },
+          ],
+          status: 'draft',
+          errorMessage: null,
+        },
+      ],
+    }
+    vi.mocked(apiClient.get).mockImplementation(async (path) => ({
+      data: String(path).endsWith('/sends')
+        ? [
+            row('resent-ready', { kind: 'invoice_ready', queuedCount: 1 }),
+            row('original-ready', { kind: 'invoice_ready', deliveredCount: 1 }),
+          ]
+        : history,
+    }))
+    vi.mocked(apiClient.post).mockImplementation(async (path) => {
+      if (String(path).endsWith('/send')) {
+        history = [
+          row('resent-ready', {
+            kind: 'invoice_ready',
+            queuedCount: 1,
+            sendCount: 2,
+          }),
+        ]
+        return { data: { ...draft, state: 'approved' } }
+      }
+      return { data: draft }
+    })
+    mount(history)
+    fireEvent.click(screen.getByRole('button', { name: 'Preview resend' }))
+    await screen.findByText('Ready for pickup.')
+    fireEvent.click(screen.getByRole('button', { name: 'Send via WhatsApp' }))
+    await screen.findByText('1 queued')
+    fireEvent.click(screen.getByText('Close', { selector: 'button' }))
+    expect(screen.getByText('View history (1)')).toBeTruthy()
+    fireEvent.click(screen.getByText('View history (1)'))
+    await screen.findByText('2 sends')
+    expect(screen.getAllByText('Delivery details')).toHaveLength(1)
+    fireEvent.click(screen.getByText('Delivery details'))
+    await screen.findByText('Send 2')
+    expect(screen.getByText('Send 1')).toBeTruthy()
+    expect(screen.getByText(/1 delivered/)).toBeTruthy()
+    expect(
+      screen.getAllByRole('button', { name: 'Preview resend' }),
+    ).toHaveLength(1)
   })
 })

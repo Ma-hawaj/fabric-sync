@@ -40,6 +40,12 @@ pub async fn history(
 ) -> Result<Json<Vec<History>>, AppError> {
     Ok(Json(repository::history(state.db(), id).await?))
 }
+pub async fn sends(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<History>>, AppError> {
+    Ok(Json(repository::sends(state.db(), id).await?))
+}
 pub async fn send(
     State(state): State<AppState>,
     Extension(user): Extension<AuthenticatedUser>,

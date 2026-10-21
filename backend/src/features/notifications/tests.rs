@@ -502,6 +502,7 @@ async fn private_routes_require_staff_auth_and_webhooks_require_meta_auth(pool: 
     for path in [
         format!("/documents/{id}/content"),
         format!("/notifications/{id}"),
+        format!("/notifications/{id}/sends"),
         format!("/invoices/{id}/notifications"),
     ] {
         assert_eq!(
@@ -916,7 +917,7 @@ async fn recent_history_keeps_both_latest_notification_types_and_uses_approval_t
     ).bind(original.id).fetch_one(&pool).await.unwrap();
     sqlx::query(
         "INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,state,snapshot,created_by,created_at,approved_by,approved_at)
-         SELECT invoice_id,'manual_resend','history-'||item,source_hash,preview_version,'approved',snapshot,'staff',now()-interval '300 days','staff',now()-item*interval '1 minute'
+         SELECT invoice_id,'manual_resend','history-'||item,source_hash||item,preview_version,'approved',snapshot,'staff',now()-interval '300 days','staff',now()-item*interval '1 minute'
          FROM notifications CROSS JOIN generate_series(1,101) item WHERE id=$1"
     ).bind(original.id).execute(&pool).await.unwrap();
     let history = repository::history(&pool, invoice).await.unwrap();
@@ -925,4 +926,86 @@ async fn recent_history_keeps_both_latest_notification_types_and_uses_approval_t
     assert_eq!(history.last().unwrap().id, pickup);
     assert!(history[0].created_at > history.last().unwrap().created_at);
     assert!(!history.iter().any(|row| row.id == original.id));
+}
+
+#[sqlx::test]
+async fn resends_update_one_version_entry_and_reject_older_links(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), Some(url.clone()), Some(url)).await;
+    let original = service::prepare(&state, invoice, prepare("invoice_created"), "staff")
+        .await
+        .unwrap();
+    service::approve(&state, original.id, send(&original), "staff", true)
+        .await
+        .unwrap();
+    worker::tick(&state).await.unwrap();
+    let resent = service::resend(&state, original.id, Uuid::new_v4(), "staff")
+        .await
+        .unwrap();
+    assert!(repository::history(&pool, invoice).await.unwrap()[0].send_count == 1);
+    assert_eq!(resent.artifact_id, original.artifact_id);
+    service::approve(&state, resent.id, send(&resent), "staff", true)
+        .await
+        .unwrap();
+    let history = repository::history(&pool, invoice).await.unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].id, resent.id);
+    assert_eq!(history[0].send_count, 2);
+    assert_eq!(history[0].kind, "invoice_created");
+    assert_eq!(history[0].queued_count, 1);
+    let sends = repository::sends(&pool, resent.id).await.unwrap();
+    assert_eq!(sends.len(), 2);
+    assert_eq!(sends[0].id, resent.id);
+    assert_eq!(sends[1].id, original.id);
+    assert_eq!(sends[1].accepted_count, 1);
+    assert_eq!(
+        repository::recipients(&pool, original.id).await.unwrap()[0].status,
+        "accepted"
+    );
+    assert!(matches!(
+        service::resend(&state, original.id, Uuid::new_v4(), "staff").await,
+        Err(AppError::Conflict(_))
+    ));
+    let next = service::resend(&state, resent.id, Uuid::new_v4(), "staff")
+        .await
+        .unwrap();
+    let competing = service::resend(&state, resent.id, Uuid::new_v4(), "other-staff")
+        .await
+        .unwrap();
+    service::approve(&state, next.id, send(&next), "staff", true)
+        .await
+        .unwrap();
+    assert!(matches!(
+        service::approve(&state, competing.id, send(&competing), "other-staff", true).await,
+        Err(AppError::Conflict(_))
+    ));
+    service::discard_preview(&state, competing.id)
+        .await
+        .unwrap();
+    assert_eq!(
+        repository::history(&pool, invoice).await.unwrap()[0].send_count,
+        3
+    );
+    sqlx::query("UPDATE invoices SET total_price=120 WHERE id=$1")
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let updated = service::prepare(&state, invoice, prepare("invoice_updated"), "staff")
+        .await
+        .unwrap();
+    service::approve(&state, updated.id, send(&updated), "staff", true)
+        .await
+        .unwrap();
+    let history = repository::history(&pool, invoice).await.unwrap();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].id, updated.id);
+    assert_eq!(history[0].send_count, 1);
+    assert_eq!(history[1].send_count, 3);
+    assert!(matches!(
+        service::resend(&state, next.id, Uuid::new_v4(), "staff").await,
+        Err(AppError::Conflict(_))
+    ));
+    assert_eq!(mock.renders.load(Ordering::SeqCst), 2);
 }

@@ -79,6 +79,7 @@ pub struct NotificationRow {
     #[sqlx(json)]
     pub snapshot: Snapshot,
     pub artifact_id: Option<Uuid>,
+    pub resend_of: Option<Uuid>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -104,6 +105,7 @@ pub struct History {
     pub kind: String,
     pub state: String,
     pub created_at: DateTime<Utc>,
+    pub send_count: i64,
     pub recipient_count: i64,
     pub queued_count: i64,
     pub accepted_count: i64,

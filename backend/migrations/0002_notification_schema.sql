@@ -47,6 +47,10 @@ CREATE INDEX notifications_preview_cleanup
     ON notifications (created_at)
     WHERE approved_at IS NULL;
 
+CREATE INDEX notifications_versions
+    ON notifications (invoice_id, source_hash, approved_at DESC, id DESC)
+    WHERE approved_at IS NOT NULL;
+
 CREATE TABLE notification_recipients (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     notification_id UUID NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
