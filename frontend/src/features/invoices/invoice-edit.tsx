@@ -36,7 +36,7 @@ export function InvoiceEditPage({ invoiceId }: { invoiceId: string }) {
       key={edit.id}
       defaultValues={mapped.values}
       title={`Edit Invoice INV-${edit.invoiceNumber}`}
-      subtitle="Change the header or line items and save to rebuild the invoice. Received orders or production activity cannot be edited — payments already taken stay as they are."
+      subtitle="Change the header or line items and save to rebuild the invoice. Collected orders or production activity cannot be edited — payments already taken stay as they are."
       saveVerb="Updating"
       savedVerb="updated"
       mutation={updateInvoice}

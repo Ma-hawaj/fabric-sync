@@ -587,22 +587,10 @@ async fn private_routes_require_staff_auth_and_webhooks_require_meta_auth(pool: 
     }
 }
 
-#[sqlx::test(migrations = false)]
-async fn additive_migration_preserves_existing_customers_orders_and_payments(pool: PgPool) {
-    sqlx::raw_sql(include_str!(
-        "../../../migrations/20260712000000_create_tables.sql"
-    ))
-    .execute(&pool)
-    .await
-    .unwrap();
-    sqlx::raw_sql(include_str!(
-        "../../../migrations/20260730000000_add_list_indexes.sql"
-    ))
-    .execute(&pool)
-    .await
-    .unwrap();
+#[sqlx::test]
+async fn fresh_migrations_support_collection_readiness_and_customer_defaults(pool: PgPool) {
     let (invoice, orders, _, _) = test_support::invoice(&pool, 2, false).await;
-    sqlx::query("UPDATE orders SET status='received',received_at=now() WHERE id=$1")
+    sqlx::query("UPDATE orders SET status='collected',collected_at=now() WHERE id=$1")
         .bind(orders[0])
         .execute(&pool)
         .await
@@ -614,21 +602,13 @@ async fn additive_migration_preserves_existing_customers_orders_and_payments(poo
     .execute(&pool)
     .await
     .unwrap();
-    let mut tx = pool.begin().await.unwrap();
-    sqlx::raw_sql(include_str!(
-        "../../../migrations/20261018000000_invoice_notifications.sql"
-    ))
-    .execute(&mut *tx)
-    .await
-    .unwrap();
-    tx.commit().await.unwrap();
     let statuses: Vec<String> =
         sqlx::query_scalar("SELECT status FROM orders WHERE invoice_id=$1 ORDER BY order_number")
             .bind(invoice)
             .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(statuses, vec!["received", "pending"]);
+    assert_eq!(statuses, vec!["collected", "pending"]);
     assert!(sqlx::query_scalar::<_, bool>(
         "SELECT bool_and(whatsapp_notifications_enabled) FROM customers"
     )

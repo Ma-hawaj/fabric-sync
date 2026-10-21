@@ -4,7 +4,7 @@ import { useDataTable } from '@/hooks/use-data-table'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getOrderColumns } from './components/order-columns'
-import { ReceiveOrderDialog } from './components/receive-order-dialog'
+import { CollectOrderDialog } from './components/collect-order-dialog'
 import { useAllInventory } from '@/features/inventory/hooks/use-inventory'
 import { useOrderStages } from '@/features/order-stages/hooks/use-order-stages'
 import { useAllLocations } from '@/features/locations/hooks/use-locations'
@@ -87,7 +87,7 @@ export function OrdersPage() {
         </DataTable>
       )}
 
-      <ReceiveOrderDialog
+      <CollectOrderDialog
         order={selectedOrder}
         onOpenChange={(open) => !open && setSelectedOrder(null)}
       />

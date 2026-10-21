@@ -77,7 +77,7 @@ export interface GiftCardRedemptionDraft {
 }
 
 // One payment taken up front with the invoice. Later payments go through the
-// receive endpoints or a till payment, so the form only ever carries the
+// collect endpoints or a till payment, so the form only ever carries the
 // opening ones — usually zero or one row.
 export interface PaymentDraft {
   key: string

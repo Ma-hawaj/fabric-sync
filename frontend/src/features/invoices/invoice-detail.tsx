@@ -25,7 +25,7 @@ import {
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
+import { CollectInvoiceDialog } from './components/collect-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
 import { useInvoice } from './hooks/use-invoice'
 import { downloadInvoicePdf } from './lib/print-invoice'
@@ -48,7 +48,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
   const navigate = useNavigate()
   const [resendOpen, setResendOpen] = React.useState(false)
 
-  // The receive dialog was built around the list row's `Invoice`, so the
+  // The collect dialog was built around the list row's `Invoice`, so the
   // detail is narrowed into that shape for it — the arithmetic it shows comes
   // from `totals` here, never re-derived.
   const invoice: Invoice | null = detail ? toInvoice(detail) : null
@@ -117,8 +117,8 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                 ? 'Paid'
                 : 'Unpaid'}
           </Badge>
-          <Badge variant={invoice.received ? 'default' : 'secondary'}>
-            {invoice.received ? 'Received' : 'Pending collection'}
+          <Badge variant={invoice.collected ? 'default' : 'secondary'}>
+            {invoice.collected ? 'Collected' : 'Pending collection'}
           </Badge>
         </div>
 
@@ -134,14 +134,14 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
               scope="invoices"
               status={
                 detail.readinessStatus ??
-                (detail.received ? 'collected' : 'in_progress')
+                (detail.collected ? 'collected' : 'in_progress')
               }
             />
           )}
 
           <Button
             variant="outline"
-            disabled={detail.received}
+            disabled={detail.collected}
             onClick={() =>
               void navigate({
                 to: '/invoices/$invoiceId/edit',
@@ -152,7 +152,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
             <PencilIcon className="h-4 w-4" />
             Edit
           </Button>
-          <ReceiveInvoiceButton invoice={invoice} />
+          <CollectInvoiceButton invoice={invoice} />
           <RecordPaymentButton invoice={invoice} />
         </div>
       </div>
@@ -341,9 +341,9 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
   )
 }
 
-// The receive dialog needs its trigger; keep it self-contained here rather
+// The collect dialog needs its trigger; keep it self-contained here rather
 // than a separate dialog state in this page.
-function ReceiveInvoiceButton({ invoice }: { invoice: Invoice }) {
+function CollectInvoiceButton({ invoice }: { invoice: Invoice }) {
   const [open, setOpen] = React.useState(false)
 
   return (
@@ -353,9 +353,9 @@ function ReceiveInvoiceButton({ invoice }: { invoice: Invoice }) {
         className="text-info hover:text-info/80 hover:bg-info/5 dark:hover:bg-info/10"
         onClick={() => setOpen(true)}
       >
-        Mark Received
+        Mark Collected
       </Button>
-      <ReceiveInvoiceDialog
+      <CollectInvoiceDialog
         invoice={open ? invoice : null}
         onOpenChange={(isOpen) => !isOpen && setOpen(false)}
       />
@@ -439,10 +439,10 @@ function toInvoice(detail: InvoiceDetail): Invoice {
     balanceDue: detail.totals.balanceDue,
     paymentMethod: detail.paymentMethod,
     giftCardRedeemed: detail.totals.giftCardRedeemed,
-    received: detail.received,
+    collected: detail.collected,
     orderCount: detail.orderCount,
     collectedOrderCount: detail.collectedOrderCount,
-    lastReceivedAt: detail.lastReceivedAt,
+    lastCollectedAt: detail.lastCollectedAt,
     receivingLocation: detail.branchName,
     // The detail endpoint carries no production locations (lines carry no
     // location), so the list's production filter has nothing to reuse here —

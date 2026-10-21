@@ -9,7 +9,7 @@ import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getInvoiceColumns } from './components/invoice-columns'
 import { InvoiceOrderBreakdown } from './components/invoice-order-breakdown'
-import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
+import { CollectInvoiceDialog } from './components/collect-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
 import { useListParams } from '@/hooks/use-list-params'
 import { useInvoices } from './hooks/use-invoices'
@@ -23,7 +23,7 @@ import { downloadInvoicePdf } from './lib/print-invoice'
 import type { Invoice } from './types/invoices'
 
 export function InvoicesPage() {
-  const [receiveInvoice, setReceiveInvoice] = React.useState<Invoice | null>(
+  const [collectInvoice, setCollectInvoice] = React.useState<Invoice | null>(
     null,
   )
   const [paymentInvoice, setPaymentInvoice] = React.useState<Invoice | null>(
@@ -66,7 +66,7 @@ export function InvoicesPage() {
       names.map((name) => ({ label: name, value: name })),
       receiving,
       production,
-      setReceiveInvoice,
+      setCollectInvoice,
       (invoice) =>
         void navigate({
           to: '/invoices/$invoiceId',
@@ -137,9 +137,9 @@ export function InvoicesPage() {
         </DataTable>
       )}
 
-      <ReceiveInvoiceDialog
-        invoice={receiveInvoice}
-        onOpenChange={(open) => !open && setReceiveInvoice(null)}
+      <CollectInvoiceDialog
+        invoice={collectInvoice}
+        onOpenChange={(open) => !open && setCollectInvoice(null)}
       />
       <RecordPaymentDialog
         invoice={paymentInvoice}

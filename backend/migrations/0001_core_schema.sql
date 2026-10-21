@@ -1,3 +1,5 @@
+-- Fresh-database baseline: locations, sales, production, and collection.
+
 -- A physical location. It can be a branch where customers collect finished
 -- orders, a store that only holds material stock, or both — so the two
 -- capabilities are independent flags rather than a single type column.
@@ -15,6 +17,7 @@ CREATE TABLE customers (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     name TEXT NOT NULL,
     mobile_no TEXT NOT NULL,
+    whatsapp_notifications_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     UNIQUE (name, mobile_no)
 );
 
@@ -72,7 +75,9 @@ CREATE TABLE invoices (
     -- reducing the total. It is a settlement channel next to the payments
     -- below, so what the customer actually hands over to clear the invoice is
     -- total_price - gift_card_redeemed.
-    gift_card_redeemed NUMERIC(10, 2) NOT NULL DEFAULT 0
+    gift_card_redeemed NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    notification_revision BIGINT NOT NULL DEFAULT 0,
+    readiness_generation BIGINT NOT NULL DEFAULT 0
 );
 
 CREATE TABLE measurements (
@@ -139,8 +144,12 @@ CREATE TABLE orders (
     patti TEXT,
     emd TEXT,
     more_details TEXT,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'received')),
-    received_at TIMESTAMPTZ,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'ready', 'collected')),
+    collected_at TIMESTAMPTZ,
+    ready_at TIMESTAMPTZ,
+    ready_by TEXT,
+    readiness_version BIGINT NOT NULL DEFAULT 0,
+    ready_location_id UUID REFERENCES branch(id),
     -- A garment handed to a tailor needs a number the tailor can quote back,
     -- just like the tax invoice it rides on. The uuidv7 primary key is not
     -- quotable, so the human-readable identity lives here instead.
@@ -355,10 +364,6 @@ CREATE TABLE design_options (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     UNIQUE (category, slug)
 );
-
--- Picker order per category, and the admin table's default sort.
-CREATE INDEX IF NOT EXISTS design_options_category_idx
-    ON design_options (category, sort_order);
 
 -- Catalog rows and bundled illustrations live in backend/seeds/design_options.sql
 -- and are loaded explicitly after migrations when the deployment needs them.

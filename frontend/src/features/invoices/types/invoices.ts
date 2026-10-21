@@ -29,16 +29,16 @@ export interface Invoice extends ReadinessFields {
   paymentMethod: PaymentType | null
   giftCardRedeemed: number
   /** Goods receipt, separate from money: every order collected. */
-  received: boolean
+  collected: boolean
   /** Tailoring garments only, excluding retail products and gift cards. */
   orderCount: number
   collectedOrderCount: number
   /**
    * Latest collection across the invoice's tailoring lines, as an ISO
-   * datetime. Null until the first order is received (and on retail-only
+   * datetime. Null until the first order is collected (and on retail-only
    * invoices, which have no orders).
    */
-  lastReceivedAt: string | null
+  lastCollectedAt: string | null
   /** Where the customer collects, taken from the invoice's branch. */
   receivingLocation: string | null
   /** Distinct production locations across the invoice's tailoring lines. */

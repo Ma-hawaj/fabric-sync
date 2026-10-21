@@ -80,12 +80,12 @@ pub async fn fetch_invoice_detail(
             -- Goods receipt is separate from money: true once no order on
             -- the invoice is still pending collection. A retail-only invoice
             -- has no orders, so there is nothing to collect.
-            collection.order_count = collection.collected_order_count AS "received!",
+            collection.order_count = collection.collected_order_count AS "collected!",
             collection.order_count AS "order_count!",
             collection.collected_order_count AS "collected_order_count!",
             -- The latest collection across the invoice's tailoring lines
             -- (see the list query's `agg` lateral for the same derivation).
-            collection.last_received_at AS "last_received_at?",
+            collection.last_collected_at AS "last_collected_at?",
             i.total_price::float8 AS "total_price!",
             i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
             -- The `?` suffixes are for sqlx: it reads nullability off the
@@ -99,8 +99,8 @@ pub async fn fetch_invoice_detail(
         LEFT JOIN customers c ON c.id = i.customer_id
         LEFT JOIN LATERAL (
             SELECT count(*) AS order_count,
-                   count(*) FILTER (WHERE status = 'received') AS collected_order_count,
-                   max(received_at) AS last_received_at
+                   count(*) FILTER (WHERE status = 'collected') AS collected_order_count,
+                   max(collected_at) AS last_collected_at
             FROM orders WHERE invoice_id = i.id
         ) collection ON true
         LEFT JOIN LATERAL (
@@ -284,10 +284,10 @@ pub async fn fetch_invoice_detail(
             total_price: invoice.total_price,
             amount_paid: invoice.amount_paid,
             payment_method: invoice.payment_method,
-            received: invoice.received,
+            collected: invoice.collected,
             order_count: invoice.order_count,
             collected_order_count: invoice.collected_order_count,
-            last_received_at: invoice.last_received_at,
+            last_collected_at: invoice.last_collected_at,
             gift_card_redeemed: invoice.gift_card_redeemed,
         },
         lines,
@@ -325,12 +325,12 @@ const SPEC: ListSpec = ListSpec {
             method.payment_type AS payment_method,
             NOT EXISTS(
                 SELECT 1 FROM orders o
-                WHERE o.invoice_id = i.id AND o.status <> 'received'
-            ) AS received,
+                WHERE o.invoice_id = i.id AND o.status <> 'collected'
+            ) AS collected,
             -- The latest collection across the invoice's tailoring lines.
-            -- NULL until the first order is received (and on retail-only
+            -- NULL until the first order is collected (and on retail-only
             -- invoices, which have no orders at all).
-            agg.last_received_at AS last_received_at,
+            agg.last_collected_at AS last_collected_at,
             COALESCE(agg.item_count, 0) AS order_count,
             ready.readiness_status, ready.ready_order_count, ready.pending_order_count, ready.readiness_generation,
             COALESCE(agg.collected_order_count, 0) AS collected_order_count,
@@ -368,7 +368,7 @@ const SPEC: ListSpec = ListSpec {
         LEFT JOIN LATERAL (
             SELECT
                 count(*) AS item_count,
-                count(*) FILTER (WHERE o.status = 'received') AS collected_order_count,
+                count(*) FILTER (WHERE o.status = 'collected') AS collected_order_count,
                 json_agg(DISTINCT jsonb_build_object(
                     'name', c.name,
                     'mobileNo', c.mobile_no
@@ -379,7 +379,7 @@ const SPEC: ListSpec = ListSpec {
                 array_agg(DISTINCT CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END) AS material_names,
                 json_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_locations,
                 array_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_location_names,
-                MAX(o.received_at) AS last_received_at
+                MAX(o.collected_at) AS last_collected_at
             FROM orders o
             JOIN measurements m ON m.id = o.measurement_id
             JOIN customers c ON c.id = m.customer_id
@@ -465,14 +465,14 @@ const SPEC: ListSpec = ListSpec {
             "paymentMethod",
             ColumnDef::new("payment_method", ColumnKind::Text),
         ),
-        ("received", ColumnDef::new("received", ColumnKind::Bool)),
+        ("collected", ColumnDef::new("collected", ColumnKind::Bool)),
         (
             "readinessStatus",
             ColumnDef::new("readiness_status", ColumnKind::Text),
         ),
         (
-            "lastReceivedAt",
-            ColumnDef::new("last_received_at", ColumnKind::Date),
+            "lastCollectedAt",
+            ColumnDef::new("last_collected_at", ColumnKind::Date),
         ),
         (
             "receivingLocation",
@@ -675,20 +675,20 @@ pub async fn order_belongs_to_invoice(
     .await?)
 }
 
-/// Marks every still-pending order on the invoice received. Already-received
-/// rows are left alone — re-stamping their `received_at` would rewrite when
+/// Marks every still-pending order on the invoice collected. Already-collected
+/// rows are left alone — re-stamping their `collected_at` would rewrite when
 /// they were actually collected, which matters once settlement can land after
-/// collection (see service::receive_invoice). The money is settled separately
+/// collection (see service::collect_invoice). The money is settled separately
 /// by the caller inserting a balancing payment.
-pub async fn mark_orders_received(
+pub async fn mark_orders_collected(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         UPDATE orders
-        SET status = 'received', received_at = now()
-        WHERE invoice_id = $1 AND status <> 'received'
+        SET status = 'collected', collected_at = now()
+        WHERE invoice_id = $1 AND status <> 'collected'
         "#,
         invoice_id,
     )
@@ -1100,7 +1100,7 @@ pub async fn fetch_invoice_edit(
 }
 
 /// True once any order on the invoice has been collected.
-pub async fn invoice_has_received_orders(
+pub async fn invoice_has_collected_orders(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
@@ -1108,7 +1108,7 @@ pub async fn invoice_has_received_orders(
         r#"
         SELECT EXISTS(
             SELECT 1 FROM orders
-            WHERE invoice_id = $1 AND status = 'received'
+            WHERE invoice_id = $1 AND status = 'collected'
         ) AS "exists!"
         "#,
         invoice_id,

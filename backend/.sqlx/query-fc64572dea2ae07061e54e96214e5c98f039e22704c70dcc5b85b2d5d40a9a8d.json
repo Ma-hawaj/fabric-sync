@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT COUNT(*) FILTER (WHERE status <> 'received') = 0\n        FROM orders\n        WHERE invoice_id = $1\n        ",
+  "query": "\n        SELECT COUNT(*) FILTER (WHERE status <> 'collected') = 0\n        FROM orders\n        WHERE invoice_id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -18,5 +18,5 @@
       null
     ]
   },
-  "hash": "7ebba4a182f77b12fd94c5970bf589cdb3054ee8f7f29246fa70dfeb790e95e1"
+  "hash": "fc64572dea2ae07061e54e96214e5c98f039e22704c70dcc5b85b2d5d40a9a8d"
 }

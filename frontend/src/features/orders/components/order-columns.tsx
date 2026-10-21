@@ -20,7 +20,7 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 const statusOptions = [
   { label: 'Pending', value: 'pending' },
   { label: 'Ready for pickup', value: 'ready' },
-  { label: 'Received', value: 'received' },
+  { label: 'Collected', value: 'collected' },
 ]
 
 const paymentStatusOptions = [
@@ -43,7 +43,7 @@ export function getOrderColumns(
   stageOptions: { label: string; value: string }[],
   receivingOptions: { label: string; value: string }[],
   productionOptions: { label: string; value: string }[],
-  onReceive: (order: Order) => void,
+  onCollect: (order: Order) => void,
   onOpen: (order: Order) => void,
 ): ColumnDef<Order, any>[] {
   return [
@@ -240,9 +240,9 @@ export function getOrderColumns(
       cell: ({ row }) => {
         const status = row.getValue<Order['status']>('status')
         return (
-          <Badge variant={status === 'received' ? 'default' : 'secondary'}>
-            {status === 'received'
-              ? 'Received'
+          <Badge variant={status === 'collected' ? 'default' : 'secondary'}>
+            {status === 'collected'
+              ? 'Collected'
               : status === 'ready'
                 ? 'Ready for pickup'
                 : 'Pending'}
@@ -258,14 +258,14 @@ export function getOrderColumns(
       },
     },
     {
-      accessorKey: 'receivedAt',
+      accessorKey: 'collectedAt',
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} label="Received At" />
+        <DataTableColumnHeader column={column} label="Collected At" />
       ),
       cell: ({ row }) => {
-        const receivedAt = row.getValue<Date | null>('receivedAt')
-        if (!receivedAt) return <div className="text-muted-foreground">—</div>
-        return <div>{receivedAt.toLocaleString()}</div>
+        const collectedAt = row.getValue<Date | null>('collectedAt')
+        if (!collectedAt) return <div className="text-muted-foreground">—</div>
+        return <div>{collectedAt.toLocaleString()}</div>
       },
       enableSorting: true,
       enableColumnFilter: false,
@@ -386,10 +386,10 @@ export function getOrderColumns(
               },
               {
                 label:
-                  order.status === 'received' ? 'Received' : 'Mark Received',
+                  order.status === 'collected' ? 'Collected' : 'Mark Collected',
                 icon: CheckIcon,
-                disabled: order.status === 'received',
-                onClick: () => onReceive(order),
+                disabled: order.status === 'collected',
+                onClick: () => onCollect(order),
                 separatorBefore: true,
               },
             ]}

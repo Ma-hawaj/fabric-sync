@@ -48,7 +48,7 @@ const SPEC: ListSpec = ListSpec {
             o.material_amount::float8 AS material_amount,
             o.price::float8 AS price,
             o.status,
-            o.received_at,
+            o.collected_at,
             o.ready_at,
             o.ready_by,
             o.thobe_type,
@@ -74,7 +74,7 @@ const SPEC: ListSpec = ListSpec {
             pay.status AS invoice_payment_status,
             i.gift_card_redeemed::float8 AS invoice_gift_card_redeemed,
             -- Unlike the list page's own balance, this one nets off gift
-            -- card tender too — it is what the receive dialog collects.
+            -- card tender too — it is what the collect dialog collects.
             GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS invoice_balance_due,
             method.payment_type AS invoice_payment_method,
             GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS balance_due,
@@ -189,8 +189,8 @@ const SPEC: ListSpec = ListSpec {
         ("price", ColumnDef::new("price", ColumnKind::Number)),
         ("status", ColumnDef::new("status", ColumnKind::Text)),
         (
-            "receivedAt",
-            ColumnDef::new("received_at", ColumnKind::Date),
+            "collectedAt",
+            ColumnDef::new("collected_at", ColumnKind::Date),
         ),
         (
             "invoicePaymentStatus",
@@ -403,7 +403,7 @@ pub async fn list_repairs(
 }
 
 /// The order's invoice with the row locked. The service refuses a pickup on
-/// an already-received order through this: a retry would otherwise record
+/// an already-collected order through this: a retry would otherwise record
 /// the pickup's payment twice.
 pub struct LockedOrder {
     pub invoice_id: Uuid,
@@ -432,16 +432,16 @@ pub async fn lock_order(
     }))
 }
 
-/// Marks the order received. The caller holds the row locked (see
-/// `lock_order`) and has refused already-received rows.
-pub async fn mark_received(
+/// Marks the order collected. The caller holds the row locked (see
+/// `lock_order`) and has refused already-collected rows.
+pub async fn mark_collected(
     tx: &mut sqlx::PgTransaction<'_>,
     order_id: Uuid,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         UPDATE orders
-        SET status = 'received', received_at = now()
+        SET status = 'collected', collected_at = now()
         WHERE id = $1
         "#,
         order_id,
@@ -452,16 +452,16 @@ pub async fn mark_received(
     Ok(())
 }
 
-/// True once every order on the invoice has been received — the point at
+/// True once every order on the invoice has been collected — the point at
 /// which the customer has collected everything, so the remaining balance is
 /// considered settled.
-pub async fn invoice_fully_received(
+pub async fn invoice_fully_collected(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar!(
         r#"
-        SELECT COUNT(*) FILTER (WHERE status <> 'received') = 0
+        SELECT COUNT(*) FILTER (WHERE status <> 'collected') = 0
         FROM orders
         WHERE invoice_id = $1
         "#,
@@ -469,7 +469,7 @@ pub async fn invoice_fully_received(
     )
     .fetch_one(&mut **tx)
     .await
-    .map(|all_received| all_received.unwrap_or(false))
+    .map(|all_collected| all_collected.unwrap_or(false))
 }
 
 /// COALESCE keeps the stored value when the caller omits the field, matching

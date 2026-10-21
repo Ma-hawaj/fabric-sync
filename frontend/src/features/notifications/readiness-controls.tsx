@@ -85,12 +85,7 @@ export function ReadinessControls({
       if (result.becameReady) setNotify(true)
     },
   })
-  if (
-    status === 'received' ||
-    status === 'collected' ||
-    status === 'not_applicable'
-  )
-    return null
+  if (status === 'collected' || status === 'not_applicable') return null
   const notificationDialog = (
     <NotificationDialog
       key="ready-notification"

@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import type { Order, PaymentType } from '../types/orders'
 
-interface ReceiveOrderInput {
+interface CollectOrderInput {
   orderId: string
   /** Collected at this pickup; zero collects with no money. */
   amount: number
@@ -10,23 +10,23 @@ interface ReceiveOrderInput {
   paymentType: PaymentType | null
 }
 
-async function receiveOrder({
+async function collectOrder({
   orderId,
   amount,
   paymentType,
-}: ReceiveOrderInput): Promise<Order> {
-  const { data } = await apiClient.post<Order>(`/orders/${orderId}/receive`, {
+}: CollectOrderInput): Promise<Order> {
+  const { data } = await apiClient.post<Order>(`/orders/${orderId}/collect`, {
     amount,
     paymentType,
   })
   return data
 }
 
-export function useReceiveOrder() {
+export function useCollectOrder() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: receiveOrder,
+    mutationFn: collectOrder,
     onSuccess: () => {
       // A pickup records a payment against the shared invoice, so the
       // invoice list is stale too — not just this order's row.

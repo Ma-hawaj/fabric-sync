@@ -40,7 +40,7 @@ fn blockers(order: &ReadyOrder, stages: &[Stage], has_repair: bool) -> Vec<Strin
         return vec![];
     }
     let mut errors = Vec::new();
-    if order.status == "received" {
+    if order.status == "collected" {
         errors.push("Already collected".into());
     }
     if order.production_branch_id.is_none() {
@@ -330,7 +330,7 @@ mod tests {
             "in_progress"
         );
         confirm(&pool, invoice, None, "staff", true).await.unwrap();
-        sqlx::query("UPDATE orders SET status='received',received_at=now() WHERE id=$1")
+        sqlx::query("UPDATE orders SET status='collected',collected_at=now() WHERE id=$1")
             .bind(orders[0])
             .execute(&pool)
             .await

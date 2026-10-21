@@ -81,15 +81,15 @@ export interface InvoiceDetail extends ReadinessFields {
   /** The most recent payment's method, if anything has been paid. */
   paymentMethod: PaymentType | null
   /** Goods receipt, separate from money: every order collected. */
-  received: boolean
+  collected: boolean
   /** Tailoring garments only, excluding retail products and gift cards. */
   orderCount: number
   collectedOrderCount: number
   /**
    * Latest collection across the invoice's tailoring lines, as an ISO
-   * datetime. Null until the first order is received.
+   * datetime. Null until the first order is collected.
    */
-  lastReceivedAt: string | null
+  lastCollectedAt: string | null
   lines: InvoiceLine[]
   redemptions: InvoiceRedemption[]
   payments: InvoicePayment[]

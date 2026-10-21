@@ -380,7 +380,7 @@ export function InvoiceSummary({
                       )}
 
                       {/* Payments taken up front with the invoice. Later ones
-                          go through the receive endpoints or a till payment,
+                          go through the collect endpoints or a till payment,
                           so this list is usually empty or a single advance. */}
                       <form.Field name={'payments' as never}>
                         {(paymentsField: any) => (
@@ -398,7 +398,7 @@ export function InvoiceSummary({
                             {paymentsLocked && (
                               <p className="text-xs text-muted-foreground">
                                 Already taken — an edit never changes money.
-                                Take further payments via Receive.
+                                Take further payments via Collect.
                               </p>
                             )}
                             {paymentsLocked &&

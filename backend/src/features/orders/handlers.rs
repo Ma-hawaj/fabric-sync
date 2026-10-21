@@ -15,7 +15,7 @@ use crate::{
 use super::{
     document, service,
     types::{
-        AssignStageInput, CreateRepairInput, OrderDetail, OrderListItem, ReceiveOrderInput,
+        AssignStageInput, CollectOrderInput, CreateRepairInput, OrderDetail, OrderListItem,
         SetStageInput, UpdateOrderInput, UpdateRepairInput,
     },
 };
@@ -49,14 +49,14 @@ pub async fn order_document(
     ))
 }
 
-pub async fn receive_order(
+pub async fn collect_order(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,
     Path(order_id): Path<Uuid>,
-    Json(input): Json<ReceiveOrderInput>,
+    Json(input): Json<CollectOrderInput>,
 ) -> Result<Json<OrderListItem>, AppError> {
     Ok(Json(
-        service::receive_order(&state, order_id, input.amount, input.payment_type).await?,
+        service::collect_order(&state, order_id, input.amount, input.payment_type).await?,
     ))
 }
 

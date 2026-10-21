@@ -51,7 +51,7 @@ const ORDER: OrderDetail = {
   materialAmount: 3.5,
   price: 100,
   status: 'pending',
-  receivedAt: null,
+  collectedAt: null,
   thobeType: 'thobx',
   fPocket: 'round',
   sPocket: 'type-2',

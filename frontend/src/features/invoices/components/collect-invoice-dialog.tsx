@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { CURRENCY } from '@/lib/currency'
-import { useReceiveInvoice } from '../hooks/use-receive-invoice'
+import { useCollectInvoice } from '../hooks/use-collect-invoice'
 import type { Invoice, PaymentType } from '../types/invoices'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -32,16 +32,16 @@ const paymentTypeOptions: { value: PaymentType; label: string }[] = [
   { value: 'card', label: 'Card' },
 ]
 
-interface ReceiveInvoiceDialogProps {
+interface CollectInvoiceDialogProps {
   invoice: Invoice | null
   onOpenChange: (open: boolean) => void
 }
 
-export function ReceiveInvoiceDialog({
+export function CollectInvoiceDialog({
   invoice,
   onOpenChange,
-}: ReceiveInvoiceDialogProps) {
-  const receiveInvoice = useReceiveInvoice()
+}: CollectInvoiceDialogProps) {
+  const collectInvoice = useCollectInvoice()
   const [paymentType, setPaymentType] = React.useState<PaymentType | ''>('')
 
   React.useEffect(() => {
@@ -52,20 +52,20 @@ export function ReceiveInvoiceDialog({
   // stays hidden and the request carries a null payment type.
   const needsPayment = (invoice?.balanceDue ?? 0) > 0
   const canConfirm =
-    invoice && (!needsPayment || paymentType) && !receiveInvoice.isPending
+    invoice && (!needsPayment || paymentType) && !collectInvoice.isPending
 
   const handleConfirm = async () => {
     if (!invoice || !canConfirm) return
 
-    const pending = receiveInvoice.mutateAsync({
+    const pending = collectInvoice.mutateAsync({
       invoiceId: invoice.id,
       paymentType: needsPayment ? (paymentType as PaymentType) : null,
     })
     toast.promise(pending, {
-      loading: 'Marking invoice received...',
+      loading: 'Marking invoice collected...',
       success: needsPayment
-        ? 'Invoice marked received and settled.'
-        : 'Invoice marked received.',
+        ? 'Invoice marked collected and settled.'
+        : 'Invoice marked collected.',
       error: 'Could not update this invoice. Please try again.',
     })
 
@@ -86,7 +86,7 @@ export function ReceiveInvoiceDialog({
         {invoice && (
           <>
             <DialogHeader>
-              <DialogTitle>Mark Invoice Received</DialogTitle>
+              <DialogTitle>Mark Invoice Collected</DialogTitle>
               <DialogDescription>
                 {invoice.customers.map((c) => c.name).join(', ')} —{' '}
                 {invoice.materials.join(', ')}
@@ -119,10 +119,10 @@ export function ReceiveInvoiceDialog({
             </div>
 
             <p className="text-sm text-muted-foreground">
-              {invoice.received
+              {invoice.collected
                 ? 'Every order on this invoice is already collected — this only settles the remaining balance.'
                 : needsPayment
-                  ? 'Marks every order on this invoice received and settles the remaining balance in full using the payment method below.'
+                  ? 'Marks every order on this invoice collected and settles the remaining balance in full using the payment method below.'
                   : 'This invoice is already fully paid — this just collects every order on it.'}
             </p>
 
@@ -157,12 +157,12 @@ export function ReceiveInvoiceDialog({
               <Button
                 variant="outline"
                 onClick={() => onOpenChange(false)}
-                disabled={receiveInvoice.isPending}
+                disabled={collectInvoice.isPending}
               >
                 Cancel
               </Button>
               <Button onClick={handleConfirm} disabled={!canConfirm}>
-                Confirm Received
+                Confirm Collected
               </Button>
             </DialogFooter>
           </>

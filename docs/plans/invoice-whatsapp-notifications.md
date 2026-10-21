@@ -68,9 +68,9 @@ rules, pagination envelopes, and multi-customer collection breakdown.
 
 ### Order lifecycle
 
-Extend `orders.status` from `pending | received` to
-`pending | ready | received`. Display those values as In progress, Ready for
-pickup, and Collected. Preserve the existing `received` API value.
+Extend `orders.status` from `pending | collected` to
+`pending | ready | collected`. Display those values as In progress, Ready for
+pickup, and Collected. Use `collected` consistently in the database, API, and interface.
 
 Add `ready_at`, `ready_by` (the authenticated subject), and a monotonically
 increasing readiness version. Retain confirmation metadata on collection.
@@ -115,7 +115,7 @@ pagination, payment status, and browser query caches:
 | Status           | Rule                                                                                   |
 | ---------------- | -------------------------------------------------------------------------------------- |
 | Not applicable   | No tailoring orders; retail products and gift cards do not create pickup readiness.    |
-| Collected        | Every tailoring order has status `received`.                                           |
+| Collected        | Every tailoring order has status `collected`.                                           |
 | Ready for pickup | At least one order remains uncollected and every uncollected order has status `ready`. |
 | Partially ready  | Some uncollected orders are ready and others are pending.                              |
 | In progress      | Uncollected orders exist and none is ready.                                            |
@@ -186,7 +186,7 @@ including media uploads.
   destinations or an unavailable channel are explained in the preview.
 - Both edit prompts and manual resends select all current eligible invoice
   customers by default and deduplicate their normalized mobiles. Do not limit
-  recipients to whoever received an earlier version of the invoice.
+  recipients to whoever was sent an earlier version of the invoice.
 - Prepare a new frozen snapshot using the current saved data. Changed invoice
   content must produce a new artifact for review; an unchanged source may reuse
   a matching stored artifact. Never resend the previous PDF by default after
@@ -293,7 +293,8 @@ settings and include retained artifacts in database backups.
 
 ## Persistence
 
-Create additive SQLx migrations; do not edit either existing migration.
+Use a consolidated, ordered SQLx baseline for a fresh database. There is no
+active deployment to upgrade; declare the final columns and statuses directly.
 Regenerate `backend/.sqlx` whenever compile-time checked queries change.
 
 | Record                     | Required information                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -415,7 +416,7 @@ must leave the rest of the application usable.
 ## Delivery milestones
 
 1. **Integrate the foundations.** Port the relevant PR #26/#36 pieces into the
-   current architecture, add incremental migrations and the new feature
+   current architecture, organize the fresh-database migrations and new feature
    boundaries, and preserve existing invoice/payment behavior. Add the minimal
    Postgres integration-test harness needed for queue/concurrency checks.
 2. **Implement readiness.** Add validated ready/reopen/bulk actions, serialization
@@ -475,8 +476,8 @@ pnpm run build
 
 Add a real-renderer CI job and database-backed integration coverage. Extend CI
 path filters so renderer image/font files, document templates, compose changes,
-and their tests trigger the relevant checks/builds. Verify upgrading a database
-with both existing migrations already applied, as well as a fresh database.
+and their tests trigger the relevant checks/builds. Verify the full migration
+baseline and reference/demo seeds against a fresh database.
 
 ## Deployment and completion criteria
 
@@ -495,7 +496,7 @@ renderer outage blocks document preparation without breaking invoice saving.
 The release is complete when both notification events work through preview and
 approval, the sent attachment is the approved stored file, readiness is visible
 and validated independently of payment, delivery history reflects actual
-provider outcomes, migrations preserve existing data, and the checks above
+provider outcomes, the fresh-database baseline initializes correctly, and the checks above
 pass. Successful invoice edits offer a resend prompt, the independent Resend
 invoice via WhatsApp button is available, and both paths preview the current
 saved version before explicit sending. Creation, edit, manual resend, and pickup

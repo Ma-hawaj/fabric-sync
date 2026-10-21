@@ -120,8 +120,8 @@ pub struct OrderRow {
     pub price: f64,
     pub status: String,
     /// When the customer collected the garment, stamped automatically when
-    /// the order is received. Null while the order is still pending.
-    pub received_at: Option<DateTime<Utc>>,
+    /// the order is collected. Null while the order is still pending.
+    pub collected_at: Option<DateTime<Utc>>,
     pub ready_at: Option<DateTime<Utc>>,
     pub ready_by: Option<String>,
     /// The made-to-measure design choices, as stored on `orders` — the same
@@ -145,7 +145,7 @@ pub struct OrderRow {
     pub invoice_payment_status: String,
     pub invoice_balance_due: f64,
     /// Gift card tender on the invoice: settled alongside payments, so the
-    /// receive dialog shows it rather than leaving a gap between the total
+    /// collect dialog shows it rather than leaving a gap between the total
     /// and what was paid.
     pub invoice_gift_card_redeemed: f64,
     /// The method of the invoice's most recent payment, if any.
@@ -196,7 +196,7 @@ pub struct OrderRepair {
 
 // One row of GET /orders — an order line joined with its invoice, customer,
 // and material for the orders list page, plus the invoice's payment state so
-// the page can show balance due and settle it via receive_order, and the
+// the page can show balance due and settle it via collect_order, and the
 // production checklist and repair history for the tracking sheet.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -220,8 +220,8 @@ pub struct OrderListItem {
     pub price: f64,
     pub status: String,
     /// When the customer collected the garment, stamped automatically when
-    /// the order is received. Null while the order is still pending.
-    pub received_at: Option<DateTime<Utc>>,
+    /// the order is collected. Null while the order is still pending.
+    pub collected_at: Option<DateTime<Utc>>,
     pub ready_at: Option<DateTime<Utc>>,
     pub ready_by: Option<String>,
     /// The made-to-measure design choices, as stored on `orders` — the same
@@ -261,7 +261,7 @@ pub struct OrderListItem {
     pub invoice_payment_status: String,
     pub invoice_balance_due: f64,
     /// Gift card tender on the invoice: settled alongside payments, so the
-    /// receive dialog shows it rather than leaving a gap between the total
+    /// collect dialog shows it rather than leaving a gap between the total
     /// and what was paid.
     pub invoice_gift_card_redeemed: f64,
     /// The method of the invoice's most recent payment, if any.
@@ -280,14 +280,14 @@ pub struct OrderDetail {
     pub measurement: Measurement,
 }
 
-/// Body for `POST /orders/:id/receive` — marks the order collected and records
+/// Body for `POST /orders/:id/collect` — marks the order collected and records
 /// the payment taken at that pickup. `amount` may be zero (collect with no
 /// money); when it is positive a `payment_type` is required. The invoice is
-/// settled in full only once every order on it is received *and* the balance
-/// reaches zero — see `receive_order`.
+/// settled in full only once every order on it is collected *and* the balance
+/// reaches zero — see `collect_order`.
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReceiveOrderInput {
+pub struct CollectOrderInput {
     #[serde(default)]
     pub amount: f64,
     #[serde(default)]

@@ -46,10 +46,10 @@ const DETAIL: InvoiceDetail = {
   buyer: null,
   paymentStatus: 'partial',
   paymentMethod: 'benefit',
-  received: false,
+  collected: false,
   orderCount: 1,
   collectedOrderCount: 0,
-  lastReceivedAt: null,
+  lastCollectedAt: null,
   lines: [
     {
       kind: 'order',
@@ -169,7 +169,7 @@ describe('InvoiceDetailPage', () => {
   })
 
   it('shows collection separately from payment and still allows editing with an advance taken', () => {
-    renderPage({ ...DETAIL, received: false })
+    renderPage({ ...DETAIL, collected: false })
 
     expect(screen.queryByText('Pending collection')).toBeTruthy()
     expect(screen.queryByText('Partially paid')).toBeTruthy()
@@ -178,10 +178,10 @@ describe('InvoiceDetailPage', () => {
     ).toBe(false)
   })
 
-  it('marks a collected invoice received and disables editing', () => {
-    renderPage({ ...DETAIL, received: true })
+  it('marks a collected invoice collected and disables editing', () => {
+    renderPage({ ...DETAIL, collected: true })
 
-    expect(screen.queryByText('Received')).toBeTruthy()
+    expect(screen.queryByText('Collected')).toBeTruthy()
     expect(
       screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
     ).toBe(true)

@@ -6,6 +6,31 @@ invoice detail/list actions offer **Resend invoice via WhatsApp**. Marking the
 last uncollected order ready offers the pickup preview. Closing or skipping a
 preview does not undo the saved invoice or readiness.
 
+## Production and pickup locations
+
+The production branch is the physical location where a garment is made. It is
+selected per order as **Made at** / **Production Location**. The invoice's pickup
+branch is where the customer collects the finished garment. A single location
+can serve both purposes.
+
+Readiness requires an explicitly assigned production location and a pickup
+branch so it can determine whether the garment must move between locations.
+If they differ, the delivery stage must record delivery to the pickup branch.
+If they match, no transfer is needed. Production stages and repairs must also
+be complete, and staff must confirm the garment is physically at the pickup
+branch. An inferred stock location is a suggestion until assigned to the order.
+
+Collection is a separate action from readiness: it records that the customer
+has taken the garment. The database and API use `collected`, `collectedAt`,
+`lastCollectedAt`, and `/collect` consistently.
+
+## Database setup
+
+The migrations are an ordered fresh-database baseline; see
+[the migration guide](../backend/migrations/README.md). Notification fields are
+declared directly in the core tables, with notification storage, readiness and
+revision triggers, and list indexes in separate migrations.
+
 All invoice customers are selected by default. The server parses numbers using
 `WHATSAPP_DEFAULT_REGION` and groups them by E.164 mobile, so local and
 international representations of a shared number receive one notification.
@@ -44,7 +69,8 @@ Configure a Meta WhatsApp Business sender using the variables in
 The root `.env.example` contains compose infrastructure settings only, including
 the renderer's published port. For production compose, supply the backend runtime
 variables through the deployment environment; the compose file passes them into
-the app container.
+the app container. `TIMEZONE` is also a root Compose setting and is forwarded to
+the backend for printed-document dates; standalone runs use `backend/.env`.
 Set `WHATSAPP_DELIVERY_ENABLED=true` only when the sender and approved templates
 are available. Unconfigured delivery never reports simulated success. PDF
 previews and invoice work are available independently of delivery configuration.
