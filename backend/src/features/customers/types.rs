@@ -61,6 +61,7 @@ pub struct Measurement {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Customer {
+    pub whatsapp_notifications_enabled: bool,
     pub id: Uuid,
     pub name: String,
     pub mobile_no: String,
@@ -131,8 +132,14 @@ pub struct CreateMeasurementInput {
 pub struct CreateCustomerInput {
     pub name: String,
     pub mobile_no: String,
+    #[serde(default = "default_whatsapp_notifications_enabled")]
+    pub whatsapp_notifications_enabled: bool,
     #[serde(default)]
     pub measurement: Option<CreateMeasurementInput>,
+}
+
+fn default_whatsapp_notifications_enabled() -> bool {
+    true
 }
 
 /// Every field is optional so a partial update (e.g. just `mobileNo`) stays a
@@ -142,6 +149,7 @@ pub struct CreateCustomerInput {
 pub struct UpdateCustomerInput {
     pub name: Option<String>,
     pub mobile_no: Option<String>,
+    pub whatsapp_notifications_enabled: Option<bool>,
 }
 
 // Two snapshots count as "the same measurement" if every measured field

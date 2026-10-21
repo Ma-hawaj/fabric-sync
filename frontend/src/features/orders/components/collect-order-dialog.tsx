@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select'
 import { Field, FieldError } from '@/components/ui/field'
 import { CURRENCY } from '@/lib/currency'
-import { useReceiveOrder } from '../hooks/use-receive-order'
+import { useCollectOrder } from '../hooks/use-collect-order'
 import type { Order, PaymentType } from '../types/orders'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -34,16 +34,16 @@ const paymentTypeOptions: { value: PaymentType; label: string }[] = [
   { value: 'card', label: 'Card' },
 ]
 
-interface ReceiveOrderDialogProps {
+interface CollectOrderDialogProps {
   order: Order | null
   onOpenChange: (open: boolean) => void
 }
 
-export function ReceiveOrderDialog({
+export function CollectOrderDialog({
   order,
   onOpenChange,
-}: ReceiveOrderDialogProps) {
-  const receiveOrder = useReceiveOrder()
+}: CollectOrderDialogProps) {
+  const collectOrder = useCollectOrder()
   const [amount, setAmount] = React.useState('')
   const [paymentType, setPaymentType] = React.useState<PaymentType | ''>('')
 
@@ -71,22 +71,22 @@ export function ReceiveOrderDialog({
     amountValid &&
     !overBalance &&
     (!needsMethod || paymentType) &&
-    !receiveOrder.isPending
+    !collectOrder.isPending
 
   const handleConfirm = async () => {
     if (!order || !canConfirm) return
 
-    const pending = receiveOrder.mutateAsync({
+    const pending = collectOrder.mutateAsync({
       orderId: order.id,
       amount: parsedAmount,
       paymentType: needsMethod ? (paymentType as PaymentType) : null,
     })
     toast.promise(pending, {
-      loading: 'Marking order received...',
+      loading: 'Marking order collected...',
       success:
         parsedAmount > 0
-          ? 'Order marked received and payment recorded.'
-          : 'Order marked received.',
+          ? 'Order marked collected and payment recorded.'
+          : 'Order marked collected.',
       error: 'Could not update this order. Please try again.',
     })
 
@@ -107,7 +107,7 @@ export function ReceiveOrderDialog({
         {order && (
           <>
             <DialogHeader>
-              <DialogTitle>Mark Order Received</DialogTitle>
+              <DialogTitle>Mark Order Collected</DialogTitle>
               <DialogDescription>
                 {order.customerName} — {order.material}
               </DialogDescription>
@@ -187,7 +187,7 @@ export function ReceiveOrderDialog({
 
             <p className="text-sm text-muted-foreground">
               {order.invoiceBalanceDue > 0
-                ? 'The invoice is settled in full once every order on it has been received and the balance reaches zero.'
+                ? 'The invoice is settled in full once every order on it has been collected and the balance reaches zero.'
                 : 'This invoice is already fully paid — this just collects the garment.'}
             </p>
 
@@ -195,12 +195,12 @@ export function ReceiveOrderDialog({
               <Button
                 variant="outline"
                 onClick={() => onOpenChange(false)}
-                disabled={receiveOrder.isPending}
+                disabled={collectOrder.isPending}
               >
                 Cancel
               </Button>
               <Button onClick={handleConfirm} disabled={!canConfirm}>
-                Confirm Received
+                Confirm Collected
               </Button>
             </DialogFooter>
           </>

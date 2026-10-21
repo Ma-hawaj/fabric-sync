@@ -1,3 +1,4 @@
+import { NotificationDialog } from '@/features/notifications/notification-dialog'
 import * as React from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
@@ -8,7 +9,7 @@ import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getInvoiceColumns } from './components/invoice-columns'
 import { InvoiceOrderBreakdown } from './components/invoice-order-breakdown'
-import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
+import { CollectInvoiceDialog } from './components/collect-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
 import { useListParams } from '@/hooks/use-list-params'
 import { useInvoices } from './hooks/use-invoices'
@@ -18,22 +19,23 @@ import {
   orderReceivingLocations,
   productionLocations as productionLocationOptions,
 } from '@/features/locations/lib/location-filters'
-import { printInvoiceDocument } from './lib/print-invoice'
+import { downloadInvoicePdf } from './lib/print-invoice'
 import type { Invoice } from './types/invoices'
 
 export function InvoicesPage() {
-  const [receiveInvoice, setReceiveInvoice] = React.useState<Invoice | null>(
+  const [collectInvoice, setCollectInvoice] = React.useState<Invoice | null>(
     null,
   )
   const [paymentInvoice, setPaymentInvoice] = React.useState<Invoice | null>(
     null,
   )
   const navigate = useNavigate()
+  const [resendId, setResendId] = React.useState<string | null>(null)
 
   const exportPdf = React.useCallback((invoice: Invoice) => {
-    toast.promise(printInvoiceDocument(invoice.id), {
+    toast.promise(downloadInvoicePdf(invoice.id), {
       loading: 'Preparing the invoice...',
-      success: 'Invoice ready — choose "Save as PDF" to download it.',
+      success: 'Invoice PDF downloaded.',
       error: 'Could not prepare this invoice. Please try again.',
     })
   }, [])
@@ -64,7 +66,7 @@ export function InvoicesPage() {
       names.map((name) => ({ label: name, value: name })),
       receiving,
       production,
-      setReceiveInvoice,
+      setCollectInvoice,
       (invoice) =>
         void navigate({
           to: '/invoices/$invoiceId',
@@ -77,6 +79,7 @@ export function InvoicesPage() {
           params: { invoiceId: invoice.id },
         }),
       setPaymentInvoice,
+      (invoice) => setResendId(invoice.id),
     )
   }, [materials, locations, exportPdf, navigate])
 
@@ -101,6 +104,11 @@ export function InvoicesPage() {
 
   return (
     <div className="space-y-4">
+      <NotificationDialog
+        invoiceId={resendId}
+        kind="manual_resend"
+        onClose={() => setResendId(null)}
+      />
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Invoices</h1>
@@ -129,9 +137,9 @@ export function InvoicesPage() {
         </DataTable>
       )}
 
-      <ReceiveInvoiceDialog
-        invoice={receiveInvoice}
-        onOpenChange={(open) => !open && setReceiveInvoice(null)}
+      <CollectInvoiceDialog
+        invoice={collectInvoice}
+        onOpenChange={(open) => !open && setCollectInvoice(null)}
       />
       <RecordPaymentDialog
         invoice={paymentInvoice}

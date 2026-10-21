@@ -29,6 +29,7 @@ pub struct InvoiceBranding {
 
 #[derive(Clone, Debug)]
 pub struct Config {
+    pub notifications: crate::features::notifications::Config,
     pub port: u16,
     pub database_url: String,
     pub oauth_issuer_url: String,
@@ -161,6 +162,7 @@ impl Config {
             timezone,
             static_dir,
             invoice_branding: InvoiceBranding::from_env(),
+            notifications: crate::features::notifications::Config::from_env(),
         }
     }
 }

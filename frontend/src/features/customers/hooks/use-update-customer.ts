@@ -3,11 +3,12 @@ import { apiClient } from '@/lib/api'
 import type { Customer } from '../types/customers'
 
 // PATCH accepts any subset of the fields, so this serves the edit form
-// (which sends both) today and any future single-field action.
+// and any future single-field action.
 export interface UpdateCustomerInput {
   id: string
   name?: string
   mobileNo?: string
+  whatsappNotificationsEnabled?: boolean
 }
 
 async function updateCustomer({

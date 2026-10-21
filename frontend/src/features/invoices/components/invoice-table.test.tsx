@@ -39,10 +39,10 @@ const invoice: Invoice = {
   balanceDue: 60,
   paymentMethod: 'cash',
   giftCardRedeemed: 0,
-  received: false,
+  collected: false,
   orderCount: 3,
   collectedOrderCount: 1,
-  lastReceivedAt: '2026-10-17T11:00:00Z',
+  lastCollectedAt: '2026-10-17T11:00:00Z',
   receivingLocation: 'Manama',
   productionLocations: ['Factory'],
 }
@@ -56,7 +56,7 @@ const orders = [
     material: 'White cotton',
     materialAmount: 3,
     price: 20,
-    status: 'received',
+    status: 'collected',
     productionLocation: 'Factory',
   },
   {
@@ -177,7 +177,7 @@ describe('Invoice table', () => {
     expect(within(ahmed).queryByRole('link', { name: 'ORD-103' })).toBeNull()
     expect(within(ahmed).getByText('BHD 45.000')).toBeTruthy()
     expect(within(ahmed).getByText('Collected')).toBeTruthy()
-    expect(within(ahmed).getByText('Pending')).toBeTruthy()
+    expect(within(ahmed).getByText('In progress')).toBeTruthy()
     expect(within(ahmed).getByText('White cotton')).toBeTruthy()
     expect(within(ahmed).getByText('Blue cotton')).toBeTruthy()
     const omar = screen
@@ -213,7 +213,7 @@ describe('Invoice table', () => {
           ...invoice,
           orderCount: count,
           collectedOrderCount: collected,
-          received: collected === count,
+          collected: collected === count,
         },
       ])
       expect(

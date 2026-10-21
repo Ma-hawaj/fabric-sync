@@ -367,7 +367,9 @@ fn assemble_order(
         material_amount: row.material_amount,
         price: row.price,
         status: row.status,
-        received_at: row.received_at,
+        collected_at: row.collected_at,
+        ready_at: row.ready_at,
+        ready_by: row.ready_by,
         thobe_type: row.thobe_type,
         f_pocket: row.f_pocket,
         s_pocket: row.s_pocket,
@@ -493,15 +495,15 @@ pub(crate) async fn get_order(state: &AppState, order_id: Uuid) -> Result<OrderD
     })
 }
 
-/// Marks an order received and records the payment taken at that pickup.
+/// Marks an order collected and records the payment taken at that pickup.
 /// The invoice's money state is derived from the ledger, so nothing is
 /// settled here explicitly: it simply becomes paid once every order on it is
-/// received *and* the payments cover the balance.
+/// collected *and* the payments cover the balance.
 ///
 /// Deliberately not gated on the production checklist: staff hand a garment
 /// over when it is ready, so the current stage is shown alongside rather than
 /// blocking the counter.
-pub async fn receive_order(
+pub async fn collect_order(
     state: &AppState,
     order_id: Uuid,
     amount: f64,
@@ -533,14 +535,14 @@ pub async fn receive_order(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
 
-    if locked.status == "received" {
+    if locked.status == "collected" {
         return Err(AppError::BadRequest(
-            "this order is already received".to_string(),
+            "this order is already collected".to_string(),
         ));
     }
 
     let invoice_id = locked.invoice_id;
-    repository::mark_received(&mut tx, order_id).await?;
+    repository::mark_collected(&mut tx, order_id).await?;
 
     if amount > 0.0 {
         let payment_type = payment_type.expect("validated: payment type is set");
@@ -561,7 +563,7 @@ pub async fn receive_order(
         .await?;
     }
 
-    let invoice_settled = repository::invoice_fully_received(&mut tx, invoice_id).await?;
+    let invoice_settled = repository::invoice_fully_collected(&mut tx, invoice_id).await?;
 
     tx.commit().await?;
 
@@ -570,7 +572,7 @@ pub async fn receive_order(
         invoice_id = %invoice_id,
         amount,
         invoice_settled,
-        "order received"
+        "order collected"
     );
 
     load_order(state, order_id).await
@@ -621,28 +623,31 @@ pub async fn set_stage(
         &single_location_materials,
     );
 
+    let mut tx = state.db().begin().await?;
+    super::readiness_repository::lock_invoice(&mut tx, order.invoice_id).await?;
+    let (current_production, current_receiving) =
+        super::readiness_repository::locations(&mut tx, order_id).await?;
+    let effective_production_id = current_production.or(effective_production_id);
     validate_delivery_location(
         stage.requires_delivery,
         stage_applies(
             stage.requires_delivery,
             effective_production_id,
-            order.receiving_location_id,
+            current_receiving,
         ),
         input.status,
         input.location_id,
     )?;
 
-    let progress = repository::list_progress(state, std::slice::from_ref(&order_id)).await?;
+    let progress = super::readiness_repository::progress(&mut tx, order_id).await?;
     validate_stage_sequence(
         &catalog,
         &progress,
         effective_production_id,
-        order.receiving_location_id,
+        current_receiving,
         stage_id,
         input.status,
     )?;
-
-    let mut tx = state.db().begin().await?;
 
     if input.status == StageStatus::Pending {
         repository::clear_stage(&mut tx, order_id, stage_id).await?;

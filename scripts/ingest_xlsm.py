@@ -71,7 +71,7 @@ Mapping decisions worth knowing:
     worked, not when each stage completed, and fabricating checklist rows would
     poison the derived stage-timing logic. In particular the sheet's Delivery
     Date is the customer receiving date, not the date the garment moved
-    branches, so it feeds orders.received_at (and the invoice target date)
+    branches, so it feeds orders.collected_at (and the invoice target date)
     but never a 'Location delivery' completion timestamp.
  * No branch is named in the workbook. Every invoice uses one branch:
    ``--branch`` if given (created when missing), else the first active
@@ -612,7 +612,7 @@ def read_workbook(path: Path, report: Report) -> dict:
             "reason": norm_name(get(r, idx, "Problem")) or "Repair",
             "charge": parse_money(get(r, idx, " INCL. VAT AMT")) or Decimal("0"),
             "raw_status": status,
-            "received": get(r, idx, "RECEIVED     DATE"),
+            "collected": get(r, idx, "RECEIVED     DATE"),
         })
     report.count("Repairing: 2026 rows -> repair candidates", len(repairs))
 
@@ -1040,11 +1040,11 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 copies.extend([copies[0]] * fills)
                 report.count("orders reusing first measurement (thobs > nos)", fills)
             prices = split_price(total, len(copies))
-            received_at = None
+            collected_at = None
             if inv["status"] == "done":
                 for d in (inv["delivery"], inv["approval"]):
                     if isinstance(d, dt.datetime):
-                        received_at = d
+                        collected_at = d
                         break
             for k, (measurement_id, src) in enumerate(copies):
                 design = src["design"]
@@ -1054,7 +1054,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                     INSERT INTO orders (
                         measurement_id, material_id, material_amount, invoice_id, price,
                         thobe_type, f_pocket, collar, sleeve, patti, emd, more_details,
-                        status, received_at, production_branch_id
+                        status, collected_at, production_branch_id
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
                     RETURNING id
                     """,
@@ -1071,8 +1071,8 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                         design.get("patti"),
                         inv["emd"],
                         design.get("more_details"),
-                        "received" if inv["status"] == "done" else "pending",
-                        received_at,
+                        "collected" if inv["status"] == "done" else "pending",
+                        collected_at,
                     ),
                 )
                 order_id = cur.fetchone()[0]
@@ -1095,7 +1095,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                         )
                 # The sheet's Delivery Date is the receiving date, not a stage
                 # completion date (see module docstring): it already feeds
-                # received_at above, and no progress row is fabricated for it.
+                # collected_at above, and no progress row is fabricated for it.
                 steps += 1
         report.count("invoices+orders roundtrips", steps)
 
@@ -1133,8 +1133,8 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 report.count("repairs already present (skipped)")
                 continue
             completed_at = None
-            if isinstance(rep["received"], dt.datetime):
-                completed_at = rep["received"]
+            if isinstance(rep["collected"], dt.datetime):
+                completed_at = rep["collected"]
             repair_rows.append((
                 order_id,
                 rep["reason"],

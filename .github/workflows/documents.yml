@@ -1,0 +1,63 @@
+name: Invoice documents
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "docker-compose*.yml"
+      - "frontend/public/designs/**"
+      - "scripts/fabric-designs/**"
+      - ".github/workflows/documents.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "docker-compose*.yml"
+      - "frontend/public/designs/**"
+      - "scripts/fabric-designs/**"
+      - ".github/workflows/documents.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fabric_sync
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+      renderer:
+        image: gotenberg/gotenberg:8.38.0@sha256:c36cdd730893e3941d27a196ff8b68675e473642d067ec7ee3668b9adaa37b75
+        ports: ["53000:3000"]
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/fabric_sync
+      SQLX_OFFLINE: "true"
+      DOCUMENT_RENDERER_TEST_URL: http://localhost:53000
+      DOCUMENT_RENDERER_TEST_OUTPUT: /tmp/fabric-sync-invoice.pdf
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+      - name: Render bilingual multi-page invoice with real Chromium
+        run: cargo test real_chromium -- --ignored
+      - name: Check PDF page count and embedded Arabic font
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+          pdfinfo /tmp/fabric-sync-invoice.pdf
+          test "$(pdfinfo /tmp/fabric-sync-invoice.pdf | awk '/^Pages:/ {print $2}')" -gt 1
+          pdffonts /tmp/fabric-sync-invoice.pdf | grep -i NotoSansArabic

@@ -22,10 +22,10 @@ use uuid::Uuid;
 use super::{
     repository,
     types::{
-        CreateGiftCardLineInput, CreateInvoiceInput, CreateOrderInput, CreateProductLineInput,
-        CreatedInvoice, DiscountUnit, GiftCardRedemptionInput, InvoiceCustomerInput, InvoiceDetail,
-        InvoiceEdit, InvoiceListItem, InvoiceTotalsBreakdown, MaterialSource, PaymentSummary,
-        PaymentType, ReceivedInvoice, RecordedPayment,
+        CollectedInvoice, CreateGiftCardLineInput, CreateInvoiceInput, CreateOrderInput,
+        CreateProductLineInput, CreatedInvoice, DiscountUnit, GiftCardRedemptionInput,
+        InvoiceCustomerInput, InvoiceDetail, InvoiceEdit, InvoiceListItem, InvoiceTotalsBreakdown,
+        MaterialSource, PaymentSummary, PaymentType, RecordedPayment,
     },
 };
 use crate::features::customers::types::CreateMeasurementInput;
@@ -76,6 +76,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
     let payments = repository::list_payments(state, invoice_id).await?;
 
     Ok(InvoiceDetail {
+        readiness: crate::features::orders::readiness::summary(state.db(), invoice_id).await?,
         id: invoice.id,
         invoice_number: invoice.invoice_number,
         date: invoice.date,
@@ -85,10 +86,10 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         buyer: invoice.buyer,
         payment_status: invoice.payment_status,
         payment_method: invoice.payment_method,
-        received: invoice.received,
+        collected: invoice.collected,
         order_count: invoice.order_count,
         collected_order_count: invoice.collected_order_count,
-        last_received_at: invoice.last_received_at,
+        last_collected_at: invoice.last_collected_at,
         lines: rows.lines,
         redemptions: rows.redemptions,
         payments,
@@ -233,22 +234,22 @@ pub async fn record_payment(
     Ok(RecordedPayment { payment, summary })
 }
 
-/// Marks every order on the invoice received and settles the remaining
+/// Marks every order on the invoice collected and settles the remaining
 /// balance in one action — the whole-invoice counterpart to
-/// features::orders::receive_order, for when everything is collected (and
+/// features::orders::collect_order, for when everything is collected (and
 /// paid) at once. Takes no money when nothing is left to pay.
-pub async fn receive_invoice(
+pub async fn collect_invoice(
     state: &AppState,
     invoice_id: Uuid,
     payment_type: Option<PaymentType>,
-) -> Result<ReceivedInvoice, AppError> {
+) -> Result<CollectedInvoice, AppError> {
     let mut tx = state.db().begin().await?;
 
     let locked = repository::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
 
-    repository::mark_orders_received(&mut tx, invoice_id).await?;
+    repository::mark_orders_collected(&mut tx, invoice_id).await?;
 
     let paid = repository::sum_payments(&mut tx, invoice_id).await?;
     let summary = payment_summary(locked.total_price, locked.gift_card_redeemed, paid);
@@ -286,16 +287,16 @@ pub async fn receive_invoice(
     tracing::info!(
         invoice_id = %invoice_id,
         amount_paid = summary.amount_paid,
-        "invoice received"
+        "invoice collected"
     );
 
-    Ok(ReceivedInvoice {
+    Ok(CollectedInvoice {
         id: invoice_id,
         payment_status: summary.payment_status,
         amount_paid: summary.amount_paid,
         balance_due: summary.balance_due,
         payment_method,
-        received: true,
+        collected: true,
     })
 }
 
@@ -554,6 +555,7 @@ async fn resolve_customer_id(
             tx,
             &new_customer.name,
             &new_customer.mobile_no,
+            true,
         )
         .await?),
         // Already rejected by validate().
@@ -1296,7 +1298,7 @@ pub async fn update_invoice(
     mut input: CreateInvoiceInput,
 ) -> Result<CreatedInvoice, AppError> {
     // Anything the form sends back for the ledger is ignored: payments are
-    // taken through the receive and payments endpoints, never smuggled in
+    // taken through the collect and payments endpoints, never smuggled in
     // through an edit. Clearing before validate() also keeps the up-front
     // overpay check — meant for creation — from firing on money that is
     // already legitimately held.
@@ -1321,9 +1323,9 @@ pub async fn update_invoice(
     let kept = repository::sum_payments(&mut tx, invoice_id).await?;
     validate_kept_payments(kept, totals.total, totals.redeemed)?;
 
-    if repository::invoice_has_received_orders(&mut tx, invoice_id).await? {
+    if repository::invoice_has_collected_orders(&mut tx, invoice_id).await? {
         return Err(AppError::BadRequest(
-            "this invoice has received orders and cannot be edited".to_string(),
+            "this invoice has collected orders and cannot be edited".to_string(),
         ));
     }
 

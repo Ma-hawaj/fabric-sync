@@ -1,3 +1,4 @@
+import { ReadinessBadge } from '@/features/notifications/readiness-controls'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Link } from '@tanstack/react-router'
 import {
@@ -43,11 +44,12 @@ export const getInvoiceColumns = (
   materialOptions: { label: string; value: string }[],
   receivingOptions: { label: string; value: string }[],
   productionOptions: { label: string; value: string }[],
-  onReceive: (invoice: Invoice) => void,
+  onCollect: (invoice: Invoice) => void,
   onViewDetails: (invoice: Invoice) => void,
   onExportPdf: (invoice: Invoice) => void,
   onEdit: (invoice: Invoice) => void,
   onRecordPayment: (invoice: Invoice) => void,
+  onResend?: (invoice: Invoice) => void,
 ): ColumnDef<Invoice, any>[] => [
   {
     id: 'expand',
@@ -147,7 +149,7 @@ export const getInvoiceColumns = (
     },
   },
   {
-    accessorKey: 'received',
+    accessorKey: 'collected',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Collected" />
     ),
@@ -310,16 +312,16 @@ export const getInvoiceColumns = (
     enableColumnFilter: false,
   },
   {
-    id: 'lastReceivedAt',
+    id: 'lastCollectedAt',
     accessorFn: (invoice) =>
-      invoice.lastReceivedAt ? new Date(invoice.lastReceivedAt) : null,
+      invoice.lastCollectedAt ? new Date(invoice.lastCollectedAt) : null,
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Last Received" />
+      <DataTableColumnHeader column={column} label="Last Collected" />
     ),
     cell: ({ row }) => {
-      const lastReceived = row.getValue<Date | null>('lastReceivedAt')
-      if (!lastReceived) return <div className="text-muted-foreground">—</div>
-      return <div>{lastReceived.toLocaleString()}</div>
+      const lastCollected = row.getValue<Date | null>('lastCollectedAt')
+      if (!lastCollected) return <div className="text-muted-foreground">—</div>
+      return <div>{lastCollected.toLocaleString()}</div>
     },
     enableSorting: true,
     enableColumnFilter: false,
@@ -344,6 +346,25 @@ export const getInvoiceColumns = (
     },
   },
   {
+    id: 'readinessStatus',
+    accessorKey: 'readinessStatus',
+    header: 'Readiness',
+    cell: ({ row }) => <ReadinessBadge {...row.original} />,
+    enableSorting: false,
+    enableColumnFilter: true,
+    meta: {
+      label: 'Readiness',
+      variant: 'multiSelect',
+      options: [
+        { label: 'In progress', value: 'in_progress' },
+        { label: 'Partially ready', value: 'partially_ready' },
+        { label: 'Ready for pickup', value: 'ready' },
+        { label: 'Collected', value: 'collected' },
+        { label: 'No garments', value: 'not_applicable' },
+      ],
+    },
+  },
+  {
     id: 'actions',
     header: 'Actions',
     enablePinning: true,
@@ -352,6 +373,11 @@ export const getInvoiceColumns = (
       return (
         <RowActions
           items={[
+            {
+              label: 'Resend invoice via WhatsApp',
+              icon: FileDownIcon,
+              onClick: () => onResend?.(invoice),
+            },
             {
               label: 'View Details',
               icon: EyeIcon,
@@ -364,12 +390,12 @@ export const getInvoiceColumns = (
             },
             {
               // Collected garments can't be re-specified: the backend refuses
-              // to rebuild an invoice with received orders, so the action is
+              // to rebuild an invoice with collected orders, so the action is
               // disabled rather than failing on save. Advances don't block —
               // the ledger survives a rebuild untouched.
               label: 'Edit',
               icon: PencilIcon,
-              disabled: invoice.received || invoice.collectedOrderCount > 0,
+              disabled: invoice.collected || invoice.collectedOrderCount > 0,
               onClick: () => onEdit(invoice),
             },
             {
@@ -385,9 +411,9 @@ export const getInvoiceColumns = (
             {
               // Always available: on a paid invoice this just collects the
               // orders without taking money.
-              label: 'Mark Received',
+              label: 'Mark Collected',
               icon: CheckIcon,
-              onClick: () => onReceive(invoice),
+              onClick: () => onCollect(invoice),
             },
           ]}
         />

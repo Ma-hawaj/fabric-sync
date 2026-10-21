@@ -1,0 +1,329 @@
+import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import type { NotificationDraft, NotificationKind } from './types'
+import { usePrepareNotification } from './hooks/use-prepare-notification'
+import { useSelectNotificationRecipients } from './hooks/use-select-notification-recipients'
+import { useSendNotification } from './hooks/use-send-notification'
+import { useDiscardNotificationPreview } from './hooks/use-discard-notification-preview'
+import { useNotificationDocument } from './hooks/use-notification-document'
+
+interface Props {
+  invoiceId: string | null
+  kind: NotificationKind
+  onClose: () => void
+  resendOf?: string
+}
+
+export function NotificationDialog(props: Props) {
+  return props.invoiceId ? (
+    <Preview
+      key={`${props.invoiceId}:${props.kind}:${props.resendOf ?? ''}`}
+      {...props}
+      invoiceId={props.invoiceId}
+    />
+  ) : null
+}
+
+function Preview({
+  invoiceId,
+  kind,
+  onClose,
+  resendOf,
+}: Props & { invoiceId: string }) {
+  const { mutate: discard } = useDiscardNotificationPreview()
+  const selection = useSelectNotificationRecipients()
+  const send = useSendNotification()
+  const [requestId] = useState(() => crypto.randomUUID())
+  const [draft, setDraft] = useState<NotificationDraft | null>(null)
+  const active = useRef(false)
+  const currentDraft = useRef<NotificationDraft | null>(null)
+  const updateDraft = (value: NotificationDraft) => {
+    currentDraft.current = value
+    setDraft(value)
+  }
+  const [pdfPreview, setPdfPreview] = useState<{
+    artifactId: string
+    url: string
+  } | null>(null)
+  const pdfUrl =
+    pdfPreview?.artifactId === draft?.artifactId
+      ? (pdfPreview?.url ?? null)
+      : null
+  const [problem, setProblem] = useState('')
+  const {
+    mutate: prepare,
+    isPending: preparing,
+    error: prepareError,
+  } = usePrepareNotification((value) => {
+    if (!active.current) {
+      discard(value.id)
+      return
+    }
+    if (currentDraft.current && currentDraft.current.id !== value.id)
+      discard(currentDraft.current.id)
+    updateDraft(value)
+    setProblem('')
+  })
+  useEffect(() => {
+    active.current = true
+    prepare({ invoiceId, kind, requestId, resendOf })
+    return () => {
+      active.current = false
+      if (currentDraft.current) discard(currentDraft.current.id)
+    }
+  }, [prepare, discard, invoiceId, kind, requestId, resendOf])
+  const pdf = useNotificationDocument(draft?.artifactId)
+  useEffect(() => {
+    if (!pdf.data) {
+      setPdfPreview(null)
+      return
+    }
+    const url = URL.createObjectURL(pdf.data)
+    setPdfPreview({ artifactId: draft?.artifactId ?? '', url })
+    return () => URL.revokeObjectURL(url)
+  }, [pdf.data, draft?.artifactId])
+  const handlePreviewError = (error: Error) => {
+    setProblem(error.message)
+    if ('status' in error && (error.status === 409 || error.status === 404))
+      setDraft((value) => (value ? { ...value, state: 'stale' } : value))
+  }
+  const close = () => {
+    if (send.isPending || selection.isPending) return
+    active.current = false
+    if (draft) discard(draft.id)
+    onClose()
+  }
+  const selectedCount = draft?.recipients.filter((r) => r.selected).length ?? 0
+  const recipientsDisabled =
+    selection.isPending || send.isPending || draft?.state !== 'draft'
+  const ready =
+    draft && (!draft.artifactId || pdfUrl) && draft.state === 'draft'
+  const title =
+    kind === 'invoice_updated'
+      ? 'Invoice saved. Send the updated invoice?'
+      : kind === 'invoice_ready'
+        ? 'Ready for pickup — notify customers'
+        : kind === 'invoice_created'
+          ? 'Invoice saved — preview WhatsApp notification'
+          : 'Resend invoice via WhatsApp'
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) close()
+      }}
+    >
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            Review the recipients, message, and any attachment before sending.
+          </DialogDescription>
+        </DialogHeader>
+        {preparing && (
+          <p role="status">Preparing the preview… Your invoice is saved.</p>
+        )}
+        {prepareError && (
+          <p role="alert" className="text-destructive">
+            The invoice is saved, but the preview could not be prepared:{' '}
+            {prepareError.message}
+          </p>
+        )}
+        {draft && (
+          <div className="space-y-4">
+            <p className="text-sm font-medium">
+              INV-{draft.snapshot.invoiceNumber} · {selectedCount} unique mobile
+              {selectedCount === 1 ? '' : 's'} selected
+            </p>
+            <fieldset
+              className="space-y-2 rounded-lg border p-3"
+              disabled={recipientsDisabled}
+            >
+              <legend className="px-1 text-sm font-semibold">Recipients</legend>
+              {draft.recipients.map((recipient) => (
+                <label
+                  key={recipient.normalizedMobile}
+                  className="flex items-start gap-2 text-sm"
+                >
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={recipient.selected}
+                    disabled={recipientsDisabled}
+                    onCheckedChange={(checked) => {
+                      const mobiles = draft.recipients
+                        .filter((r) =>
+                          r.normalizedMobile === recipient.normalizedMobile
+                            ? checked
+                            : r.selected,
+                        )
+                        .map((r) => r.normalizedMobile)
+                      selection.mutate(
+                        {
+                          id: draft.id,
+                          previewVersion: draft.previewVersion,
+                          selectedMobiles: mobiles,
+                        },
+                        { onSuccess: updateDraft, onError: handlePreviewError },
+                      )
+                    }}
+                  />
+                  <span>
+                    {recipient.customers.map((c) => c.name).join(', ')} —{' '}
+                    <span dir="ltr">{recipient.normalizedMobile}</span>
+                  </span>
+                </label>
+              ))}
+              {draft.recipients.length === 0 && (
+                <p>No valid mobile numbers are available for this invoice.</p>
+              )}
+            </fieldset>
+            {draft.snapshot.exclusions.length > 0 && (
+              <div className="rounded-lg border p-3 text-sm">
+                <p className="font-semibold">Excluded recipients</p>
+                {draft.snapshot.exclusions.map((entry, index) => (
+                  <p key={index}>
+                    {entry.customers.map((c) => c.name).join(', ')}:{' '}
+                    {entry.excludedReason}
+                  </p>
+                ))}
+              </div>
+            )}
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="mb-2 text-xs text-muted-foreground">
+                Message · {draft.snapshot.language}
+              </p>
+              <p className="whitespace-pre-wrap text-sm">
+                {draft.snapshot.body}
+              </p>
+            </div>
+            {draft.artifactId && (
+              <div className="space-y-2">
+                {pdf.isLoading && <p>Loading the invoice PDF…</p>}
+                {pdf.isError && (
+                  <p role="alert" className="text-destructive">
+                    Could not load the approved PDF. Refresh the preview to try
+                    again.
+                  </p>
+                )}
+                {pdfUrl && (
+                  <>
+                    <iframe
+                      title="Invoice PDF preview"
+                      src={pdfUrl}
+                      className="h-96 w-full rounded border"
+                    />
+                    <a
+                      href={pdfUrl}
+                      download={`INV-${draft.snapshot.invoiceNumber}.pdf`}
+                      className="text-sm underline"
+                    >
+                      Open or download the full PDF
+                    </a>
+                  </>
+                )}
+              </div>
+            )}
+            {!draft.canSend && (
+              <p className="text-sm text-muted-foreground">
+                WhatsApp delivery is currently disabled or unconfigured. Your
+                invoice is saved.
+              </p>
+            )}
+            {draft.state === 'approved' && (
+              <p role="status">
+                This notification is queued or has already been submitted. Check
+                notification history for delivery status.
+              </p>
+            )}
+            {draft.state === 'stale' && (
+              <p role="alert">
+                This preview is out of date. Refresh before sending.
+              </p>
+            )}
+          </div>
+        )}
+        {problem && (
+          <p
+            role="alert"
+            className="whitespace-pre-wrap text-sm text-destructive"
+          >
+            {problem}
+          </p>
+        )}
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={close}
+            disabled={send.isPending || selection.isPending}
+          >
+            {draft?.state === 'approved' ? 'Close' : 'Not now'}
+          </Button>
+          {(prepareError ||
+            problem ||
+            draft?.state === 'stale' ||
+            pdf.isError) && (
+            <Button
+              variant="outline"
+              disabled={preparing || send.isPending}
+              onClick={() => {
+                setProblem('')
+                if (draft?.artifactId) void pdf.refetch()
+                prepare({ invoiceId, kind, requestId, resendOf })
+              }}
+            >
+              Refresh preview
+            </Button>
+          )}
+          <Button
+            disabled={
+              !ready ||
+              !draft.canSend ||
+              selectedCount === 0 ||
+              preparing ||
+              selection.isPending ||
+              send.isPending
+            }
+            onClick={() => {
+              if (!draft) return
+              send.mutate(
+                {
+                  id: draft.id,
+                  invoiceId,
+                  previewVersion: draft.previewVersion,
+                  selectedMobiles: draft.recipients
+                    .filter((r) => r.selected)
+                    .map((r) => r.normalizedMobile),
+                },
+                {
+                  onSuccess: (value) => {
+                    updateDraft(value)
+                    toast.success(
+                      'Notification queued. Delivery status is shown in notification history.',
+                    )
+                  },
+                  onError: handlePreviewError,
+                },
+              )
+            }}
+          >
+            {send.isPending
+              ? 'Queuing…'
+              : kind === 'invoice_updated'
+                ? 'Send updated invoice'
+                : 'Send via WhatsApp'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}

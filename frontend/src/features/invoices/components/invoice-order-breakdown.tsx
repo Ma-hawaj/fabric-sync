@@ -119,10 +119,14 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
                     <TableCell>
                       <Badge
                         variant={
-                          order.status === 'received' ? 'default' : 'secondary'
+                          order.status === 'collected' ? 'default' : 'secondary'
                         }
                       >
-                        {order.status === 'received' ? 'Collected' : 'Pending'}
+                        {order.status === 'collected'
+                          ? 'Collected'
+                          : order.status === 'ready'
+                            ? 'Ready for pickup'
+                            : 'In progress'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-end tabular-nums">

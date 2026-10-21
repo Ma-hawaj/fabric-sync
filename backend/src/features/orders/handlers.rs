@@ -15,7 +15,7 @@ use crate::{
 use super::{
     document, service,
     types::{
-        AssignStageInput, CreateRepairInput, OrderDetail, OrderListItem, ReceiveOrderInput,
+        AssignStageInput, CollectOrderInput, CreateRepairInput, OrderDetail, OrderListItem,
         SetStageInput, UpdateOrderInput, UpdateRepairInput,
     },
 };
@@ -49,14 +49,14 @@ pub async fn order_document(
     ))
 }
 
-pub async fn receive_order(
+pub async fn collect_order(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,
     Path(order_id): Path<Uuid>,
-    Json(input): Json<ReceiveOrderInput>,
+    Json(input): Json<CollectOrderInput>,
 ) -> Result<Json<OrderListItem>, AppError> {
     Ok(Json(
-        service::receive_order(&state, order_id, input.amount, input.payment_type).await?,
+        service::collect_order(&state, order_id, input.amount, input.payment_type).await?,
     ))
 }
 
@@ -109,4 +109,39 @@ pub async fn update_repair(
     Ok(Json(
         service::update_repair(&state, order_id, repair_id, input).await?,
     ))
+}
+
+pub async fn mark_ready(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(order_id): Path<Uuid>,
+    Json(input): Json<super::readiness::ConfirmInput>,
+) -> Result<Json<super::readiness::ReadyResult>, AppError> {
+    let invoice_id = super::readiness::invoice_for_order(state.db(), order_id).await?;
+    Ok(Json(
+        super::readiness::confirm(
+            state.db(),
+            invoice_id,
+            Some(order_id),
+            user.subject().unwrap_or("staff"),
+            input.confirmed_at_pickup_branch,
+        )
+        .await?,
+    ))
+}
+
+pub async fn reopen(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(order_id): Path<Uuid>,
+    Json(input): Json<super::readiness::ReopenInput>,
+) -> Result<Json<OrderListItem>, AppError> {
+    super::readiness::reopen(
+        state.db(),
+        order_id,
+        user.subject().unwrap_or("staff"),
+        &input.reason,
+    )
+    .await?;
+    Ok(Json(service::get_order(&state, order_id).await?.order))
 }

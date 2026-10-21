@@ -1,6 +1,6 @@
 import type { Measurement } from '@/features/customers/types/customers'
 
-export type OrderStatus = 'pending' | 'received'
+export type OrderStatus = 'pending' | 'ready' | 'collected'
 export type InvoicePaymentStatus = 'unpaid' | 'partial' | 'paid'
 export type PaymentType = 'benefit' | 'cash' | 'card'
 
@@ -87,7 +87,9 @@ export interface Order {
    * When the customer collected the garment, as an ISO datetime — parsed to
    * a Date in use-orders.ts for the table. Null while still pending.
    */
-  receivedAt: Date | null
+  collectedAt: Date | null
+  readyAt?: string | null
+  readyBy?: string | null
   /**
    * The made-to-measure design choices, as stored on the order — the same
    * values the invoice PDF renders as chips per line. Null when the slot was

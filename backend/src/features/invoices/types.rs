@@ -147,7 +147,7 @@ pub struct InvoiceCustomerInput {
 }
 
 /// One payment taken with the invoice: an advance collected up front. Later
-/// payments go through `POST /invoices/:id/payments` or the receive
+/// payments go through `POST /invoices/:id/payments` or the collect
 /// endpoints, which is why this carries no `order_id`.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -322,31 +322,31 @@ pub struct InvoiceListCustomer {
     pub mobile_no: String,
 }
 
-/// Body for `POST /invoices/:id/receive` — marks every order on the invoice
-/// received and settles the remaining balance in one action, for when the
+/// Body for `POST /invoices/:id/collect` — marks every order on the invoice
+/// collected and settles the remaining balance in one action, for when the
 /// customer collects everything (and pays) at once rather than picking up
-/// order lines individually (see features::orders::receive_order). Omitted
+/// order lines individually (see features::orders::collect_order). Omitted
 /// when nothing is left to pay — collecting a fully-paid invoice takes no
 /// money.
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReceiveInvoiceInput {
+pub struct CollectInvoiceInput {
     #[serde(default)]
     pub payment_type: Option<PaymentType>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReceivedInvoice {
+pub struct CollectedInvoice {
     pub id: Uuid,
     pub payment_status: String,
     pub amount_paid: f64,
     pub balance_due: f64,
     pub payment_method: Option<String>,
     /// Goods receipt, separate from money: true once no order on the invoice
-    /// is still pending collection. Always true from the bulk-receive call,
+    /// is still pending collection. Always true from the bulk-collect call,
     /// which marks every pending order.
-    pub received: bool,
+    pub collected: bool,
 }
 
 /// Body for `POST /invoices/:id/payments` — a till payment not tied to
@@ -506,14 +506,14 @@ pub struct InvoiceRecord {
     pub payment_method: Option<String>,
     /// Goods receipt, separate from money: true once no order on the invoice
     /// is still pending collection.
-    pub received: bool,
+    pub collected: bool,
     /// Tailoring garments only; retail products and gift cards are excluded.
     pub order_count: i64,
     pub collected_order_count: i64,
     /// The latest collection time across the invoice's tailoring lines,
-    /// derived as MAX(orders.received_at). Null until the first order is
-    /// received (and on retail-only invoices, which have no orders).
-    pub last_received_at: Option<DateTime<Utc>>,
+    /// derived as MAX(orders.collected_at). Null until the first order is
+    /// collected (and on retail-only invoices, which have no orders).
+    pub last_collected_at: Option<DateTime<Utc>>,
     pub gift_card_redeemed: f64,
 }
 
@@ -522,6 +522,8 @@ pub struct InvoiceRecord {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceDetail {
+    #[serde(flatten)]
+    pub readiness: crate::features::orders::readiness::Summary,
     pub id: Uuid,
     /// Sequential and human-readable, unlike `id`. Formatted for display by
     /// the consumer, which is why it stays a number here.
@@ -540,15 +542,15 @@ pub struct InvoiceDetail {
     /// full history is in `payments`.
     pub payment_method: Option<String>,
     /// Goods receipt, separate from money: true once no order on the invoice
-    /// is still pending collection. The edit form and the receive actions
+    /// is still pending collection. The edit form and the collect actions
     /// both read this rather than inferring it from the payment status.
-    pub received: bool,
+    pub collected: bool,
     /// Tailoring garments only; retail products and gift cards are excluded.
     pub order_count: i64,
     pub collected_order_count: i64,
     /// The latest collection time across the invoice's tailoring lines.
-    /// Null until the first order is received.
-    pub last_received_at: Option<DateTime<Utc>>,
+    /// Null until the first order is collected.
+    pub last_collected_at: Option<DateTime<Utc>>,
     pub lines: Vec<InvoiceDetailLine>,
     pub redemptions: Vec<InvoiceRedemptionLine>,
     pub payments: Vec<InvoicePayment>,
@@ -558,6 +560,9 @@ pub struct InvoiceDetail {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceListItem {
+    #[sqlx(flatten)]
+    #[serde(flatten)]
+    pub readiness: crate::features::orders::readiness::Summary,
     pub id: Uuid,
     /// The human-readable invoice identity shown as `INV-###` in the UI.
     pub invoice_number: i64,
@@ -580,14 +585,14 @@ pub struct InvoiceListItem {
     pub payment_method: Option<String>,
     /// Goods receipt, separate from money: true once no order on the invoice
     /// is still pending collection. Backs the list's collection filter.
-    pub received: bool,
+    pub collected: bool,
     /// Tailoring garments only; retail products and gift cards are excluded.
     pub order_count: i64,
     pub collected_order_count: i64,
     /// The latest collection time across the invoice's tailoring lines.
-    /// Null until the first order is received (and on retail-only invoices,
+    /// Null until the first order is collected (and on retail-only invoices,
     /// which have no orders).
-    pub last_received_at: Option<DateTime<Utc>>,
+    pub last_collected_at: Option<DateTime<Utc>>,
     /// Gift card tender applied to this invoice. Not part of `amount_paid`:
     /// together they add up to `total_price` on a settled invoice.
     pub gift_card_redeemed: f64,

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT EXISTS(\n            SELECT 1 FROM orders\n            WHERE invoice_id = $1 AND status = 'received'\n        ) AS \"exists!\"\n        ",
+  "query": "\n        SELECT EXISTS(\n            SELECT 1 FROM orders\n            WHERE invoice_id = $1 AND status = 'collected'\n        ) AS \"exists!\"\n        ",
   "describe": {
     "columns": [
       {
@@ -18,5 +18,5 @@
       null
     ]
   },
-  "hash": "7566f49ce325adabc4b9fc72f7492db98049a62e5a6ab464c88393a48e764631"
+  "hash": "7e0fbedaccb06c4582416b0e8a80a08467be98570d768122363e83326cbe3683"
 }
