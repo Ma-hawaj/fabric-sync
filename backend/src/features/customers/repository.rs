@@ -268,15 +268,17 @@ pub async fn insert_customer(
     tx: &mut sqlx::PgTransaction<'_>,
     name: &str,
     mobile_no: &str,
+    whatsapp_notifications_enabled: bool,
 ) -> Result<Uuid, sqlx::Error> {
     sqlx::query_scalar!(
         r#"
-        INSERT INTO customers (name, mobile_no)
-        VALUES ($1, $2)
+        INSERT INTO customers (name, mobile_no, whatsapp_notifications_enabled)
+        VALUES ($1, $2, $3)
         RETURNING id
         "#,
         name,
         mobile_no,
+        whatsapp_notifications_enabled,
     )
     .fetch_one(&mut **tx)
     .await
@@ -286,11 +288,13 @@ pub async fn create_customer(
     state: &AppState,
     name: &str,
     mobile_no: &str,
+    whatsapp_notifications_enabled: bool,
     measurement: Option<&CreateMeasurementInput>,
 ) -> Result<Uuid, sqlx::Error> {
     let mut tx = state.db().begin().await?;
 
-    let customer_id = insert_customer(&mut tx, name, mobile_no).await?;
+    let customer_id =
+        insert_customer(&mut tx, name, mobile_no, whatsapp_notifications_enabled).await?;
 
     if let Some(measurement) = measurement {
         insert_measurement(&mut tx, customer_id, measurement).await?;
@@ -310,18 +314,21 @@ pub async fn update_customer(
     customer_id: Uuid,
     name: Option<&str>,
     mobile_no: Option<&str>,
+    whatsapp_notifications_enabled: Option<bool>,
 ) -> Result<Option<Customer>, AppError> {
     let updated = sqlx::query_scalar!(
         r#"
         UPDATE customers
         SET name = COALESCE($2, name),
-            mobile_no = COALESCE($3, mobile_no)
+            mobile_no = COALESCE($3, mobile_no),
+            whatsapp_notifications_enabled = COALESCE($4, whatsapp_notifications_enabled)
         WHERE id = $1
         RETURNING id
         "#,
         customer_id,
         name,
         mobile_no,
+        whatsapp_notifications_enabled,
     )
     .fetch_optional(state.db())
     .await?;
@@ -331,20 +338,4 @@ pub async fn update_customer(
     }
 
     get_customer(state, customer_id).await
-}
-
-pub async fn set_whatsapp_preference(
-    state: &AppState,
-    id: Uuid,
-    enabled: bool,
-) -> Result<bool, sqlx::Error> {
-    Ok(
-        sqlx::query("UPDATE customers SET whatsapp_notifications_enabled=$2 WHERE id=$1")
-            .bind(id)
-            .bind(enabled)
-            .execute(state.db())
-            .await?
-            .rows_affected()
-            > 0,
-    )
 }

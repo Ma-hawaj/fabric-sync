@@ -54,17 +54,3 @@ pub async fn update_customer(
         service::update_customer(&state, customer_id, input).await?,
     ))
 }
-
-#[derive(serde::Deserialize)]
-pub struct WhatsAppPreference {
-    enabled: bool,
-}
-
-pub async fn whatsapp_preference(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Json(input): Json<WhatsAppPreference>,
-) -> Result<Json<Customer>, AppError> {
-    service::set_whatsapp_preference(&state, id, input.enabled).await?;
-    Ok(Json(service::get_customer(&state, id).await?))
-}

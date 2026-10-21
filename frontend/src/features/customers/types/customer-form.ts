@@ -5,6 +5,7 @@ import type { Customer } from './customers'
 export interface CustomerFormValues {
   name: string
   mobileNo: string
+  whatsappNotificationsEnabled: boolean
   addMeasurement: boolean
   measurement: MeasurementDraft
 }
@@ -13,6 +14,7 @@ export function createEmptyCustomerForm(): CustomerFormValues {
   return {
     name: '',
     mobileNo: '',
+    whatsappNotificationsEnabled: true,
     addMeasurement: false,
     measurement: createEmptyMeasurement(),
   }
@@ -24,6 +26,7 @@ export function customerToFormValues(customer: Customer): CustomerFormValues {
   return {
     name: customer.name,
     mobileNo: customer.mobileNo,
+    whatsappNotificationsEnabled: customer.whatsappNotificationsEnabled ?? true,
     addMeasurement: false,
     measurement: createEmptyMeasurement(),
   }

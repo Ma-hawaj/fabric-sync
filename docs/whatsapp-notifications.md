@@ -37,7 +37,10 @@ international representations of a shared number receive one notification.
 The preview lists the customers sharing each destination. Invalid numbers and
 disabled WhatsApp update preferences appear as exclusions; a disabled customer
 sharing a mobile blocks that destination. Preferences can be changed on the
-customer edit page and are independent of marketing messages.
+customer form and saved with the name and mobile number using **Save**.
+Changing the checkbox or cancelling the form does not persist the preference.
+The preference defaults to enabled for new customers and is independent of
+marketing messages.
 
 ## PDF rendering
 
