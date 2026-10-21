@@ -475,10 +475,14 @@ async fn stale_queues_cancel_all_unstarted_destinations_and_cleanup_retains_hist
             .is_ok()
     );
     assert!(repository::artifact_metadata(&pool, orphan).await.is_err());
-    assert_eq!(
-        service::get(&state, abandoned.id).await.unwrap().state,
-        "cancelled"
-    );
+    assert!(matches!(
+        service::get(&state, abandoned.id).await,
+        Err(AppError::NotFound(_))
+    ));
+    let history = repository::history(&pool, invoice).await.unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].id, draft.id);
+    assert_eq!(history[0].cancelled_count, 2);
 }
 
 #[sqlx::test]
@@ -510,6 +514,15 @@ async fn private_routes_require_staff_auth_and_webhooks_require_meta_auth(pool: 
             StatusCode::UNAUTHORIZED
         );
     }
+    assert_eq!(
+        client
+            .delete(format!("{url}/notifications/{id}"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
     assert_eq!(
         client
             .post(format!("{url}/notifications/{id}/send"))
@@ -678,4 +691,238 @@ async fn catalog_changes_invalidate_previews_but_keep_the_original_pdf(pool: PgP
             .unwrap(),
         original
     );
+}
+
+#[sqlx::test]
+async fn previews_are_disposable_and_only_send_creates_history(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), Some(url.clone()), Some(url)).await;
+    let input = prepare("manual_resend");
+    let request_id = input.request_id;
+    let draft = service::prepare(&state, invoice, input, "staff")
+        .await
+        .unwrap();
+    let refreshed = service::prepare(
+        &state,
+        invoice,
+        PrepareInput {
+            kind: "manual_resend".into(),
+            request_id,
+            resend_of: None,
+        },
+        "staff",
+    )
+    .await
+    .unwrap();
+    assert_eq!(draft.id, refreshed.id);
+    let mut input = send(&draft);
+    input.selected_mobiles.clear();
+    service::approve(&state, draft.id, input, "staff", false)
+        .await
+        .unwrap();
+    assert!(repository::history(&pool, invoice)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(matches!(
+        service::resend(&state, draft.id, Uuid::new_v4(), "staff").await,
+        Err(AppError::BadRequest(_))
+    ));
+    service::discard_preview(&state, draft.id).await.unwrap();
+    service::discard_preview(&state, draft.id).await.unwrap();
+    assert!(matches!(
+        service::get(&state, draft.id).await,
+        Err(AppError::NotFound(_))
+    ));
+    assert!(repository::recipients(&pool, draft.id)
+        .await
+        .unwrap()
+        .is_empty());
+    let reopened = service::prepare(&state, invoice, prepare("manual_resend"), "staff")
+        .await
+        .unwrap();
+    assert_ne!(draft.id, reopened.id);
+    assert_eq!(draft.artifact_id, reopened.artifact_id);
+    assert!(reopened.recipients.iter().all(|r| r.selected));
+    assert_eq!(mock.renders.load(Ordering::SeqCst), 1);
+    assert!(repository::history(&pool, invoice)
+        .await
+        .unwrap()
+        .is_empty());
+    service::approve(&state, reopened.id, send(&reopened), "staff", true)
+        .await
+        .unwrap();
+    service::approve(&state, reopened.id, send(&reopened), "staff", true)
+        .await
+        .unwrap();
+    service::discard_preview(&state, reopened.id).await.unwrap();
+    let history = repository::history(&pool, invoice).await.unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].id, reopened.id);
+    assert_eq!(history[0].queued_count, 1);
+    worker::tick(&state).await.unwrap();
+    service::discard_preview(&state, reopened.id).await.unwrap();
+    assert_eq!(
+        repository::history(&pool, invoice).await.unwrap()[0].accepted_count,
+        1
+    );
+    let attempts: i64 = sqlx::query_scalar("SELECT count(*) FROM notification_attempts")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(attempts, 1);
+    assert_eq!(mock.messages.lock().unwrap().len(), 1);
+}
+
+#[sqlx::test]
+async fn cleanup_removes_only_unapproved_previews_and_unused_pdfs(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let (url, _) = mock_server().await;
+    let state = test_support::state(pool.clone(), Some(url.clone()), Some(url)).await;
+    let approved = service::prepare(&state, invoice, prepare("invoice_created"), "staff")
+        .await
+        .unwrap();
+    service::approve(&state, approved.id, send(&approved), "staff", true)
+        .await
+        .unwrap();
+    service::cancel(&state, approved.id).await.unwrap();
+    let live = service::prepare(&state, invoice, prepare("manual_resend"), "staff")
+        .await
+        .unwrap();
+    let expired = service::prepare(&state, invoice, prepare("manual_resend"), "staff")
+        .await
+        .unwrap();
+    let stale = service::prepare(&state, invoice, prepare("manual_resend"), "staff")
+        .await
+        .unwrap();
+    let cancelled = service::prepare(&state, invoice, prepare("manual_resend"), "staff")
+        .await
+        .unwrap();
+    service::cancel(&state, cancelled.id).await.unwrap();
+    sqlx::query("UPDATE notifications SET state='stale' WHERE id=$1")
+        .bind(stale.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE notifications SET created_at=now()-interval '100 days' WHERE id IN ($1,$2)",
+    )
+    .bind(approved.id)
+    .bind(expired.id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    // An edited invoice has a different PDF; once its abandoned preview is removed,
+    // that PDF can expire without removing the earlier approved attachment.
+    sqlx::query("INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,5,'cash')")
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let edited = service::prepare(&state, invoice, prepare("manual_resend"), "staff")
+        .await
+        .unwrap();
+    assert_ne!(approved.artifact_id, edited.artifact_id);
+    service::discard_preview(&state, edited.id).await.unwrap();
+    sqlx::query("UPDATE document_artifacts SET created_at=now()-interval '100 days'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    repository::cleanup(&pool, state.notifications())
+        .await
+        .unwrap();
+    for id in [expired.id, stale.id, cancelled.id, edited.id] {
+        assert!(matches!(
+            service::get(&state, id).await,
+            Err(AppError::NotFound(_))
+        ));
+        assert!(repository::recipients(&pool, id).await.unwrap().is_empty());
+    }
+    assert!(service::get(&state, live.id).await.is_ok());
+    assert!(
+        repository::artifact_metadata(&pool, approved.artifact_id.unwrap())
+            .await
+            .is_ok()
+    );
+    assert!(matches!(
+        repository::artifact_metadata(&pool, edited.artifact_id.unwrap()).await,
+        Err(AppError::NotFound(_))
+    ));
+    let history = repository::history(&pool, invoice).await.unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].id, approved.id);
+    assert_eq!(history[0].state, "cancelled");
+    assert_eq!(history[0].cancelled_count, 1);
+}
+
+#[sqlx::test]
+async fn closing_a_preview_during_approval_never_deletes_an_approved_send(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let (url, _) = mock_server().await;
+    let state = test_support::state(pool.clone(), Some(url.clone()), Some(url)).await;
+    for _ in 0..5 {
+        let draft = service::prepare(&state, invoice, prepare("manual_resend"), "staff")
+            .await
+            .unwrap();
+        let (approved, discarded) = tokio::join!(
+            service::approve(&state, draft.id, send(&draft), "staff", true),
+            service::discard_preview(&state, draft.id),
+        );
+        discarded.unwrap();
+        match approved {
+            Ok(_) => {
+                assert_eq!(
+                    service::get(&state, draft.id).await.unwrap().state,
+                    "approved"
+                );
+                assert!(repository::history(&pool, invoice)
+                    .await
+                    .unwrap()
+                    .iter()
+                    .any(|row| row.id == draft.id));
+            }
+            Err(AppError::Conflict(_) | AppError::NotFound(_)) => {
+                assert!(matches!(
+                    service::get(&state, draft.id).await,
+                    Err(AppError::NotFound(_))
+                ));
+            }
+            Err(error) => panic!("unexpected approval error: {error:?}"),
+        }
+    }
+}
+
+#[sqlx::test]
+async fn recent_history_keeps_both_latest_notification_types_and_uses_approval_time(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let (url, _) = mock_server().await;
+    let state = test_support::state(pool.clone(), Some(url.clone()), Some(url)).await;
+    let original = service::prepare(&state, invoice, prepare("invoice_created"), "staff")
+        .await
+        .unwrap();
+    service::approve(&state, original.id, send(&original), "staff", true)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE notifications SET approved_at=now()-interval '200 days' WHERE id=$1")
+        .bind(original.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let pickup: Uuid = sqlx::query_scalar(
+        "INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,state,snapshot,created_by,approved_by,approved_at)
+         SELECT invoice_id,'invoice_ready','old-ready',source_hash,preview_version,'approved',snapshot,'staff','staff',now()-interval '100 days'
+         FROM notifications WHERE id=$1 RETURNING id"
+    ).bind(original.id).fetch_one(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,state,snapshot,created_by,created_at,approved_by,approved_at)
+         SELECT invoice_id,'manual_resend','history-'||item,source_hash,preview_version,'approved',snapshot,'staff',now()-interval '300 days','staff',now()-item*interval '1 minute'
+         FROM notifications CROSS JOIN generate_series(1,101) item WHERE id=$1"
+    ).bind(original.id).execute(&pool).await.unwrap();
+    let history = repository::history(&pool, invoice).await.unwrap();
+    assert_eq!(history.len(), 101);
+    assert_eq!(history[0].kind, "manual_resend");
+    assert_eq!(history.last().unwrap().id, pickup);
+    assert!(history[0].created_at > history.last().unwrap().created_at);
+    assert!(!history.iter().any(|row| row.id == original.id));
 }

@@ -77,22 +77,35 @@ pub async fn recipients(db: &PgPool, id: Uuid) -> Result<Vec<Recipient>, AppErro
 pub async fn history(db: &PgPool, invoice_id: Uuid) -> Result<Vec<History>, AppError> {
     Ok(sqlx::query_as(
         r#"
+        WITH recent AS (
+            SELECT id FROM notifications
+             WHERE invoice_id = $1 AND approved_at IS NOT NULL
+             ORDER BY approved_at DESC, id DESC
+             LIMIT 100
+        ), latest AS (
+            SELECT DISTINCT ON (kind = 'invoice_ready') id FROM notifications
+             WHERE invoice_id = $1 AND approved_at IS NOT NULL
+             ORDER BY (kind = 'invoice_ready'), approved_at DESC, id DESC
+        )
         SELECT n.id,
                n.kind,
                n.state,
-               n.created_at,
+               n.approved_at AS created_at,
                count(r.id) FILTER (WHERE r.selected) AS recipient_count,
+               count(r.id) FILTER (WHERE r.status IN ('queued','submitting')) AS queued_count,
                count(r.id) FILTER (WHERE r.status = 'accepted') AS accepted_count,
                count(r.id) FILTER (WHERE r.status IN ('delivered','read')) AS delivered_count,
                count(r.id) FILTER (WHERE r.status = 'failed') AS failed_count,
-               count(r.id) FILTER (WHERE r.status = 'uncertain') AS uncertain_count
+               count(r.id) FILTER (WHERE r.status = 'uncertain') AS uncertain_count,
+               count(r.id) FILTER (WHERE r.selected AND r.status = 'cancelled') AS cancelled_count
           FROM notifications n
           LEFT JOIN notification_recipients r
             ON r.notification_id = n.id
          WHERE n.invoice_id = $1
+           AND n.approved_at IS NOT NULL
+           AND n.id IN (SELECT id FROM recent UNION SELECT id FROM latest)
          GROUP BY n.id
-         ORDER BY n.created_at DESC
-         LIMIT 100
+         ORDER BY n.approved_at DESC, n.id DESC
         "#,
     )
     .bind(invoice_id)
@@ -235,7 +248,7 @@ pub async fn belongs_to_invoice(
     invoice: Uuid,
 ) -> Result<bool, AppError> {
     Ok(sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM notifications WHERE id=$1 AND invoice_id=$2)",
+        "SELECT EXISTS(SELECT 1 FROM notifications WHERE id=$1 AND invoice_id=$2 AND approved_at IS NOT NULL)",
     )
     .bind(id)
     .bind(invoice)
@@ -297,7 +310,7 @@ pub async fn lock_notification(
     conn: &mut PgConnection,
     id: Uuid,
 ) -> Result<(String, Uuid), AppError> {
-    Ok(sqlx::query_as(
+    sqlx::query_as(
         r#"
         SELECT state,
                preview_version
@@ -307,8 +320,11 @@ pub async fn lock_notification(
         "#,
     )
     .bind(id)
-    .fetch_one(conn)
-    .await?)
+    .fetch_optional(conn)
+    .await?
+    .ok_or_else(|| {
+        AppError::Conflict("This preview was closed or expired. Prepare it again.".into())
+    })
 }
 
 pub async fn mark_stale(conn: &mut PgConnection, id: Uuid) -> Result<(), AppError> {
@@ -480,6 +496,25 @@ pub async fn cancel(conn: &mut PgConnection, id: Uuid) -> Result<(), AppError> {
     .bind(id)
     .execute(conn)
     .await?;
+    Ok(())
+}
+
+pub async fn preview_invoice(db: &PgPool, id: Uuid) -> Result<Option<Uuid>, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT invoice_id FROM notifications WHERE id=$1 AND approved_at IS NULL",
+    )
+    .bind(id)
+    .fetch_optional(db)
+    .await?)
+}
+
+pub async fn delete_preview(conn: &mut PgConnection, id: Uuid) -> Result<(), AppError> {
+    // Approval is permanent, even if a queued send is later cancelled or stale.
+    // The recipient cascade removes only draft selections; attempts retain their FK guard.
+    sqlx::query("DELETE FROM notifications WHERE id=$1 AND approved_at IS NULL")
+        .bind(id)
+        .execute(conn)
+        .await?;
     Ok(())
 }
 
@@ -731,20 +766,17 @@ pub async fn webhook_checked(db: &PgPool, id: i64, matched: bool) -> Result<(), 
 
 pub async fn cleanup(db: &PgPool, config: &super::Config) -> Result<(), AppError> {
     let mut tx = db.begin().await?;
-    let expired: Vec<Uuid> = sqlx::query_scalar(
+    sqlx::query(
         r#"
-        UPDATE notifications
-           SET state = 'cancelled'
-         WHERE state = 'draft'
-           AND created_at < now() - make_interval(days => $1) RETURNING id
+        DELETE FROM notifications
+         WHERE approved_at IS NULL
+           AND (state IN ('stale', 'cancelled')
+                OR created_at < now() - make_interval(days => $1))
         "#,
     )
     .bind(config.draft_retention_days)
-    .fetch_all(&mut *tx)
+    .execute(&mut *tx)
     .await?;
-    for id in expired {
-        cancel_unstarted(&mut tx, id).await?;
-    }
     sqlx::query(
         r#"
         DELETE

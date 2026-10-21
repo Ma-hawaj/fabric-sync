@@ -43,9 +43,13 @@ CREATE UNIQUE INDEX notifications_approved_event
     ON notifications (invoice_id, event_key)
     WHERE approved_at IS NOT NULL;
 
+CREATE INDEX notifications_preview_cleanup
+    ON notifications (created_at)
+    WHERE approved_at IS NULL;
+
 CREATE TABLE notification_recipients (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
-    notification_id UUID NOT NULL REFERENCES notifications(id),
+    notification_id UUID NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
     normalized_mobile TEXT NOT NULL CHECK (normalized_mobile ~ '^\+[1-9][0-9]{7,14}$'),
     customers JSONB NOT NULL,
     selected BOOLEAN NOT NULL DEFAULT TRUE,

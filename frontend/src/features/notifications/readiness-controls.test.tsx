@@ -5,7 +5,13 @@ import { apiClient } from '@/lib/api'
 import { ReadinessControls } from './readiness-controls'
 import type { NotificationDraft } from './types'
 
-vi.mock('@/lib/api', () => ({ apiClient: { get: vi.fn(), post: vi.fn() } }))
+vi.mock('@/lib/api', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    delete: vi.fn(() => Promise.resolve({})),
+  },
+}))
 
 function fixture(): NotificationDraft {
   return {

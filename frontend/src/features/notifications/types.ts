@@ -40,8 +40,10 @@ export interface NotificationHistoryRow {
   state: string
   createdAt: string
   recipientCount: number
+  queuedCount: number
   acceptedCount: number
   deliveredCount: number
   failedCount: number
   uncertainCount: number
+  cancelledCount: number
 }

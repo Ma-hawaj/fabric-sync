@@ -5,7 +5,9 @@ import { apiClient } from '@/lib/api'
 import { NotificationDialog } from './notification-dialog'
 import type { NotificationDraft, NotificationKind } from './types'
 
-vi.mock('@/lib/api', () => ({ apiClient: { get: vi.fn(), post: vi.fn() } }))
+vi.mock('@/lib/api', () => ({
+  apiClient: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
+}))
 
 function fixture(): NotificationDraft {
   return {
@@ -51,12 +53,12 @@ function mount(kind: NotificationKind = 'manual_resend', onClose = vi.fn()) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-  render(
+  const view = render(
     <QueryClientProvider client={client}>
       <NotificationDialog invoiceId="invoice-1" kind={kind} onClose={onClose} />
     </QueryClientProvider>,
   )
-  return { onClose }
+  return { onClose, ...view }
 }
 
 describe('notification preview and approval', () => {
@@ -64,6 +66,7 @@ describe('notification preview and approval', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     draft = fixture()
+    vi.mocked(apiClient.delete).mockResolvedValue({ data: undefined })
     vi.stubGlobal(
       'URL',
       Object.assign(URL, {
@@ -149,11 +152,38 @@ describe('notification preview and approval', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
     expect(onClose).toHaveBeenCalled()
+    expect(apiClient.delete).toHaveBeenCalledWith('/notifications/draft-1')
     expect(
       vi
         .mocked(apiClient.post)
         .mock.calls.some(([path]) => String(path).endsWith('/send')),
     ).toBe(false)
+  })
+  it('discards an unmounted preview without sending', async () => {
+    const { unmount } = mount()
+    await screen.findByTitle('Invoice PDF preview')
+    unmount()
+    expect(apiClient.delete).toHaveBeenCalledWith('/notifications/draft-1')
+    expect(apiClient.post).not.toHaveBeenCalledWith(
+      '/notifications/draft-1/send',
+      expect.anything(),
+    )
+  })
+  it('discards a preview that finishes preparing after the dialog closes', async () => {
+    let resolve: (value: { data: NotificationDraft }) => void = () => {}
+    vi.mocked(apiClient.post).mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done
+        }),
+    )
+    const { unmount } = mount()
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalled())
+    unmount()
+    resolve({ data: draft })
+    await waitFor(() =>
+      expect(apiClient.delete).toHaveBeenCalledWith('/notifications/draft-1'),
+    )
   })
   it('keeps sending disabled until the actual attachment is available', async () => {
     vi.mocked(apiClient.get).mockImplementation(() => new Promise(() => {}))

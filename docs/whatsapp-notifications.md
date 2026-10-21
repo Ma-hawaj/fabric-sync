@@ -105,6 +105,12 @@ Send commits the approved recipient selection and queues one delivery per
 unique mobile. A Postgres-backed worker claims jobs across application
 instances. Notification history distinguishes queued, provider-accepted,
 delivered/read, failed, and uncertain results. Accepted does not mean delivered.
+The invoice page shows the latest invoice and pickup notification statuses;
+**View history** expands approved sends and their individual delivery results.
+Opening, changing recipients, refreshing, or closing a preview adds no delivery
+history. The history timestamp is when staff approved Send.
+The page loads the 100 most recent approved sends and always includes the latest
+invoice and pickup sends, so a long resend history cannot hide either status.
 
 Known transient failures retry the same approved payload with bounded backoff,
 respecting `Retry-After` (up to 24 hours). `NOTIFICATION_MAX_ATTEMPTS` defaults
@@ -119,12 +125,16 @@ previews stale. Refresh and approve the current version. Reopening production
 prevents an unstarted pickup notice from being sent. An external send already
 in progress cannot be recalled.
 
-Hourly maintenance expires unapproved drafts after
-`NOTIFICATION_DRAFT_RETENTION_DAYS` (default 30). It removes only unreferenced
-PDFs older than `DOCUMENT_ORPHAN_RETENTION_DAYS` (default 30), and webhook
-payloads older than `WHATSAPP_WEBHOOK_RETENTION_DAYS` (default 90). All artifacts
-referenced by notification history remain available, including stale and
-cancelled previews. Include these retained documents in database backups.
+Previews are temporary database rows so approval can verify the exact text,
+recipients, and PDF shown. Closing a preview deletes its unapproved row and
+recipient selections. Unchanged PDFs are reused from a short cache. Hourly
+maintenance deletes abandoned previews after `NOTIFICATION_DRAFT_RETENTION_DAYS`
+(default 1), and never-approved stale/cancelled previews. It removes unreferenced
+PDFs older than `DOCUMENT_ORPHAN_RETENTION_DAYS` (default 1), and webhook payloads
+older than `WHATSAPP_WEBHOOK_RETENTION_DAYS` (default 90). Approved sends and their
+artifacts remain available, even if delivery later becomes stale or cancelled.
+Include these retained documents in database backups. Preview disposal never
+cancels or deletes an approved send.
 
 ## Verification
 
@@ -147,17 +157,18 @@ embeds the Arabic font. Provider tests use controlled local HTTP servers and
 never contact Meta. Actual delivery still needs a staging smoke test with the
 configured approved templates and a designated test recipient.
 
-### Verified locally on 20 October 2026
+### Verified locally on 21 October 2026
 
-- Backend: 227 tests passed, including upgrading a database with existing
-  customers, pending/collected orders, and payments. Formatting, compilation,
+- Backend: 234 tests passed, including temporary-preview disposal, approval races,
+  cleanup, and retaining both latest statuses in long histories. Formatting, compilation,
   fresh migrations, and `cargo sqlx prepare --check` passed.
-- Frontend: 285 tests across 41 files passed; lint, formatting, and production
+- Frontend: 296 tests across 43 files passed; lint, formatting, and production
   build passed. Tests cover explicit approval, recipient grouping/selection,
   stale previews, successful/failed edits, skipping, and the separate resend
   button. A readiness transition preserves the open preview and its recipient
-  selection without preparing it again.
-- Real Chromium: rendered a two-page A4 bilingual invoice with embedded
+  selection without preparing it again. Closed and late-arriving previews are
+  discarded; older sends and recipient delivery details expand on demand.
+- Real Chromium (verified on 20 October): rendered a two-page A4 bilingual invoice with embedded
   Noto Sans Arabic fonts. The renderer test passed separately from the default
   backend suite.
 - Local and production compose configurations validated. No deployment or real

@@ -255,7 +255,7 @@ pub async fn prepare(
         let belongs = repository::belongs_to_invoice(&mut tx, original, invoice_id).await?;
         if !belongs {
             return Err(AppError::BadRequest(
-                "The original notification belongs to a different invoice.".into(),
+                "Choose an approved notification from this invoice to resend.".into(),
             ));
         }
     }
@@ -373,6 +373,18 @@ pub async fn cancel(state: &AppState, id: Uuid) -> Result<Notification, AppError
     repository::cancel(&mut tx, id).await?;
     tx.commit().await?;
     get(state, id).await
+}
+
+pub async fn discard_preview(state: &AppState, id: Uuid) -> Result<(), AppError> {
+    if let Some(invoice_id) = repository::preview_invoice(state.db(), id).await? {
+        let mut tx = state.db().begin().await?;
+        // Use the same lock order as approval. Closing a preview must never
+        // remove a send that another request has already approved.
+        repository::lock_invoice(&mut tx, invoice_id).await?;
+        repository::delete_preview(&mut tx, id).await?;
+        tx.commit().await?;
+    }
+    Ok(())
 }
 
 pub async fn document(state: &AppState, invoice_id: Uuid) -> Result<Uuid, AppError> {

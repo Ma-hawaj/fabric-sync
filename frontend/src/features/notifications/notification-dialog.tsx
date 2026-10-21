@@ -21,6 +21,12 @@ interface Props {
   resendOf?: string
 }
 
+function discard(id: string) {
+  // Approval may have completed while the page was closing. The server only
+  // deletes never-approved previews.
+  void apiClient.delete(`/notifications/${id}`).catch(() => {})
+}
+
 export function NotificationDialog(props: Props) {
   return props.invoiceId ? (
     <Preview
@@ -40,6 +46,12 @@ function Preview({
   const client = useQueryClient()
   const [requestId] = React.useState(() => crypto.randomUUID())
   const [draft, setDraft] = React.useState<NotificationDraft | null>(null)
+  const active = React.useRef(false)
+  const currentDraft = React.useRef<NotificationDraft | null>(null)
+  const updateDraft = (value: NotificationDraft) => {
+    currentDraft.current = value
+    setDraft(value)
+  }
   const [pdfPreview, setPdfPreview] = React.useState<{
     artifactId: string
     url: string
@@ -62,12 +74,23 @@ function Preview({
         )
       ).data,
     onSuccess: (value) => {
-      setDraft(value)
+      if (!active.current) {
+        discard(value.id)
+        return
+      }
+      if (currentDraft.current && currentDraft.current.id !== value.id)
+        discard(currentDraft.current.id)
+      updateDraft(value)
       setProblem('')
     },
   })
   React.useEffect(() => {
+    active.current = true
     prepare()
+    return () => {
+      active.current = false
+      if (currentDraft.current) discard(currentDraft.current.id)
+    }
   }, [prepare])
   const pdf = useQuery({
     queryKey: ['notification-document', draft?.artifactId],
@@ -98,10 +121,10 @@ function Preview({
           { previewVersion: draft?.previewVersion, selectedMobiles: mobiles },
         )
       ).data,
-    onSuccess: setDraft,
+    onSuccess: updateDraft,
     onError: (error) => {
       setProblem(error.message)
-      if ('status' in error && error.status === 409)
+      if ('status' in error && (error.status === 409 || error.status === 404))
         setDraft((value) => (value ? { ...value, state: 'stale' } : value))
     },
   })
@@ -119,7 +142,7 @@ function Preview({
         )
       ).data,
     onSuccess: (value) => {
-      setDraft(value)
+      updateDraft(value)
       void client.invalidateQueries({ queryKey: ['notifications', invoiceId] })
       toast.success(
         'Notification queued. Delivery status is shown in notification history.',
@@ -127,15 +150,14 @@ function Preview({
     },
     onError: (error) => {
       setProblem(error.message)
-      if ('status' in error && error.status === 409)
+      if ('status' in error && (error.status === 409 || error.status === 404))
         setDraft((value) => (value ? { ...value, state: 'stale' } : value))
     },
   })
   const close = () => {
     if (send.isPending || selection.isPending) return
-    if (draft?.state === 'draft') {
-      void apiClient.post(`/notifications/${draft.id}/cancel`).catch(() => {})
-    }
+    active.current = false
+    if (draft) discard(draft.id)
     onClose()
   }
   const selectedCount = draft?.recipients.filter((r) => r.selected).length ?? 0

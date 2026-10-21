@@ -27,6 +27,13 @@ pub async fn get(
 ) -> Result<Json<Notification>, AppError> {
     Ok(Json(service::get(&state, id).await?))
 }
+pub async fn discard_preview(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    service::discard_preview(&state, id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
 pub async fn history(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

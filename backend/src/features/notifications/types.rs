@@ -105,10 +105,12 @@ pub struct History {
     pub state: String,
     pub created_at: DateTime<Utc>,
     pub recipient_count: i64,
+    pub queued_count: i64,
     pub accepted_count: i64,
     pub delivered_count: i64,
     pub failed_count: i64,
     pub uncertain_count: i64,
+    pub cancelled_count: i64,
 }
 
 #[derive(Debug, Serialize, FromRow)]

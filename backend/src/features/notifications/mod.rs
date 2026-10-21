@@ -74,13 +74,13 @@ impl Config {
                 .parse::<i32>()
                 .unwrap_or(5)
                 .clamp(1, 10),
-            draft_retention_days: value("NOTIFICATION_DRAFT_RETENTION_DAYS", "30")
+            draft_retention_days: value("NOTIFICATION_DRAFT_RETENTION_DAYS", "1")
                 .parse::<i32>()
-                .unwrap_or(30)
+                .unwrap_or(1)
                 .max(1),
-            artifact_retention_days: value("DOCUMENT_ORPHAN_RETENTION_DAYS", "30")
+            artifact_retention_days: value("DOCUMENT_ORPHAN_RETENTION_DAYS", "1")
                 .parse::<i32>()
-                .unwrap_or(30)
+                .unwrap_or(1)
                 .max(1),
             webhook_retention_days: value("WHATSAPP_WEBHOOK_RETENTION_DAYS", "90")
                 .parse::<i32>()
