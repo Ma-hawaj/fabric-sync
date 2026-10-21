@@ -198,41 +198,44 @@ function Preview({
                 ))}
               </div>
             )}
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <p className="mb-2 text-xs text-muted-foreground">
-                Message · {draft.snapshot.language}
-              </p>
-              <p className="whitespace-pre-wrap text-sm">
-                {draft.snapshot.body}
-              </p>
-            </div>
-            {draft.artifactId && (
-              <div className="space-y-2">
-                {pdf.isLoading && <p>Loading the invoice PDF…</p>}
-                {pdf.isError && (
-                  <p role="alert" className="text-destructive">
-                    Could not load the approved PDF. Refresh the preview to try
-                    again.
+            {draft.snapshot.messages.map((message, index) => (
+              <div key={index} className="space-y-2">
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Message {index + 1} of {draft.snapshot.messages.length} ·{' '}
+                    {message.language}
                   </p>
-                )}
-                {pdfUrl && (
-                  <>
-                    <iframe
-                      title="Invoice PDF preview"
-                      src={pdfUrl}
-                      className="h-96 w-full rounded border"
-                    />
-                    <a
-                      href={pdfUrl}
-                      download={`INV-${draft.snapshot.invoiceNumber}.pdf`}
-                      className="text-sm underline"
-                    >
-                      Open or download the full PDF
-                    </a>
-                  </>
+                  <p className="whitespace-pre-wrap text-sm">{message.body}</p>
+                </div>
+                {message.attachInvoice && draft.artifactId && (
+                  <div className="space-y-2">
+                    {pdf.isLoading && <p>Loading the invoice PDF…</p>}
+                    {pdf.isError && (
+                      <p role="alert" className="text-destructive">
+                        Could not load the approved PDF. Refresh the preview to
+                        try again.
+                      </p>
+                    )}
+                    {pdfUrl && (
+                      <>
+                        <iframe
+                          title="Invoice PDF preview"
+                          src={pdfUrl}
+                          className="h-96 w-full rounded border"
+                        />
+                        <a
+                          href={pdfUrl}
+                          download={`INV-${draft.snapshot.invoiceNumber}.pdf`}
+                          className="text-sm underline"
+                        >
+                          Open or download the full PDF
+                        </a>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
+            ))}
             {!draft.canSend && (
               <p className="text-sm text-muted-foreground">
                 WhatsApp delivery is currently disabled or unconfigured. Your
@@ -318,9 +321,11 @@ function Preview({
           >
             {send.isPending
               ? 'Queuing…'
-              : kind === 'invoice_updated'
-                ? 'Send updated invoice'
-                : 'Send via WhatsApp'}
+              : draft && draft.snapshot.messages.length > 1
+                ? `Send ${draft.snapshot.messages.length} messages via WhatsApp`
+                : kind === 'invoice_updated'
+                  ? 'Send updated invoice'
+                  : 'Send via WhatsApp'}
           </Button>
         </DialogFooter>
       </DialogContent>

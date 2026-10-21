@@ -6,6 +6,15 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 pub async fn state(db: PgPool, renderer: Option<String>, provider: Option<String>) -> AppState {
+    state_with_notifications(db, renderer, provider, |_| {}).await
+}
+
+pub async fn state_with_notifications(
+    db: PgPool,
+    renderer: Option<String>,
+    provider: Option<String>,
+    configure: impl FnOnce(&mut crate::features::notifications::Config),
+) -> AppState {
     let mut config = Config::from_env();
     config.oauth_issuer_url = "http://127.0.0.1:1".into();
     config.oauth_introspection_url = Some("http://127.0.0.1:1/introspect".into());
@@ -18,6 +27,7 @@ pub async fn state(db: PgPool, renderer: Option<String>, provider: Option<String
     config.notifications.test_graph_url = provider;
     config.notifications.app_secret = Some("test-webhook-secret".into());
     config.notifications.verification_token = Some("test-verify-token".into());
+    configure(&mut config.notifications);
     let auth = TokenIntrospection::discover(&config).await.unwrap();
     let users = ZitadelUserDirectory::discover(&config).await.unwrap();
     AppState::new(config, db, auth, users)

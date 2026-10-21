@@ -82,6 +82,15 @@ describe('compact notification history', () => {
             customers: [{ name: 'Ahmed' }],
             normalizedMobile: '+97333112233',
             status: 'failed',
+            messages: [
+              { messageIndex: 0, status: 'accepted', errorMessage: null },
+              {
+                messageIndex: 1,
+                status: 'failed',
+                errorMessage: 'Provider rejected the message.',
+              },
+              { messageIndex: 2, status: 'cancelled', errorMessage: null },
+            ],
             errorMessage: 'Provider rejected the message.',
           },
           {
@@ -90,6 +99,7 @@ describe('compact notification history', () => {
             customers: [{ name: 'Excluded customer' }],
             normalizedMobile: '+97333991122',
             status: 'draft',
+            messages: [],
           },
         ],
       },
@@ -102,6 +112,9 @@ describe('compact notification history', () => {
     ).toBeNull()
     fireEvent.click(within(olderEntry).getByText('Recipients'))
     await screen.findByText('Provider rejected the message.')
+    expect(screen.getByText('Message 1: accepted')).toBeTruthy()
+    expect(screen.getByText(/Message 2: failed/)).toBeTruthy()
+    expect(screen.getByText('Message 3: cancelled')).toBeTruthy()
     expect(apiClient.get).toHaveBeenNthCalledWith(
       1,
       '/notifications/old-invoice/sends',
@@ -143,7 +156,13 @@ describe('compact notification history', () => {
         artifactId: null,
         snapshot: {
           invoiceNumber: 42,
-          body: 'Ready for pickup.',
+          messages: [
+            {
+              body: 'Ready for pickup.',
+              language: 'en_US',
+              attachInvoice: false,
+            },
+          ],
           exclusions: [],
         },
         recipients: [],
@@ -180,8 +199,13 @@ describe('compact notification history', () => {
       artifactId: null,
       snapshot: {
         invoiceNumber: 42,
-        body: 'Ready for pickup.',
-        language: 'en_US',
+        messages: [
+          {
+            body: 'Ready for pickup.',
+            language: 'en_US',
+            attachInvoice: false,
+          },
+        ],
         exclusions: [],
       },
       recipients: [

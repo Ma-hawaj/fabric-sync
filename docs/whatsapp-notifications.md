@@ -89,6 +89,63 @@ footer, and buttons. The initial templates have no footer or buttons.
 | `invoice_document_v1` | Document/PDF | `Your invoice {{1}} from {{2}} is attached. Total: {{3}}. Balance due: {{4}}.` | Invoice reference, company name, total with BHD, balance with BHD |
 | `invoice_ready_v1` | None | `Your order for invoice {{1}} is ready for pickup at {{2}}. Balance due: {{3}}.` | Invoice reference, pickup branch, balance with BHD |
 
+### Multiple messages for one event
+
+Set `WHATSAPP_INVOICE_MESSAGES` or `WHATSAPP_READY_MESSAGES` to an ordered JSON
+array in the backend environment. Invoice configuration applies to creation,
+updates, and invoice resends; pickup configuration applies to ready notices and
+their resends. Blank values keep the single-template settings above.
+
+For example, register the exact templates below with Meta, then set
+`WHATSAPP_INVOICE_MESSAGES` to this JSON (compact it onto one line for `.env`):
+
+```json
+[
+  {
+    "templateName": "invoice_greeting_v1",
+    "body": "Hello! Invoice {{1}} follows.",
+    "parameters": ["invoiceReference"]
+  },
+  {
+    "templateName": "invoice_document_v1",
+    "body": "Your invoice {{1}} from {{2}} is attached. Total: {{3}}. Balance due: {{4}}.",
+    "parameters": ["invoiceReference", "companyName", "total", "balanceDue"],
+    "attachInvoice": true
+  },
+  {
+    "templateName": "invoice_help_v1",
+    "body": "Contact us about invoice {{1}}.",
+    "parameters": ["invoiceReference"]
+  }
+]
+```
+
+These names and bodies are examples; each must match a template approved for
+your sender. The document part reuses the single-message default template.
+Templates without variables can omit `parameters`.
+Supported parameter values are `invoiceReference`, `companyName`, `total`,
+`balanceDue`, and `pickupBranch`, listed in the order of `{{1}}`, `{{2}}`, etc.
+All parts use `WHATSAPP_TEMPLATE_LANGUAGE`.
+
+Sequences contain 1–10 messages. Invoice sequences require exactly one
+`attachInvoice: true` part; pickup sequences allow zero or one. Configuration is
+validated at startup, including unknown fields and unmatched placeholders.
+The root env example remains for Compose infrastructure; sequence configuration
+belongs in `backend/.env` or the deployment environment.
+
+The preview shows every part and its attachment in order. One Send approval
+freezes the complete sequence and selected unique mobiles. For each mobile,
+the next part becomes eligible after WhatsApp accepts all preceding parts.
+Delivery receipts are tracked separately. A transient retry repeats only its
+own part; a permanent failure or uncertain result stops later parts for that
+mobile. Other recipients can continue. An explicit resend previews the complete
+current sequence again. Configuration changes invalidate older previews.
+
+Each part is sent as an approved template, including greetings outside the
+24-hour customer-service window. Sending a greeting does not open that window;
+it opens when the customer messages the business. A separate greeting still
+needs a template Meta accepts for its intended category and wording.
+
 The generic invoice document wording is used for creation, edits, and explicit
 resends. Set `WHATSAPP_INVOICE_BODY` / `WHATSAPP_READY_BODY` to the exact approved
 wording if it differs. Approved template messages are used even outside the
@@ -166,11 +223,12 @@ configured approved templates and a designated test recipient.
 
 ### Verified locally on 21 October 2026
 
-- Backend: 235 tests passed, including temporary-preview disposal, approval races,
+- Backend: 244 tests passed, including ordered sequences, per-part retries,
+  terminal/uncertain failures, edits between parts, temporary-preview disposal, approval races,
   cleanup, grouping resends by version, rejecting older resend links, and retaining
   both latest statuses in long histories. Formatting, compilation,
   fresh migrations, and `cargo sqlx prepare --check` passed.
-- Frontend: 297 tests across 43 files passed; lint, formatting, and production
+- Frontend: 299 tests across 43 files passed; lint, formatting, and production
   build passed. Tests cover explicit approval, recipient grouping/selection,
   stale previews, successful/failed edits, skipping, and the separate resend
   button. A readiness transition preserves the open preview and its recipient

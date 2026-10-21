@@ -20,8 +20,13 @@ function fixture(): NotificationDraft {
     canSend: true,
     snapshot: {
       invoiceNumber: 42,
-      body: 'Your invoice INV-42 is attached. Balance due: 40.000 BHD.',
-      language: 'en_US',
+      messages: [
+        {
+          body: 'Your invoice INV-42 is attached. Balance due: 40.000 BHD.',
+          language: 'en_US',
+          attachInvoice: true,
+        },
+      ],
       exclusions: [],
     },
     recipients: [
@@ -35,6 +40,7 @@ function fixture(): NotificationDraft {
         selected: true,
         status: 'draft',
         errorMessage: null,
+        messages: [{ messageIndex: 0, status: 'draft', errorMessage: null }],
       },
       {
         id: 'recipient-2',
@@ -45,6 +51,7 @@ function fixture(): NotificationDraft {
         selected: true,
         status: 'draft',
         errorMessage: null,
+        messages: [{ messageIndex: 0, status: 'draft', errorMessage: null }],
       },
     ],
   }
@@ -221,5 +228,75 @@ describe('notification preview and approval', () => {
       }).disabled,
     ).toBe(true)
     expect(screen.getByRole('button', { name: 'Refresh preview' })).toBeTruthy()
+  })
+  it('previews the complete sequence and approves all parts once for the unique mobiles', async () => {
+    const invoiceMessage = draft.snapshot.messages[0]
+    draft.snapshot.messages = [
+      {
+        body: 'Hello from Fabric Sync.',
+        language: 'en_US',
+        attachInvoice: false,
+      },
+      invoiceMessage,
+      {
+        body: 'Contact us with any questions.',
+        language: 'en_US',
+        attachInvoice: false,
+      },
+    ]
+    mount()
+    await screen.findByTitle('Invoice PDF preview')
+    const labels = screen.getAllByText(/Message [123] of 3/)
+    expect(labels.map((label) => label.textContent)).toEqual([
+      'Message 1 of 3 · en_US',
+      'Message 2 of 3 · en_US',
+      'Message 3 of 3 · en_US',
+    ])
+    expect(screen.getByText('Hello from Fabric Sync.')).toBeTruthy()
+    expect(screen.getByText('Contact us with any questions.')).toBeTruthy()
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+    expect(
+      vi
+        .mocked(apiClient.post)
+        .mock.calls.filter(([path]) => String(path).endsWith('/send')),
+    ).toHaveLength(0)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Send 3 messages via WhatsApp' }),
+    )
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/notifications/draft-1/send',
+        {
+          previewVersion: 'version-1',
+          selectedMobiles: ['+97333112233', '+97333991122'],
+        },
+      ),
+    )
+    expect(
+      vi
+        .mocked(apiClient.post)
+        .mock.calls.filter(([path]) => String(path).endsWith('/send')),
+    ).toHaveLength(1)
+  })
+
+  it('waits for the PDF before allowing approval of a sequence that starts with text', async () => {
+    draft.snapshot.messages.unshift({
+      body: 'Hello from Fabric Sync.',
+      language: 'en_US',
+      attachInvoice: false,
+    })
+    vi.mocked(apiClient.get).mockImplementation(() => new Promise(() => {}))
+    mount()
+    await screen.findByText('Hello from Fabric Sync.')
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', {
+        name: 'Send 2 messages via WhatsApp',
+      }).disabled,
+    ).toBe(true)
+    expect(
+      vi
+        .mocked(apiClient.post)
+        .mock.calls.filter(([path]) => String(path).endsWith('/send')),
+    ).toHaveLength(0)
   })
 })

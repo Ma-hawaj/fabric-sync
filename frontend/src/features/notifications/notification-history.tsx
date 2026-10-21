@@ -181,6 +181,16 @@ function RecipientDeliveryDetails({ id }: { id: string }) {
             {recipient.errorMessage && (
               <p className="text-destructive">{recipient.errorMessage}</p>
             )}
+            {recipient.messages.length > 1 && (
+              <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+                {recipient.messages.map((message) => (
+                  <li key={message.messageIndex}>
+                    Message {message.messageIndex + 1}: {message.status}
+                    {message.errorMessage ? ` — ${message.errorMessage}` : ''}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         ))}
     </details>

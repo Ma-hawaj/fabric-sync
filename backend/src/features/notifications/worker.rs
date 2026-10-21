@@ -42,6 +42,7 @@ pub(super) async fn tick(state: &AppState) -> Result<(), AppError> {
     // Never replay an expired submission lease automatically.
     repository::recover_leases(state.db()).await?;
     process_webhooks(state.db()).await?;
+    repository::cancel_blocked(state.db()).await?;
     if !state.notifications().can_send() {
         return Ok(());
     }
@@ -120,6 +121,7 @@ pub(super) async fn tick(state: &AppState) -> Result<(), AppError> {
         }
     }
     process_webhooks(state.db()).await?;
+    repository::cancel_blocked(state.db()).await?;
     Ok(())
 }
 
@@ -156,6 +158,11 @@ async fn send(
     notification: &super::types::NotificationRow,
 ) -> Result<String, Failure> {
     let config = state.notifications();
+    let message = notification
+        .snapshot
+        .messages
+        .get(job.message_index as usize)
+        .ok_or_else(|| failure("The approved message sequence is invalid", false, false))?;
     let client = service::http_client()
         .map_err(|_| failure("Could not initialize the sender", true, false))?;
     let token = config
@@ -170,9 +177,15 @@ async fn send(
     #[cfg(test)]
     let root = config.test_graph_url.clone().unwrap_or(root);
     let mut components = vec![
-        json!({"type":"body","parameters":notification.snapshot.parameters.iter().map(|value|json!({"type":"text","text":value})).collect::<Vec<_>>()}),
+        json!({"type":"body","parameters":message.parameters.iter().map(|value|json!({"type":"text","text":value})).collect::<Vec<_>>()}),
     ];
-    if let Some(artifact_id) = notification.artifact_id {
+    if message.parameters.is_empty() {
+        components.clear();
+    }
+    if message.attach_invoice {
+        let artifact_id = notification
+            .artifact_id
+            .ok_or_else(|| failure("The approved PDF is missing", false, false))?;
         let artifact = repository::artifact_content(state.db(), artifact_id)
             .await
             .map_err(|_| failure("The approved attachment could not be loaded", true, false))?;
@@ -201,7 +214,11 @@ async fn send(
     repository::request_started(state.db(), job)
         .await
         .map_err(|_| failure("Could not record the send attempt", true, false))?;
-    let response=client.post(format!("{root}/messages")).bearer_auth(token).json(&json!({"messaging_product":"whatsapp","to":job.normalized_mobile.trim_start_matches('+'),"type":"template","template":{"name":notification.snapshot.template_name,"language":{"code":notification.snapshot.language},"components":components}}))
+    let mut template = json!({"name":message.template_name,"language":{"code":message.language}});
+    if !components.is_empty() {
+        template["components"] = json!(components);
+    }
+    let response=client.post(format!("{root}/messages")).bearer_auth(token).json(&json!({"messaging_product":"whatsapp","to":job.normalized_mobile.trim_start_matches('+'),"type":"template","template":template}))
         .send().await.map_err(|_|failure("The send result is unknown. Check WhatsApp delivery before explicitly resending.",false,true))?;
     let value = graph_response(response, true).await?;
     value["messages"][0]["id"]
@@ -315,15 +332,15 @@ async fn process_webhooks(db: &PgPool) -> Result<(), AppError> {
                         continue;
                     };
                     let mut tx = db.begin().await?;
-                    let existing = repository::lock_provider_recipient(&mut tx, message_id).await?;
-                    if let Some((recipient, current)) = existing {
+                    let existing = repository::lock_provider_delivery(&mut tx, message_id).await?;
+                    if let Some((delivery, current)) = existing {
                         if let Some(next) = next_status(&current, incoming) {
                             let error = if next == "failed" {
                                 Some(status["errors"].to_string())
                             } else {
                                 None
                             };
-                            repository::delivery_status(&mut tx, recipient, next, error.as_deref())
+                            repository::delivery_status(&mut tx, delivery, next, error.as_deref())
                                 .await?;
                         }
                     } else {

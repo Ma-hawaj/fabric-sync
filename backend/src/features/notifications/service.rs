@@ -54,44 +54,44 @@ pub(crate) async fn source(
         "{} BHD",
         crate::document::format_amount(detail.totals.balance_due)
     );
-    let (template_name, body_template, parameters) = if kind == "invoice_ready" {
-        (
-            &config.ready_template,
-            &config.ready_body,
-            vec![
-                reference,
-                detail
-                    .branch_name
-                    .clone()
-                    .ok_or_else(|| AppError::BadRequest("Choose a pickup branch first.".into()))?,
-                balance,
-            ],
-        )
-    } else {
-        (
-            &config.invoice_template,
-            &config.invoice_body,
-            vec![
-                reference,
-                state.invoice_branding().name_en.clone(),
-                format!(
-                    "{} BHD",
-                    crate::document::format_amount(detail.totals.total)
-                ),
-                balance,
-            ],
-        )
-    };
-    let mut body = body_template.clone();
-    for (index, value) in parameters.iter().enumerate() {
-        body = body.replace(&format!("{{{{{}}}}}", index + 1), value);
-    }
-    if body.contains("{{") {
-        return Err(AppError::Unavailable(
-            "The WhatsApp template contains an unconfigured parameter.".into(),
-        ));
-    }
-    let source_hash = hash(&serde_json::to_vec(&json!({"detail":detail,"html":html,"customers":customers,"revision":revision,"kind":if kind == "invoice_ready" { "ready" } else { "document" },"template":template_name,"body":body_template,"language":config.language,"profile":config.renderer_profile})).map_err(|e| AppError::Config(e.to_string()))?);
+    let total = format!(
+        "{} BHD",
+        crate::document::format_amount(detail.totals.total)
+    );
+    let templates = config.messages(kind == "invoice_ready")?;
+    let messages: Vec<MessageSnapshot> = templates
+        .iter()
+        .map(|template| {
+            let parameters: Vec<String> = template
+                .parameters
+                .iter()
+                .map(|parameter| {
+                    Ok(match parameter {
+                        super::messages::Parameter::InvoiceReference => reference.clone(),
+                        super::messages::Parameter::CompanyName => {
+                            state.invoice_branding().name_en.clone()
+                        }
+                        super::messages::Parameter::Total => total.clone(),
+                        super::messages::Parameter::BalanceDue => balance.clone(),
+                        super::messages::Parameter::PickupBranch => {
+                            detail.branch_name.clone().ok_or_else(|| {
+                                AppError::BadRequest("Choose a pickup branch first.".into())
+                            })?
+                        }
+                    })
+                })
+                .collect::<Result<_, AppError>>()?;
+            let body = template.render_body(&parameters);
+            Ok(MessageSnapshot {
+                body,
+                template_name: template.template_name.clone(),
+                language: config.language.clone(),
+                parameters,
+                attach_invoice: template.attach_invoice,
+            })
+        })
+        .collect::<Result<_, AppError>>()?;
+    let source_hash = hash(&serde_json::to_vec(&json!({"detail":detail,"html":html,"customers":customers,"revision":revision,"kind":if kind == "invoice_ready" { "ready" } else { "document" },"messages":messages,"profile":config.renderer_profile})).map_err(|e| AppError::Config(e.to_string()))?);
     let artifact_hash = hash(format!("{}\n{}", config.renderer_profile, html).as_bytes());
     if repository::revision(state.db(), invoice_id).await?.0 != revision {
         return Err(AppError::Conflict(
@@ -103,10 +103,7 @@ pub(crate) async fn source(
             invoice_number: detail.invoice_number,
             source_hash,
             revision,
-            body,
-            template_name: template_name.clone(),
-            language: config.language.clone(),
-            parameters,
+            messages,
             exclusions,
         },
         html,
@@ -234,10 +231,15 @@ pub async fn prepare(
             return Err(AppError::Conflict("This invoice already has an approved creation notification. Use Resend invoice to preview the current version.".into()));
         }
     }
-    let artifact_id = if input.kind == "invoice_ready" {
-        None
-    } else {
+    let artifact_id = if source
+        .snapshot
+        .messages
+        .iter()
+        .any(|message| message.attach_invoice)
+    {
         Some(artifact(state, invoice_id, &source).await?)
+    } else {
+        None
     };
     let mut tx = state.db().begin().await?;
     let current = repository::lock_invoice(&mut tx, invoice_id).await?;
@@ -278,7 +280,8 @@ pub async fn prepare(
     )
     .await?;
     for recipient in &source.recipients {
-        repository::insert_recipient(&mut tx, id, recipient).await?;
+        repository::insert_recipient(&mut tx, id, recipient, source.snapshot.messages.len())
+            .await?;
     }
     tx.commit().await?;
     get(state, id).await

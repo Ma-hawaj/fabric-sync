@@ -24,8 +24,13 @@ function fixture(): NotificationDraft {
     canSend: true,
     snapshot: {
       invoiceNumber: 42,
-      body: 'Your order is ready for pickup.',
-      language: 'en_US',
+      messages: [
+        {
+          body: 'Your order is ready for pickup.',
+          language: 'en_US',
+          attachInvoice: false,
+        },
+      ],
       exclusions: [],
     },
     recipients: [
@@ -43,6 +48,7 @@ function fixture(): NotificationDraft {
         selected: true,
         status: 'draft',
         errorMessage: null,
+        messages: [{ messageIndex: 0, status: 'draft', errorMessage: null }],
       },
     ],
   }

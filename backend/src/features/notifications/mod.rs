@@ -1,4 +1,5 @@
 mod handlers;
+pub(crate) mod messages;
 mod phone;
 pub(crate) mod repository;
 mod routes;
@@ -27,6 +28,8 @@ pub struct Config {
     pub ready_template: String,
     pub invoice_body: String,
     pub ready_body: String,
+    pub invoice_messages: Option<String>,
+    pub ready_messages: Option<String>,
     pub max_attempts: i32,
     pub draft_retention_days: i32,
     pub artifact_retention_days: i32,
@@ -70,6 +73,8 @@ impl Config {
                 "WHATSAPP_READY_BODY",
                 "Your order for invoice {{1}} is ready for pickup at {{2}}. Balance due: {{3}}.",
             ),
+            invoice_messages: optional("WHATSAPP_INVOICE_MESSAGES"),
+            ready_messages: optional("WHATSAPP_READY_MESSAGES"),
             max_attempts: value("NOTIFICATION_MAX_ATTEMPTS", "5")
                 .parse::<i32>()
                 .unwrap_or(5)
