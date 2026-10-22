@@ -10,24 +10,6 @@ export const getCustomerColumns = (
   onPrint: (customer: Customer) => void,
 ): ColumnDef<Customer, any>[] => [
   {
-    accessorKey: 'id',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="ID" />
-    ),
-    cell: ({ row }) => (
-      <div className="font-mono text-muted-foreground">
-        {row.getValue('id')}
-      </div>
-    ),
-    enableSorting: true,
-    enableColumnFilter: true,
-    meta: {
-      label: 'ID',
-      placeholder: 'Filter ID...',
-      variant: 'text',
-    },
-  },
-  {
     accessorKey: 'name',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Name" />

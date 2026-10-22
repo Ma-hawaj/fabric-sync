@@ -47,6 +47,9 @@ export function DataTableAdvancedToolbar<TData>({
   const [searchId, setSearchId] = React.useState(
     () =>
       searchColumns.find((column) =>
+        ['mobileNo', 'customerMobile'].includes(column.id),
+      )?.id ??
+      searchColumns.find((column) =>
         ['customerName', 'name', 'code'].includes(column.id),
       )?.id ??
       searchColumns.at(0)?.id ??

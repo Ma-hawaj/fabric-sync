@@ -1,7 +1,7 @@
 'use client'
 
 import type { Table } from '@tanstack/react-table'
-import { CheckIcon, Settings2 } from 'lucide-react'
+import { Settings2 } from 'lucide-react'
 import * as React from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -99,12 +99,6 @@ export function DataTableViewOptions<TData>({
                   <span className="truncate">
                     {column.columnDef.meta?.label ?? column.id}
                   </span>
-                  <CheckIcon
-                    className={cn(
-                      'ms-auto size-4',
-                      !column.getIsVisible() && 'invisible',
-                    )}
-                  />
                 </CommandItem>
               ))}
             </CommandGroup>
