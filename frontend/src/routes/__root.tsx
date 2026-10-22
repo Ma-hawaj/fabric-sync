@@ -9,6 +9,7 @@ import type { AuthState } from '@/lib/auth'
 import type { QueryClient } from '@tanstack/react-query'
 import { SidebarInset, SidebarTrigger } from '#/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
+import { useTheme } from '@/components/theme-provider'
 import { NuqsAdapter } from 'nuqs/adapters/tanstack-router'
 
 type RouterContext = {
@@ -46,6 +47,7 @@ function Header() {
 }
 
 function RootComponent() {
+  const { theme } = useTheme()
   return (
     <NuqsAdapter>
       <Sidebar />
@@ -68,7 +70,7 @@ function RootComponent() {
           ]}
         />
       )}
-      <Toaster />
+      <Toaster theme={theme} />
     </NuqsAdapter>
   )
 }

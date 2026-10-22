@@ -49,7 +49,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { dataTableConfig } from '@/config/data-table'
-import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
+import { useDebouncedInput } from '@/hooks/use-debounced-input'
 import {
   getDefaultFilterOperator,
   getFilterOperators,
@@ -61,9 +61,14 @@ import { useTableFilters } from '@/hooks/use-table-filters'
 import { cn } from '@/lib/utils'
 import type { ExtendedColumnFilter, JoinOperator } from '@/types/data-table'
 
-const DEBOUNCE_MS = 300
 const FILTER_SHORTCUT_KEY = 'f'
 const REMOVE_FILTER_SHORTCUTS = ['backspace', 'delete']
+
+type FilterUpdate<TData> = (
+  filterId: string,
+  updates: Partial<Omit<ExtendedColumnFilter<TData>, 'filterId'>>,
+  expected?: Pick<ExtendedColumnFilter<TData>, 'id' | 'variant' | 'operator'>,
+) => void
 
 interface DataTableFilterListProps<TData> extends React.ComponentProps<
   typeof PopoverContent
@@ -84,6 +89,13 @@ export function DataTableFilterList<TData>({
   const descriptionId = React.useId()
   const [open, setOpen] = React.useState(false)
   const addButtonRef = React.useRef<HTMLButtonElement>(null)
+  const mounted = React.useRef(false)
+  React.useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   const tableColumns = table.getAllColumns()
   const columns = React.useMemo(() => {
@@ -130,10 +142,21 @@ export function DataTableFilterList<TData>({
     (
       filterId: string,
       updates: Partial<Omit<ExtendedColumnFilter<TData>, 'filterId'>>,
+      expected?: Pick<
+        ExtendedColumnFilter<TData>,
+        'id' | 'variant' | 'operator'
+      >,
     ) => {
+      if (!mounted.current) return
       void setFilters((prevFilters) => {
         const updatedFilters = prevFilters.map((filter) => {
-          if (filter.filterId === filterId) {
+          if (
+            filter.filterId === filterId &&
+            (!expected ||
+              (filter.id === expected.id &&
+                filter.variant === expected.variant &&
+                filter.operator === expected.operator))
+          ) {
             return { ...filter, ...updates }
           }
           return filter
@@ -320,10 +343,7 @@ interface DataTableFilterItemProps<TData> {
   joinOperator: JoinOperator
   setJoinOperator: (value: JoinOperator) => void
   columns: Column<TData>[]
-  onFilterUpdate: (
-    filterId: string,
-    updates: Partial<Omit<ExtendedColumnFilter<TData>, 'filterId'>>,
-  ) => void
+  onFilterUpdate: FilterUpdate<TData>
   onFilterRemove: (filterId: string) => void
 }
 
@@ -524,7 +544,9 @@ function DataTableFilterItem<TData>({
           inputId,
           column,
           columnMeta,
-          onFilterUpdate,
+          // A closing input must not overwrite a newly selected field/operator.
+          onFilterUpdate: (filterId, updates) =>
+            onFilterUpdate(filterId, updates, filter),
           showValueSelector,
           setShowValueSelector,
         })}
@@ -587,6 +609,7 @@ function onFilterInputRender<TData>({
       ) {
         return (
           <DataTableRangeFilter
+            key={`${filter.filterId}:${filter.id}:${filter.operator}`}
             filter={filter}
             column={column}
             inputId={inputId}
@@ -829,17 +852,13 @@ function FilterTextInput({
   value: string
   onValueChange: (value: string) => void
 }) {
-  const [draft, setDraft] = React.useState(value)
-  const updateValue = useDebouncedCallback(onValueChange, DEBOUNCE_MS)
-  React.useEffect(() => setDraft(value), [value])
+  const { draft, change, flush } = useDebouncedInput(value, onValueChange)
   return (
     <Input
       {...props}
       value={draft}
-      onChange={(event) => {
-        setDraft(event.target.value)
-        updateValue(event.target.value)
-      }}
+      onChange={(event) => change(event.target.value)}
+      onBlur={flush}
     />
   )
 }

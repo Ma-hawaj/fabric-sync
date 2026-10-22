@@ -159,6 +159,20 @@ export default [
     },
   },
   {
+    // Keep the CLI's generated syntax intact; app code keeps the project rules.
+    name: 'shadcn/generated-style',
+    files: ['src/components/ui/**', 'src/lib/utils.ts'],
+    rules: {
+      'import/consistent-type-specifier-style': 'off',
+      'no-shadow': 'off',
+    },
+  },
+  {
+    // Upstream FieldError guards its computed error array with an optional chain.
+    files: ['src/components/ui/field.tsx'],
+    rules: { '@typescript-eslint/no-unnecessary-condition': 'off' },
+  },
+  {
     // Pinned-table and drag-and-drop geometry is computed at runtime (sticky
     // offsets and width from column state; transform/transition from drag
     // state), so the linter cannot verify those style objects statically.

@@ -7,13 +7,14 @@ import {
 import type { ColumnDef } from '@tanstack/react-table'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { withNuqsTestingAdapter } from 'nuqs/adapters/testing'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { DataTableFilterList } from './data-table-filter-list'
 import { useListParams } from '@/hooks/use-list-params'
 import type { ExtendedColumnFilter } from '@/types/data-table'
 
 interface Row {
+  name: string
   amountPaid: number
   quantity: number
   date: string
@@ -21,6 +22,11 @@ interface Row {
 }
 
 const columns: ColumnDef<Row>[] = [
+  {
+    accessorKey: 'name',
+    enableColumnFilter: true,
+    meta: { label: 'Name', variant: 'text' },
+  },
   {
     accessorKey: 'amountPaid',
     enableColumnFilter: true,
@@ -47,6 +53,7 @@ function FilterHarness() {
   const table = useReactTable({
     columns,
     data: [10, 20].map((amountPaid) => ({
+      name: 'Ali',
       amountPaid,
       quantity: 1,
       date: '2026-10-20',
@@ -70,15 +77,19 @@ function FilterHarness() {
 }
 
 function renderFilter(filter: ExtendedColumnFilter<Row>) {
-  render(<FilterHarness />, {
+  const onUrlUpdate =
+    vi.fn<(event: { searchParams: URLSearchParams }) => void>()
+  const view = render(<FilterHarness />, {
     wrapper: withNuqsTestingAdapter({
       searchParams: `?filters=${encodeURIComponent(JSON.stringify([filter]))}`,
       hasMemory: true,
       // Preserve pending writes when the in-memory adapter rerenders.
       resetUrlUpdateQueueOnMount: false,
+      onUrlUpdate,
     }),
   })
   fireEvent.click(screen.getByRole('button', { name: /Filters/ }))
+  return { ...view, onUrlUpdate }
 }
 
 function requestFilters() {
@@ -93,6 +104,116 @@ async function selectOperator(label: string) {
 }
 
 describe('advanced filter requests', () => {
+  it('saves pending text when Escape closes the popover', async () => {
+    renderFilter({
+      id: 'name',
+      variant: 'text',
+      value: 'Ali',
+      operator: 'iLike',
+      filterId: 'one',
+    })
+    const input = screen.getByRole('textbox', { name: 'Name filter value' })
+    fireEvent.change(input, { target: { value: 'Ahmed' } })
+    expect(requestFilters()[0].value).toBe('Ali')
+    fireEvent.keyDown(input, { key: 'Escape' })
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('textbox', { name: 'Name filter value' }),
+      ).toBeNull(),
+    )
+    await waitFor(() => expect(requestFilters()[0].value).toBe('Ahmed'))
+  })
+
+  it('debounces rapid range edits and keeps both bounds in the final request', async () => {
+    const { onUrlUpdate } = renderFilter({
+      id: 'amountPaid',
+      variant: 'range',
+      value: ['', ''],
+      operator: 'isBetween',
+      filterId: 'one',
+    })
+    const minimum = screen.getByRole<HTMLInputElement>('spinbutton', {
+      name: 'Paid minimum value',
+    })
+    const maximum = screen.getByRole<HTMLInputElement>('spinbutton', {
+      name: 'Paid maximum value',
+    })
+    for (const value of ['5', '50', '500', '500.125']) {
+      fireEvent.change(minimum, { target: { value } })
+    }
+    fireEvent.change(maximum, { target: { value: '5000.875' } })
+    expect(minimum.value).toBe('500.125')
+    expect(maximum.value).toBe('5000.875')
+    expect(requestFilters()).toEqual([])
+    await waitFor(() =>
+      expect(requestFilters()[0]?.value).toEqual(['500.125', '5000.875']),
+    )
+    expect(
+      onUrlUpdate.mock.calls.map(
+        ([event]) => JSON.parse(event.searchParams.get('filters')!)[0].value,
+      ),
+    ).toEqual([['500.125', '5000.875']])
+  })
+
+  it('saves pending range bounds when the popover closes', async () => {
+    renderFilter({
+      id: 'amountPaid',
+      variant: 'range',
+      value: ['', ''],
+      operator: 'isBetween',
+      filterId: 'one',
+    })
+    const minimum = screen.getByRole('spinbutton', {
+      name: 'Paid minimum value',
+    })
+    fireEvent.change(minimum, { target: { value: '500.125' } })
+    fireEvent.change(
+      screen.getByRole('spinbutton', { name: 'Paid maximum value' }),
+      { target: { value: '5000.875' } },
+    )
+    fireEvent.keyDown(minimum, { key: 'Escape' })
+    await waitFor(() =>
+      expect(requestFilters()[0]?.value).toEqual(['500.125', '5000.875']),
+    )
+  })
+
+  it('does not flush a stale scalar into a newly selected range operator', async () => {
+    renderFilter({
+      id: 'quantity',
+      variant: 'number',
+      value: '5',
+      operator: 'eq',
+      filterId: 'one',
+    })
+    fireEvent.change(
+      screen.getByRole('spinbutton', { name: 'Quantity filter value' }),
+      { target: { value: '12' } },
+    )
+    await selectOperator('Is between')
+    await waitFor(() =>
+      expect(requestFilters()[0]).toMatchObject({
+        operator: 'isBetween',
+        value: expect.any(Array),
+      }),
+    )
+  })
+
+  it('does not write pending filters when leaving the page', async () => {
+    const { unmount, onUrlUpdate } = renderFilter({
+      id: 'name',
+      variant: 'text',
+      value: 'Ali',
+      operator: 'iLike',
+      filterId: 'one',
+    })
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Name filter value' }),
+      { target: { value: 'Ahmed' } },
+    )
+    unmount()
+    expect(onUrlUpdate).not.toHaveBeenCalled()
+  })
+
   it.each([
     ['amountPaid', 'range', '25.125'],
     ['quantity', 'number', '5'],
