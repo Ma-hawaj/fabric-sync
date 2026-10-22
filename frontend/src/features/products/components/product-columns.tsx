@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { PencilIcon, PowerIcon } from 'lucide-react'
-import type { ColumnDef } from '@tanstack/react-table'
+import { defineColumns } from '@/lib/define-columns'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
@@ -18,164 +18,165 @@ export const getProductColumns = (
   onToggleActive: (product: Product) => void,
   isToggling: boolean,
   locations: Location[],
-): ColumnDef<Product, any>[] => [
-  {
-    accessorKey: 'name',
-    size: 220,
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Name" />
-    ),
-    cell: ({ row }) => (
-      <Link
-        to="/products/$productId/edit"
-        params={{ productId: row.original.id }}
-        className="font-medium text-info hover:underline"
-      >
-        {row.getValue('name')}
-      </Link>
-    ),
-    enableSorting: true,
-    enableColumnFilter: true,
-    meta: {
-      label: 'Name',
-      placeholder: 'Filter name...',
-      variant: 'text',
-    },
-  },
-  {
-    accessorKey: 'sku',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="SKU" />
-    ),
-    cell: ({ row }) => (
-      <div className="font-mono text-muted-foreground">
-        {row.getValue('sku') ?? '—'}
-      </div>
-    ),
-    enableSorting: true,
-    enableColumnFilter: true,
-    meta: {
-      label: 'SKU',
-      placeholder: 'Filter SKU...',
-      variant: 'text',
-    },
-  },
-  {
-    accessorKey: 'unitPrice',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Price" />
-    ),
-    cell: ({ row }) => (
-      <div className="font-medium">
-        {currencyFormatter.format(row.getValue<number>('unitPrice'))}
-      </div>
-    ),
-    enableSorting: true,
-    enableColumnFilter: true,
-    meta: {
-      label: 'Price',
-      variant: 'range',
-      range: [0, 2000],
-      unit: CURRENCY,
-    },
-  },
-  {
-    id: 'locations',
-    accessorFn: (product) => product.locations.map((l) => l.location),
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Locations" />
-    ),
-    cell: ({ row }) => (
-      <div className="flex flex-wrap gap-1">
-        {row.original.locations.map((l) => (
-          <Badge key={l.locationId} variant="outline">
-            {l.location}
-          </Badge>
-        ))}
-      </div>
-    ),
-    enableSorting: false,
-    enableColumnFilter: true,
-    meta: {
-      label: 'Locations',
-      placeholder: 'Filter locations...',
-      variant: 'multiSelect',
-      // The filter matches against location names (see accessorFn above),
-      // so option values are names rather than ids.
-      options: locations.map((location) => ({
-        label: location.name,
-        value: location.name,
-      })),
-    },
-  },
-  {
-    id: 'totalQuantity',
-    accessorFn: productTotalStock,
-    meta: { label: 'Total Quantity' },
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="In Stock" />
-    ),
-    cell: ({ row }) => <div>{row.getValue<number>('totalQuantity')}</div>,
-    enableSorting: true,
-    enableColumnFilter: false,
-  },
-  {
-    id: 'status',
-    accessorFn: (product) => [product.isActive ? 'Active' : 'Inactive'],
-    size: 96,
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Status" />
-    ),
-    cell: ({ row }) =>
-      row.original.isActive ? (
-        <Badge variant="secondary">Active</Badge>
-      ) : (
-        <Badge variant="outline" className="text-muted-foreground">
-          Inactive
-        </Badge>
+) =>
+  defineColumns<Product>()([
+    {
+      accessorKey: 'name',
+      size: 220,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Name" />
       ),
-    enableSorting: false,
-    enableColumnFilter: true,
-    meta: {
-      label: 'Status',
-      placeholder: 'Filter status...',
-      variant: 'multiSelect',
-      options: [
-        { label: 'Active', value: 'active' },
-        { label: 'Inactive', value: 'inactive' },
-      ],
+      cell: ({ row }) => (
+        <Link
+          to="/products/$productId/edit"
+          params={{ productId: row.original.id }}
+          className="font-medium text-info hover:underline"
+        >
+          {row.getValue('name')}
+        </Link>
+      ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Name',
+        placeholder: 'Filter name...',
+        variant: 'text',
+      },
     },
-  },
-  {
-    id: 'actions',
-    size: 72,
-    meta: { label: 'Actions' },
-    header: 'Actions',
-    enablePinning: true,
-    cell: ({ row }) => {
-      const product = row.original
-      return (
-        <RowActions
-          items={[
-            {
-              label: 'Edit',
-              icon: PencilIcon,
-              render: (
-                <Link
-                  to="/products/$productId/edit"
-                  params={{ productId: product.id }}
-                />
-              ),
-            },
-            {
-              label: product.isActive ? 'Deactivate' : 'Activate',
-              icon: PowerIcon,
-              disabled: isToggling,
-              onClick: () => onToggleActive(product),
-            },
-          ]}
-        />
-      )
+    {
+      accessorKey: 'sku',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="SKU" />
+      ),
+      cell: ({ row }) => (
+        <div className="font-mono text-muted-foreground">
+          {row.getValue('sku') ?? '—'}
+        </div>
+      ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      meta: {
+        label: 'SKU',
+        placeholder: 'Filter SKU...',
+        variant: 'text',
+      },
     },
-  },
-]
+    {
+      accessorKey: 'unitPrice',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Price" />
+      ),
+      cell: ({ row }) => (
+        <div className="font-medium">
+          {currencyFormatter.format(row.getValue<number>('unitPrice'))}
+        </div>
+      ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Price',
+        variant: 'range',
+        range: [0, 2000],
+        unit: CURRENCY,
+      },
+    },
+    {
+      id: 'locations',
+      accessorFn: (product) => product.locations.map((l) => l.location),
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Locations" />
+      ),
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1">
+          {row.original.locations.map((l) => (
+            <Badge key={l.locationId} variant="outline">
+              {l.location}
+            </Badge>
+          ))}
+        </div>
+      ),
+      enableSorting: false,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Locations',
+        placeholder: 'Filter locations...',
+        variant: 'multiSelect',
+        // The filter matches against location names (see accessorFn above),
+        // so option values are names rather than ids.
+        options: locations.map((location) => ({
+          label: location.name,
+          value: location.name,
+        })),
+      },
+    },
+    {
+      id: 'totalQuantity',
+      accessorFn: productTotalStock,
+      meta: { label: 'Total Quantity' },
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="In Stock" />
+      ),
+      cell: ({ row }) => <div>{row.getValue<number>('totalQuantity')}</div>,
+      enableSorting: true,
+      enableColumnFilter: false,
+    },
+    {
+      id: 'status',
+      accessorFn: (product) => [product.isActive ? 'Active' : 'Inactive'],
+      size: 96,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Status" />
+      ),
+      cell: ({ row }) =>
+        row.original.isActive ? (
+          <Badge variant="secondary">Active</Badge>
+        ) : (
+          <Badge variant="outline" className="text-muted-foreground">
+            Inactive
+          </Badge>
+        ),
+      enableSorting: false,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Status',
+        placeholder: 'Filter status...',
+        variant: 'multiSelect',
+        options: [
+          { label: 'Active', value: 'active' },
+          { label: 'Inactive', value: 'inactive' },
+        ],
+      },
+    },
+    {
+      id: 'actions',
+      size: 72,
+      meta: { label: 'Actions' },
+      header: 'Actions',
+      enablePinning: true,
+      cell: ({ row }) => {
+        const product = row.original
+        return (
+          <RowActions
+            items={[
+              {
+                label: 'Edit',
+                icon: PencilIcon,
+                render: (
+                  <Link
+                    to="/products/$productId/edit"
+                    params={{ productId: product.id }}
+                  />
+                ),
+              },
+              {
+                label: product.isActive ? 'Deactivate' : 'Activate',
+                icon: PowerIcon,
+                disabled: isToggling,
+                onClick: () => onToggleActive(product),
+              },
+            ]}
+          />
+        )
+      },
+    },
+  ])

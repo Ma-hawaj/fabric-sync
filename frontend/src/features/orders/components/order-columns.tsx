@@ -1,4 +1,4 @@
-import type { ColumnDef } from '@tanstack/react-table'
+import { defineColumns } from '@/lib/define-columns'
 import { Link } from '@tanstack/react-router'
 import { ListChecksIcon, CheckIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -45,8 +45,8 @@ export function getOrderColumns(
   productionOptions: { label: string; value: string }[],
   onCollect: (order: Order) => void,
   onOpen: (order: Order) => void,
-): ColumnDef<Order, any>[] {
-  return [
+) {
+  return defineColumns<Order>()([
     {
       accessorKey: 'orderNumber',
       size: 88,
@@ -441,5 +441,5 @@ export function getOrderColumns(
         )
       },
     },
-  ]
+  ])
 }

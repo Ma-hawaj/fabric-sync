@@ -9,6 +9,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import type {
+  ColumnDef,
   ColumnFiltersState,
   ColumnPinningState,
   ColumnSizingState,
@@ -44,13 +45,21 @@ import {
   saveTablePreferences,
   tablePreferenceKey,
 } from '@/lib/table-preferences'
-import type { ExtendedColumnSort, QueryKeys } from '@/types/data-table'
+import type {
+  DataTableInstance,
+  ExtendedColumnSort,
+  QueryKeys,
+} from '@/types/data-table'
 
 const DEBOUNCE_MS = 300
 const THROTTLE_MS = 50
 
-interface UseDataTableProps<TData> extends Omit<
+interface UseDataTableProps<
+  TData,
+  TColumns extends ColumnDef<TData, any>[],
+> extends Omit<
   TableOptions<TData>,
+  | 'columns'
   | 'state'
   | 'pageCount'
   | 'getCoreRowModel'
@@ -58,6 +67,7 @@ interface UseDataTableProps<TData> extends Omit<
   | 'manualPagination'
   | 'manualSorting'
 > {
+  columns: TColumns
   pageCount?: number
   manualFiltering?: boolean
   manualPagination?: boolean
@@ -76,7 +86,10 @@ interface UseDataTableProps<TData> extends Omit<
   startTransition?: React.TransitionStartFunction
 }
 
-export function useDataTable<TData>(props: UseDataTableProps<TData>) {
+export function useDataTable<
+  TData,
+  const TColumns extends ColumnDef<TData, any>[],
+>(props: UseDataTableProps<TData, TColumns>) {
   const {
     columns,
     pageCount,
@@ -331,7 +344,12 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   })
 
   return React.useMemo(
-    () => ({ table, shallow, debounceMs, throttleMs }),
+    () => ({
+      table: table as DataTableInstance<TData, TColumns>,
+      shallow,
+      debounceMs,
+      throttleMs,
+    }),
     [table, shallow, debounceMs, throttleMs],
   )
 }

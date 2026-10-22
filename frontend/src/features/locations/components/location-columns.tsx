@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { PencilIcon, PowerIcon } from 'lucide-react'
-import type { ColumnDef } from '@tanstack/react-table'
+import { defineColumns } from '@/lib/define-columns'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
@@ -19,114 +19,115 @@ export function locationUses(location: Location): string[] {
 export const getLocationColumns = (
   onToggleActive: (location: Location) => void,
   isToggling: boolean,
-): ColumnDef<Location, any>[] => [
-  {
-    accessorKey: 'name',
-    size: 220,
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Name" />
-    ),
-    cell: ({ row }) => (
-      <Link
-        to="/locations/$locationId/edit"
-        params={{ locationId: row.original.id }}
-        className="font-medium text-info hover:underline"
-      >
-        {row.getValue('name')}
-      </Link>
-    ),
-    enableSorting: true,
-    enableColumnFilter: true,
-    meta: {
-      label: 'Name',
-      placeholder: 'Filter name...',
-      variant: 'text',
-    },
-  },
-  {
-    id: 'uses',
-    accessorFn: locationUses,
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Used For" />
-    ),
-    cell: ({ row }) => (
-      <div className="flex flex-wrap gap-1">
-        {locationUses(row.original).map((use) => (
-          <Badge key={use} variant="outline">
-            {use}
-          </Badge>
-        ))}
-      </div>
-    ),
-    enableSorting: false,
-    enableColumnFilter: true,
-    meta: {
-      label: 'Used For',
-      placeholder: 'Filter use...',
-      variant: 'multiSelect',
-      options: [
-        { label: RECEIVES_ORDERS_LABEL, value: 'receivesOrders' },
-        { label: HOLDS_STOCK_LABEL, value: 'holdsStock' },
-      ],
-    },
-  },
-  {
-    id: 'status',
-    accessorFn: (location) => [location.isActive ? 'Active' : 'Inactive'],
-    size: 96,
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} label="Status" />
-    ),
-    cell: ({ row }) =>
-      row.original.isActive ? (
-        <Badge variant="secondary">Active</Badge>
-      ) : (
-        <Badge variant="outline" className="text-muted-foreground">
-          Inactive
-        </Badge>
+) =>
+  defineColumns<Location>()([
+    {
+      accessorKey: 'name',
+      size: 220,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Name" />
       ),
-    enableSorting: false,
-    enableColumnFilter: true,
-    meta: {
-      label: 'Status',
-      placeholder: 'Filter status...',
-      variant: 'multiSelect',
-      options: [
-        { label: 'Active', value: 'active' },
-        { label: 'Inactive', value: 'inactive' },
-      ],
+      cell: ({ row }) => (
+        <Link
+          to="/locations/$locationId/edit"
+          params={{ locationId: row.original.id }}
+          className="font-medium text-info hover:underline"
+        >
+          {row.getValue('name')}
+        </Link>
+      ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Name',
+        placeholder: 'Filter name...',
+        variant: 'text',
+      },
     },
-  },
-  {
-    id: 'actions',
-    size: 72,
-    meta: { label: 'Actions' },
-    header: 'Actions',
-    enablePinning: true,
-    cell: ({ row }) => {
-      const location = row.original
-      return (
-        <RowActions
-          items={[
-            {
-              label: 'Edit',
-              icon: PencilIcon,
-              render: (
-                <Link
-                  to="/locations/$locationId/edit"
-                  params={{ locationId: location.id }}
-                />
-              ),
-            },
-            {
-              label: location.isActive ? 'Deactivate' : 'Activate',
-              icon: PowerIcon,
-              disabled: isToggling,
-              onClick: () => onToggleActive(location),
-            },
-          ]}
-        />
-      )
+    {
+      id: 'uses',
+      accessorFn: locationUses,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Used For" />
+      ),
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1">
+          {locationUses(row.original).map((use) => (
+            <Badge key={use} variant="outline">
+              {use}
+            </Badge>
+          ))}
+        </div>
+      ),
+      enableSorting: false,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Used For',
+        placeholder: 'Filter use...',
+        variant: 'multiSelect',
+        options: [
+          { label: RECEIVES_ORDERS_LABEL, value: 'receivesOrders' },
+          { label: HOLDS_STOCK_LABEL, value: 'holdsStock' },
+        ],
+      },
     },
-  },
-]
+    {
+      id: 'status',
+      accessorFn: (location) => [location.isActive ? 'Active' : 'Inactive'],
+      size: 96,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Status" />
+      ),
+      cell: ({ row }) =>
+        row.original.isActive ? (
+          <Badge variant="secondary">Active</Badge>
+        ) : (
+          <Badge variant="outline" className="text-muted-foreground">
+            Inactive
+          </Badge>
+        ),
+      enableSorting: false,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Status',
+        placeholder: 'Filter status...',
+        variant: 'multiSelect',
+        options: [
+          { label: 'Active', value: 'active' },
+          { label: 'Inactive', value: 'inactive' },
+        ],
+      },
+    },
+    {
+      id: 'actions',
+      size: 72,
+      meta: { label: 'Actions' },
+      header: 'Actions',
+      enablePinning: true,
+      cell: ({ row }) => {
+        const location = row.original
+        return (
+          <RowActions
+            items={[
+              {
+                label: 'Edit',
+                icon: PencilIcon,
+                render: (
+                  <Link
+                    to="/locations/$locationId/edit"
+                    params={{ locationId: location.id }}
+                  />
+                ),
+              },
+              {
+                label: location.isActive ? 'Deactivate' : 'Activate',
+                icon: PowerIcon,
+                disabled: isToggling,
+                onClick: () => onToggleActive(location),
+              },
+            ]}
+          />
+        )
+      },
+    },
+  ])

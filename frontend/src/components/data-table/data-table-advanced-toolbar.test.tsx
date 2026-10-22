@@ -1,11 +1,11 @@
-import { getCoreRowModel, useReactTable } from '@tanstack/react-table'
-import type { ColumnDef } from '@tanstack/react-table'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { withNuqsTestingAdapter } from 'nuqs/adapters/testing'
 import { describe, expect, it } from 'vitest'
 
 import { DataTableAdvancedToolbar } from './data-table-advanced-toolbar'
 import { useListParams } from '@/hooks/use-list-params'
+import { useDataTable } from '@/hooks/use-data-table'
+import { defineColumns } from '@/lib/define-columns'
 
 interface Record {
   title: string
@@ -14,7 +14,7 @@ interface Record {
   lifecycle: string
 }
 
-const columns: ColumnDef<Record>[] = [
+const columns = defineColumns<Record>()([
   {
     accessorKey: 'title',
     enableColumnFilter: true,
@@ -43,15 +43,14 @@ const columns: ColumnDef<Record>[] = [
       options: [{ label: 'Queued', value: 'queued' }],
     },
   },
-]
+])
 const data: Record[] = []
 
 function Harness({ configured = false }: { configured?: boolean }) {
-  const table = useReactTable({
+  const { table } = useDataTable({
     data,
     columns,
-    manualFiltering: true,
-    getCoreRowModel: getCoreRowModel(),
+    enableAdvancedFilter: true,
   })
   const { searchParams } = useListParams({ columns })
   return (

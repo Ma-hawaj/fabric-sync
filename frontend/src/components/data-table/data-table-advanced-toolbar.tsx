@@ -2,7 +2,8 @@
 
 import * as React from 'react'
 import { useState } from 'react'
-import type { Column, Table } from '@tanstack/react-table'
+import type { DataTableColumnId, DataTableInstance } from '@/types/data-table'
+import type { Column, ColumnDef, Table } from '@tanstack/react-table'
 import { SearchIcon, XIcon } from 'lucide-react'
 import { parseAsStringLiteral, useQueryState } from 'nuqs'
 import { DataTableFilterList } from './data-table-filter-list'
@@ -23,17 +24,28 @@ import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/format'
 import { parseFilterDate } from '@/lib/filter-date'
 
+interface DataTableAdvancedToolbarProps<TData, TColumnId extends string> {
+  table: Table<TData>
+  className?: string
+  defaultSearchColumnId?: TColumnId
+  quickFilter?: { columnId: TColumnId; allLabel: string }
+}
+
+export function DataTableAdvancedToolbar<
+  TData,
+  TColumns extends ColumnDef<TData, any>[],
+>(
+  props: DataTableAdvancedToolbarProps<
+    TData,
+    NoInfer<DataTableColumnId<TColumns>>
+  > & { table: DataTableInstance<TData, TColumns> },
+): React.JSX.Element
 export function DataTableAdvancedToolbar<TData>({
   table,
   className,
   defaultSearchColumnId,
   quickFilter,
-}: {
-  table: Table<TData>
-  className?: string
-  defaultSearchColumnId?: string
-  quickFilter?: { columnId: string; allLabel: string }
-}) {
+}: DataTableAdvancedToolbarProps<TData, string>) {
   const tableColumns = table.getAllColumns()
   const definitions = React.useMemo(
     () => tableColumns.map((column) => column.columnDef),
