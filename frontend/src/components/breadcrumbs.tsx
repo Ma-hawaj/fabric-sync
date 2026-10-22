@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { Link, useMatches } from '@tanstack/react-router'
 import {
   Breadcrumb,
@@ -9,37 +10,39 @@ import {
 } from '@/components/ui/breadcrumb'
 
 export function Breadcrumbs() {
-  const matches = useMatches()
-  const crumbs = useMatches().filter((m) => m.staticData.title)
+  const crumbs = useMatches({
+    select: (matches) => matches.filter((match) => match.staticData.title),
+  })
 
-  console.log(JSON.stringify({ matches }, undefined, 2))
-  console.log(JSON.stringify({ crumbs }, undefined, 2))
+  if (crumbs.length === 0) return null
 
   return (
     <Breadcrumb>
       <BreadcrumbList>
-        {crumbs
-          .filter((m) => m.staticData.title)
-          .map((m, i) => {
-            const isLast = i === crumbs.length - 1
-            console.log({ isLast })
-            return (
-              <>
-                <BreadcrumbItem key={m.pathname}>
-                  {!isLast ? (
-                    <BreadcrumbLink render={<Link to={m.pathname} />}>
-                      {m.staticData.title}
-                    </BreadcrumbLink>
-                  ) : (
-                    <>
-                      <BreadcrumbPage>{m.staticData.title}</BreadcrumbPage>
-                    </>
-                  )}
-                </BreadcrumbItem>
-                {!isLast && <BreadcrumbSeparator />}
-              </>
-            )
-          })}
+        {crumbs.map((match, index) => {
+          const isLast = index === crumbs.length - 1
+          return (
+            <Fragment key={match.id}>
+              <BreadcrumbItem>
+                {isLast ? (
+                  <BreadcrumbPage>{match.staticData.title}</BreadcrumbPage>
+                ) : (
+                  <BreadcrumbLink
+                    render={
+                      <Link
+                        to={match.pathname}
+                        activeOptions={{ exact: true }}
+                      />
+                    }
+                  >
+                    {match.staticData.title}
+                  </BreadcrumbLink>
+                )}
+              </BreadcrumbItem>
+              {!isLast && <BreadcrumbSeparator />}
+            </Fragment>
+          )
+        })}
       </BreadcrumbList>
     </Breadcrumb>
   )

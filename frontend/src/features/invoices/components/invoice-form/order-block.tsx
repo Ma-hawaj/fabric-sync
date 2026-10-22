@@ -1,10 +1,11 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { useStore } from '@tanstack/react-form'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { PRODUCTION_FILTERS } from '@/features/locations/lib/location-filters'
 import { XIcon } from 'lucide-react'
 import { NumberField, TextField } from '@/components/form/fields'
-import { DesignOptionGrid } from '@/components/form/design-option-grid'
+import { DesignOptionGrid } from '@/features/design-options/components/design-option-grid'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import { Button } from '@/components/ui/button'
 import {
@@ -164,11 +165,10 @@ export function OrderBlock({
       customers?: { orders?: { materialId?: string }[] }[]
     }
   ).customers?.[customerIndex]?.orders?.[orderIndex]?.materialId
-  const [pickedMaterial, setPickedMaterial] = React.useState<Material | null>(
-    () =>
-      storedMaterialId
-        ? (initialMaterialForId?.(storedMaterialId) ?? null)
-        : null,
+  const [pickedMaterial, setPickedMaterial] = useState<Material | null>(() =>
+    storedMaterialId
+      ? (initialMaterialForId?.(storedMaterialId) ?? null)
+      : null,
   )
   // Shop fabric needs stock at the default location. Customer fabric can use
   // the active production default directly. Never overwrite a chosen location.

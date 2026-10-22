@@ -3,6 +3,7 @@
 import type { Column } from '@tanstack/react-table'
 import { Check, PlusCircle, XCircle } from 'lucide-react'
 import * as React from 'react'
+import { useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -37,7 +38,7 @@ export function DataTableFacetedFilter<TData, TValue>({
   options,
   multiple,
 }: DataTableFacetedFilterProps<TData, TValue>) {
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = useState(false)
 
   const columnFilterValue = column?.getFilterValue()
   const selectedValues = new Set(

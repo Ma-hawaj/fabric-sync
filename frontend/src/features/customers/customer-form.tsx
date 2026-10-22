@@ -106,7 +106,12 @@ function CustomerForm({ existing }: { existing?: Customer }) {
       >
         <div className="max-w-3xl space-y-4 rounded-xl border border-border/60 bg-card p-5">
           <TextField form={form} name="name" label="Full Name" />
-          <PhoneField form={form} name="mobileNo" label="Phone" />
+          <PhoneField
+            form={form}
+            name="mobileNo"
+            label="Phone"
+            defaultCountry="BH"
+          />
           <form.Field name="whatsappNotificationsEnabled">
             {(field) => (
               <label className="flex items-start gap-2 text-sm">

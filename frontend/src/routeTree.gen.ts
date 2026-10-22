@@ -12,6 +12,15 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
+import { Route as AuthenticatedProductsRouteRouteImport } from './routes/_authenticated/products/route'
+import { Route as AuthenticatedOrdersRouteRouteImport } from './routes/_authenticated/orders/route'
+import { Route as AuthenticatedOrderStagesRouteRouteImport } from './routes/_authenticated/order-stages/route'
+import { Route as AuthenticatedLocationsRouteRouteImport } from './routes/_authenticated/locations/route'
+import { Route as AuthenticatedInvoicesRouteRouteImport } from './routes/_authenticated/invoices/route'
+import { Route as AuthenticatedInventoryRouteRouteImport } from './routes/_authenticated/inventory/route'
+import { Route as AuthenticatedGiftCardsRouteRouteImport } from './routes/_authenticated/gift-cards/route'
+import { Route as AuthenticatedDesignOptionsRouteRouteImport } from './routes/_authenticated/design-options/route'
+import { Route as AuthenticatedCustomersRouteRouteImport } from './routes/_authenticated/customers/route'
 import { Route as AuthenticatedProductsIndexRouteImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedOrdersIndexRouteImport } from './routes/_authenticated/orders/index'
 import { Route as AuthenticatedOrderStagesIndexRouteImport } from './routes/_authenticated/order-stages/index'
@@ -53,119 +62,173 @@ const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedProductsRouteRoute =
+  AuthenticatedProductsRouteRouteImport.update({
+    id: '/products',
+    path: '/products',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedOrdersRouteRoute =
+  AuthenticatedOrdersRouteRouteImport.update({
+    id: '/orders',
+    path: '/orders',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedOrderStagesRouteRoute =
+  AuthenticatedOrderStagesRouteRouteImport.update({
+    id: '/order-stages',
+    path: '/order-stages',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedLocationsRouteRoute =
+  AuthenticatedLocationsRouteRouteImport.update({
+    id: '/locations',
+    path: '/locations',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedInvoicesRouteRoute =
+  AuthenticatedInvoicesRouteRouteImport.update({
+    id: '/invoices',
+    path: '/invoices',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedInventoryRouteRoute =
+  AuthenticatedInventoryRouteRouteImport.update({
+    id: '/inventory',
+    path: '/inventory',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedGiftCardsRouteRoute =
+  AuthenticatedGiftCardsRouteRouteImport.update({
+    id: '/gift-cards',
+    path: '/gift-cards',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedDesignOptionsRouteRoute =
+  AuthenticatedDesignOptionsRouteRouteImport.update({
+    id: '/design-options',
+    path: '/design-options',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedCustomersRouteRoute =
+  AuthenticatedCustomersRouteRouteImport.update({
+    id: '/customers',
+    path: '/customers',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedProductsIndexRoute =
   AuthenticatedProductsIndexRouteImport.update({
-    id: '/products/',
-    path: '/products/',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedProductsRouteRoute,
   } as any)
 const AuthenticatedOrdersIndexRoute =
   AuthenticatedOrdersIndexRouteImport.update({
-    id: '/orders/',
-    path: '/orders/',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedOrdersRouteRoute,
   } as any)
 const AuthenticatedOrderStagesIndexRoute =
   AuthenticatedOrderStagesIndexRouteImport.update({
-    id: '/order-stages/',
-    path: '/order-stages/',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedOrderStagesRouteRoute,
   } as any)
 const AuthenticatedLocationsIndexRoute =
   AuthenticatedLocationsIndexRouteImport.update({
-    id: '/locations/',
-    path: '/locations/',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedLocationsRouteRoute,
   } as any)
 const AuthenticatedInvoicesIndexRoute =
   AuthenticatedInvoicesIndexRouteImport.update({
-    id: '/invoices/',
-    path: '/invoices/',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedInvoicesRouteRoute,
   } as any)
 const AuthenticatedInventoryIndexRoute =
   AuthenticatedInventoryIndexRouteImport.update({
-    id: '/inventory/',
-    path: '/inventory/',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedInventoryRouteRoute,
   } as any)
 const AuthenticatedGiftCardsIndexRoute =
   AuthenticatedGiftCardsIndexRouteImport.update({
-    id: '/gift-cards/',
-    path: '/gift-cards/',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedGiftCardsRouteRoute,
   } as any)
 const AuthenticatedDesignOptionsIndexRoute =
   AuthenticatedDesignOptionsIndexRouteImport.update({
-    id: '/design-options/',
-    path: '/design-options/',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedDesignOptionsRouteRoute,
   } as any)
 const AuthenticatedCustomersIndexRoute =
   AuthenticatedCustomersIndexRouteImport.update({
-    id: '/customers/',
-    path: '/customers/',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedCustomersRouteRoute,
   } as any)
 const AuthenticatedProductsNewRoute =
   AuthenticatedProductsNewRouteImport.update({
-    id: '/products/new',
-    path: '/products/new',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedProductsRouteRoute,
   } as any)
 const AuthenticatedOrdersOrderIdRoute =
   AuthenticatedOrdersOrderIdRouteImport.update({
-    id: '/orders/$orderId',
-    path: '/orders/$orderId',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/$orderId',
+    path: '/$orderId',
+    getParentRoute: () => AuthenticatedOrdersRouteRoute,
   } as any)
 const AuthenticatedOrderStagesNewRoute =
   AuthenticatedOrderStagesNewRouteImport.update({
-    id: '/order-stages/new',
-    path: '/order-stages/new',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedOrderStagesRouteRoute,
   } as any)
 const AuthenticatedLocationsNewRoute =
   AuthenticatedLocationsNewRouteImport.update({
-    id: '/locations/new',
-    path: '/locations/new',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedLocationsRouteRoute,
   } as any)
 const AuthenticatedInvoicesNewRoute =
   AuthenticatedInvoicesNewRouteImport.update({
-    id: '/invoices/new',
-    path: '/invoices/new',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedInvoicesRouteRoute,
   } as any)
 const AuthenticatedInventoryNewRoute =
   AuthenticatedInventoryNewRouteImport.update({
-    id: '/inventory/new',
-    path: '/inventory/new',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedInventoryRouteRoute,
   } as any)
 const AuthenticatedGiftCardsNewRoute =
   AuthenticatedGiftCardsNewRouteImport.update({
-    id: '/gift-cards/new',
-    path: '/gift-cards/new',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedGiftCardsRouteRoute,
   } as any)
 const AuthenticatedDesignOptionsNewRoute =
   AuthenticatedDesignOptionsNewRouteImport.update({
-    id: '/design-options/new',
-    path: '/design-options/new',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedDesignOptionsRouteRoute,
   } as any)
 const AuthenticatedCustomersNewRoute =
   AuthenticatedCustomersNewRouteImport.update({
-    id: '/customers/new',
-    path: '/customers/new',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedCustomersRouteRoute,
   } as any)
 const AuthenticatedInvoicesInvoiceIdRouteRoute =
   AuthenticatedInvoicesInvoiceIdRouteRouteImport.update({
-    id: '/invoices/$invoiceId',
-    path: '/invoices/$invoiceId',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/$invoiceId',
+    path: '/$invoiceId',
+    getParentRoute: () => AuthenticatedInvoicesRouteRoute,
   } as any)
 const AuthenticatedInvoicesInvoiceIdIndexRoute =
   AuthenticatedInvoicesInvoiceIdIndexRouteImport.update({
@@ -175,21 +238,21 @@ const AuthenticatedInvoicesInvoiceIdIndexRoute =
   } as any)
 const AuthenticatedProductsProductIdEditRoute =
   AuthenticatedProductsProductIdEditRouteImport.update({
-    id: '/products/$productId/edit',
-    path: '/products/$productId/edit',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/$productId/edit',
+    path: '/$productId/edit',
+    getParentRoute: () => AuthenticatedProductsRouteRoute,
   } as any)
 const AuthenticatedOrderStagesStageIdEditRoute =
   AuthenticatedOrderStagesStageIdEditRouteImport.update({
-    id: '/order-stages/$stageId/edit',
-    path: '/order-stages/$stageId/edit',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/$stageId/edit',
+    path: '/$stageId/edit',
+    getParentRoute: () => AuthenticatedOrderStagesRouteRoute,
   } as any)
 const AuthenticatedLocationsLocationIdEditRoute =
   AuthenticatedLocationsLocationIdEditRouteImport.update({
-    id: '/locations/$locationId/edit',
-    path: '/locations/$locationId/edit',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/$locationId/edit',
+    path: '/$locationId/edit',
+    getParentRoute: () => AuthenticatedLocationsRouteRoute,
   } as any)
 const AuthenticatedInvoicesInvoiceIdEditRoute =
   AuthenticatedInvoicesInvoiceIdEditRouteImport.update({
@@ -199,19 +262,28 @@ const AuthenticatedInvoicesInvoiceIdEditRoute =
   } as any)
 const AuthenticatedDesignOptionsDesignOptionIdEditRoute =
   AuthenticatedDesignOptionsDesignOptionIdEditRouteImport.update({
-    id: '/design-options/$designOptionId/edit',
-    path: '/design-options/$designOptionId/edit',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/$designOptionId/edit',
+    path: '/$designOptionId/edit',
+    getParentRoute: () => AuthenticatedDesignOptionsRouteRoute,
   } as any)
 const AuthenticatedCustomersCustomerIdEditRoute =
   AuthenticatedCustomersCustomerIdEditRouteImport.update({
-    id: '/customers/$customerId/edit',
-    path: '/customers/$customerId/edit',
-    getParentRoute: () => AuthenticatedRoute,
+    id: '/$customerId/edit',
+    path: '/$customerId/edit',
+    getParentRoute: () => AuthenticatedCustomersRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/customers': typeof AuthenticatedCustomersRouteRouteWithChildren
+  '/design-options': typeof AuthenticatedDesignOptionsRouteRouteWithChildren
+  '/gift-cards': typeof AuthenticatedGiftCardsRouteRouteWithChildren
+  '/inventory': typeof AuthenticatedInventoryRouteRouteWithChildren
+  '/invoices': typeof AuthenticatedInvoicesRouteRouteWithChildren
+  '/locations': typeof AuthenticatedLocationsRouteRouteWithChildren
+  '/order-stages': typeof AuthenticatedOrderStagesRouteRouteWithChildren
+  '/orders': typeof AuthenticatedOrdersRouteRouteWithChildren
+  '/products': typeof AuthenticatedProductsRouteRouteWithChildren
   '/users': typeof AuthenticatedUsersRoute
   '/invoices/$invoiceId': typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
   '/customers/new': typeof AuthenticatedCustomersNewRoute
@@ -273,6 +345,15 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/_authenticated/customers': typeof AuthenticatedCustomersRouteRouteWithChildren
+  '/_authenticated/design-options': typeof AuthenticatedDesignOptionsRouteRouteWithChildren
+  '/_authenticated/gift-cards': typeof AuthenticatedGiftCardsRouteRouteWithChildren
+  '/_authenticated/inventory': typeof AuthenticatedInventoryRouteRouteWithChildren
+  '/_authenticated/invoices': typeof AuthenticatedInvoicesRouteRouteWithChildren
+  '/_authenticated/locations': typeof AuthenticatedLocationsRouteRouteWithChildren
+  '/_authenticated/order-stages': typeof AuthenticatedOrderStagesRouteRouteWithChildren
+  '/_authenticated/orders': typeof AuthenticatedOrdersRouteRouteWithChildren
+  '/_authenticated/products': typeof AuthenticatedProductsRouteRouteWithChildren
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/invoices/$invoiceId': typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
   '/_authenticated/customers/new': typeof AuthenticatedCustomersNewRoute
@@ -305,6 +386,15 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/customers'
+    | '/design-options'
+    | '/gift-cards'
+    | '/inventory'
+    | '/invoices'
+    | '/locations'
+    | '/order-stages'
+    | '/orders'
+    | '/products'
     | '/users'
     | '/invoices/$invoiceId'
     | '/customers/new'
@@ -365,6 +455,15 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/_authenticated/customers'
+    | '/_authenticated/design-options'
+    | '/_authenticated/gift-cards'
+    | '/_authenticated/inventory'
+    | '/_authenticated/invoices'
+    | '/_authenticated/locations'
+    | '/_authenticated/order-stages'
+    | '/_authenticated/orders'
+    | '/_authenticated/products'
     | '/_authenticated/users'
     | '/_authenticated/invoices/$invoiceId'
     | '/_authenticated/customers/new'
@@ -422,138 +521,201 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedUsersRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/products': {
+      id: '/_authenticated/products'
+      path: '/products'
+      fullPath: '/products'
+      preLoaderRoute: typeof AuthenticatedProductsRouteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/orders': {
+      id: '/_authenticated/orders'
+      path: '/orders'
+      fullPath: '/orders'
+      preLoaderRoute: typeof AuthenticatedOrdersRouteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/order-stages': {
+      id: '/_authenticated/order-stages'
+      path: '/order-stages'
+      fullPath: '/order-stages'
+      preLoaderRoute: typeof AuthenticatedOrderStagesRouteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/locations': {
+      id: '/_authenticated/locations'
+      path: '/locations'
+      fullPath: '/locations'
+      preLoaderRoute: typeof AuthenticatedLocationsRouteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/invoices': {
+      id: '/_authenticated/invoices'
+      path: '/invoices'
+      fullPath: '/invoices'
+      preLoaderRoute: typeof AuthenticatedInvoicesRouteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/inventory': {
+      id: '/_authenticated/inventory'
+      path: '/inventory'
+      fullPath: '/inventory'
+      preLoaderRoute: typeof AuthenticatedInventoryRouteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/gift-cards': {
+      id: '/_authenticated/gift-cards'
+      path: '/gift-cards'
+      fullPath: '/gift-cards'
+      preLoaderRoute: typeof AuthenticatedGiftCardsRouteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/design-options': {
+      id: '/_authenticated/design-options'
+      path: '/design-options'
+      fullPath: '/design-options'
+      preLoaderRoute: typeof AuthenticatedDesignOptionsRouteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/customers': {
+      id: '/_authenticated/customers'
+      path: '/customers'
+      fullPath: '/customers'
+      preLoaderRoute: typeof AuthenticatedCustomersRouteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/products/': {
       id: '/_authenticated/products/'
-      path: '/products'
+      path: '/'
       fullPath: '/products/'
       preLoaderRoute: typeof AuthenticatedProductsIndexRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedProductsRouteRoute
     }
     '/_authenticated/orders/': {
       id: '/_authenticated/orders/'
-      path: '/orders'
+      path: '/'
       fullPath: '/orders/'
       preLoaderRoute: typeof AuthenticatedOrdersIndexRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedOrdersRouteRoute
     }
     '/_authenticated/order-stages/': {
       id: '/_authenticated/order-stages/'
-      path: '/order-stages'
+      path: '/'
       fullPath: '/order-stages/'
       preLoaderRoute: typeof AuthenticatedOrderStagesIndexRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedOrderStagesRouteRoute
     }
     '/_authenticated/locations/': {
       id: '/_authenticated/locations/'
-      path: '/locations'
+      path: '/'
       fullPath: '/locations/'
       preLoaderRoute: typeof AuthenticatedLocationsIndexRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedLocationsRouteRoute
     }
     '/_authenticated/invoices/': {
       id: '/_authenticated/invoices/'
-      path: '/invoices'
+      path: '/'
       fullPath: '/invoices/'
       preLoaderRoute: typeof AuthenticatedInvoicesIndexRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedInvoicesRouteRoute
     }
     '/_authenticated/inventory/': {
       id: '/_authenticated/inventory/'
-      path: '/inventory'
+      path: '/'
       fullPath: '/inventory/'
       preLoaderRoute: typeof AuthenticatedInventoryIndexRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedInventoryRouteRoute
     }
     '/_authenticated/gift-cards/': {
       id: '/_authenticated/gift-cards/'
-      path: '/gift-cards'
+      path: '/'
       fullPath: '/gift-cards/'
       preLoaderRoute: typeof AuthenticatedGiftCardsIndexRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedGiftCardsRouteRoute
     }
     '/_authenticated/design-options/': {
       id: '/_authenticated/design-options/'
-      path: '/design-options'
+      path: '/'
       fullPath: '/design-options/'
       preLoaderRoute: typeof AuthenticatedDesignOptionsIndexRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedDesignOptionsRouteRoute
     }
     '/_authenticated/customers/': {
       id: '/_authenticated/customers/'
-      path: '/customers'
+      path: '/'
       fullPath: '/customers/'
       preLoaderRoute: typeof AuthenticatedCustomersIndexRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedCustomersRouteRoute
     }
     '/_authenticated/products/new': {
       id: '/_authenticated/products/new'
-      path: '/products/new'
+      path: '/new'
       fullPath: '/products/new'
       preLoaderRoute: typeof AuthenticatedProductsNewRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedProductsRouteRoute
     }
     '/_authenticated/orders/$orderId': {
       id: '/_authenticated/orders/$orderId'
-      path: '/orders/$orderId'
+      path: '/$orderId'
       fullPath: '/orders/$orderId'
       preLoaderRoute: typeof AuthenticatedOrdersOrderIdRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedOrdersRouteRoute
     }
     '/_authenticated/order-stages/new': {
       id: '/_authenticated/order-stages/new'
-      path: '/order-stages/new'
+      path: '/new'
       fullPath: '/order-stages/new'
       preLoaderRoute: typeof AuthenticatedOrderStagesNewRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedOrderStagesRouteRoute
     }
     '/_authenticated/locations/new': {
       id: '/_authenticated/locations/new'
-      path: '/locations/new'
+      path: '/new'
       fullPath: '/locations/new'
       preLoaderRoute: typeof AuthenticatedLocationsNewRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedLocationsRouteRoute
     }
     '/_authenticated/invoices/new': {
       id: '/_authenticated/invoices/new'
-      path: '/invoices/new'
+      path: '/new'
       fullPath: '/invoices/new'
       preLoaderRoute: typeof AuthenticatedInvoicesNewRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedInvoicesRouteRoute
     }
     '/_authenticated/inventory/new': {
       id: '/_authenticated/inventory/new'
-      path: '/inventory/new'
+      path: '/new'
       fullPath: '/inventory/new'
       preLoaderRoute: typeof AuthenticatedInventoryNewRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedInventoryRouteRoute
     }
     '/_authenticated/gift-cards/new': {
       id: '/_authenticated/gift-cards/new'
-      path: '/gift-cards/new'
+      path: '/new'
       fullPath: '/gift-cards/new'
       preLoaderRoute: typeof AuthenticatedGiftCardsNewRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedGiftCardsRouteRoute
     }
     '/_authenticated/design-options/new': {
       id: '/_authenticated/design-options/new'
-      path: '/design-options/new'
+      path: '/new'
       fullPath: '/design-options/new'
       preLoaderRoute: typeof AuthenticatedDesignOptionsNewRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedDesignOptionsRouteRoute
     }
     '/_authenticated/customers/new': {
       id: '/_authenticated/customers/new'
-      path: '/customers/new'
+      path: '/new'
       fullPath: '/customers/new'
       preLoaderRoute: typeof AuthenticatedCustomersNewRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedCustomersRouteRoute
     }
     '/_authenticated/invoices/$invoiceId': {
       id: '/_authenticated/invoices/$invoiceId'
-      path: '/invoices/$invoiceId'
+      path: '/$invoiceId'
       fullPath: '/invoices/$invoiceId'
       preLoaderRoute: typeof AuthenticatedInvoicesInvoiceIdRouteRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedInvoicesRouteRoute
     }
     '/_authenticated/invoices/$invoiceId/': {
       id: '/_authenticated/invoices/$invoiceId/'
@@ -564,24 +726,24 @@ declare module '@tanstack/react-router' {
     }
     '/_authenticated/products/$productId/edit': {
       id: '/_authenticated/products/$productId/edit'
-      path: '/products/$productId/edit'
+      path: '/$productId/edit'
       fullPath: '/products/$productId/edit'
       preLoaderRoute: typeof AuthenticatedProductsProductIdEditRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedProductsRouteRoute
     }
     '/_authenticated/order-stages/$stageId/edit': {
       id: '/_authenticated/order-stages/$stageId/edit'
-      path: '/order-stages/$stageId/edit'
+      path: '/$stageId/edit'
       fullPath: '/order-stages/$stageId/edit'
       preLoaderRoute: typeof AuthenticatedOrderStagesStageIdEditRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedOrderStagesRouteRoute
     }
     '/_authenticated/locations/$locationId/edit': {
       id: '/_authenticated/locations/$locationId/edit'
-      path: '/locations/$locationId/edit'
+      path: '/$locationId/edit'
       fullPath: '/locations/$locationId/edit'
       preLoaderRoute: typeof AuthenticatedLocationsLocationIdEditRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedLocationsRouteRoute
     }
     '/_authenticated/invoices/$invoiceId/edit': {
       id: '/_authenticated/invoices/$invoiceId/edit'
@@ -592,20 +754,90 @@ declare module '@tanstack/react-router' {
     }
     '/_authenticated/design-options/$designOptionId/edit': {
       id: '/_authenticated/design-options/$designOptionId/edit'
-      path: '/design-options/$designOptionId/edit'
+      path: '/$designOptionId/edit'
       fullPath: '/design-options/$designOptionId/edit'
       preLoaderRoute: typeof AuthenticatedDesignOptionsDesignOptionIdEditRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedDesignOptionsRouteRoute
     }
     '/_authenticated/customers/$customerId/edit': {
       id: '/_authenticated/customers/$customerId/edit'
-      path: '/customers/$customerId/edit'
+      path: '/$customerId/edit'
       fullPath: '/customers/$customerId/edit'
       preLoaderRoute: typeof AuthenticatedCustomersCustomerIdEditRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AuthenticatedCustomersRouteRoute
     }
   }
 }
+
+interface AuthenticatedCustomersRouteRouteChildren {
+  AuthenticatedCustomersNewRoute: typeof AuthenticatedCustomersNewRoute
+  AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
+  AuthenticatedCustomersCustomerIdEditRoute: typeof AuthenticatedCustomersCustomerIdEditRoute
+}
+
+const AuthenticatedCustomersRouteRouteChildren: AuthenticatedCustomersRouteRouteChildren =
+  {
+    AuthenticatedCustomersNewRoute: AuthenticatedCustomersNewRoute,
+    AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
+    AuthenticatedCustomersCustomerIdEditRoute:
+      AuthenticatedCustomersCustomerIdEditRoute,
+  }
+
+const AuthenticatedCustomersRouteRouteWithChildren =
+  AuthenticatedCustomersRouteRoute._addFileChildren(
+    AuthenticatedCustomersRouteRouteChildren,
+  )
+
+interface AuthenticatedDesignOptionsRouteRouteChildren {
+  AuthenticatedDesignOptionsNewRoute: typeof AuthenticatedDesignOptionsNewRoute
+  AuthenticatedDesignOptionsIndexRoute: typeof AuthenticatedDesignOptionsIndexRoute
+  AuthenticatedDesignOptionsDesignOptionIdEditRoute: typeof AuthenticatedDesignOptionsDesignOptionIdEditRoute
+}
+
+const AuthenticatedDesignOptionsRouteRouteChildren: AuthenticatedDesignOptionsRouteRouteChildren =
+  {
+    AuthenticatedDesignOptionsNewRoute: AuthenticatedDesignOptionsNewRoute,
+    AuthenticatedDesignOptionsIndexRoute: AuthenticatedDesignOptionsIndexRoute,
+    AuthenticatedDesignOptionsDesignOptionIdEditRoute:
+      AuthenticatedDesignOptionsDesignOptionIdEditRoute,
+  }
+
+const AuthenticatedDesignOptionsRouteRouteWithChildren =
+  AuthenticatedDesignOptionsRouteRoute._addFileChildren(
+    AuthenticatedDesignOptionsRouteRouteChildren,
+  )
+
+interface AuthenticatedGiftCardsRouteRouteChildren {
+  AuthenticatedGiftCardsNewRoute: typeof AuthenticatedGiftCardsNewRoute
+  AuthenticatedGiftCardsIndexRoute: typeof AuthenticatedGiftCardsIndexRoute
+}
+
+const AuthenticatedGiftCardsRouteRouteChildren: AuthenticatedGiftCardsRouteRouteChildren =
+  {
+    AuthenticatedGiftCardsNewRoute: AuthenticatedGiftCardsNewRoute,
+    AuthenticatedGiftCardsIndexRoute: AuthenticatedGiftCardsIndexRoute,
+  }
+
+const AuthenticatedGiftCardsRouteRouteWithChildren =
+  AuthenticatedGiftCardsRouteRoute._addFileChildren(
+    AuthenticatedGiftCardsRouteRouteChildren,
+  )
+
+interface AuthenticatedInventoryRouteRouteChildren {
+  AuthenticatedInventoryNewRoute: typeof AuthenticatedInventoryNewRoute
+  AuthenticatedInventoryIndexRoute: typeof AuthenticatedInventoryIndexRoute
+}
+
+const AuthenticatedInventoryRouteRouteChildren: AuthenticatedInventoryRouteRouteChildren =
+  {
+    AuthenticatedInventoryNewRoute: AuthenticatedInventoryNewRoute,
+    AuthenticatedInventoryIndexRoute: AuthenticatedInventoryIndexRoute,
+  }
+
+const AuthenticatedInventoryRouteRouteWithChildren =
+  AuthenticatedInventoryRouteRoute._addFileChildren(
+    AuthenticatedInventoryRouteRouteChildren,
+  )
 
 interface AuthenticatedInvoicesInvoiceIdRouteRouteChildren {
   AuthenticatedInvoicesInvoiceIdEditRoute: typeof AuthenticatedInvoicesInvoiceIdEditRoute
@@ -625,66 +857,128 @@ const AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren =
     AuthenticatedInvoicesInvoiceIdRouteRouteChildren,
   )
 
-interface AuthenticatedRouteChildren {
-  AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
+interface AuthenticatedInvoicesRouteRouteChildren {
   AuthenticatedInvoicesInvoiceIdRouteRoute: typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
-  AuthenticatedCustomersNewRoute: typeof AuthenticatedCustomersNewRoute
-  AuthenticatedDesignOptionsNewRoute: typeof AuthenticatedDesignOptionsNewRoute
-  AuthenticatedGiftCardsNewRoute: typeof AuthenticatedGiftCardsNewRoute
-  AuthenticatedInventoryNewRoute: typeof AuthenticatedInventoryNewRoute
   AuthenticatedInvoicesNewRoute: typeof AuthenticatedInvoicesNewRoute
-  AuthenticatedLocationsNewRoute: typeof AuthenticatedLocationsNewRoute
-  AuthenticatedOrderStagesNewRoute: typeof AuthenticatedOrderStagesNewRoute
-  AuthenticatedOrdersOrderIdRoute: typeof AuthenticatedOrdersOrderIdRoute
-  AuthenticatedProductsNewRoute: typeof AuthenticatedProductsNewRoute
-  AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
-  AuthenticatedDesignOptionsIndexRoute: typeof AuthenticatedDesignOptionsIndexRoute
-  AuthenticatedGiftCardsIndexRoute: typeof AuthenticatedGiftCardsIndexRoute
-  AuthenticatedInventoryIndexRoute: typeof AuthenticatedInventoryIndexRoute
   AuthenticatedInvoicesIndexRoute: typeof AuthenticatedInvoicesIndexRoute
+}
+
+const AuthenticatedInvoicesRouteRouteChildren: AuthenticatedInvoicesRouteRouteChildren =
+  {
+    AuthenticatedInvoicesInvoiceIdRouteRoute:
+      AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren,
+    AuthenticatedInvoicesNewRoute: AuthenticatedInvoicesNewRoute,
+    AuthenticatedInvoicesIndexRoute: AuthenticatedInvoicesIndexRoute,
+  }
+
+const AuthenticatedInvoicesRouteRouteWithChildren =
+  AuthenticatedInvoicesRouteRoute._addFileChildren(
+    AuthenticatedInvoicesRouteRouteChildren,
+  )
+
+interface AuthenticatedLocationsRouteRouteChildren {
+  AuthenticatedLocationsNewRoute: typeof AuthenticatedLocationsNewRoute
   AuthenticatedLocationsIndexRoute: typeof AuthenticatedLocationsIndexRoute
-  AuthenticatedOrderStagesIndexRoute: typeof AuthenticatedOrderStagesIndexRoute
-  AuthenticatedOrdersIndexRoute: typeof AuthenticatedOrdersIndexRoute
-  AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
-  AuthenticatedCustomersCustomerIdEditRoute: typeof AuthenticatedCustomersCustomerIdEditRoute
-  AuthenticatedDesignOptionsDesignOptionIdEditRoute: typeof AuthenticatedDesignOptionsDesignOptionIdEditRoute
   AuthenticatedLocationsLocationIdEditRoute: typeof AuthenticatedLocationsLocationIdEditRoute
+}
+
+const AuthenticatedLocationsRouteRouteChildren: AuthenticatedLocationsRouteRouteChildren =
+  {
+    AuthenticatedLocationsNewRoute: AuthenticatedLocationsNewRoute,
+    AuthenticatedLocationsIndexRoute: AuthenticatedLocationsIndexRoute,
+    AuthenticatedLocationsLocationIdEditRoute:
+      AuthenticatedLocationsLocationIdEditRoute,
+  }
+
+const AuthenticatedLocationsRouteRouteWithChildren =
+  AuthenticatedLocationsRouteRoute._addFileChildren(
+    AuthenticatedLocationsRouteRouteChildren,
+  )
+
+interface AuthenticatedOrderStagesRouteRouteChildren {
+  AuthenticatedOrderStagesNewRoute: typeof AuthenticatedOrderStagesNewRoute
+  AuthenticatedOrderStagesIndexRoute: typeof AuthenticatedOrderStagesIndexRoute
   AuthenticatedOrderStagesStageIdEditRoute: typeof AuthenticatedOrderStagesStageIdEditRoute
+}
+
+const AuthenticatedOrderStagesRouteRouteChildren: AuthenticatedOrderStagesRouteRouteChildren =
+  {
+    AuthenticatedOrderStagesNewRoute: AuthenticatedOrderStagesNewRoute,
+    AuthenticatedOrderStagesIndexRoute: AuthenticatedOrderStagesIndexRoute,
+    AuthenticatedOrderStagesStageIdEditRoute:
+      AuthenticatedOrderStagesStageIdEditRoute,
+  }
+
+const AuthenticatedOrderStagesRouteRouteWithChildren =
+  AuthenticatedOrderStagesRouteRoute._addFileChildren(
+    AuthenticatedOrderStagesRouteRouteChildren,
+  )
+
+interface AuthenticatedOrdersRouteRouteChildren {
+  AuthenticatedOrdersOrderIdRoute: typeof AuthenticatedOrdersOrderIdRoute
+  AuthenticatedOrdersIndexRoute: typeof AuthenticatedOrdersIndexRoute
+}
+
+const AuthenticatedOrdersRouteRouteChildren: AuthenticatedOrdersRouteRouteChildren =
+  {
+    AuthenticatedOrdersOrderIdRoute: AuthenticatedOrdersOrderIdRoute,
+    AuthenticatedOrdersIndexRoute: AuthenticatedOrdersIndexRoute,
+  }
+
+const AuthenticatedOrdersRouteRouteWithChildren =
+  AuthenticatedOrdersRouteRoute._addFileChildren(
+    AuthenticatedOrdersRouteRouteChildren,
+  )
+
+interface AuthenticatedProductsRouteRouteChildren {
+  AuthenticatedProductsNewRoute: typeof AuthenticatedProductsNewRoute
+  AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedProductsProductIdEditRoute: typeof AuthenticatedProductsProductIdEditRoute
 }
 
+const AuthenticatedProductsRouteRouteChildren: AuthenticatedProductsRouteRouteChildren =
+  {
+    AuthenticatedProductsNewRoute: AuthenticatedProductsNewRoute,
+    AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
+    AuthenticatedProductsProductIdEditRoute:
+      AuthenticatedProductsProductIdEditRoute,
+  }
+
+const AuthenticatedProductsRouteRouteWithChildren =
+  AuthenticatedProductsRouteRoute._addFileChildren(
+    AuthenticatedProductsRouteRouteChildren,
+  )
+
+interface AuthenticatedRouteChildren {
+  AuthenticatedCustomersRouteRoute: typeof AuthenticatedCustomersRouteRouteWithChildren
+  AuthenticatedDesignOptionsRouteRoute: typeof AuthenticatedDesignOptionsRouteRouteWithChildren
+  AuthenticatedGiftCardsRouteRoute: typeof AuthenticatedGiftCardsRouteRouteWithChildren
+  AuthenticatedInventoryRouteRoute: typeof AuthenticatedInventoryRouteRouteWithChildren
+  AuthenticatedInvoicesRouteRoute: typeof AuthenticatedInvoicesRouteRouteWithChildren
+  AuthenticatedLocationsRouteRoute: typeof AuthenticatedLocationsRouteRouteWithChildren
+  AuthenticatedOrderStagesRouteRoute: typeof AuthenticatedOrderStagesRouteRouteWithChildren
+  AuthenticatedOrdersRouteRoute: typeof AuthenticatedOrdersRouteRouteWithChildren
+  AuthenticatedProductsRouteRoute: typeof AuthenticatedProductsRouteRouteWithChildren
+  AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
+}
+
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedCustomersRouteRoute:
+    AuthenticatedCustomersRouteRouteWithChildren,
+  AuthenticatedDesignOptionsRouteRoute:
+    AuthenticatedDesignOptionsRouteRouteWithChildren,
+  AuthenticatedGiftCardsRouteRoute:
+    AuthenticatedGiftCardsRouteRouteWithChildren,
+  AuthenticatedInventoryRouteRoute:
+    AuthenticatedInventoryRouteRouteWithChildren,
+  AuthenticatedInvoicesRouteRoute: AuthenticatedInvoicesRouteRouteWithChildren,
+  AuthenticatedLocationsRouteRoute:
+    AuthenticatedLocationsRouteRouteWithChildren,
+  AuthenticatedOrderStagesRouteRoute:
+    AuthenticatedOrderStagesRouteRouteWithChildren,
+  AuthenticatedOrdersRouteRoute: AuthenticatedOrdersRouteRouteWithChildren,
+  AuthenticatedProductsRouteRoute: AuthenticatedProductsRouteRouteWithChildren,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
-  AuthenticatedInvoicesInvoiceIdRouteRoute:
-    AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren,
-  AuthenticatedCustomersNewRoute: AuthenticatedCustomersNewRoute,
-  AuthenticatedDesignOptionsNewRoute: AuthenticatedDesignOptionsNewRoute,
-  AuthenticatedGiftCardsNewRoute: AuthenticatedGiftCardsNewRoute,
-  AuthenticatedInventoryNewRoute: AuthenticatedInventoryNewRoute,
-  AuthenticatedInvoicesNewRoute: AuthenticatedInvoicesNewRoute,
-  AuthenticatedLocationsNewRoute: AuthenticatedLocationsNewRoute,
-  AuthenticatedOrderStagesNewRoute: AuthenticatedOrderStagesNewRoute,
-  AuthenticatedOrdersOrderIdRoute: AuthenticatedOrdersOrderIdRoute,
-  AuthenticatedProductsNewRoute: AuthenticatedProductsNewRoute,
-  AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
-  AuthenticatedDesignOptionsIndexRoute: AuthenticatedDesignOptionsIndexRoute,
-  AuthenticatedGiftCardsIndexRoute: AuthenticatedGiftCardsIndexRoute,
-  AuthenticatedInventoryIndexRoute: AuthenticatedInventoryIndexRoute,
-  AuthenticatedInvoicesIndexRoute: AuthenticatedInvoicesIndexRoute,
-  AuthenticatedLocationsIndexRoute: AuthenticatedLocationsIndexRoute,
-  AuthenticatedOrderStagesIndexRoute: AuthenticatedOrderStagesIndexRoute,
-  AuthenticatedOrdersIndexRoute: AuthenticatedOrdersIndexRoute,
-  AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
-  AuthenticatedCustomersCustomerIdEditRoute:
-    AuthenticatedCustomersCustomerIdEditRoute,
-  AuthenticatedDesignOptionsDesignOptionIdEditRoute:
-    AuthenticatedDesignOptionsDesignOptionIdEditRoute,
-  AuthenticatedLocationsLocationIdEditRoute:
-    AuthenticatedLocationsLocationIdEditRoute,
-  AuthenticatedOrderStagesStageIdEditRoute:
-    AuthenticatedOrderStagesStageIdEditRoute,
-  AuthenticatedProductsProductIdEditRoute:
-    AuthenticatedProductsProductIdEditRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

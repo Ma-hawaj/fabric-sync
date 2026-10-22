@@ -4,7 +4,7 @@ import { ProductFormPage } from '@/features/products/product-form'
 export const Route = createFileRoute(
   '/_authenticated/products/$productId/edit',
 )({
-  staticData: { title: 'Edit Product' },
+  staticData: { title: 'Edit' },
   component: EditProductRoute,
 })
 

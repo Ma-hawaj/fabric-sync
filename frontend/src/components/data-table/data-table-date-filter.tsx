@@ -14,19 +14,12 @@ import {
 } from '@/components/ui/popover'
 import { Separator } from '@/components/ui/separator'
 import { formatDate } from '@/lib/format'
+import { parseFilterDate, serializeFilterDate } from '@/lib/filter-date'
 
 type DateSelection = Date[] | DateRange
 
 function getIsDateRange(value: DateSelection): value is DateRange {
   return typeof value === 'object' && !Array.isArray(value)
-}
-
-function parseAsDate(timestamp: number | string | undefined): Date | undefined {
-  if (!timestamp) return undefined
-  const numericTimestamp =
-    typeof timestamp === 'string' ? Number(timestamp) : timestamp
-  const date = new Date(numericTimestamp)
-  return !Number.isNaN(date.getTime()) ? date : undefined
 }
 
 function parseColumnFilterValue(value: unknown) {
@@ -71,13 +64,13 @@ export function DataTableDateFilter<TData>({
     if (multiple) {
       const timestamps = parseColumnFilterValue(columnFilterValue)
       return {
-        from: parseAsDate(timestamps[0]),
-        to: parseAsDate(timestamps[1]),
+        from: parseFilterDate(timestamps[0]),
+        to: parseFilterDate(timestamps[1]),
       }
     }
 
     const timestamps = parseColumnFilterValue(columnFilterValue)
-    const date = parseAsDate(timestamps[0])
+    const date = parseFilterDate(timestamps[0])
     return date ? [date] : []
   }, [columnFilterValue, multiple])
 
@@ -89,11 +82,11 @@ export function DataTableDateFilter<TData>({
       }
 
       if (multiple && !('getTime' in date)) {
-        const from = date.from?.getTime()
-        const to = date.to?.getTime()
+        const from = serializeFilterDate(date.from)
+        const to = serializeFilterDate(date.to)
         column.setFilterValue(from || to ? [from, to] : undefined)
       } else if (!multiple && 'getTime' in date) {
-        column.setFilterValue(date.getTime())
+        column.setFilterValue(serializeFilterDate(date))
       }
     },
     [column, multiple],

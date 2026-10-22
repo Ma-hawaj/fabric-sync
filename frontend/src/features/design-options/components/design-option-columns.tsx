@@ -26,6 +26,7 @@ export const getDesignOptionColumns = (
 ): ColumnDef<DesignOption, any>[] => [
   {
     id: 'illustration',
+    meta: { label: 'Illustration' },
     header: 'Image',
     enableSorting: false,
     enableColumnFilter: false,
@@ -134,6 +135,7 @@ export const getDesignOptionColumns = (
   {
     id: 'status',
     accessorFn: (option) => [option.isActive ? 'Active' : 'Retired'],
+    size: 96,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Status" />
     ),
@@ -161,6 +163,8 @@ export const getDesignOptionColumns = (
   },
   {
     id: 'actions',
+    size: 72,
+    meta: { label: 'Actions' },
     header: 'Actions',
     enablePinning: true,
     cell: ({ row }) => {

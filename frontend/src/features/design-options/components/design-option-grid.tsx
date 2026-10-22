@@ -18,7 +18,7 @@ interface DesignOptionGridProps {
 
 // An image-per-choice radio group, in the spirit of SegmentedOptions but for
 // choices that mean something visually (thob type, collar, sleeve, pocket,
-// patti). Selected state keyed by option.id — the catalog id an order stores.
+// patti). Selected state is keyed by the catalog value stored on an order.
 export const DesignOptionGrid = memo(function DesignOptionGrid({
   options,
   value,

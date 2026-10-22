@@ -1,4 +1,4 @@
-import * as React from 'react'
+import { useState } from 'react'
 import { PlusIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FieldError } from '@/components/ui/field'
@@ -61,7 +61,7 @@ export function CustomerBlock({
       customers?: { existingCustomerId?: string }[]
     }
   ).customers?.[customerIndex]?.existingCustomerId
-  const [picked, setPicked] = React.useState<Customer | null>(() =>
+  const [picked, setPicked] = useState<Customer | null>(() =>
     storedId ? (initialCustomerForId?.(storedId) ?? null) : null,
   )
 
@@ -173,6 +173,7 @@ export function CustomerBlock({
                       form={form}
                       name={`${base}.mobileNo`}
                       label="Phone"
+                      defaultCountry="BH"
                     />
 
                     <TextField
