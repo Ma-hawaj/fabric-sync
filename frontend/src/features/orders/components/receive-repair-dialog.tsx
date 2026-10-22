@@ -101,7 +101,7 @@ export function ReceiveRepairDialog({
         {repair && (
           <>
             <DialogHeader>
-              <DialogTitle>Collect Repair</DialogTitle>
+              <DialogTitle>Mark as Collected</DialogTitle>
               <DialogDescription>
                 {repair.customerName} — ORD-{repair.orderNumber} ·{' '}
                 {repair.reason}
@@ -167,7 +167,7 @@ export function ReceiveRepairDialog({
                 Cancel
               </Button>
               <Button onClick={handleConfirm} disabled={!canConfirm}>
-                Confirm Collection
+                Mark as Collected
               </Button>
             </DialogFooter>
           </>

@@ -193,7 +193,7 @@ export function getRepairColumns(
                 ),
               },
               {
-                label: 'Collect',
+                label: 'Mark as Collected',
                 icon: CheckIcon,
                 disabled: !canReceive,
                 onClick: () => onReceive(repair),

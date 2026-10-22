@@ -818,7 +818,7 @@ pub async fn update_repair(
 
     if input.status == Some(RepairStatus::Received) {
         return Err(AppError::BadRequest(
-            "receive a completed repair through its receive endpoint".to_string(),
+            "mark a ready repair as collected through its dedicated endpoint".to_string(),
         ));
     }
 
@@ -826,8 +826,18 @@ pub async fn update_repair(
         .status
         .and_then(|status| repair_completion_time(status, Utc::now()));
 
+    let mut tx = state.db().begin().await?;
+    let locked = repository::lock_repair(&mut tx, repair_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("repair {repair_id} not found")))?;
+    if input.status.is_some() && locked.status == RepairStatus::Received.as_str() {
+        return Err(AppError::BadRequest(
+            "a collected repair cannot change status".to_string(),
+        ));
+    }
+
     repository::update_repair(
-        state,
+        &mut tx,
         repair_id,
         reason.as_deref(),
         input.charge,
@@ -837,6 +847,8 @@ pub async fn update_repair(
     )
     .await?
     .ok_or_else(|| AppError::NotFound(format!("repair {repair_id} not found")))?;
+
+    tx.commit().await?;
 
     tracing::info!(
         order_id = %order_id,
@@ -875,12 +887,12 @@ pub async fn receive_repair(
 
     if locked.status == RepairStatus::Received.as_str() {
         return Err(AppError::BadRequest(
-            "this repair is already received".to_string(),
+            "this repair is already collected".to_string(),
         ));
     }
     if locked.status != RepairStatus::Completed.as_str() {
         return Err(AppError::BadRequest(
-            "only a completed repair can be received".to_string(),
+            "only a ready repair can be marked as collected".to_string(),
         ));
     }
 
@@ -1608,5 +1620,54 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(error, AppError::NotFound(_)));
+    }
+}
+
+#[cfg(test)]
+mod repair_collection_tests {
+    use super::*;
+    use crate::test_support;
+    use sqlx::PgPool;
+
+    #[sqlx::test]
+    async fn collected_repairs_keep_their_status_and_original_payment(db: PgPool) {
+        let (_, orders, _, _) = test_support::invoice(&db, 1, false).await;
+        let order_id = orders[0];
+        let repair_id: Uuid = sqlx::query_scalar("INSERT INTO order_repairs(order_id, reason, status, completed_at, received_at, received_amount, received_payment_type) VALUES ($1, 'Fit adjustment', 'received', now(), now(), 3.5, 'cash') RETURNING id")
+            .bind(order_id).fetch_one(&db).await.unwrap();
+        let original: (DateTime<Utc>, DateTime<Utc>, f64, String) = sqlx::query_as("SELECT completed_at, received_at, received_amount::float8, received_payment_type FROM order_repairs WHERE id=$1")
+            .bind(repair_id).fetch_one(&db).await.unwrap();
+        let state = test_support::state(db.clone(), None, None).await;
+        for status in [
+            RepairStatus::Open,
+            RepairStatus::InProgress,
+            RepairStatus::Completed,
+            RepairStatus::Cancelled,
+        ] {
+            let input = UpdateRepairInput {
+                status: Some(status),
+                ..Default::default()
+            };
+            assert!(matches!(
+                update_repair(&state, order_id, repair_id, input).await,
+                Err(AppError::BadRequest(_))
+            ));
+        }
+        let metadata = UpdateRepairInput {
+            notes: Some("Customer collected the garment".into()),
+            ..Default::default()
+        };
+        update_repair(&state, order_id, repair_id, metadata)
+            .await
+            .unwrap();
+        assert!(matches!(
+            receive_repair(&state, order_id, repair_id, 5.0, Some(PaymentType::Card)).await,
+            Err(AppError::BadRequest(_))
+        ));
+        let saved: (String, DateTime<Utc>, DateTime<Utc>, f64, String, String) = sqlx::query_as("SELECT status, completed_at, received_at, received_amount::float8, received_payment_type, notes FROM order_repairs WHERE id=$1")
+            .bind(repair_id).fetch_one(&db).await.unwrap();
+        assert_eq!(saved.0, "received");
+        assert_eq!((saved.1, saved.2, saved.3, saved.4), original);
+        assert_eq!(saved.5, "Customer collected the garment");
     }
 }

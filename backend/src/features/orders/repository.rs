@@ -473,6 +473,19 @@ pub async fn lock_repair(
     tx: &mut sqlx::PgTransaction<'_>,
     repair_id: Uuid,
 ) -> Result<Option<LockedRepair>, sqlx::Error> {
+    // Match the invoice-before-repair lock order used by other order writes.
+    let invoice_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT o.invoice_id FROM orders o JOIN order_repairs r ON r.order_id=o.id WHERE r.id=$1",
+    )
+    .bind(repair_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if let Some(invoice_id) = invoice_id {
+        sqlx::query("SELECT id FROM invoices WHERE id=$1 FOR UPDATE")
+            .bind(invoice_id)
+            .execute(&mut **tx)
+            .await?;
+    }
     let row = sqlx::query!(
         r#"
         SELECT status
@@ -784,7 +797,7 @@ pub async fn create_repair(
 /// never describe a repair that is open again. It is only touched when the
 /// request actually changes the status.
 pub async fn update_repair(
-    state: &AppState,
+    tx: &mut sqlx::PgTransaction<'_>,
     repair_id: Uuid,
     reason: Option<&str>,
     charge: Option<f64>,
@@ -792,20 +805,7 @@ pub async fn update_repair(
     notes: Option<&str>,
     completed_at: Option<DateTime<Utc>>,
 ) -> Result<Option<Uuid>, sqlx::Error> {
-    let mut tx = state.db().begin().await?;
-    let invoice_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT o.invoice_id FROM orders o JOIN order_repairs r ON r.order_id=o.id WHERE r.id=$1",
-    )
-    .bind(repair_id)
-    .fetch_optional(&mut *tx)
-    .await?;
-    if let Some(invoice_id) = invoice_id {
-        sqlx::query("SELECT id FROM invoices WHERE id=$1 FOR UPDATE")
-            .bind(invoice_id)
-            .execute(&mut *tx)
-            .await?;
-    }
-    let result = sqlx::query_scalar!(
+    sqlx::query_scalar!(
         r#"
         UPDATE order_repairs
         SET reason = COALESCE($2, reason),
@@ -823,8 +823,6 @@ pub async fn update_repair(
         notes,
         completed_at,
     )
-    .fetch_optional(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(result)
+    .fetch_optional(&mut **tx)
+    .await
 }

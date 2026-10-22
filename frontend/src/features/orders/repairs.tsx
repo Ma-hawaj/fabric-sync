@@ -19,13 +19,7 @@ export function RepairsPage() {
       getRepairColumns(
         (repair) => setReceiveRepair(repair),
         (repair) => {
-          const pending = printRepairDocument(repair.orderId, repair.id).catch(
-            () => {
-              // toast.promise below reports the failure; this just avoids an
-              // unhandled rejection.
-            },
-          )
-          toast.promise(pending, {
+          toast.promise(printRepairDocument(repair.orderId, repair.id), {
             loading: 'Preparing the repair receipt...',
             success: 'Receipt ready — choose "Save as PDF" to download it.',
             error: 'Could not prepare this receipt. Please try again.',

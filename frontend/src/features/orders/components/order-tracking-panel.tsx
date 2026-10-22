@@ -562,7 +562,7 @@ function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
             className="h-8 w-auto px-2"
             onClick={() => setReceiveOpen(true)}
           >
-            Collect
+            Mark as Collected
           </Button>
         )}
         <Button
