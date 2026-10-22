@@ -1,4 +1,4 @@
-import * as React from 'react'
+import { useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -69,8 +69,8 @@ function DesignOptionForm({ existing }: { existing?: DesignOption }) {
   // Clearing the stored illustration is separate from picking a new file: the
   // form field only ever carries a fresh upload, so "remove" needs its own
   // flag to tell "untouched" apart from "cleared" on submit.
-  const [clearImage, setClearImage] = React.useState(false)
-  const [fileError, setFileError] = React.useState<string | null>(null)
+  const [clearImage, setClearImage] = useState(false)
+  const [fileError, setFileError] = useState<string | null>(null)
 
   const form = useForm({
     defaultValues: existing

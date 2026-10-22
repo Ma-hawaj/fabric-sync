@@ -1,5 +1,6 @@
 import { ReadinessControls } from '@/features/notifications/readiness-controls'
 import * as React from 'react'
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,8 +36,8 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 
 export function OrderDetailPage({ orderId }: { orderId: string }) {
   const { data: order, isLoading, isError } = useOrder(orderId)
-  const [repairOrderId, setRepairOrderId] = React.useState<string | null>(null)
-  const [collectOpen, setCollectOpen] = React.useState(false)
+  const [repairOrderId, setRepairOrderId] = useState<string | null>(null)
+  const [collectOpen, setCollectOpen] = useState(false)
 
   if (isLoading) {
     return (
@@ -331,7 +332,7 @@ function DesignDetails({ order }: { order: OrderDetail }) {
 }
 
 function ExportPdfButton({ order }: { order: OrderDetail }) {
-  const [isPrinting, setIsPrinting] = React.useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
 
   return (
     <Button

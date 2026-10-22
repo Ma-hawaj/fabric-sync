@@ -18,6 +18,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import { useTableAppearance } from './table-appearance'
 
 interface DataTableViewOptionsProps<TData> extends React.ComponentProps<
   typeof PopoverContent
@@ -32,15 +33,15 @@ export function DataTableViewOptions<TData>({
   className,
   ...props
 }: DataTableViewOptionsProps<TData>) {
+  const { density, setDensity } = useTableAppearance()
+  const tableColumns = table.getAllColumns()
   const columns = React.useMemo(
     () =>
-      table
-        .getAllColumns()
-        .filter(
-          (column) =>
-            typeof column.accessorFn !== 'undefined' && column.getCanHide(),
-        ),
-    [table],
+      tableColumns.filter(
+        (column) =>
+          typeof column.accessorFn !== 'undefined' && column.getCanHide(),
+      ),
+    [tableColumns],
   )
 
   return (
@@ -51,15 +52,37 @@ export function DataTableViewOptions<TData>({
             aria-label="Toggle columns"
             role="combobox"
             variant="outline"
-            className="ms-auto hidden h-8 font-normal lg:flex"
+            className="ms-auto h-8 font-normal"
             disabled={disabled}
           />
         }
       >
         <Settings2 className="text-muted-foreground" />
-        View
+        Display
       </PopoverTrigger>
-      <PopoverContent className={cn('w-44 p-0', className)} {...props}>
+      <PopoverContent className={cn('w-60 gap-0 p-0', className)} {...props}>
+        <div className="space-y-2 border-b p-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            Row density
+          </p>
+          <div className="flex gap-1" role="group" aria-label="Row density">
+            {(['compact', 'comfortable'] as const).map((value) => (
+              <Button
+                key={value}
+                size="sm"
+                variant={density === value ? 'secondary' : 'ghost'}
+                aria-pressed={density === value}
+                onClick={() => setDensity(value)}
+                className="flex-1 capitalize"
+              >
+                {value === 'compact' ? 'Compact' : 'Comfortable'}
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Drag a column edge to resize.
+          </p>
+        </div>
         <Command>
           <CommandInput placeholder="Search columns..." />
           <CommandList>
@@ -81,6 +104,20 @@ export function DataTableViewOptions<TData>({
             </CommandGroup>
           </CommandList>
         </Command>
+        <div className="border-t p-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full"
+            onClick={() => {
+              table.resetColumnVisibility()
+              table.resetColumnSizing()
+              setDensity('compact')
+            }}
+          >
+            Reset display
+          </Button>
+        </div>
       </PopoverContent>
     </Popover>
   )

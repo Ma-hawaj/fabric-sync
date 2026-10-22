@@ -46,17 +46,19 @@ export function OrderStagesPage() {
     manualFiltering: false,
     manualSorting: false,
     manualPagination: false,
+    initialState: { columnPinning: { right: ['actions'] } },
   })
 
   return (
-    <div className="space-y-4">
+    <div
+      data-slot="list-page"
+      className="flex h-full min-h-0 min-w-0 flex-col gap-3 [&>:first-child]:shrink-0"
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Order Stages</h1>
-          <p className="text-muted-foreground">
-            The steps every order walks through in production. Retiring a stage
-            takes it off the checklist without erasing the orders that already
-            passed through it.
+          <h1 className="text-xl font-semibold tracking-tight">Order Stages</h1>
+          <p className="mt-0.5 hidden text-xs leading-relaxed text-muted-foreground sm:block">
+            Production checklist and delivery requirements.
           </p>
         </div>
         <Button nativeButton={false} render={<Link to="/order-stages/new" />}>
@@ -65,15 +67,9 @@ export function OrderStagesPage() {
         </Button>
       </div>
 
-      {isLoading ? (
-        <div className="text-center text-sm text-muted-foreground py-10">
-          Loading order stages...
-        </div>
-      ) : (
-        <DataTable table={table}>
-          <DataTableToolbar table={table} />
-        </DataTable>
-      )}
+      <DataTable isLoading={isLoading} table={table}>
+        <DataTableToolbar table={table} />
+      </DataTable>
     </div>
   )
 }

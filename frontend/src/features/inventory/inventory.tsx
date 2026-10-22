@@ -1,10 +1,11 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { useDataTable } from '@/hooks/use-data-table'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
-import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
+import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-advanced-toolbar'
 import { getInventoryColumns } from './components/inventory-columns'
 import { InventoryDetailsSheet } from './components/inventory-details-sheet'
 import { RemoveStockDialog } from './components/remove-stock-dialog'
@@ -17,11 +18,10 @@ export function InventoryPage() {
   // Unfiltered on purpose: this facet lists where stock already sits, so a
   // since-deactivated location should stay selectable here.
   const { data: locations } = useAllLocations()
-  const [selectedMaterial, setSelectedMaterial] =
-    React.useState<Material | null>(null)
-  const [removeMaterial, setRemoveMaterial] = React.useState<Material | null>(
+  const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(
     null,
   )
+  const [removeMaterial, setRemoveMaterial] = useState<Material | null>(null)
 
   const columns = React.useMemo(
     () =>
@@ -42,15 +42,25 @@ export function InventoryPage() {
     columns,
     pageCount,
     rowCount: total,
+    enableAdvancedFilter: true,
+    initialState: { columnPinning: { right: ['actions'] } },
   })
 
   return (
-    <div className="space-y-4">
+    <div
+      data-slot="list-page"
+      className="flex h-full min-h-0 min-w-0 flex-col gap-3 [&>:first-child]:shrink-0"
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Inventory</h1>
-          <p className="text-muted-foreground">
-            Track materials and their stock across every location.
+          <h1 className="text-xl font-semibold tracking-tight">
+            Inventory{' '}
+            <span className="ms-2 align-middle text-xs font-normal text-muted-foreground tabular-nums">
+              {isLoading ? '…' : total.toLocaleString()} records
+            </span>
+          </h1>
+          <p className="mt-0.5 hidden text-xs leading-relaxed text-muted-foreground sm:block">
+            Material availability across all locations.
           </p>
         </div>
         <Button nativeButton={false} render={<Link to="/inventory/new" />}>
@@ -59,15 +69,9 @@ export function InventoryPage() {
         </Button>
       </div>
 
-      {isLoading ? (
-        <div className="text-center text-sm text-muted-foreground py-10">
-          Loading inventory...
-        </div>
-      ) : (
-        <DataTable table={table}>
-          <DataTableToolbar table={table} />
-        </DataTable>
-      )}
+      <DataTable isLoading={isLoading} table={table}>
+        <DataTableAdvancedToolbar table={table} defaultSearchColumnId="name" />
+      </DataTable>
 
       <InventoryDetailsSheet
         material={selectedMaterial}
