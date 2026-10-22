@@ -64,3 +64,22 @@ pub struct MaterialPrices {
 pub struct AddStockInput {
     pub entries: Vec<StockEntryInput>,
 }
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateMaterialInput {
+    pub name: String,
+    pub sku: Option<String>,
+    pub unit: String,
+    pub family: Option<String>,
+    #[serde(flatten)]
+    pub prices: MaterialPrices,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferStockInput {
+    pub from_location_id: Uuid,
+    pub to_location_id: Uuid,
+    pub quantity: f64,
+}

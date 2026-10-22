@@ -8,6 +8,8 @@ import { DataTable } from '@/components/data-table/data-table'
 import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-advanced-toolbar'
 import { getInventoryColumns } from './components/inventory-columns'
 import { InventoryDetailsSheet } from './components/inventory-details-sheet'
+import { EditMaterialDialog } from './components/edit-material-dialog'
+import { TransferStockDialog } from './components/transfer-stock-dialog'
 import { RemoveStockDialog } from './components/remove-stock-dialog'
 import { useAllLocations } from '@/features/locations/hooks/use-locations'
 import { useListParams } from '@/hooks/use-list-params'
@@ -23,9 +25,19 @@ export function InventoryPage() {
   )
   const [removeMaterial, setRemoveMaterial] = useState<Material | null>(null)
 
+  const [editMaterial, setEditMaterial] = React.useState<Material | null>(null)
+  const [transferMaterial, setTransferMaterial] =
+    React.useState<Material | null>(null)
+
   const columns = React.useMemo(
     () =>
-      getInventoryColumns(setSelectedMaterial, locations, setRemoveMaterial),
+      getInventoryColumns(
+        setSelectedMaterial,
+        locations,
+        setRemoveMaterial,
+        setEditMaterial,
+        setTransferMaterial,
+      ),
     [locations],
   )
 
@@ -78,6 +90,15 @@ export function InventoryPage() {
         onOpenChange={(open) => !open && setSelectedMaterial(null)}
       />
 
+      <EditMaterialDialog
+        material={editMaterial}
+        onOpenChange={(open) => !open && setEditMaterial(null)}
+      />
+      <TransferStockDialog
+        material={transferMaterial}
+        locations={locations}
+        onOpenChange={(open) => !open && setTransferMaterial(null)}
+      />
       <RemoveStockDialog
         material={removeMaterial}
         onOpenChange={(open) => !open && setRemoveMaterial(null)}

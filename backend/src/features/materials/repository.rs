@@ -6,7 +6,9 @@ use crate::{
     state::AppState,
 };
 
-use super::types::{Material, MaterialPrices, StockEntryInput};
+use super::types::{
+    Material, MaterialPrices, StockEntryInput, TransferStockInput, UpdateMaterialInput,
+};
 
 // `total_quantity` and `location_names` mirror what the inventory table derives
 // per row in the browser. They are computed by the same `GROUP BY` that builds
@@ -134,15 +136,66 @@ pub async fn create_material(
     Ok(material_id)
 }
 
-pub async fn update_prices(
+pub async fn update_material(
     state: &AppState,
     id: Uuid,
-    prices: &MaterialPrices,
+    input: &UpdateMaterialInput,
 ) -> Result<bool, sqlx::Error> {
     Ok(sqlx::query!(
-        "UPDATE materials SET junior_price = $2::float8, normal_price = $3::float8, large_price = $4::float8 WHERE id = $1",
-        id, prices.junior_price, prices.normal_price, prices.large_price
+        "UPDATE materials SET name = $2, sku = $3, unit = $4, family = $5, junior_price = $6::float8, normal_price = $7::float8, large_price = $8::float8 WHERE id = $1",
+        id, input.name, input.sku, input.unit, input.family,
+        input.prices.junior_price, input.prices.normal_price, input.prices.large_price
     ).execute(state.db()).await?.rows_affected() > 0)
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum TransferResult {
+    Transferred,
+    MissingMaterial,
+    InvalidDestination,
+    InsufficientStock,
+}
+
+pub async fn transfer_stock(
+    pool: &sqlx::PgPool,
+    material_id: Uuid,
+    input: &TransferStockInput,
+) -> Result<TransferResult, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    // Serialize transfers of this material to avoid opposite-direction moves
+    // locking stock rows in reverse order. NO KEY UPDATE allows invoice FK reads.
+    let material = sqlx::query_scalar!(
+        "SELECT id FROM materials WHERE id = $1 FOR NO KEY UPDATE",
+        material_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    if material.is_none() {
+        return Ok(TransferResult::MissingMaterial);
+    }
+    let destination = sqlx::query_scalar!(
+        "SELECT id FROM branch WHERE id = $1 AND is_active AND holds_stock FOR SHARE",
+        input.to_location_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    if destination.is_none() {
+        return Ok(TransferResult::InvalidDestination);
+    }
+    if !decrement_stock(&mut tx, material_id, input.from_location_id, input.quantity).await? {
+        return Ok(TransferResult::InsufficientStock);
+    }
+    upsert_stock(
+        &mut tx,
+        material_id,
+        &[StockEntryInput {
+            location_id: input.to_location_id,
+            quantity: input.quantity,
+        }],
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(TransferResult::Transferred)
 }
 
 pub async fn add_stock(
@@ -249,4 +302,179 @@ pub async fn material_name(
     )
     .fetch_optional(&mut **tx)
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::PgPool;
+
+    async fn fixture(pool: &PgPool) -> (Uuid, Uuid, Uuid) {
+        let material =
+            sqlx::query_scalar("INSERT INTO materials(name) VALUES('Cotton') RETURNING id")
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        let from = sqlx::query_scalar("INSERT INTO branch(name) VALUES('Source') RETURNING id")
+            .fetch_one(pool)
+            .await
+            .unwrap();
+        let to = sqlx::query_scalar("INSERT INTO branch(name) VALUES('Destination') RETURNING id")
+            .fetch_one(pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO material_stock(material_id,branch_id,quantity) VALUES($1,$2,10)")
+            .bind(material)
+            .bind(from)
+            .execute(pool)
+            .await
+            .unwrap();
+        (material, from, to)
+    }
+    async fn quantity(pool: &PgPool, material: Uuid, location: Uuid) -> f64 {
+        sqlx::query_scalar("SELECT COALESCE(SUM(quantity),0)::float8 FROM material_stock WHERE material_id=$1 AND branch_id=$2").bind(material).bind(location).fetch_one(pool).await.unwrap()
+    }
+    fn movement(from: Uuid, to: Uuid, quantity: f64) -> TransferStockInput {
+        TransferStockInput {
+            from_location_id: from,
+            to_location_id: to,
+            quantity,
+        }
+    }
+    #[sqlx::test]
+    async fn move_creates_and_then_updates_destination_without_changing_total(pool: PgPool) {
+        let (material, from, to) = fixture(&pool).await;
+        for amount in [3.25, 6.75] {
+            assert_eq!(
+                transfer_stock(&pool, material, &movement(from, to, amount))
+                    .await
+                    .unwrap(),
+                TransferResult::Transferred
+            );
+        }
+        assert_eq!(quantity(&pool, material, from).await, 0.0);
+        assert_eq!(quantity(&pool, material, to).await, 10.0);
+    }
+    #[sqlx::test]
+    async fn refused_moves_never_debit_source(pool: PgPool) {
+        let (material, from, to) = fixture(&pool).await;
+        assert_eq!(
+            transfer_stock(&pool, material, &movement(from, to, 11.0))
+                .await
+                .unwrap(),
+            TransferResult::InsufficientStock
+        );
+        for (active, holds) in [(false, true), (true, false)] {
+            sqlx::query("UPDATE branch SET is_active=$2, holds_stock=$3 WHERE id=$1")
+                .bind(to)
+                .bind(active)
+                .bind(holds)
+                .execute(&pool)
+                .await
+                .unwrap();
+            assert_eq!(
+                transfer_stock(&pool, material, &movement(from, to, 1.0))
+                    .await
+                    .unwrap(),
+                TransferResult::InvalidDestination
+            );
+        }
+        assert_eq!(
+            transfer_stock(&pool, Uuid::new_v4(), &movement(from, to, 1.0))
+                .await
+                .unwrap(),
+            TransferResult::MissingMaterial
+        );
+        assert_eq!(quantity(&pool, material, from).await, 10.0);
+        assert_eq!(quantity(&pool, material, to).await, 0.0);
+    }
+    #[sqlx::test]
+    async fn destination_write_failure_rolls_back_source_debit(pool: PgPool) {
+        let (material, from, to) = fixture(&pool).await;
+        sqlx::query(
+            "INSERT INTO material_stock(material_id,branch_id,quantity) VALUES($1,$2,99999999.99)",
+        )
+        .bind(material)
+        .bind(to)
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(transfer_stock(&pool, material, &movement(from, to, 1.0))
+            .await
+            .is_err());
+        assert_eq!(quantity(&pool, material, from).await, 10.0);
+        assert_eq!(quantity(&pool, material, to).await, 99_999_999.99);
+    }
+    #[sqlx::test]
+    async fn concurrent_moves_cannot_overdraw_the_source(pool: PgPool) {
+        let (material, from, to) = fixture(&pool).await;
+        let a = movement(from, to, 8.0);
+        let b = a.clone();
+        let (a, b) = tokio::join!(
+            transfer_stock(&pool, material, &a),
+            transfer_stock(&pool, material, &b)
+        );
+        let results = [a.unwrap(), b.unwrap()];
+        assert_eq!(
+            results
+                .iter()
+                .filter(|r| **r == TransferResult::Transferred)
+                .count(),
+            1
+        );
+        assert_eq!(
+            results
+                .iter()
+                .filter(|r| **r == TransferResult::InsufficientStock)
+                .count(),
+            1
+        );
+        assert_eq!(quantity(&pool, material, from).await, 2.0);
+        assert_eq!(quantity(&pool, material, to).await, 8.0);
+    }
+    #[sqlx::test]
+    async fn opposite_moves_serialize_without_deadlock(pool: PgPool) {
+        let (material, from, to) = fixture(&pool).await;
+        transfer_stock(&pool, material, &movement(from, to, 5.0))
+            .await
+            .unwrap();
+        let a = movement(from, to, 1.0);
+        let b = movement(to, from, 1.0);
+        let (a, b) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            tokio::join!(
+                transfer_stock(&pool, material, &a),
+                transfer_stock(&pool, material, &b)
+            )
+        })
+        .await
+        .unwrap();
+        assert_eq!(a.unwrap(), TransferResult::Transferred);
+        assert_eq!(b.unwrap(), TransferResult::Transferred);
+        assert_eq!(quantity(&pool, material, from).await, 5.0);
+        assert_eq!(quantity(&pool, material, to).await, 5.0);
+    }
+    #[sqlx::test]
+    async fn edit_saves_metadata_and_prices_together_without_affecting_stock(pool: PgPool) {
+        let (material, from, _) = fixture(&pool).await;
+        let state = crate::test_support::state(pool.clone(), None, None).await;
+        let input = UpdateMaterialInput {
+            name: "Linen".into(),
+            sku: Some("LN".into()),
+            unit: "yards".into(),
+            family: None,
+            prices: MaterialPrices {
+                junior_price: 10.0,
+                normal_price: 20.0,
+                large_price: 30.0,
+            },
+        };
+        assert!(update_material(&state, material, &input).await.unwrap());
+        let saved = get_material(&state, material).await.unwrap().unwrap();
+        assert_eq!(saved.name, "Linen");
+        assert_eq!(saved.sku.as_deref(), Some("LN"));
+        assert_eq!(saved.family, None);
+        assert_eq!(saved.unit, "yards");
+        assert_eq!(saved.normal_price, Some(20.0));
+        assert_eq!(quantity(&pool, material, from).await, 10.0);
+    }
 }

@@ -1,4 +1,4 @@
-import { MaterialPricesForm } from './material-prices-form'
+import { CURRENCY } from '@/lib/currency'
 import {
   Sheet,
   SheetContent,
@@ -55,7 +55,21 @@ export function InventoryDetailsSheet({
               </div>
             </SheetHeader>
 
-            <MaterialPricesForm key={material.id} material={material} />
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">
+                Garment prices incl. VAT ({CURRENCY})
+              </h3>
+              <dl className="grid grid-cols-3 gap-3 text-sm">
+                {(['junior', 'normal', 'large'] as const).map((tier) => (
+                  <div key={tier}>
+                    <dt className="capitalize text-muted-foreground">{tier}</dt>
+                    <dd>
+                      {material[`${tier}Price`]?.toFixed(2) ?? 'Not configured'}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
 
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2.5 flex items-center gap-1.5">

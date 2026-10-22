@@ -1,5 +1,10 @@
 import { defineColumns } from '@/lib/define-columns'
-import { EyeIcon, MinusIcon } from 'lucide-react'
+import {
+  EyeIcon,
+  MinusIcon,
+  PencilIcon,
+  ArrowRightLeftIcon,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
@@ -14,6 +19,8 @@ export const getInventoryColumns = (
   onViewStock: (material: Material) => void,
   locations: Location[],
   onRemoveStock: (material: Material) => void,
+  onEdit: (material: Material) => void,
+  onTransfer: (material: Material) => void,
 ) =>
   defineColumns<Material>()([
     {
@@ -134,6 +141,17 @@ export const getInventoryColumns = (
               label: 'View Stock',
               icon: EyeIcon,
               onClick: () => onViewStock(row.original),
+            },
+            {
+              label: 'Edit Material',
+              icon: PencilIcon,
+              onClick: () => onEdit(row.original),
+            },
+            {
+              label: 'Move Stock',
+              icon: ArrowRightLeftIcon,
+              disabled: totalQuantity(row.original) <= 0,
+              onClick: () => onTransfer(row.original),
             },
             {
               // Takes stock off without deleting the material. Disabled when

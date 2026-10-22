@@ -178,7 +178,7 @@ VITE_API_BASE_URL=http://localhost:8000 pnpm run dev
 ## Garment pricing
 
 Materials have junior, normal, and large garment prices, entered when creating
-a material or through its inventory details. Design options have an optional
+a material or through its Edit Material dialog. Design options have an optional
 additional cost (zero by default). Prices include VAT.
 
 Quantity in metres selects the garment price; it does not multiply it. The shared
@@ -193,3 +193,9 @@ Customer-supplied fabric uses a manually entered tailoring base plus design
 costs. Editing an invoice recalculates prices using the current catalog; viewing
 or printing keeps the saved prices. Imported materials without tier prices must
 be configured before creating garment lines.
+
+Material details are read-only. Use the inventory row actions to edit a material
+(name, SKU, family, unit, and tier prices), remove stock, or move stock. Move Stock
+transfers a quantity from one location to another in one transaction; it refuses
+insufficient source stock and inactive or non-stock-holding destinations. Moves
+keep total material stock unchanged and can create a destination stock row.
