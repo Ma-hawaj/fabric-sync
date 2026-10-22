@@ -4,7 +4,7 @@ import { DesignOptionFormPage } from '@/features/design-options/design-option-fo
 export const Route = createFileRoute(
   '/_authenticated/design-options/$designOptionId/edit',
 )({
-  staticData: { title: 'Edit Option' },
+  staticData: { title: 'Edit' },
   component: EditDesignOptionRoute,
 })
 
