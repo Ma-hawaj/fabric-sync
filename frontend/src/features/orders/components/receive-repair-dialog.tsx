@@ -76,12 +76,12 @@ export function ReceiveRepairDialog({
       paymentType: needsMethod ? (paymentType as PaymentType) : null,
     })
     toast.promise(pending, {
-      loading: 'Marking repair received...',
+      loading: 'Marking repair collected...',
       success:
         parsedAmount > 0
-          ? 'Repair handed over and payment recorded.'
-          : 'Repair handed over.',
-      error: 'Could not receive this repair. Please try again.',
+          ? 'Repair collected and payment recorded.'
+          : 'Repair collected.',
+      error: 'Could not collect this repair. Please try again.',
     })
 
     try {
@@ -101,7 +101,7 @@ export function ReceiveRepairDialog({
         {repair && (
           <>
             <DialogHeader>
-              <DialogTitle>Receive Repair</DialogTitle>
+              <DialogTitle>Collect Repair</DialogTitle>
               <DialogDescription>
                 {repair.customerName} — ORD-{repair.orderNumber} ·{' '}
                 {repair.reason}
@@ -167,7 +167,7 @@ export function ReceiveRepairDialog({
                 Cancel
               </Button>
               <Button onClick={handleConfirm} disabled={!canConfirm}>
-                Confirm Received
+                Confirm Collection
               </Button>
             </DialogFooter>
           </>

@@ -228,7 +228,7 @@ describe('repairStatusLabel', () => {
   it('renders the stored snake_case status readably', () => {
     expect(repairStatusLabel('in_progress')).toBe('In progress')
     expect(repairStatusLabel('open')).toBe('Open')
-    expect(repairStatusLabel('received')).toBe('Received')
+    expect(repairStatusLabel('received')).toBe('Collected')
   })
 })
 

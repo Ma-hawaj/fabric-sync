@@ -55,8 +55,8 @@ export function RepairsPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Repairs</h1>
         <p className="text-muted-foreground">
-          Every garment brought back for rework — receive finished repairs,
-          record measurement fixes, and print receipts.
+          Every garment brought back for rework — collect ready repairs, record
+          measurement fixes, and print receipts.
         </p>
       </div>
 

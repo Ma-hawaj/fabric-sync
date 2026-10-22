@@ -28,8 +28,8 @@ function matchesAnySelected(cellValue: string[], filterValue: unknown) {
 const statusOptions = [
   { label: 'Open', value: 'open' },
   { label: 'In progress', value: 'in_progress' },
-  { label: 'Completed', value: 'completed' },
-  { label: 'Received', value: 'received' },
+  { label: 'Ready', value: 'completed' },
+  { label: 'Collected', value: 'received' },
   { label: 'Cancelled', value: 'cancelled' },
 ]
 
@@ -157,7 +157,7 @@ export function getRepairColumns(
       id: 'handover',
       accessorFn: (repair) =>
         repair.status === 'received'
-          ? `Received ${currencyFormatter.format(repair.receivedAmount)}`
+          ? `Collected ${currencyFormatter.format(repair.receivedAmount)}`
           : repair.fixedMeasurementId
             ? 'Fix recorded'
             : '—',
@@ -193,7 +193,7 @@ export function getRepairColumns(
                 ),
               },
               {
-                label: 'Receive',
+                label: 'Collect',
                 icon: CheckIcon,
                 disabled: !canReceive,
                 onClick: () => onReceive(repair),

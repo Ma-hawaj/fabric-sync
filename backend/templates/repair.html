@@ -210,7 +210,7 @@
         <dt>Material</dt>
         <dd>{{ order.material }}</dd>
         <dt>Status</dt>
-        <dd>{{ repair.status }}</dd>
+        <dd>{{ 'Ready' if repair.status == 'completed' else 'Collected' if repair.status == 'received' else 'In progress' if repair.status == 'in_progress' else 'Open' if repair.status == 'open' else 'Cancelled' }}</dd>
       </dl>
     </section>
 
@@ -221,9 +221,9 @@
         <dd>{{ repair.reason }}</dd>
         <dt>Reported</dt>
         <dd>{{ reported_on }}</dd>
-        <dt>Completed</dt>
+        <dt>Ready</dt>
         <dd>{{ completed_at or '—' }}</dd>
-        <dt>Received</dt>
+        <dt>Collected</dt>
         <dd>{{ received_at or '—' }}</dd>
         <dt>Charge ({{ currency }})</dt>
         <dd class="num">{{ amounts.charge }}</dd>

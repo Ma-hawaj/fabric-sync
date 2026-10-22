@@ -551,7 +551,7 @@ function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
               disabled={updateRepair.isPending}
               onClick={() => void setStatus('completed')}
             >
-              Complete
+              Mark Ready
             </Button>
           </>
         )}
@@ -562,7 +562,7 @@ function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
             className="h-8 w-auto px-2"
             onClick={() => setReceiveOpen(true)}
           >
-            Receive
+            Collect
           </Button>
         )}
         <Button

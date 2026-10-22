@@ -121,9 +121,9 @@ export function stageTimingLabel(entry: OrderStageEntry): string | null {
 const REPAIR_STATUS_LABELS: Record<RepairStatus, string> = {
   open: 'Open',
   in_progress: 'In progress',
-  completed: 'Completed',
+  completed: 'Ready',
   cancelled: 'Cancelled',
-  received: 'Received',
+  received: 'Collected',
 }
 
 export function repairStatusLabel(status: RepairStatus): string {
