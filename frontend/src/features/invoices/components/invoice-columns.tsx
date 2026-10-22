@@ -53,6 +53,8 @@ export const getInvoiceColumns = (
 ): ColumnDef<Invoice, any>[] => [
   {
     id: 'expand',
+    minSize: 48,
+    meta: { label: 'Expand' },
     header: () => <span className="sr-only">Order breakdown</span>,
     cell: ({ row }) =>
       row.getCanExpand() ? (
@@ -74,6 +76,7 @@ export const getInvoiceColumns = (
   },
   {
     accessorKey: 'invoiceNumber',
+    size: 88,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Invoice" />
     ),
@@ -97,6 +100,8 @@ export const getInvoiceColumns = (
   {
     id: 'date',
     accessorFn: (invoice) => new Date(invoice.date),
+    size: 154,
+    meta: { label: 'Date' },
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Date" />
     ),
@@ -127,6 +132,8 @@ export const getInvoiceColumns = (
     id: 'targetDate',
     accessorFn: (invoice) =>
       invoice.targetDate ? new Date(invoice.targetDate) : null,
+    size: 128,
+    meta: { label: 'Target date' },
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Target Date" />
     ),
@@ -140,6 +147,7 @@ export const getInvoiceColumns = (
   {
     id: 'customerName',
     accessorFn: (invoice) => invoice.customers.map((c) => c.name).join(', '),
+    size: 190,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Customers" />
     ),
@@ -169,6 +177,8 @@ export const getInvoiceColumns = (
   },
   {
     accessorKey: 'collected',
+    size: 132,
+    meta: { label: 'Collected' },
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Collected" />
     ),
@@ -193,6 +203,7 @@ export const getInvoiceColumns = (
     id: 'customerMobile',
     accessorFn: (invoice) =>
       invoice.customers.map((c) => c.mobileNo).join(', '),
+    size: 150,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Customer Mobile" />
     ),
@@ -207,6 +218,7 @@ export const getInvoiceColumns = (
   },
   {
     accessorKey: 'itemCount',
+    size: 80,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Items" />
     ),
@@ -220,6 +232,7 @@ export const getInvoiceColumns = (
   },
   {
     accessorKey: 'materials',
+    size: 180,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Materials" />
     ),
@@ -246,6 +259,7 @@ export const getInvoiceColumns = (
   },
   {
     accessorKey: 'receivingLocation',
+    size: 114,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Receiving" />
     ),
@@ -291,6 +305,7 @@ export const getInvoiceColumns = (
   },
   {
     accessorKey: 'paymentStatus',
+    size: 120,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Payment" />
     ),
@@ -320,6 +335,7 @@ export const getInvoiceColumns = (
     // The most recent payment's method, worked out server-side from the
     // ledger.
     accessorFn: (invoice) => invoice.paymentMethod,
+    meta: { label: 'Payment method' },
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Payment Method" />
     ),
@@ -334,6 +350,7 @@ export const getInvoiceColumns = (
     id: 'lastCollectedAt',
     accessorFn: (invoice) =>
       invoice.lastCollectedAt ? new Date(invoice.lastCollectedAt) : null,
+    meta: { label: 'Last collected' },
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Last Collected" />
     ),
@@ -347,6 +364,7 @@ export const getInvoiceColumns = (
   },
   {
     accessorKey: 'amountPaid',
+    size: 116,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Paid" />
     ),
@@ -361,6 +379,7 @@ export const getInvoiceColumns = (
   },
   {
     accessorKey: 'balanceDue',
+    size: 116,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Balance" />
     ),
@@ -381,6 +400,7 @@ export const getInvoiceColumns = (
   },
   {
     accessorKey: 'totalPrice',
+    size: 116,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Total Price" />
     ),
@@ -401,6 +421,7 @@ export const getInvoiceColumns = (
   {
     id: 'readinessStatus',
     accessorKey: 'readinessStatus',
+    size: 140,
     header: 'Readiness',
     cell: ({ row }) => <ReadinessBadge {...row.original} />,
     enableSorting: false,
@@ -419,6 +440,8 @@ export const getInvoiceColumns = (
   },
   {
     id: 'actions',
+    size: 72,
+    meta: { label: 'Actions' },
     header: 'Actions',
     enablePinning: true,
     cell: ({ row }) => {

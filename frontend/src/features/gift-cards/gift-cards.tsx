@@ -55,6 +55,7 @@ export function GiftCardsPage() {
     pageCount,
     rowCount: total,
     enableAdvancedFilter: true,
+    initialState: { columnPinning: { right: ['actions'] } },
   })
 
   return (
@@ -81,7 +82,11 @@ export function GiftCardsPage() {
       </div>
 
       <DataTable isLoading={isLoading} table={table}>
-        <DataTableAdvancedToolbar table={table} />
+        <DataTableAdvancedToolbar
+          table={table}
+          defaultSearchColumnId="code"
+          quickFilter={{ columnId: 'status', allLabel: 'All statuses' }}
+        />
       </DataTable>
     </div>
   )

@@ -138,6 +138,8 @@ Hooks call `apiClient` (an axios instance, `src/lib/api.ts`) rather than `fetch`
 
 `src/hooks/use-data-table.ts` is the entry point (note: `src/hooks/`, not `src/components/data-table/`), and it syncs page, perPage, sort, and filters into the URL query string via **`nuqs`** — the adapter is wired in `routes/__root.tsx`. `src/components/data-table/` holds the presentational pieces (`DataTable`, toolbar, column header, pagination, filter controls); all five feature tables compose from there, so prefer that over bespoke table UI.
 
+Keep `components/data-table/` and `use-data-table.ts` generic: feature column definitions own widths, labels, and resize limits; feature pages explicitly configure pinning, default search fields, and quick-filter columns. Do not infer business behavior from column IDs in shared table code.
+
 Columns drive their own filter UI through `meta`: set `label`, `placeholder`, and `variant` (`'text' | 'multiSelect' | …`, plus `options` for the select variants) and the toolbar builds the control. One gotcha — a `multiSelect` filter's value arrives at `filterFn` as a `string[]` (nuqs parses it with `parseAsArrayOf`), so the filter function must handle arrays and return `true` when the array is empty. Supporting modules: `src/config/data-table.ts` (filter operator registry), `src/types/data-table.ts`, `src/lib/data-table.ts`, `src/lib/parsers.ts`.
 
 ## Database schema notes

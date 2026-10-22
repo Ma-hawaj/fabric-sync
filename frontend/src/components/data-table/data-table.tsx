@@ -122,9 +122,10 @@ export function DataTable<TData>({
                           table.setColumnSizing((previous) => ({
                             ...previous,
                             [header.column.id]: Math.max(
-                              64,
+                              header.column.columnDef.minSize ?? 20,
                               Math.min(
-                                600,
+                                header.column.columnDef.maxSize ??
+                                  Number.MAX_SAFE_INTEGER,
                                 header.column.getSize() +
                                   (event.key === 'ArrowRight' ? 10 : -10),
                               ),

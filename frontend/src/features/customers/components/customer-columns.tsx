@@ -11,6 +11,7 @@ export const getCustomerColumns = (
 ): ColumnDef<Customer, any>[] => [
   {
     accessorKey: 'name',
+    size: 220,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Name" />
     ),
@@ -33,6 +34,7 @@ export const getCustomerColumns = (
   },
   {
     accessorKey: 'mobileNo',
+    size: 150,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Phone Number" />
     ),
@@ -71,6 +73,8 @@ export const getCustomerColumns = (
   },
   {
     id: 'actions',
+    size: 72,
+    meta: { label: 'Actions' },
     header: 'Actions',
     enablePinning: true,
     cell: ({ row }) => {

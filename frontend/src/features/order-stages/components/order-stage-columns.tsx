@@ -43,6 +43,7 @@ export const getOrderStageColumns = (
   },
   {
     accessorKey: 'name',
+    size: 220,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Stage" />
     ),
@@ -93,6 +94,7 @@ export const getOrderStageColumns = (
   {
     id: 'status',
     accessorFn: (stage) => [stage.isActive ? 'Active' : 'Retired'],
+    size: 96,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Status" />
     ),
@@ -120,6 +122,8 @@ export const getOrderStageColumns = (
   },
   {
     id: 'actions',
+    size: 72,
+    meta: { label: 'Actions' },
     header: 'Actions',
     enablePinning: true,
     cell: ({ row }) => {

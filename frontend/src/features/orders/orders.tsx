@@ -76,7 +76,7 @@ export function OrdersPage() {
         paymentMethod: false,
         price: false,
       },
-      columnPinning: { left: ['orderNumber'] },
+      columnPinning: { left: ['orderNumber'], right: ['actions'] },
     },
   })
 
@@ -98,7 +98,11 @@ export function OrdersPage() {
       </div>
 
       <DataTable isLoading={isLoading} table={table}>
-        <DataTableAdvancedToolbar table={table} />
+        <DataTableAdvancedToolbar
+          table={table}
+          defaultSearchColumnId="customerMobile"
+          quickFilter={{ columnId: 'status', allLabel: 'All statuses' }}
+        />
       </DataTable>
 
       <CollectOrderDialog

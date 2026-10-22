@@ -21,6 +21,7 @@ export const getProductColumns = (
 ): ColumnDef<Product, any>[] => [
   {
     accessorKey: 'name',
+    size: 220,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Name" />
     ),
@@ -110,6 +111,7 @@ export const getProductColumns = (
   {
     id: 'totalQuantity',
     accessorFn: productTotalStock,
+    meta: { label: 'Total Quantity' },
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="In Stock" />
     ),
@@ -120,6 +122,7 @@ export const getProductColumns = (
   {
     id: 'status',
     accessorFn: (product) => [product.isActive ? 'Active' : 'Inactive'],
+    size: 96,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Status" />
     ),
@@ -145,6 +148,8 @@ export const getProductColumns = (
   },
   {
     id: 'actions',
+    size: 72,
+    meta: { label: 'Actions' },
     header: 'Actions',
     enablePinning: true,
     cell: ({ row }) => {

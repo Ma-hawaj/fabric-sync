@@ -272,76 +272,13 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     ],
   )
 
-  const hasActionsColumn = React.useMemo(
-    () => columns.some((column) => getColumnDefId(column) === 'actions'),
-    [columns],
-  )
-
   const [columnPinning, setColumnPinning] = React.useState<ColumnPinningState>(
-    hasActionsColumn
-      ? { ...(initialState?.columnPinning ?? {}), right: ['actions'] }
-      : (initialState?.columnPinning ?? {}),
-  )
-
-  const sizedColumns = React.useMemo(
-    () =>
-      columns.map((column) => {
-        const id = getColumnDefId(column) ?? ''
-        const widths: Partial<Record<string, number>> = {
-          expand: 36,
-          actions: 72,
-          orderNumber: 88,
-          invoiceNumber: 88,
-          date: 154,
-          targetDate: 128,
-          customerName: 190,
-          name: 220,
-          customerMobile: 150,
-          mobileNo: 150,
-          material: 138,
-          materials: 180,
-          stage: 164,
-          repairs: 80,
-          materialAmount: 90,
-          itemCount: 80,
-          price: 110,
-          totalPrice: 116,
-          amountPaid: 116,
-          balanceDue: 116,
-          collected: 132,
-          readinessStatus: 140,
-          status: 96,
-          paymentStatus: 120,
-          receivingLocation: 114,
-          productionLocation: 114,
-        }
-        const labels: Partial<Record<string, string>> = {
-          id: 'ID',
-          collected: 'Collected',
-          lastCollectedAt: 'Last collected',
-          paymentMethod: 'Payment method',
-          targetDate: 'Target date',
-          invoiceDate: 'Invoice date',
-          invoicePaymentStatus: 'Payment status',
-        }
-        const label =
-          labels[id] ??
-          id
-            .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-            .replace(/^./, (character) => character.toUpperCase())
-        return {
-          ...column,
-          size: column.size ?? widths[id] ?? 140,
-          minSize: column.minSize ?? (id === 'expand' ? 48 : 64),
-          meta: { ...column.meta, label: column.meta?.label ?? label },
-        }
-      }),
-    [columns],
+    initialState?.columnPinning ?? {},
   )
 
   const table = useReactTable({
     ...tableProps,
-    columns: sizedColumns,
+    columns,
     initialState,
     pageCount: manualPagination ? (pageCount ?? -1) : undefined,
     state: {
@@ -354,7 +291,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       columnPinning,
     },
     defaultColumn: {
-      size: 130,
+      size: 140,
       minSize: 64,
       maxSize: 600,
       ...tableProps.defaultColumn,

@@ -35,6 +35,7 @@ export const getGiftCardColumns = (
   },
   {
     accessorKey: 'initialAmount',
+    meta: { label: 'Initial Amount' },
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Issued For" />
     ),
@@ -68,6 +69,7 @@ export const getGiftCardColumns = (
   {
     id: 'customerName',
     accessorFn: (card) => card.customerName ?? '',
+    size: 190,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Bought By" />
     ),
@@ -88,6 +90,7 @@ export const getGiftCardColumns = (
   },
   {
     accessorKey: 'expiresOn',
+    meta: { label: 'Expires On' },
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Expires" />
     ),
@@ -102,6 +105,7 @@ export const getGiftCardColumns = (
   {
     id: 'status',
     accessorFn: (card) => [giftCardStatus(card, today)],
+    size: 96,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Status" />
     ),
@@ -133,6 +137,8 @@ export const getGiftCardColumns = (
   },
   {
     id: 'actions',
+    size: 72,
+    meta: { label: 'Actions' },
     header: 'Actions',
     enablePinning: true,
     cell: ({ row }) => {

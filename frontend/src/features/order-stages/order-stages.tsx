@@ -46,6 +46,7 @@ export function OrderStagesPage() {
     manualFiltering: false,
     manualSorting: false,
     manualPagination: false,
+    initialState: { columnPinning: { right: ['actions'] } },
   })
 
   return (

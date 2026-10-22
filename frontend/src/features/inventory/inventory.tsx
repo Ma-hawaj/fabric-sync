@@ -43,6 +43,7 @@ export function InventoryPage() {
     pageCount,
     rowCount: total,
     enableAdvancedFilter: true,
+    initialState: { columnPinning: { right: ['actions'] } },
   })
 
   return (
@@ -69,7 +70,7 @@ export function InventoryPage() {
       </div>
 
       <DataTable isLoading={isLoading} table={table}>
-        <DataTableAdvancedToolbar table={table} />
+        <DataTableAdvancedToolbar table={table} defaultSearchColumnId="name" />
       </DataTable>
 
       <InventoryDetailsSheet

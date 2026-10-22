@@ -22,6 +22,7 @@ export const getLocationColumns = (
 ): ColumnDef<Location, any>[] => [
   {
     accessorKey: 'name',
+    size: 220,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Name" />
     ),
@@ -72,6 +73,7 @@ export const getLocationColumns = (
   {
     id: 'status',
     accessorFn: (location) => [location.isActive ? 'Active' : 'Inactive'],
+    size: 96,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Status" />
     ),
@@ -97,6 +99,8 @@ export const getLocationColumns = (
   },
   {
     id: 'actions',
+    size: 72,
+    meta: { label: 'Actions' },
     header: 'Actions',
     enablePinning: true,
     cell: ({ row }) => {

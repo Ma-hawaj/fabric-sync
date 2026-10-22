@@ -47,6 +47,7 @@ export function CustomersPage() {
     pageCount,
     rowCount: total,
     enableAdvancedFilter: true,
+    initialState: { columnPinning: { right: ['actions'] } },
   })
 
   return (
@@ -73,7 +74,10 @@ export function CustomersPage() {
       </div>
 
       <DataTable isLoading={isLoading} table={table}>
-        <DataTableAdvancedToolbar table={table} />
+        <DataTableAdvancedToolbar
+          table={table}
+          defaultSearchColumnId="mobileNo"
+        />
       </DataTable>
 
       <CustomerDetailsSheet

@@ -60,6 +60,7 @@ export function ProductsPage() {
     pageCount,
     rowCount: total,
     enableAdvancedFilter: true,
+    initialState: { columnPinning: { right: ['actions'] } },
   })
 
   return (
@@ -86,7 +87,11 @@ export function ProductsPage() {
       </div>
 
       <DataTable isLoading={isLoading} table={table}>
-        <DataTableAdvancedToolbar table={table} />
+        <DataTableAdvancedToolbar
+          table={table}
+          defaultSearchColumnId="name"
+          quickFilter={{ columnId: 'status', allLabel: 'All statuses' }}
+        />
       </DataTable>
     </div>
   )

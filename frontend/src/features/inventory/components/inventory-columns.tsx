@@ -17,6 +17,7 @@ export const getInventoryColumns = (
 ): ColumnDef<Material, any>[] => [
   {
     accessorKey: 'name',
+    size: 220,
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Name" />
     ),
@@ -107,6 +108,7 @@ export const getInventoryColumns = (
   {
     id: 'totalQuantity',
     accessorFn: totalQuantity,
+    meta: { label: 'Total Quantity' },
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Total Quantity" />
     ),
@@ -120,6 +122,8 @@ export const getInventoryColumns = (
   },
   {
     id: 'actions',
+    size: 72,
+    meta: { label: 'Actions' },
     header: 'Actions',
     enablePinning: true,
     cell: ({ row }) => (

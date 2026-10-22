@@ -24,9 +24,13 @@ import { formatDate } from '@/lib/format'
 export function DataTableAdvancedToolbar<TData>({
   table,
   className,
+  defaultSearchColumnId,
+  quickFilter,
 }: {
   table: Table<TData>
   className?: string
+  defaultSearchColumnId?: string
+  quickFilter?: { columnId: string; allLabel: string }
 }) {
   const tableColumns = table.getAllColumns()
   const definitions = React.useMemo(
@@ -46,12 +50,7 @@ export function DataTableAdvancedToolbar<TData>({
     )
   const [searchId, setSearchId] = React.useState(
     () =>
-      searchColumns.find((column) =>
-        ['mobileNo', 'customerMobile'].includes(column.id),
-      )?.id ??
-      searchColumns.find((column) =>
-        ['customerName', 'name', 'code'].includes(column.id),
-      )?.id ??
+      searchColumns.find((column) => column.id === defaultSearchColumnId)?.id ??
       searchColumns.at(0)?.id ??
       '',
   )
@@ -86,26 +85,29 @@ export function DataTableAdvancedToolbar<TData>({
         : []),
     ])
   }, 300)
-  const statusColumn = table
+  const quickFilterColumn = table
     .getAllColumns()
     .find(
       (column) =>
-        ['status', 'paymentStatus', 'isActive'].includes(column.id) &&
+        column.id === quickFilter?.columnId &&
+        column.getCanFilter() &&
         column.columnDef.meta?.options?.length,
     )
-  const statusFilter = filters.find((filter) => filter.id === statusColumn?.id)
-  const statusValue = !statusFilter
+  const quickFilterRule = filters.find(
+    (filter) => filter.id === quickFilterColumn?.id,
+  )
+  const quickFilterValue = !quickFilterRule
     ? 'all'
-    : statusFilter.operator !==
+    : quickFilterRule.operator !==
         getDefaultFilterOperator(
-          statusColumn?.columnDef.meta?.variant ?? 'multiSelect',
+          quickFilterColumn?.columnDef.meta?.variant ?? 'multiSelect',
         )
       ? 'custom'
-      : Array.isArray(statusFilter.value)
-        ? statusFilter.value.length === 1
-          ? statusFilter.value[0]
+      : Array.isArray(quickFilterRule.value)
+        ? quickFilterRule.value.length === 1
+          ? quickFilterRule.value[0]
           : 'custom'
-        : statusFilter.value
+        : quickFilterRule.value
   const [join] = useQueryState(
     table.options.meta?.queryKeys?.joinOperator ?? 'joinOperator',
     parseAsStringLiteral(['and', 'or']).withDefault('and'),
@@ -148,9 +150,7 @@ export function DataTableAdvancedToolbar<TData>({
                 className="h-8 w-36 shrink-0"
               >
                 <SelectValue>
-                  {searchId === 'customerName'
-                    ? 'Customer'
-                    : (searchColumn?.columnDef.meta?.label ?? searchId)}
+                  {searchColumn?.columnDef.meta?.label ?? searchId}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -180,47 +180,54 @@ export function DataTableAdvancedToolbar<TData>({
             </div>
           </div>
         )}
-        {statusColumn && (
+        {quickFilterColumn && (
           <Select
-            value={statusValue}
+            value={quickFilterValue}
             onValueChange={(value) => {
               if (!value) return
-              const meta = statusColumn.columnDef.meta!
+              const meta = quickFilterColumn.columnDef.meta!
               void setFilters((previous) => [
-                ...previous.filter((filter) => filter.id !== statusColumn.id),
+                ...previous.filter(
+                  (filter) => filter.id !== quickFilterColumn.id,
+                ),
                 ...(value === 'all'
                   ? []
                   : [
                       {
-                        id: statusColumn.id as Extract<keyof TData, string>,
+                        id: quickFilterColumn.id as Extract<
+                          keyof TData,
+                          string
+                        >,
                         value: meta.variant === 'multiSelect' ? [value] : value,
                         variant: meta.variant!,
                         operator: getDefaultFilterOperator(meta.variant!),
-                        filterId: `quick:${statusColumn.id}`,
+                        filterId: `quick:${quickFilterColumn.id}`,
                       },
                     ]),
               ])
             }}
           >
             <SelectTrigger
-              aria-label={`Quick ${statusColumn.columnDef.meta?.label} filter`}
+              aria-label={`Quick ${quickFilterColumn.columnDef.meta?.label} filter`}
               className="h-8 w-32 sm:w-36"
             >
               <SelectValue>
-                {statusColumn.columnDef.meta?.options?.find(
-                  (option) => option.value === statusValue,
+                {quickFilterColumn.columnDef.meta?.options?.find(
+                  (option) => option.value === quickFilterValue,
                 )?.label ??
-                  (statusValue === 'custom' ? 'Custom rules' : 'All statuses')}
+                  (quickFilterValue === 'custom'
+                    ? 'Custom rules'
+                    : quickFilter?.allLabel)}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {statusValue === 'custom' && (
+              {quickFilterValue === 'custom' && (
                 <SelectItem value="custom" disabled>
                   Custom rules
                 </SelectItem>
               )}
-              <SelectItem value="all">All statuses</SelectItem>
-              {statusColumn.columnDef.meta?.options?.map((option) => (
+              <SelectItem value="all">{quickFilter?.allLabel}</SelectItem>
+              {quickFilterColumn.columnDef.meta?.options?.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>

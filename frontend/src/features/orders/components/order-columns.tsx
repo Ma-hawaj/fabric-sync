@@ -49,6 +49,7 @@ export function getOrderColumns(
   return [
     {
       accessorKey: 'orderNumber',
+      size: 88,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Order" />
       ),
@@ -71,6 +72,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'invoiceNumber',
+      size: 88,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Invoice" />
       ),
@@ -122,6 +124,7 @@ export function getOrderColumns(
           </span>
         </div>
       ),
+      size: 190,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Customer Name" />
       ),
@@ -135,6 +138,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'customerMobile',
+      size: 150,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Customer Mobile" />
       ),
@@ -149,6 +153,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'material',
+      size: 138,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Material" />
       ),
@@ -173,6 +178,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'materialAmount',
+      size: 90,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Quantity" />
       ),
@@ -186,6 +192,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'receivingLocation',
+      size: 114,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Receiving" />
       ),
@@ -203,6 +210,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'productionLocation',
+      size: 114,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Production" />
       ),
@@ -229,6 +237,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'price',
+      size: 110,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Price" />
       ),
@@ -246,6 +255,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'status',
+      size: 96,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Collection" />
       ),
@@ -271,6 +281,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'collectedAt',
+      meta: { label: 'Collected At' },
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Collected At" />
       ),
@@ -285,6 +296,7 @@ export function getOrderColumns(
     {
       id: 'stage',
       accessorFn: currentStageLabel,
+      size: 164,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Stage" />
       ),
@@ -321,6 +333,8 @@ export function getOrderColumns(
     {
       id: 'repairs',
       accessorFn: openRepairCount,
+      size: 80,
+      meta: { label: 'Repairs' },
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Repairs" />
       ),
@@ -341,6 +355,8 @@ export function getOrderColumns(
       id: 'balanceDue',
       // Server-computed: the total less gift card tender and every payment.
       accessorFn: (order) => order.invoiceBalanceDue,
+      size: 116,
+      meta: { label: 'Balance Due' },
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Balance Due" />
       ),
@@ -384,6 +400,7 @@ export function getOrderColumns(
     {
       id: 'paymentMethod',
       accessorFn: (order) => order.invoicePaymentMethod,
+      meta: { label: 'Payment method' },
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Payment Method" />
       ),
@@ -397,6 +414,8 @@ export function getOrderColumns(
     },
     {
       id: 'actions',
+      size: 72,
+      meta: { label: 'Actions' },
       header: 'Actions',
       enablePinning: true,
       cell: ({ row }) => {

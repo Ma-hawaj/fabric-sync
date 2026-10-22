@@ -108,7 +108,7 @@ export function InvoicesPage() {
         lastCollectedAt: false,
         paymentMethod: false,
       },
-      columnPinning: { left: ['invoiceNumber'] },
+      columnPinning: { left: ['invoiceNumber'], right: ['actions'] },
       columnOrder: [
         'expand',
         'invoiceNumber',
@@ -158,7 +158,11 @@ export function InvoicesPage() {
           <InvoiceOrderBreakdown invoiceId={row.original.id} />
         )}
       >
-        <DataTableAdvancedToolbar table={table} />
+        <DataTableAdvancedToolbar
+          table={table}
+          defaultSearchColumnId="customerMobile"
+          quickFilter={{ columnId: 'paymentStatus', allLabel: 'All statuses' }}
+        />
       </DataTable>
 
       <NotificationDialog
