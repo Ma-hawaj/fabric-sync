@@ -153,6 +153,7 @@ pub async fn fetch_invoice_detail(
             COALESCE(mat.unit, 'meters') AS "material_unit!",
             o.material_amount::float8 AS "material_amount!",
             o.price::float8 AS "price!",
+            o.urgent_charge::float8 AS "urgent_charge!",
             o.thobe_type,
             o.f_pocket,
             o.s_pocket,
@@ -221,6 +222,7 @@ pub async fn fetch_invoice_detail(
             };
             InvoiceDetailLine {
                 kind: InvoiceLineKind::Order,
+                urgent_charge: row.urgent_charge,
                 order_id: Some(row.order_id),
                 description: row.material_name,
                 detail: order_specification(
@@ -260,6 +262,7 @@ pub async fn fetch_invoice_detail(
                 InvoiceLineKind::Product
             },
             order_id: None,
+            urgent_charge: 0.0,
             description: row.description,
             detail: None,
             customer: None,
@@ -519,6 +522,7 @@ pub async fn insert_invoice(
     input: &CreateInvoiceInput,
     total_price: f64,
     gift_card_redeemed: f64,
+    urgent_charge: f64,
 ) -> Result<(Uuid, chrono::DateTime<chrono::Utc>), sqlx::Error> {
     // invoice_date is server-set (DEFAULT now()) and never taken from
     // input — staff promise a target_date instead. Returned so gift card
@@ -544,7 +548,7 @@ pub async fn insert_invoice(
         input.customer_id,
         gift_card_redeemed,
         input.is_urgent,
-        input.urgent_charge,
+        urgent_charge,
         input.collection_method.as_str(),
     )
     .fetch_one(&mut **tx)
@@ -729,15 +733,16 @@ pub async fn insert_order(
     invoice_id: Uuid,
     measurement_id: Uuid,
     order: &CreateOrderInput,
+    urgent_charge: f64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
             thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd, more_details,
-            production_branch_id, material_source, customer_material_description
+            production_branch_id, material_source, customer_material_description, urgent_charge
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8)
         "#,
         measurement_id,
         order.material_id,
@@ -758,6 +763,7 @@ pub async fn insert_order(
             .customer_material_description
             .as_deref()
             .map(str::trim),
+        urgent_charge,
     )
     .execute(&mut **tx)
     .await?;
@@ -936,6 +942,7 @@ pub async fn fetch_invoice_edit(
             b.name AS "production_location_name?",
             ms.quantity::float8 AS stock_quantity,
             o.price::float8 AS "price!",
+            o.urgent_charge::float8 AS "urgent_charge!",
             o.thobe_type,
             o.f_pocket,
             o.s_pocket,
@@ -1007,6 +1014,7 @@ pub async fn fetch_invoice_edit(
             production_location_name: row.production_location_name,
             stock_quantity: row.stock_quantity,
             price: row.price,
+            urgent_charge: row.urgent_charge,
             thobe_type: row.thobe_type,
             f_pocket: row.f_pocket,
             s_pocket: row.s_pocket,
@@ -1539,6 +1547,7 @@ pub async fn update_invoice_header(
     input: &CreateInvoiceInput,
     total_price: f64,
     gift_card_redeemed: f64,
+    urgent_charge: f64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
@@ -1564,7 +1573,7 @@ pub async fn update_invoice_header(
         total_price,
         gift_card_redeemed,
         input.is_urgent,
-        input.urgent_charge,
+        urgent_charge,
         input.collection_method.as_str(),
     )
     .execute(&mut **tx)

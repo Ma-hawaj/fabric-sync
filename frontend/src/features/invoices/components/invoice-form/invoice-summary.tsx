@@ -23,6 +23,8 @@ import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
   computeOrderLineTotal,
+  computeOrderUrgentCharge,
+  computeUrgentCharges,
   computeProductLineTotal,
   computeRedemptionTotal,
   VAT_RATE,
@@ -60,7 +62,7 @@ function customerDisplayName(
 interface CustomerLineItems {
   key: string
   customerName: string
-  orders: { key: string; label: string; total: number }[]
+  orders: { key: string; label: string; total: number; urgentCharge: number }[]
 }
 
 function buildLineItems(
@@ -74,6 +76,7 @@ function buildLineItems(
       key: order.key,
       label: `Order ${idx + 1}`,
       total: computeOrderLineTotal(order),
+      urgentCharge: computeOrderUrgentCharge(order),
     })),
   }))
 }
@@ -160,8 +163,18 @@ export function InvoiceSummary({
                 value={field.state.value ? 'Urgent' : 'Regular'}
                 onChange={(value) => {
                   field.handleChange(value === 'Urgent')
-                  if (value === 'Regular')
-                    form.setFieldValue('urgentCharge', '')
+                  if (value === 'Regular') {
+                    form.state.values.customers.forEach(
+                      (customer, customerIndex) => {
+                        customer.orders.forEach((_order, orderIndex) => {
+                          form.setFieldValue(
+                            `customers[${customerIndex}].orders[${orderIndex}].urgentCharge` as never,
+                            '' as never,
+                          )
+                        })
+                      },
+                    )
+                  }
                   // Priority changes the date and charge requirements. Refresh
                   // their existing submit errors even if neither field changed.
                   if (form.state.submissionAttempts > 0) {
@@ -174,18 +187,6 @@ export function InvoiceSummary({
           )}
         </form.Field>
       </div>
-      <form.Subscribe selector={(state: any) => state.values.isUrgent}>
-        {(isUrgent: boolean) =>
-          isUrgent && (
-            <NumberField
-              form={form}
-              name="urgentCharge"
-              label={`Urgent charge (${CURRENCY}, incl. VAT)`}
-            />
-          )
-        }
-      </form.Subscribe>
-
       <div className="grid gap-4 sm:grid-cols-2">
         <form.Subscribe selector={(state: any) => state.values.isUrgent}>
           {(isUrgent: boolean) => (
@@ -267,15 +268,19 @@ export function InvoiceSummary({
           state.values.customers,
           state.values.products,
           state.values.giftCards,
+          state.values.isUrgent,
         ]}
       >
         {(subscribedLines: any) => {
-          const [customers, products, giftCards] = subscribedLines as [
-            InvoiceCustomerDraft[],
-            InvoiceProductDraft[],
-            InvoiceGiftCardDraft[],
-          ]
+          const [customers, products, giftCards, invoiceIsUrgent] =
+            subscribedLines as [
+              InvoiceCustomerDraft[],
+              InvoiceProductDraft[],
+              InvoiceGiftCardDraft[],
+              boolean,
+            ]
 
+          const urgentCharge = computeUrgentCharges(customers)
           const lineItems = buildLineItems(customers, customerNames.current)
           const productRows = buildProductRows(products, productNames.current)
           const giftCardRows = buildGiftCardRows(giftCards)
@@ -307,6 +312,12 @@ export function InvoiceSummary({
                       </span>
                       <span>
                         {CURRENCY} {order.total.toFixed(2)}
+                        {invoiceIsUrgent && order.urgentCharge > 0 && (
+                          <span className="block text-xs">
+                            + {CURRENCY} {order.urgentCharge.toFixed(2)} urgent
+                            charge
+                          </span>
+                        )}
                       </span>
                     </div>
                   )),
@@ -364,7 +375,6 @@ export function InvoiceSummary({
                   state.values.payments,
                   state.values.redemptions,
                   state.values.isUrgent,
-                  state.values.urgentCharge,
                 ]}
               >
                 {(subscribed: any) => {
@@ -374,14 +384,12 @@ export function InvoiceSummary({
                     payments,
                     redemptions,
                     isUrgent,
-                    urgentCharge,
                   ] = subscribed as [
                     number | '',
                     DiscountUnit,
                     PaymentDraft[],
                     GiftCardRedemptionDraft[],
                     boolean,
-                    number | '',
                   ]
                   // Line prices are gross (VAT included): the discount comes
                   // off the gross and VAT is extracted from it — the shared
@@ -393,8 +401,7 @@ export function InvoiceSummary({
                     giftCardSales,
                     discount: discount === '' ? 0 : discount,
                     discountUnit,
-                    urgentCharge:
-                      isUrgent && urgentCharge !== '' ? urgentCharge : 0,
+                    urgentCharge: isUrgent ? urgentCharge : 0,
                     redeemed: redemptions.reduce(
                       (sum, redemption) =>
                         sum + computeRedemptionTotal(redemption),
@@ -415,7 +422,7 @@ export function InvoiceSummary({
                       {isUrgent && (
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">
-                            Urgent charge (incl. VAT)
+                            Urgent charges (incl. VAT)
                           </span>
                           <span>
                             {CURRENCY} {(urgentCharge || 0).toFixed(2)}

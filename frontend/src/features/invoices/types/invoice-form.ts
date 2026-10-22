@@ -35,6 +35,7 @@ export interface InvoiceOrderDraft {
   // Entered by staff per order line — materials carry no unit price to derive
   // it from.
   price: NumberInput
+  urgentCharge: NumberInput
 }
 
 export interface InvoiceCustomerDraft {
@@ -90,7 +91,6 @@ export interface PaymentDraft {
 
 export interface InvoiceFormValues {
   isUrgent: boolean
-  urgentCharge: NumberInput
   collectionMethod: CollectionMethod
   // When the garment is promised for, if at all — blank means no committed
   // pickup. Required for urgent invoices. Staff-editable; the invoice's own
@@ -148,6 +148,7 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     materialAmount: '',
     productionLocationId: '',
     price: '',
+    urgentCharge: '',
   }
 }
 
@@ -173,7 +174,6 @@ export function createEmptyInvoiceForm(): InvoiceFormValues {
     // itself).
     targetDate: '',
     isUrgent: false,
-    urgentCharge: '',
     collectionMethod: 'pickup',
     receivingBranch: '',
     customerId: '',

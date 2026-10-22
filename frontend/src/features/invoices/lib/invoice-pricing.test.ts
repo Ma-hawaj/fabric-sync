@@ -3,12 +3,14 @@ import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
   computeOrderLineTotal,
+  computeUrgentCharges,
   computeProductLineTotal,
   extractNet,
   extractVat,
 } from './invoice-pricing'
 import {
   createEmptyGiftCardLine,
+  createEmptyCustomer,
   createEmptyOrder,
   createEmptyProductLine,
 } from '../types/invoice-form'
@@ -80,6 +82,19 @@ describe('extractNet / extractVat', () => {
 })
 
 describe('computeInvoiceTotals', () => {
+  it('rounds each order charge before summing across customers', () => {
+    const customers = [
+      {
+        ...createEmptyCustomer(),
+        orders: [{ ...createEmptyOrder(), urgentCharge: 0.006 }],
+      },
+      {
+        ...createEmptyCustomer(),
+        orders: [{ ...createEmptyOrder(), urgentCharge: 0.006 }],
+      },
+    ]
+    expect(computeUrgentCharges(customers)).toBe(0.02)
+  })
   const base = {
     orderTotal: 100,
     productTotal: 100,

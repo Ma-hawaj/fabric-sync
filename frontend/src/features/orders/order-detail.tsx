@@ -175,6 +175,12 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               <dt className="text-muted-foreground">Price</dt>
               <dd className="font-medium">
                 {currencyFormatter.format(order.price)}
+                {order.urgentCharge > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    Urgent charge:{' '}
+                    {currencyFormatter.format(order.urgentCharge)}
+                  </div>
+                )}
               </dd>
             </div>
             <div className="flex justify-between gap-4">

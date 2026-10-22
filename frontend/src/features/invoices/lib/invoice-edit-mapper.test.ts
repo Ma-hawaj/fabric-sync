@@ -67,6 +67,7 @@ function editFixture(): InvoiceEdit {
             productionLocationName: 'Main Branch',
             stockQuantity: 10,
             price: 100,
+            urgentCharge: 0,
             thobeType: 'saudi-classic',
             fPocket: null,
             sPocket: 'type-2',
@@ -99,15 +100,15 @@ describe('mapInvoiceEditToForm', () => {
   it('restores urgency, collection method, and customer addresses when editing', () => {
     const edit = editFixture()
     edit.isUrgent = true
-    edit.urgentCharge = 12.5
+    edit.customers[0].orders[0].urgentCharge = 12.5
     edit.collectionMethod = 'delivery'
     edit.customers[0].customerAddress = 'Building 1, Road 2'
     const { values, seeds } = mapInvoiceEditToForm(edit)
     expect(values).toMatchObject({
       isUrgent: true,
-      urgentCharge: 12.5,
       collectionMethod: 'delivery',
     })
+    expect(values.customers[0].orders[0].urgentCharge).toBe(12.5)
     expect(
       seeds.customers.get(edit.customers[0].existingCustomerId)?.address,
     ).toBe('Building 1, Road 2')

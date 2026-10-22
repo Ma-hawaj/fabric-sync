@@ -18,6 +18,7 @@ export interface InvoiceParty {
  * line rather than per metre, so its `unitPrice` and `lineTotal` are equal.
  */
 export interface InvoiceLine {
+  urgentCharge: number
   kind: InvoiceLineKind
   /** Only set for an `order` line — lets it link straight to that order's tracking. */
   orderId: string | null

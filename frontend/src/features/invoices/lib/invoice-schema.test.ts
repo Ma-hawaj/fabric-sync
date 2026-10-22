@@ -64,45 +64,59 @@ function firstError(customers: InvoiceCustomerDraft[]) {
 describe('invoiceFormSchema', () => {
   it('requires a target date only for urgent invoices', () => {
     const input = values({
-      products: [validProductLine()],
-      productBranch: 'loc-1',
+      customers: [
+        {
+          ...createEmptyCustomer(),
+          existingCustomerId: 'cust-1',
+          measurement: validMeasurement(),
+          orders: [{ ...validOrder(), urgentCharge: 10 }],
+        },
+      ],
     })
     const targetDate = input.targetDate
     input.targetDate = ''
     expect(firstErrorFor(input)).toBeNull()
-
     input.isUrgent = true
-    input.urgentCharge = 10
     const issue = firstErrorFor(input)
     expect(issue?.path).toEqual(['targetDate'])
     expect(issue?.message).toMatch(/target date.*urgent/i)
-
     input.targetDate = targetDate
     expect(firstErrorFor(input)).toBeNull()
   })
-  it('requires a positive urgent charge and allows payments covering the surcharge', () => {
-    for (const urgentCharge of ['', 0, -1, 0.004] as const) {
-      const issue = firstErrorFor(
-        values({
-          products: [validProductLine()],
-          productBranch: 'loc-1',
-          isUrgent: true,
-          urgentCharge,
-        }),
-      )
-      expect(issue?.path).toEqual(['urgentCharge'])
-      expect(issue?.message).toMatch(/urgent charge/i)
-    }
+  it('requires a positive urgent charge on every order and includes all charges in payment validation', () => {
     const input = values({
-      products: [validProductLine()],
-      productBranch: 'loc-1',
+      customers: [
+        {
+          ...createEmptyCustomer(),
+          existingCustomerId: 'cust-1',
+          measurement: validMeasurement(),
+          orders: [
+            { ...validOrder(), price: 20, urgentCharge: 5 },
+            { ...validOrder(), price: 20, urgentCharge: 5 },
+          ],
+        },
+      ],
       isUrgent: true,
-      urgentCharge: 10,
       payments: [{ ...createEmptyPayment(), amount: 50, paymentType: 'cash' }],
     })
     expect(firstErrorFor(input)).toBeNull()
+    for (const urgentCharge of ['', 0, -1, 0.004] as const) {
+      input.customers[0].orders[1].urgentCharge = urgentCharge
+      const issue = firstErrorFor(input)
+      expect(issue?.path).toEqual(['customers', 0, 'orders', 1, 'urgentCharge'])
+      expect(issue?.message).toMatch(/urgent charge/i)
+    }
+    input.customers[0].orders[1].urgentCharge = 5
     input.payments[0].amount = 51
     expect(firstErrorFor(input)?.path).toEqual(['payments'])
+  })
+  it('requires tailoring orders before marking a retail invoice urgent', () => {
+    const input = values({
+      isUrgent: true,
+      products: [validProductLine()],
+      productBranch: 'loc-1',
+    })
+    expect(firstErrorFor(input)?.path).toEqual(['customers'])
   })
   it('accepts customer fabric without an inventory material and requires its description', () => {
     const customer = {

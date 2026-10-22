@@ -1097,6 +1097,7 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         material_sku: Some("CTN-001".to_string()),
         material_amount: 3.5,
         price: 100.0,
+        urgent_charge: 0.0,
         status: "pending".to_string(),
         collected_at: None,
         ready_at: None,

@@ -47,6 +47,7 @@ export interface InvoiceEditOrder {
   /** Live stock at the production location — seeds the "Made At" picker. */
   stockQuantity: number | null
   price: number
+  urgentCharge: number
   thobeType: string | null
   fPocket: string | null
   sPocket: string | null

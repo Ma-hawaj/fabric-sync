@@ -83,6 +83,8 @@ impl MaterialSource {
 #[serde(rename_all = "camelCase")]
 pub struct CreateOrderInput {
     #[serde(default)]
+    pub urgent_charge: f64,
+    #[serde(default)]
     pub material_source: MaterialSource,
     pub material_id: Option<Uuid>,
     pub customer_material_description: Option<String>,
@@ -180,8 +182,6 @@ pub struct CreateInvoiceInput {
     #[serde(default)]
     pub is_urgent: bool,
     #[serde(default)]
-    pub urgent_charge: f64,
-    #[serde(default)]
     pub collection_method: CollectionMethod,
     /// When the garment is promised for. Required for urgent invoices,
     /// optional otherwise, and staff-editable — this is what the form's
@@ -231,6 +231,7 @@ pub struct CreatedInvoice {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEditOrder {
+    pub urgent_charge: f64,
     pub material_source: String,
     pub material_id: Option<Uuid>,
     pub customer_material_description: Option<String>,
@@ -435,6 +436,8 @@ pub enum InvoiceLineKind {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceDetailLine {
+    /// VAT-inclusive urgency charge for this tailoring order; zero for retail.
+    pub urgent_charge: f64,
     pub kind: InvoiceLineKind,
     /// Only set for an `Order` line — lets the frontend link straight to that
     /// order's tracking. `None` for a product or gift card line, which has no

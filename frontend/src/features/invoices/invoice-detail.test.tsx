@@ -55,6 +55,7 @@ const DETAIL: InvoiceDetail = {
   lines: [
     {
       kind: 'order',
+      urgentCharge: 0,
       orderId: 'order-1',
       description: 'Japanese Toray Cotton',
       detail: 'Thobe: Saudi · Collar: Classic',
@@ -67,6 +68,7 @@ const DETAIL: InvoiceDetail = {
     },
     {
       kind: 'gift_card',
+      urgentCharge: 0,
       orderId: null,
       description: 'Gift card GC-2026-A1',
       detail: null,
@@ -122,6 +124,7 @@ describe('InvoiceDetailPage', () => {
     renderPage({
       ...DETAIL,
       isUrgent: true,
+      lines: [{ ...DETAIL.lines[0], urgentCharge: 10 }, DETAIL.lines[1]],
       collectionMethod: 'delivery',
       buyer: {
         name: 'Buyer',
@@ -138,7 +141,8 @@ describe('InvoiceDetailPage', () => {
     expect(screen.getByText('Urgent')).toBeTruthy()
     expect(screen.getByText('Delivery')).toBeTruthy()
     expect(screen.getByText('Building 1, Road 2')).toBeTruthy()
-    expect(screen.getByText('Urgent charge (incl. VAT)')).toBeTruthy()
+    expect(screen.getByText('Urgent charges (incl. VAT)')).toBeTruthy()
+    expect(screen.getByText(/Urgent charge for this order/)).toBeTruthy()
   })
   beforeEach(() => {
     navigateMock.mockClear()

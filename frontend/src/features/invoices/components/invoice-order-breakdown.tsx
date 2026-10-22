@@ -80,7 +80,10 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
               <div className="text-end text-sm">
                 <p className="font-medium">
                   {currencyFormatter.format(
-                    group.orders.reduce((sum, order) => sum + order.price, 0),
+                    group.orders.reduce(
+                      (sum, order) => sum + order.price + order.urgentCharge,
+                      0,
+                    ),
                   )}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -130,7 +133,16 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-end tabular-nums">
-                      {currencyFormatter.format(order.price)}
+                      {currencyFormatter.format(
+                        order.price + order.urgentCharge,
+                      )}
+                      {order.urgentCharge > 0 && (
+                        <div className="text-xs text-muted-foreground">
+                          Includes{' '}
+                          {currencyFormatter.format(order.urgentCharge)} urgent
+                          charge
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

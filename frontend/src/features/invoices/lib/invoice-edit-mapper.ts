@@ -155,6 +155,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
         materialAmount: line.materialAmount,
         productionLocationId: line.productionLocationId ?? '',
         price: line.price,
+        urgentCharge: line.urgentCharge === 0 ? '' : line.urgentCharge,
       }
     })
 
@@ -239,7 +240,6 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
   const values: InvoiceFormValues = {
     targetDate: edit.targetDate ?? '',
     isUrgent: edit.isUrgent,
-    urgentCharge: edit.urgentCharge === 0 ? '' : edit.urgentCharge,
     collectionMethod: edit.collectionMethod,
     receivingBranch: edit.branchId ?? '',
     customerId: edit.customerId ?? '',

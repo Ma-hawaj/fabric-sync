@@ -54,9 +54,13 @@ vi.mock('@/lib/api', () => ({
   ApiError: class ApiError extends Error {},
 }))
 
-function Harness({ order = {} }: { order?: Partial<InvoiceOrderDraft> } = {}) {
+function Harness({
+  order = {},
+  isUrgent = false,
+}: { order?: Partial<InvoiceOrderDraft>; isUrgent?: boolean } = {}) {
   const form = useForm({
     defaultValues: {
+      isUrgent,
       customers: [
         {
           ...createEmptyCustomer(),
@@ -133,6 +137,17 @@ async function pickMaterial(name: RegExp | string) {
 }
 
 describe('OrderBlock', () => {
+  it('edits the urgent charge on the order itself', () => {
+    render(<Harness isUrgent order={{ urgentCharge: 10 }} />)
+    const field = screen.getByLabelText(`Urgent charge incl. VAT (${CURRENCY})`)
+    fireEvent.change(field, { target: { value: '15' } })
+    fireEvent.blur(field)
+    expect(
+      JSON.parse(screen.getByTestId('draft').textContent).customers[0].orders[0]
+        .urgentCharge,
+    ).toBe(15)
+  })
+
   it('creates a customer fabric order with a production location that has no inventory stock', async () => {
     render(<Harness />)
     fireEvent.click(screen.getByRole('radio', { name: 'Customer' }))

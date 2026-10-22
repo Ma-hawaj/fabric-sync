@@ -385,9 +385,18 @@ fn breakdown(
 struct InvoiceTotals {
     total: f64,
     redeemed: f64,
+    urgent_charge: f64,
 }
 
 fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
+    let urgent_charge = round2(
+        input
+            .customers
+            .iter()
+            .flat_map(|customer| &customer.orders)
+            .map(|order| round2(order.urgent_charge))
+            .sum(),
+    );
     let order_subtotal: f64 = input
         .customers
         .iter()
@@ -407,11 +416,12 @@ fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
         gift_card_sales,
         input.discount,
         input.discount_unit,
-        input.urgent_charge,
+        urgent_charge,
     );
 
     InvoiceTotals {
         total: totals.total,
+        urgent_charge,
         redeemed: round2(
             input
                 .gift_card_redemptions
@@ -461,19 +471,16 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
             "urgent invoices need a target date".to_string(),
         ));
     }
-    if !input.urgent_charge.is_finite()
-        || (input.is_urgent && round2(input.urgent_charge) <= 0.0)
-        || (!input.is_urgent && input.urgent_charge != 0.0)
-    {
-        return Err(AppError::BadRequest(
-            "urgent invoices need a positive extra charge; regular invoices cannot have one"
-                .to_string(),
-        ));
-    }
     let has_orders = input
         .customers
         .iter()
         .any(|customer| !customer.orders.is_empty());
+
+    if input.is_urgent && !has_orders {
+        return Err(AppError::BadRequest(
+            "an urgent invoice needs at least one tailoring order".into(),
+        ));
+    }
 
     if !has_orders && input.products.is_empty() && input.gift_cards.is_empty() {
         return Err(AppError::BadRequest(
@@ -510,6 +517,14 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
 
         validate_measurement(&customer.measurement)?;
         for order in &customer.orders {
+            if !order.urgent_charge.is_finite()
+                || (input.is_urgent && round2(order.urgent_charge) <= 0.0)
+                || (!input.is_urgent && order.urgent_charge != 0.0)
+            {
+                return Err(AppError::BadRequest(
+                    "each urgent order needs a positive extra charge; regular orders cannot have one".into(),
+                ));
+            }
             validate_order(order)?;
         }
     }
@@ -695,13 +710,130 @@ mod tests {
     fn urgency_adds_a_taxable_charge_after_the_discount() {
         let mut invoice = invoice(10.0, "percent", vec![customer(vec![order(100.0)])]);
         invoice.is_urgent = true;
-        invoice.urgent_charge = 20.0;
+        invoice.customers[0].orders[0].urgent_charge = 20.0;
         assert!(validate(&invoice).is_ok());
         assert_eq!(compute_totals(&invoice).total, 110.0);
         let totals = breakdown(100.0, 50.0, 10.0, DiscountUnit::Percent, 20.0);
         assert_eq!(totals.taxable, 100.0);
         assert_eq!(totals.vat, 10.0);
         assert_eq!(totals.total, 160.0);
+    }
+
+    #[sqlx::test]
+    async fn urgent_order_charges_survive_create_edit_and_print(db: sqlx::PgPool) {
+        let (_, _, production, _) = crate::test_support::invoice(&db, 0, false).await;
+        let customer_id: Uuid = sqlx::query_scalar("SELECT id FROM customers LIMIT 1")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        let state = crate::test_support::state(db.clone(), None, None).await;
+        let mut input = invoice(
+            0.0,
+            "amount",
+            vec![customer(vec![order(100.0), order(100.0)])],
+        );
+        input.is_urgent = true;
+        input.customers[0].existing_customer_id = Some(customer_id);
+        for (order, charge) in input.customers[0].orders.iter_mut().zip([10.0, 20.0]) {
+            order.material_source = MaterialSource::Customer;
+            order.material_id = None;
+            order.customer_material_description = Some("Customer cotton".into());
+            order.production_location_id = production;
+            order.urgent_charge = charge;
+        }
+        let created = create_invoice(&state, input.clone()).await.unwrap();
+        assert_eq!(created.total_price, 230.0);
+        let detail = get_invoice(&state, created.id).await.unwrap();
+        assert_eq!(detail.totals.urgent_charge, 30.0);
+        assert_eq!(detail.totals.balance_due, 230.0);
+        assert_eq!(
+            detail
+                .lines
+                .iter()
+                .map(|line| line.urgent_charge)
+                .collect::<Vec<_>>(),
+            vec![10.0, 20.0]
+        );
+        let editing = get_invoice_for_edit(&state, created.id).await.unwrap();
+        assert_eq!(editing.customers[0].orders[0].urgent_charge, 10.0);
+        assert_eq!(editing.customers[0].orders[1].urgent_charge, 20.0);
+        let html = super::super::document::render_invoice_document(&state, created.id)
+            .await
+            .unwrap();
+        assert_eq!(html.matches("Urgent charge for this order").count(), 2);
+        assert!(html.contains("10.000") && html.contains("20.000") && html.contains("30.000"));
+        input.customers[0].orders[0].urgent_charge = 15.0;
+        assert_eq!(
+            update_invoice(&state, created.id, input.clone())
+                .await
+                .unwrap()
+                .total_price,
+            235.0
+        );
+        let updated = get_invoice(&state, created.id).await.unwrap();
+        assert_eq!(updated.totals.urgent_charge, 35.0);
+        let stored_charge: f64 =
+            sqlx::query_scalar("SELECT urgent_charge::float8 FROM invoices WHERE id = $1")
+                .bind(created.id)
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!(stored_charge, 35.0);
+        input.customers[0].orders[0].urgent_charge = 1.005;
+        let rounded_charge = round2(1.005);
+        update_invoice(&state, created.id, input.clone())
+            .await
+            .unwrap();
+        let rounded = get_invoice(&state, created.id).await.unwrap();
+        assert_eq!(rounded.lines[0].urgent_charge, rounded_charge);
+        assert_eq!(rounded.totals.urgent_charge, 20.0 + rounded_charge);
+        input.is_urgent = false;
+        input.target_date = None;
+        for order in &mut input.customers[0].orders {
+            order.urgent_charge = 0.0;
+        }
+        assert_eq!(
+            update_invoice(&state, created.id, input)
+                .await
+                .unwrap()
+                .total_price,
+            200.0
+        );
+        assert_eq!(
+            get_invoice(&state, created.id)
+                .await
+                .unwrap()
+                .totals
+                .urgent_charge,
+            0.0
+        );
+    }
+
+    #[test]
+    fn urgency_sums_each_order_across_customers_without_charging_retail_lines() {
+        let mut invoice = invoice(
+            10.0,
+            "percent",
+            vec![customer(vec![order(100.0)]), customer(vec![order(100.0)])],
+        );
+        invoice.is_urgent = true;
+        invoice.customers[0].orders[0].urgent_charge = 10.01;
+        invoice.customers[1].orders[0].urgent_charge = 20.02;
+        invoice.products = vec![serde_json::from_value(product(1.0, 50.0)).unwrap()];
+        invoice.gift_cards = vec![serde_json::from_value(gift_card(25.0)).unwrap()];
+        assert!(validate(&invoice).is_ok());
+        let totals = compute_totals(&invoice);
+        assert_eq!(totals.urgent_charge, 30.03);
+        assert_eq!(totals.total, 280.03);
+        invoice.customers[1].orders[0].urgent_charge = 0.0;
+        assert!(validate(&invoice).is_err());
+    }
+
+    #[test]
+    fn retail_only_invoices_cannot_carry_an_order_urgency_charge() {
+        let mut invoice = retail_invoice(serde_json::json!({"products": [product(1.0, 50.0)]}));
+        invoice.is_urgent = true;
+        assert!(validate(&invoice).is_err());
     }
 
     #[test]
@@ -711,10 +843,10 @@ mod tests {
         assert_eq!(invoice.collection_method.as_str(), "pickup");
         invoice.is_urgent = true;
         for charge in [0.0, -1.0, 0.004, f64::NAN, f64::INFINITY] {
-            invoice.urgent_charge = charge;
+            invoice.customers[0].orders[0].urgent_charge = charge;
             assert!(validate(&invoice).is_err(), "{charge}");
         }
-        invoice.urgent_charge = 0.01;
+        invoice.customers[0].orders[0].urgent_charge = 0.01;
         assert!(validate(&invoice).is_ok());
         invoice.is_urgent = false;
         assert!(validate(&invoice).is_err());
@@ -728,7 +860,7 @@ mod tests {
         assert!(validate(&invoice).is_ok());
 
         invoice.is_urgent = true;
-        invoice.urgent_charge = 10.0;
+        invoice.customers[0].orders[0].urgent_charge = 10.0;
         let error = validate(&invoice).unwrap_err();
         assert!(matches!(error, AppError::BadRequest(message) if message.contains("target date")));
 
@@ -1169,7 +1301,14 @@ async fn write_customer_orders(
             }
         }
 
-        repository::insert_order(tx, invoice_id, measurement_id, order).await?;
+        repository::insert_order(
+            tx,
+            invoice_id,
+            measurement_id,
+            order,
+            round2(order.urgent_charge),
+        )
+        .await?;
     }
 
     Ok(())
@@ -1280,8 +1419,14 @@ pub async fn create_invoice(
     // invoice_date is server-set (DEFAULT now()) — the only date staff enter
     // is the promised target_date. Its actual value comes back here so gift
     // card expiry is checked against the creation date.
-    let (invoice_id, invoice_date) =
-        repository::insert_invoice(&mut tx, &input, totals.total, totals.redeemed).await?;
+    let (invoice_id, invoice_date) = repository::insert_invoice(
+        &mut tx,
+        &input,
+        totals.total,
+        totals.redeemed,
+        totals.urgent_charge,
+    )
+    .await?;
 
     for payment in &input.payments {
         repository::insert_payment(
@@ -1546,8 +1691,15 @@ pub async fn update_invoice(
     )
     .await?;
 
-    repository::update_invoice_header(&mut tx, invoice_id, &input, totals.total, totals.redeemed)
-        .await?;
+    repository::update_invoice_header(
+        &mut tx,
+        invoice_id,
+        &input,
+        totals.total,
+        totals.redeemed,
+        totals.urgent_charge,
+    )
+    .await?;
 
     tx.commit().await?;
 

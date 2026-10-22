@@ -1,6 +1,7 @@
 import type {
   GiftCardRedemptionDraft,
   InvoiceGiftCardDraft,
+  InvoiceCustomerDraft,
   InvoiceOrderDraft,
   InvoiceProductDraft,
   NumberInput,
@@ -19,6 +20,31 @@ export function numberOrZero(value: NumberInput): number {
 // price); a blank or non-positive entry counts as 0 in the summary.
 export function computeOrderLineTotal(order: InvoiceOrderDraft): number {
   return typeof order.price === 'number' && order.price > 0 ? order.price : 0
+}
+
+export function computeOrderUrgentCharge(order: InvoiceOrderDraft): number {
+  const charge = order.urgentCharge
+  return typeof charge === 'number' && Number.isFinite(charge) && charge > 0
+    ? Math.round(charge * 100) / 100
+    : 0
+}
+
+export function computeUrgentCharges(
+  customers: InvoiceCustomerDraft[],
+): number {
+  return (
+    Math.round(
+      customers.reduce(
+        (sum, customer) =>
+          sum +
+          customer.orders.reduce(
+            (total, order) => total + computeOrderUrgentCharge(order),
+            0,
+          ),
+        0,
+      ) * 100,
+    ) / 100
+  )
 }
 
 // A product line is the one thing priced per unit — products carry a list

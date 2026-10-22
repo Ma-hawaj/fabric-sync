@@ -368,6 +368,10 @@ fn formatted_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<Strin
         );
         amounts.insert(format!("line{index}Total"), format_amount(line.line_total));
         amounts.insert(
+            format!("line{index}UrgentCharge"),
+            format_amount(line.urgent_charge),
+        );
+        amounts.insert(
             format!("line{index}Quantity"),
             format_quantity(line.quantity),
         );
@@ -491,7 +495,7 @@ mod tests {
         };
         let html = render(&detail);
         assert!(html.contains("Delivery"));
-        assert!(html.contains("Urgent charge (incl. VAT)"));
+        assert!(html.contains("Urgent charges (incl. VAT)"));
         assert!(html.contains("10.000"));
         assert!(html.contains("Building 1 &lt;Road 2&gt;"));
         detail.is_urgent = false;

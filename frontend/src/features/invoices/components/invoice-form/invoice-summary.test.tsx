@@ -121,9 +121,13 @@ describe('InvoiceSummary', () => {
     render(
       <Harness
         defaultValues={baseValues({
-          customers: [customerWithOrder(100)],
+          customers: [
+            {
+              ...customerWithOrder(100),
+              orders: [{ ...createEmptyOrder(), price: 100, urgentCharge: 10 }],
+            },
+          ],
           isUrgent: true,
-          urgentCharge: 10,
           collectionMethod: 'delivery',
         })}
       />,
@@ -134,19 +138,41 @@ describe('InvoiceSummary', () => {
         .getByRole('radio', { name: 'Delivery' })
         .getAttribute('aria-checked'),
     ).toBe('true')
-    expect(
-      screen.getByLabelText(`Urgent charge (${CURRENCY}, incl. VAT)`),
-    ).toBeTruthy()
+    expect(rowValue('Urgent charges (incl. VAT)')).toBe(`${CURRENCY} 10.00`)
+    expect(screen.getByText(`+ ${CURRENCY} 10.00 urgent charge`)).toBeTruthy()
     expect(screen.getByLabelText('Target Date (required)')).toBeTruthy()
     fireEvent.click(screen.getByRole('radio', { name: 'Regular' }))
     expect(screen.getByLabelText('Target Date (optional)')).toBeTruthy()
     expect(rowValue('Total')).toBe(`${CURRENCY} 100.00`)
-    expect(
-      screen.queryByLabelText(`Urgent charge (${CURRENCY}, incl. VAT)`),
-    ).toBeNull()
+    expect(screen.queryByText('Urgent charges (incl. VAT)')).toBeNull()
     fireEvent.click(screen.getByRole('radio', { name: 'Urgent' }))
     expect(screen.getByLabelText('Target Date (required)')).toBeTruthy()
     expect(rowValue('Total')).toBe(`${CURRENCY} 100.00`)
+  })
+  it('sums different urgency charges for multiple orders and excludes products and gift cards', () => {
+    render(
+      <Harness
+        defaultValues={baseValues({
+          isUrgent: true,
+          customers: [
+            {
+              ...customerWithOrder(100),
+              orders: [{ ...createEmptyOrder(), price: 100, urgentCharge: 10 }],
+            },
+            {
+              ...customerWithOrder(100),
+              orders: [{ ...createEmptyOrder(), price: 100, urgentCharge: 20 }],
+            },
+          ],
+          products: [productLine(1, 50)],
+          giftCards: [{ ...createEmptyGiftCardLine(), amount: 25 }],
+          discount: 10,
+          discountUnit: 'percent',
+        })}
+      />,
+    )
+    expect(rowValue('Urgent charges (incl. VAT)')).toBe(`${CURRENCY} 30.00`)
+    expect(rowValue('Total')).toBe(`${CURRENCY} 280.00`)
   })
   it('extracts VAT from order line items instead of adding it', () => {
     render(

@@ -516,6 +516,17 @@ export function OrderBlock({
               {(price: number | '') => <GrossVatHint gross={price} />}
             </form.Subscribe>
           </div>
+          <form.Subscribe selector={(state: any) => state.values.isUrgent}>
+            {(isUrgent: boolean) =>
+              isUrgent && (
+                <NumberField
+                  form={form}
+                  name={`${base}.urgentCharge`}
+                  label={`Urgent charge incl. VAT (${CURRENCY})`}
+                />
+              )
+            }
+          </form.Subscribe>
         </div>
       </div>
     </div>

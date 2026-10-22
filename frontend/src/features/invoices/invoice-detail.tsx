@@ -228,6 +228,12 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                           {line.customer.name}
                         </div>
                       )}
+                      {line.urgentCharge > 0 && (
+                        <div className="text-xs text-muted-foreground">
+                          Urgent charge for this order (incl. VAT):{' '}
+                          {currencyFormatter.format(line.urgentCharge)}
+                        </div>
+                      )}
                       {line.detail && (
                         <div className="text-xs text-muted-foreground">
                           {line.detail}
@@ -282,7 +288,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           )}
           {detail.isUrgent && (
             <TotalRow
-              label="Urgent charge (incl. VAT)"
+              label="Urgent charges (incl. VAT)"
               value={detail.totals.urgentCharge}
             />
           )}
