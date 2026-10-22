@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -44,8 +45,8 @@ export function CollectOrderDialog({
   onOpenChange,
 }: CollectOrderDialogProps) {
   const collectOrder = useCollectOrder()
-  const [amount, setAmount] = React.useState('')
-  const [paymentType, setPaymentType] = React.useState<PaymentType | ''>('')
+  const [amount, setAmount] = useState('')
+  const [paymentType, setPaymentType] = useState<PaymentType | ''>('')
 
   // Prefill this pickup with the whole remaining balance — staff collecting
   // the last order usually settle everything, and a partial pickup just edits

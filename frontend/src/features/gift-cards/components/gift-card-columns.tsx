@@ -90,7 +90,7 @@ export const getGiftCardColumns = (
   },
   {
     accessorKey: 'expiresOn',
-    meta: { label: 'Expires On' },
+    meta: { label: 'Expires On', variant: 'dateRange' },
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Expires" />
     ),
@@ -100,7 +100,7 @@ export const getGiftCardColumns = (
       </div>
     ),
     enableSorting: true,
-    enableColumnFilter: false,
+    enableColumnFilter: true,
   },
   {
     id: 'status',

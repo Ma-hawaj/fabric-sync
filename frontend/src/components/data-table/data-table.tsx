@@ -92,6 +92,11 @@ export function DataTable<TData>({
                   <TableHead
                     key={header.id}
                     colSpan={header.colSpan}
+                    className={
+                      header.column.columnDef.meta?.align === 'end'
+                        ? 'text-end'
+                        : undefined
+                    }
                     style={{
                       ...getColumnPinningStyle({ column: header.column }),
                     }}
@@ -158,6 +163,11 @@ export function DataTable<TData>({
                     {row.getVisibleCells().map((cell) => (
                       <TableCell
                         key={cell.id}
+                        className={
+                          cell.column.columnDef.meta?.align === 'end'
+                            ? 'text-end'
+                            : undefined
+                        }
                         title={
                           typeof cell.getValue() === 'string'
                             ? cell.getValue<string>()

@@ -1,5 +1,6 @@
 import { NotificationDialog } from '@/features/notifications/notification-dialog'
 import * as React from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -23,14 +24,10 @@ import { downloadInvoicePdf } from './lib/print-invoice'
 import type { Invoice } from './types/invoices'
 
 export function InvoicesPage() {
-  const [collectInvoice, setCollectInvoice] = React.useState<Invoice | null>(
-    null,
-  )
-  const [paymentInvoice, setPaymentInvoice] = React.useState<Invoice | null>(
-    null,
-  )
+  const [collectInvoice, setCollectInvoice] = useState<Invoice | null>(null)
+  const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null)
   const navigate = useNavigate()
-  const [resendId, setResendId] = React.useState<string | null>(null)
+  const [resendId, setResendId] = useState<string | null>(null)
 
   const exportPdf = React.useCallback((invoice: Invoice) => {
     toast.promise(downloadInvoicePdf(invoice.id), {

@@ -23,6 +23,7 @@ import type {
 import { parseAsInteger, useQueryState, useQueryStates } from 'nuqs'
 import type { UseQueryStateOptions } from 'nuqs'
 import * as React from 'react'
+import { useState } from 'react'
 
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
 import { getColumnDefId } from '@/lib/data-table'
@@ -113,17 +114,16 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     [history, scroll, shallow, clearOnDefault, startTransition],
   )
 
-  const [preferenceKey] = React.useState(tablePreferenceKey)
-  const [saved] = React.useState(readTablePreferences)
-  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>(
+  const [preferenceKey] = useState(tablePreferenceKey)
+  const [saved] = useState(readTablePreferences)
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>(
     initialState?.rowSelection ?? {},
   )
-  const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({
-      ...initialState?.columnVisibility,
-      ...saved.visibility,
-    })
-  const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>(
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    ...initialState?.columnVisibility,
+    ...saved.visibility,
+  })
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(
     saved.sizing ?? {},
   )
 
@@ -272,7 +272,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     ],
   )
 
-  const [columnPinning, setColumnPinning] = React.useState<ColumnPinningState>(
+  const [columnPinning, setColumnPinning] = useState<ColumnPinningState>(
     initialState?.columnPinning ?? {},
   )
 

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { parseAsStringEnum, useQueryState } from 'nuqs'
 import * as React from 'react'
+import { useState } from 'react'
 
 import { DataTableRangeFilter } from '@/components/data-table/data-table-range-filter'
 import { Badge } from '@/components/ui/badge'
@@ -56,6 +57,7 @@ import {
   getFilterValueForOperator,
 } from '@/lib/data-table'
 import { formatDate } from '@/lib/format'
+import { parseFilterDate, serializeFilterDate } from '@/lib/filter-date'
 import { generateId } from '@/lib/id'
 import { useTableFilters } from '@/hooks/use-table-filters'
 import { cn } from '@/lib/utils'
@@ -87,7 +89,7 @@ export function DataTableFilterList<TData>({
   const id = React.useId()
   const labelId = React.useId()
   const descriptionId = React.useId()
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = useState(false)
   const addButtonRef = React.useRef<HTMLButtonElement>(null)
   const mounted = React.useRef(false)
   React.useEffect(() => {
@@ -357,9 +359,9 @@ function DataTableFilterItem<TData>({
   onFilterUpdate,
   onFilterRemove,
 }: DataTableFilterItemProps<TData>) {
-  const [showFieldSelector, setShowFieldSelector] = React.useState(false)
-  const [showOperatorSelector, setShowOperatorSelector] = React.useState(false)
-  const [showValueSelector, setShowValueSelector] = React.useState(false)
+  const [showFieldSelector, setShowFieldSelector] = useState(false)
+  const [showOperatorSelector, setShowOperatorSelector] = useState(false)
+  const [showValueSelector, setShowValueSelector] = useState(false)
 
   const column = columns.find((col) => col.id === filter.id)
 
@@ -745,13 +747,11 @@ function onFilterInputRender<TData>({
       const inputListboxId = `${inputId}-listbox`
 
       const dateValue = Array.isArray(filter.value)
-        ? filter.value.filter(Boolean)
-        : [filter.value, filter.value].filter(Boolean)
+        ? filter.value
+        : [filter.value, filter.value]
 
-      const startDate = dateValue[0]
-        ? new Date(Number(dateValue[0]))
-        : undefined
-      const endDate = dateValue[1] ? new Date(Number(dateValue[1])) : undefined
+      const startDate = dateValue[0] ? parseFilterDate(dateValue[0]) : undefined
+      const endDate = dateValue[1] ? parseFilterDate(dateValue[1]) : undefined
 
       const isSameDate =
         startDate &&
@@ -795,23 +795,13 @@ function onFilterInputRender<TData>({
                 autoFocus
                 captionLayout="dropdown"
                 mode="range"
-                selected={
-                  dateValue.length === 2
-                    ? {
-                        from: new Date(Number(dateValue[0])),
-                        to: new Date(Number(dateValue[1])),
-                      }
-                    : {
-                        from: new Date(),
-                        to: new Date(),
-                      }
-                }
+                selected={{ from: startDate, to: endDate }}
                 onSelect={(date) => {
                   onFilterUpdate(filter.filterId, {
                     value: date
                       ? [
-                          (date.from?.getTime() ?? '').toString(),
-                          (date.to?.getTime() ?? '').toString(),
+                          serializeFilterDate(date.from),
+                          serializeFilterDate(date.to),
                         ]
                       : [],
                   })
@@ -824,11 +814,11 @@ function onFilterInputRender<TData>({
                 captionLayout="dropdown"
                 mode="single"
                 selected={
-                  dateValue[0] ? new Date(Number(dateValue[0])) : undefined
+                  dateValue[0] ? parseFilterDate(dateValue[0]) : undefined
                 }
                 onSelect={(date) => {
                   onFilterUpdate(filter.filterId, {
-                    value: (date?.getTime() ?? '').toString(),
+                    value: serializeFilterDate(date),
                   })
                   setShowValueSelector(false)
                 }}

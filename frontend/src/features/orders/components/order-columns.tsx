@@ -281,7 +281,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'collectedAt',
-      meta: { label: 'Collected At' },
+      meta: { label: 'Collected At', variant: 'dateRange' },
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Collected At" />
       ),
@@ -291,7 +291,7 @@ export function getOrderColumns(
         return <div>{collectedAt.toLocaleString()}</div>
       },
       enableSorting: true,
-      enableColumnFilter: false,
+      enableColumnFilter: true,
     },
     {
       id: 'stage',

@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 
 import { useCallbackRef } from './use-callback-ref'
 import { useDebouncedCallback } from './use-debounced-callback'
@@ -8,7 +9,7 @@ export function useDebouncedInput<T>(
   value: T,
   onValueChange: (value: T) => void,
 ) {
-  const [draft, setDraft] = React.useState(value)
+  const [draft, setDraft] = useState(value)
   const latestDraft = React.useRef(value)
   const pending = React.useRef<{ value: T } | null>(null)
   const commit = useCallbackRef((next: T) => {

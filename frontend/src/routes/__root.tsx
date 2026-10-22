@@ -3,13 +3,12 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import '../styles.css'
-import Sidebar from '@/components/sidebar'
+import Sidebar from '@/app/sidebar'
 import Breadcrumbs from '@/components/breadcrumbs'
 import type { AuthState } from '@/lib/auth'
 import type { QueryClient } from '@tanstack/react-query'
 import { SidebarInset, SidebarTrigger } from '#/components/ui/sidebar'
-import { Toaster } from '@/components/ui/sonner'
-import { useTheme } from '@/components/theme-provider'
+import { Toaster } from '@/app/toaster'
 import { NuqsAdapter } from 'nuqs/adapters/tanstack-router'
 
 type RouterContext = {
@@ -47,7 +46,6 @@ function Header() {
 }
 
 function RootComponent() {
-  const { theme } = useTheme()
   return (
     <NuqsAdapter>
       <Sidebar />
@@ -70,7 +68,7 @@ function RootComponent() {
           ]}
         />
       )}
-      <Toaster theme={theme} />
+      <Toaster />
     </NuqsAdapter>
   )
 }

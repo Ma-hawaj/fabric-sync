@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -14,8 +15,9 @@ import { printMeasurements } from './lib/print-measurements'
 import type { Customer } from './types/customers'
 
 export function CustomersPage() {
-  const [selectedCustomer, setSelectedCustomer] =
-    React.useState<Customer | null>(null)
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
+    null,
+  )
 
   const printCustomer = React.useCallback((customer: Customer) => {
     const measurement = customer.measurements[0]

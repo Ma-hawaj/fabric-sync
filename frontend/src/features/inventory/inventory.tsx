@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { useDataTable } from '@/hooks/use-data-table'
@@ -17,11 +18,10 @@ export function InventoryPage() {
   // Unfiltered on purpose: this facet lists where stock already sits, so a
   // since-deactivated location should stay selectable here.
   const { data: locations } = useAllLocations()
-  const [selectedMaterial, setSelectedMaterial] =
-    React.useState<Material | null>(null)
-  const [removeMaterial, setRemoveMaterial] = React.useState<Material | null>(
+  const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(
     null,
   )
+  const [removeMaterial, setRemoveMaterial] = useState<Material | null>(null)
 
   const columns = React.useMemo(
     () =>

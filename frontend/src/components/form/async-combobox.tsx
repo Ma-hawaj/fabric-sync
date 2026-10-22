@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { Loader2Icon } from 'lucide-react'
 
 import {
@@ -74,9 +75,9 @@ export function AsyncCombobox<T>({
   emptyMessage = 'No matches found.',
   disabled = false,
 }: AsyncComboboxProps<T>) {
-  const [search, setSearch] = React.useState('')
-  const [isSearching, setIsSearching] = React.useState(false)
-  const [debouncedSearch, setDebouncedSearch] = React.useState('')
+  const [search, setSearch] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
 
   React.useEffect(() => {
     const timer = window.setTimeout(

@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useDataTable } from '@/hooks/use-data-table'
 import { DataTable } from '@/components/data-table/data-table'
@@ -17,7 +18,7 @@ import { useOrders } from './hooks/use-orders'
 import type { Order } from './types/orders'
 
 export function OrdersPage() {
-  const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(null)
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const navigate = useNavigate()
 
   // The material and stage filters come from their own whole-list queries.

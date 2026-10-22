@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import {
@@ -44,10 +45,10 @@ export function CustomerDetailsSheet({
   customer,
   onOpenChange,
 }: CustomerDetailsSheetProps) {
-  const [activeMeasurementId, setActiveMeasurementId] = React.useState<
-    string | null
-  >(null)
-  const [hoveredField, setHoveredField] = React.useState<string | null>(null)
+  const [activeMeasurementId, setActiveMeasurementId] = useState<string | null>(
+    null,
+  )
+  const [hoveredField, setHoveredField] = useState<string | null>(null)
 
   React.useEffect(() => {
     setActiveMeasurementId(customer?.measurements[0]?.id ?? null)
@@ -63,7 +64,7 @@ export function CustomerDetailsSheet({
     )
   }, [customer, activeMeasurementId])
 
-  const [isPrinting, setIsPrinting] = React.useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
 
   const handlePrint = React.useCallback(() => {
     if (!customer || !activeMeasurement) return

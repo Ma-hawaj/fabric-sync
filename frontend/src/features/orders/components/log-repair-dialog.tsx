@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -23,9 +24,9 @@ interface LogRepairDialogProps {
 
 export function LogRepairDialog({ order, onOpenChange }: LogRepairDialogProps) {
   const createRepair = useCreateRepair()
-  const [reason, setReason] = React.useState('')
-  const [charge, setCharge] = React.useState('')
-  const [notes, setNotes] = React.useState('')
+  const [reason, setReason] = useState('')
+  const [charge, setCharge] = useState('')
+  const [notes, setNotes] = useState('')
 
   React.useEffect(() => {
     setReason('')

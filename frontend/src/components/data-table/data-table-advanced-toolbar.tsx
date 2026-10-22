@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useState } from 'react'
 import type { Column, Table } from '@tanstack/react-table'
 import { SearchIcon, XIcon } from 'lucide-react'
 import { parseAsStringLiteral, useQueryState } from 'nuqs'
@@ -20,6 +21,7 @@ import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
 import { getDefaultFilterOperator, getFilterOperators } from '@/lib/data-table'
 import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/format'
+import { parseFilterDate } from '@/lib/filter-date'
 
 export function DataTableAdvancedToolbar<TData>({
   table,
@@ -48,7 +50,7 @@ export function DataTableAdvancedToolbar<TData>({
         column.getCanFilter() &&
         ['text', 'number'].includes(column.columnDef.meta?.variant ?? ''),
     )
-  const [searchId, setSearchId] = React.useState(
+  const [searchId, setSearchId] = useState(
     () =>
       searchColumns.find((column) => column.id === defaultSearchColumnId)?.id ??
       searchColumns.at(0)?.id ??
@@ -62,7 +64,7 @@ export function DataTableAdvancedToolbar<TData>({
   )
   const searchValue =
     typeof searchFilter?.value === 'string' ? searchFilter.value : ''
-  const [draft, setDraft] = React.useState(searchValue)
+  const [draft, setDraft] = useState(searchValue)
   React.useEffect(() => setDraft(searchValue), [searchValue, searchId])
   const updateSearch = useDebouncedCallback((id: string, value: string) => {
     const column = table.getColumn(id)
@@ -280,7 +282,9 @@ export function DataTableAdvancedToolbar<TData>({
                       )
                         .filter(Boolean)
                         .map((value) =>
-                          formatDate(Number(value), { month: 'short' }),
+                          formatDate(parseFilterDate(value), {
+                            month: 'short',
+                          }),
                         )
                         .join(' – ')
                     : filterLabel(column, filter.value)}

@@ -101,7 +101,7 @@ export const getInvoiceColumns = (
     id: 'date',
     accessorFn: (invoice) => new Date(invoice.date),
     size: 154,
-    meta: { label: 'Date' },
+    meta: { label: 'Date', variant: 'dateRange' },
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Date" />
     ),
@@ -126,14 +126,14 @@ export const getInvoiceColumns = (
       )
     },
     enableSorting: true,
-    enableColumnFilter: false,
+    enableColumnFilter: true,
   },
   {
     id: 'targetDate',
     accessorFn: (invoice) =>
       invoice.targetDate ? new Date(invoice.targetDate) : null,
     size: 128,
-    meta: { label: 'Target date' },
+    meta: { label: 'Target date', variant: 'dateRange' },
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Target Date" />
     ),
@@ -142,7 +142,7 @@ export const getInvoiceColumns = (
       return <div>{value ? value.toLocaleDateString() : '—'}</div>
     },
     enableSorting: true,
-    enableColumnFilter: false,
+    enableColumnFilter: true,
   },
   {
     id: 'customerName',
@@ -350,7 +350,7 @@ export const getInvoiceColumns = (
     id: 'lastCollectedAt',
     accessorFn: (invoice) =>
       invoice.lastCollectedAt ? new Date(invoice.lastCollectedAt) : null,
-    meta: { label: 'Last collected' },
+    meta: { label: 'Last collected', variant: 'dateRange' },
     header: ({ column }) => (
       <DataTableColumnHeader column={column} label="Last Collected" />
     ),
@@ -360,7 +360,7 @@ export const getInvoiceColumns = (
       return <div>{lastCollected.toLocaleString()}</div>
     },
     enableSorting: true,
-    enableColumnFilter: false,
+    enableColumnFilter: true,
   },
   {
     accessorKey: 'amountPaid',

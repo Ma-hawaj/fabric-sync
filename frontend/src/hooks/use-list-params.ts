@@ -1,6 +1,7 @@
 import { parseAsInteger, parseAsStringLiteral, useQueryState } from 'nuqs'
 import type { ColumnDef } from '@tanstack/react-table'
 import * as React from 'react'
+import { useState } from 'react'
 import { useTableFilters } from './use-table-filters'
 import { readTablePreferences } from '@/lib/table-preferences'
 
@@ -35,7 +36,7 @@ export function useListParams<TData>({
   defaultPerPage = DEFAULT_PER_PAGE,
 }: UseListParamsOptions<TData>) {
   const [page] = useQueryState(PAGE_KEY, parseAsInteger.withDefault(1))
-  const [saved] = React.useState(readTablePreferences)
+  const [saved] = useState(readTablePreferences)
   const [perPage] = useQueryState(
     PER_PAGE_KEY,
     parseAsInteger.withDefault(saved.pageSize ?? defaultPerPage),
