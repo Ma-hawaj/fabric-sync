@@ -10,6 +10,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useOrders } from '@/features/orders/hooks/use-orders'
+import { OrderPriorityIndicator } from '@/features/orders/components/order-priority-indicator'
 import type { Order } from '@/features/orders/types/orders'
 import { CURRENCY } from '@/lib/currency'
 
@@ -106,16 +107,16 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
                 {group.orders.map((order) => (
                   <TableRow key={order.id}>
                     <TableCell>
-                      <Link
-                        to="/orders/$orderId"
-                        params={{ orderId: order.id }}
-                        className="font-mono text-info hover:underline"
-                      >
-                        ORD-{order.orderNumber}
-                      </Link>
-                      {order.isUrgent && (
-                        <Badge variant="destructive">Urgent</Badge>
-                      )}
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <Link
+                          to="/orders/$orderId"
+                          params={{ orderId: order.id }}
+                          className="font-mono text-info hover:underline"
+                        >
+                          ORD-{order.orderNumber}
+                        </Link>
+                        <OrderPriorityIndicator isUrgent={order.isUrgent} />
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div>{order.material}</div>

@@ -292,6 +292,7 @@ pub async fn insert_customer(
     whatsapp_notifications_enabled: bool,
     address: Option<&str>,
 ) -> Result<Uuid, sqlx::Error> {
+    let address = address.map(str::trim);
     sqlx::query_scalar!(
         r#"
         INSERT INTO customers (name, mobile_no, whatsapp_notifications_enabled, address)
@@ -347,6 +348,7 @@ pub async fn update_customer(
     whatsapp_notifications_enabled: Option<bool>,
     address: Option<&str>,
 ) -> Result<Option<Customer>, AppError> {
+    let address = address.map(str::trim);
     let updated = sqlx::query_scalar!(
         r#"
         UPDATE customers

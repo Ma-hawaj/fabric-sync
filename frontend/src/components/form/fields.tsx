@@ -65,6 +65,7 @@ export function TextField({ form, name, label }: FieldProps) {
 }
 
 export function TextareaField({ form, name, label }: FieldProps) {
+  const errorId = React.useId()
   return (
     <form.Field name={name as never}>
       {(field: any) => (
@@ -75,10 +76,13 @@ export function TextareaField({ form, name, label }: FieldProps) {
             rows={3}
             value={field.state.value ?? ''}
             aria-invalid={field.state.meta.errors.length > 0}
+            aria-describedby={
+              field.state.meta.errors.length > 0 ? errorId : undefined
+            }
             onBlur={field.handleBlur}
             onChange={(e) => field.handleChange(e.target.value)}
           />
-          <FieldError errors={field.state.meta.errors} />
+          <FieldError id={errorId} errors={field.state.meta.errors} />
         </Field>
       )}
     </form.Field>

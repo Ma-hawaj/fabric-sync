@@ -125,6 +125,61 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn multiline_addresses_are_trimmed_and_blank_addresses_clear(pool: sqlx::PgPool) {
+        let state = crate::test_support::state(pool, None, None).await;
+        for (index, blank) in ["", "   ", "\r\n\t", "\u{2003}\u{a0}\t\n"]
+            .iter()
+            .enumerate()
+        {
+            let customer = create_customer(
+                &state,
+                serde_json::from_value(serde_json::json!({
+                    "name": format!("Address customer {index}"), "mobileNo": "33112233",
+                    "address": blank,
+                }))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(customer.address, None);
+
+            let updated = update_customer(
+                &state,
+                customer.id,
+                serde_json::from_value(serde_json::json!({
+                    "address": "\n\t Building 10\nRoad 20, Manama \r\n\u{2003}",
+                }))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                updated.address.as_deref(),
+                Some("Building 10\nRoad 20, Manama")
+            );
+
+            let preserved = update_customer(
+                &state,
+                customer.id,
+                serde_json::from_value(serde_json::json!({"whatsappNotificationsEnabled": false}))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(preserved.address, updated.address);
+
+            let cleared = update_customer(
+                &state,
+                customer.id,
+                serde_json::from_value(serde_json::json!({"address": blank})).unwrap(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(cleared.address, None);
+        }
+    }
+
+    #[sqlx::test]
     async fn creation_defaults_to_whatsapp_updates_and_accepts_an_opt_out(pool: sqlx::PgPool) {
         let state = crate::test_support::state(pool, None, None).await;
         let customer = create_customer(

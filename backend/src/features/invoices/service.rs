@@ -1118,7 +1118,7 @@ mod tests {
                 "newCustomer": {
                     "name": "  Family customer  ",
                     "mobileNo": "  33112233  ",
-                    "address": "Building 1\nRoad 2",
+                    "address": "\n\t Building 1\nRoad 2 \t\n",
                 },
                 "measurement": { "date": "2026-10-23", "type": "body", "fit": "medium" },
                 "orders": [shop, customer_fabric],

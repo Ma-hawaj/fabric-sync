@@ -18,6 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { CURRENCY } from '@/lib/currency'
+import { OrderPriorityIndicator } from '@/features/orders/components/order-priority-indicator'
 import {
   ArrowLeftIcon,
   FileDownIcon,
@@ -220,14 +221,14 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                     }
                   >
                     <TableCell>
-                      <div className="font-medium">{line.description}</div>
+                      <div className="flex items-center gap-1.5 font-medium">
+                        <span>{line.description}</span>
+                        <OrderPriorityIndicator isUrgent={line.isUrgent} />
+                      </div>
                       {line.customer && (
                         <div className="text-xs text-muted-foreground">
                           {line.customer.name}
                         </div>
-                      )}
-                      {line.isUrgent && (
-                        <Badge variant="destructive">Urgent</Badge>
                       )}
                       {line.urgentCharge > 0 && (
                         <div className="text-xs text-muted-foreground">

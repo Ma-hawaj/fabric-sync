@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
 import { CURRENCY } from '@/lib/currency'
+import { OrderPriorityIndicator } from './order-priority-indicator'
 import {
   COMPLETED,
   currentStageLabel,
@@ -54,7 +55,7 @@ export function getOrderColumns(
         <DataTableColumnHeader column={column} label="Order" />
       ),
       cell: ({ row }) => (
-        <div className="flex flex-col items-start gap-1">
+        <div className="flex items-center gap-1.5 whitespace-nowrap">
           <Link
             to="/orders/$orderId"
             params={{ orderId: row.original.id }}
@@ -62,7 +63,7 @@ export function getOrderColumns(
           >
             ORD-{row.getValue<number>('orderNumber')}
           </Link>
-          {row.original.isUrgent && <Badge variant="destructive">Urgent</Badge>}
+          <OrderPriorityIndicator isUrgent={row.original.isUrgent} />
         </div>
       ),
       enableSorting: true,

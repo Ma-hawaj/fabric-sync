@@ -141,7 +141,7 @@ describe('InvoiceDetailPage', () => {
         balanceDue: 250,
       },
     })
-    expect(screen.getByText('Urgent')).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'Urgent order' })).toBeTruthy()
     expect(screen.getByText('Delivery')).toBeTruthy()
     expect(screen.getByText('Building 1, Road 2')).toBeTruthy()
     expect(screen.getByText('Urgent charges (incl. VAT)')).toBeTruthy()
