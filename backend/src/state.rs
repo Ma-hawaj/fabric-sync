@@ -59,6 +59,12 @@ impl AppState {
         &self.config.invoice_branding
     }
 
+    pub fn customer_material_base_price(&self) -> Result<Option<f64>, crate::error::AppError> {
+        self.config
+            .customer_material_base_price()
+            .map_err(crate::error::AppError::Config)
+    }
+
     /// The zone printed documents write dates in, validated at boot.
     pub fn timezone(&self) -> Result<chrono_tz::Tz, crate::error::AppError> {
         self.config

@@ -50,6 +50,9 @@ async fn run() -> Result<(), error::AppError> {
     config
         .urgent_charge_rule()
         .map_err(error::AppError::Config)?;
+    config
+        .customer_material_base_price()
+        .map_err(error::AppError::Config)?;
     let address = SocketAddr::from(([0, 0, 0, 0], config.port));
     let listener = tokio::net::TcpListener::bind(address).await?;
     let db = PgPoolOptions::new()

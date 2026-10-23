@@ -7,9 +7,10 @@ export function usePricing() {
     queryKey: ['pricing'],
     queryFn: async () =>
       (
-        await apiClient.get<{ urgentCharge: UrgentChargeRule | null }>(
-          '/pricing',
-        )
+        await apiClient.get<{
+          urgentCharge: UrgentChargeRule | null
+          customerMaterialBasePrice: number | null
+        }>('/pricing')
       ).data,
     staleTime: 5 * 60 * 1000,
   })

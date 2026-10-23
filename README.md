@@ -197,8 +197,12 @@ together; a test checks that they agree. Defaults are junior below 3 m, normal
 3–4 m inclusive, and large above 4 m.
 
 The server calculates final prices from the catalog plus selected design costs.
-Customer-supplied fabric uses a manually entered tailoring base plus design
-costs. Editing an invoice recalculates prices using the current catalog; viewing
+Customer-supplied fabric uses the fixed VAT-inclusive tailoring base configured
+by `CUSTOMER_MATERIAL_BASE_PRICE`, plus design costs. This is one price per order,
+independent of metres used. The form displays the price read-only; client-supplied
+price overrides are ignored. No amount is assumed, so customer-material orders
+cannot be saved until the fixed price is configured. Editing an invoice
+recalculates prices using the current pricing configuration and catalog; viewing
 or printing keeps the saved prices. Imported materials without tier prices must
 be configured before creating garment lines.
 

@@ -118,7 +118,6 @@ describe('invoiceFormSchema', () => {
         {
           ...validOrder(),
           materialSource: 'customer' as const,
-          customerBasePrice: 15,
           materialId: '',
           customerMaterialDescription: 'White linen',
         },

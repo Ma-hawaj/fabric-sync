@@ -32,6 +32,19 @@ mod urgent_pricing_tests {
     use super::*;
 
     #[test]
+    fn customer_material_price_must_be_explicit_positive_money() {
+        let mut config = Config::from_env();
+        config.customer_material_base_price = None;
+        assert!(config.customer_material_base_price().unwrap().is_none());
+        config.customer_material_base_price = Some("15".into());
+        assert_eq!(config.customer_material_base_price().unwrap(), Some(15.0));
+        for value in ["0", "-1", "0.001", "NaN", "invalid", "100000000"] {
+            config.customer_material_base_price = Some(value.into());
+            assert!(config.customer_material_base_price().is_err(), "{value}");
+        }
+    }
+
+    #[test]
     fn urgency_needs_an_explicit_positive_pricing_rule() {
         let mut config = Config::from_env();
         config.urgent_charge_amount = None;
@@ -91,6 +104,7 @@ pub struct Config {
     pub static_dir: String,
     pub urgent_charge_amount: Option<String>,
     pub urgent_charge_unit: String,
+    pub customer_material_base_price: Option<String>,
 }
 
 impl InvoiceBranding {
@@ -122,6 +136,22 @@ impl InvoiceBranding {
 }
 
 impl Config {
+    pub fn customer_material_base_price(&self) -> Result<Option<f64>, String> {
+        let Some(raw) = &self.customer_material_base_price else {
+            return Ok(None);
+        };
+        let amount: f64 = raw
+            .parse()
+            .map_err(|_| "CUSTOMER_MATERIAL_BASE_PRICE must be a positive amount".to_string())?;
+        if crate::features::pricing::service::validate_amount(amount).is_err() || amount <= 0.0 {
+            return Err(
+                "CUSTOMER_MATERIAL_BASE_PRICE must be positive with at most two decimal places"
+                    .into(),
+            );
+        }
+        Ok(Some(amount))
+    }
+
     pub fn urgent_charge_rule(
         &self,
     ) -> Result<Option<crate::features::pricing::types::UrgentChargeRule>, String> {
@@ -212,6 +242,9 @@ impl Config {
                 .filter(|value| !value.trim().is_empty()),
             urgent_charge_unit: env::var("URGENT_ORDER_CHARGE_UNIT")
                 .unwrap_or_else(|_| "amount".into()),
+            customer_material_base_price: env::var("CUSTOMER_MATERIAL_BASE_PRICE")
+                .ok()
+                .filter(|value| !value.trim().is_empty()),
             database_url,
             oauth_issuer_url,
             oauth_client_id,

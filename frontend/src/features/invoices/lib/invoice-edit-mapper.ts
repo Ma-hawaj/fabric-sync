@@ -158,8 +158,6 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
         materialId: line.materialId ?? '',
         materialAmount: line.materialAmount,
         productionLocationId: line.productionLocationId ?? '',
-        customerBasePrice:
-          line.materialSource === 'customer' ? line.basePrice : '',
         price: line.price,
         isUrgent: line.isUrgent,
         urgentCharge: line.urgentCharge,

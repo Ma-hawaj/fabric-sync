@@ -448,6 +448,7 @@ fn price_order(
     order: &mut CreateOrderInput,
     materials: &HashMap<Uuid, Option<(f64, f64, f64)>>,
     designs: &HashMap<(String, String), f64>,
+    customer_material_base_price: Option<f64>,
 ) -> Result<(), AppError> {
     use crate::features::pricing::service::{tier_price, validate_amount};
     validate_order(order)?;
@@ -464,8 +465,11 @@ fn price_order(
             })?;
             tier_price(order.material_amount, junior, normal, large)
         }
-        MaterialSource::Customer => order.customer_base_price.expect("validated base price"),
+        MaterialSource::Customer => customer_material_base_price.ok_or_else(|| {
+            AppError::BadRequest("customer-material tailoring price is not configured".into())
+        })?,
     };
+    validate_amount(base)?;
     let mut surcharge = 0.0;
     for (category, slug) in selected_designs(order) {
         if let Some(slug) = slug.filter(|slug| !slug.is_empty()) {
@@ -488,6 +492,7 @@ async fn resolve_order_prices(
     tx: &mut sqlx::PgTransaction<'_>,
     input: &mut CreateInvoiceInput,
     urgent_rule: Option<crate::features::pricing::types::UrgentChargeRule>,
+    customer_material_base_price: Option<f64>,
 ) -> Result<(), AppError> {
     let orders: Vec<&CreateOrderInput> = input
         .customers
@@ -548,7 +553,7 @@ async fn resolve_order_prices(
         .iter_mut()
         .flat_map(|customer| &mut customer.orders)
     {
-        price_order(order, &materials, &designs)?;
+        price_order(order, &materials, &designs, customer_material_base_price)?;
         order.urgent_charge = crate::features::pricing::service::urgent_charge(
             order.price,
             order.is_urgent,
@@ -570,12 +575,6 @@ fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
         return Err(AppError::BadRequest(
             "an order price cannot be negative".into(),
         ));
-    }
-    if order.material_source == MaterialSource::Customer {
-        let base = order.customer_base_price.ok_or_else(|| {
-            AppError::BadRequest("enter a tailoring base price for customer fabric".into())
-        })?;
-        crate::features::pricing::service::validate_amount(base)?;
     }
     match order.material_source {
         MaterialSource::Shop
@@ -782,31 +781,35 @@ mod tests {
             (("neck".into(), "same".into()), 2.25),
             (("sleeve".into(), "same".into()), 3.5),
         ]);
-        price_order(&mut garment, &materials, &designs).unwrap();
+        price_order(&mut garment, &materials, &designs, None).unwrap();
         assert_eq!(garment.base_price, 30.0);
         assert_eq!(garment.price, 35.75);
-        price_order(&mut garment, &materials, &designs).unwrap();
+        price_order(&mut garment, &materials, &designs, None).unwrap();
         assert_eq!(garment.price, 35.75);
     }
 
     #[test]
-    fn customer_fabric_adds_designs_to_the_manual_base() {
+    fn customer_fabric_uses_the_fixed_base_and_ignores_client_prices() {
         let mut raw = order(9999.0);
         raw["materialSource"] = serde_json::json!("customer");
         raw["materialId"] = serde_json::Value::Null;
         raw["customerMaterialDescription"] = serde_json::json!("White linen");
-        raw["customerBasePrice"] = serde_json::json!(15.0);
+        raw["customerBasePrice"] = serde_json::json!(9999.0);
         raw["emd"] = serde_json::json!("6");
         let mut garment = serde_json::from_value(raw.clone()).unwrap();
         let designs = HashMap::from([(("emd".into(), "6".into()), 2.5)]);
-        price_order(&mut garment, &HashMap::new(), &designs).unwrap();
+        price_order(&mut garment, &HashMap::new(), &designs, Some(15.0)).unwrap();
         assert_eq!(garment.base_price, 15.0);
+        assert_eq!(garment.price, 17.5);
+        garment.material_amount = 5.0;
+        price_order(&mut garment, &HashMap::new(), &designs, Some(15.0)).unwrap();
         assert_eq!(garment.price, 17.5);
         raw["customerBasePrice"] = serde_json::Value::Null;
         assert!(price_order(
             &mut serde_json::from_value(raw).unwrap(),
             &HashMap::new(),
-            &designs
+            &designs,
+            None
         )
         .is_err());
     }
@@ -815,13 +818,20 @@ mod tests {
     fn missing_prices_and_unknown_designs_cannot_become_free() {
         let mut garment: CreateOrderInput = serde_json::from_value(order(100.0)).unwrap();
         let id = garment.material_id.unwrap();
-        assert!(price_order(&mut garment, &HashMap::new(), &HashMap::new()).is_err());
-        assert!(price_order(&mut garment, &HashMap::from([(id, None)]), &HashMap::new()).is_err());
+        assert!(price_order(&mut garment, &HashMap::new(), &HashMap::new(), None).is_err());
+        assert!(price_order(
+            &mut garment,
+            &HashMap::from([(id, None)]),
+            &HashMap::new(),
+            None
+        )
+        .is_err());
         garment.collar = Some("unknown".into());
         assert!(price_order(
             &mut garment,
             &HashMap::from([(id, Some((0.0, 0.0, 0.0)))]),
-            &HashMap::new()
+            &HashMap::new(),
+            None
         )
         .is_err());
         garment.collar = None;
@@ -829,6 +839,7 @@ mod tests {
             &mut garment,
             &HashMap::from([(id, Some((0.0, 0.0, 0.0)))]),
             &HashMap::new(),
+            None,
         )
         .unwrap();
         assert_eq!(garment.price, 0.0);
@@ -971,7 +982,7 @@ mod tests {
         customer_fabric["materialId"] = serde_json::Value::Null;
         customer_fabric["customerMaterialDescription"] = serde_json::json!("Customer linen");
         customer_fabric["productionLocationId"] = serde_json::json!(production);
-        customer_fabric["customerBasePrice"] = serde_json::json!(15.0);
+        customer_fabric["customerBasePrice"] = serde_json::json!(9999.0);
         customer_fabric["collar"] = serde_json::json!("urgent-compat");
         customer_fabric["isUrgent"] = serde_json::json!(false);
         customer_fabric["urgentCharge"] = serde_json::json!(777.0);
@@ -1693,7 +1704,13 @@ pub async fn create_invoice(
     mut input: CreateInvoiceInput,
 ) -> Result<CreatedInvoice, AppError> {
     let mut tx = state.db().begin().await?;
-    resolve_order_prices(&mut tx, &mut input, state.urgent_charge_rule()?).await?;
+    resolve_order_prices(
+        &mut tx,
+        &mut input,
+        state.urgent_charge_rule()?,
+        state.customer_material_base_price()?,
+    )
+    .await?;
     validate(&input)?;
 
     let totals = compute_totals(&input);
@@ -1810,7 +1827,13 @@ pub async fn update_invoice(
     // already legitimately held.
     input.payments = Vec::new();
     let mut tx = state.db().begin().await?;
-    resolve_order_prices(&mut tx, &mut input, state.urgent_charge_rule()?).await?;
+    resolve_order_prices(
+        &mut tx,
+        &mut input,
+        state.urgent_charge_rule()?,
+        state.customer_material_base_price()?,
+    )
+    .await?;
     validate(&input)?;
 
     let totals = compute_totals(&input);

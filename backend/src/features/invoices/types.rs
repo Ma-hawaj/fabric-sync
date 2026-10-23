@@ -95,7 +95,6 @@ pub struct CreateOrderInput {
     // customer fabric needs an active production location without a stock row.
     // Stored directly as orders.production_branch_id for delivery tracking.
     pub production_location_id: Uuid,
-    pub customer_base_price: Option<f64>,
     // Resolved by the service, never accepted from a client.
     #[serde(skip_deserializing)]
     pub base_price: f64,

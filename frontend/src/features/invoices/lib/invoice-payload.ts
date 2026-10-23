@@ -36,10 +36,6 @@ function orderPayload(order: InvoiceOrderDraft) {
     materialAmount: numberOrZero(order.materialAmount),
     productionLocationId: order.productionLocationId,
     isUrgent: order.isUrgent,
-    customerBasePrice:
-      order.materialSource === 'customer'
-        ? numberOrZero(order.customerBasePrice)
-        : null,
     thobeType: blankToNull(order.thobeType),
     fPocket: blankToNull(order.fPocket),
     sPocket: blankToNull(order.sPocket),

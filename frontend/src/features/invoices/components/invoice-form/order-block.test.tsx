@@ -90,7 +90,12 @@ function Harness({
   })
   apiGet.mockImplementation(async (url: string) => {
     if (new URL(url, 'http://localhost').pathname === '/pricing')
-      return { data: { urgentCharge: { amount: 5, unit: 'amount' } } }
+      return {
+        data: {
+          urgentCharge: { amount: 5, unit: 'amount' },
+          customerMaterialBasePrice: 15,
+        },
+      }
     const id = new URL(url, 'http://localhost').pathname.match(
       /^\/materials\/([^/]+)$/,
     )?.[1]
@@ -403,30 +408,35 @@ describe('OrderBlock', () => {
     ).not.toContain('9999')
   })
 
-  it('adds designs to the editable customer-fabric tailoring base', async () => {
+  it('uses the fixed customer-material price and keeps it read-only across quantity changes', async () => {
     render(
-      <Harness
-        order={{
-          materialSource: 'customer',
-          materialAmount: 3,
-          customerBasePrice: 15,
-        }}
-      />,
+      <Harness order={{ materialSource: 'customer', materialAmount: 3 }} />,
     )
+    expect(
+      screen.queryByLabelText(`Tailoring base incl. VAT (${CURRENCY})`),
+    ).toBeNull()
     fireEvent.click(await screen.findByRole('radio', { name: /6 \(\+/ }))
     await waitFor(() =>
       expect(
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
       ).toContain('17.50'),
     )
-    fireEvent.change(
-      screen.getByLabelText(`Tailoring base incl. VAT (${CURRENCY})`),
-      { target: { value: '20' } },
+    expect(screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).tagName).toBe(
+      'OUTPUT',
     )
+    fireEvent.change(screen.getByLabelText('Quantity (m)'), {
+      target: { value: '5' },
+    })
     await waitFor(() =>
       expect(
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
-      ).toContain('22.50'),
+      ).toContain('17.50'),
+    )
+    fireEvent.click(screen.getByRole('radio', { name: 'None' }))
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
+      ).toContain('15.00'),
     )
   })
 

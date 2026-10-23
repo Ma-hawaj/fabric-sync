@@ -256,15 +256,20 @@ export function OrderBlock({
   const pricingMaterial = hasPickedPrices
     ? pickedMaterial
     : (currentMaterial ?? null)
+  const { data: pricingRules } = usePricing()
   const pricing =
     draft &&
     !designLoading &&
     !designError &&
     !(materialError && !hasPickedPrices)
-      ? calculateGarmentPrice(draft, pricingMaterial, designOptions)
+      ? calculateGarmentPrice(
+          draft,
+          pricingMaterial,
+          designOptions,
+          pricingRules?.customerMaterialBasePrice ?? null,
+        )
       : null
   const computedPrice = pricing?.total ?? ''
-  const { data: pricingRules } = usePricing()
   const computedUrgentCharge = draft?.isUrgent
     ? calculateUrgentCharge(computedPrice, pricingRules?.urgentCharge)
     : 0
@@ -577,13 +582,6 @@ export function OrderBlock({
           />
 
           <div className="space-y-2">
-            {materialSource === 'customer' && (
-              <NumberField
-                form={form}
-                name={`${base}.customerBasePrice`}
-                label={`Tailoring base incl. VAT (${CURRENCY})`}
-              />
-            )}
             <form.Field name={`${base}.price` as never}>
               {(field: any) => (
                 <Field data-invalid={field.state.meta.errors.length > 0}>
@@ -598,7 +596,7 @@ export function OrderBlock({
                     <p className="text-xs text-muted-foreground">
                       {pricing.tier
                         ? `${pricing.tier[0].toUpperCase()}${pricing.tier.slice(1)}`
-                        : 'Tailoring'}
+                        : 'Fixed tailoring base'}
                       : {pricing.base.toFixed(2)} + designs:{' '}
                       {pricing.designCost.toFixed(2)}
                     </p>
@@ -609,7 +607,10 @@ export function OrderBlock({
                     >
                       {designError || materialError
                         ? 'Could not load pricing. Reload to try again.'
-                        : 'Choose a priced material, quantity and valid designs, or enter a customer tailoring base.'}
+                        : materialSource === 'customer' &&
+                            pricingRules?.customerMaterialBasePrice == null
+                          ? 'Customer-material pricing is unavailable. Contact an administrator.'
+                          : 'Choose a priced material, quantity and valid designs.'}
                     </p>
                   )}
                   <FieldError errors={field.state.meta.errors} />

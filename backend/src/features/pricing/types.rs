@@ -17,4 +17,5 @@ pub struct UrgentChargeRule {
 #[serde(rename_all = "camelCase")]
 pub struct Pricing {
     pub urgent_charge: Option<UrgentChargeRule>,
+    pub customer_material_base_price: Option<f64>,
 }

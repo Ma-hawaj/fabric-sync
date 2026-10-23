@@ -58,6 +58,7 @@ export function calculateGarmentPrice(
   order: InvoiceOrderDraft,
   material: Material | null,
   options: DesignOption[],
+  customerMaterialBasePrice: number | null = null,
 ): GarmentPrice | null {
   if (
     order.materialAmount === '' ||
@@ -71,8 +72,8 @@ export function calculateGarmentPrice(
     ? material?.id === order.materialId
       ? material[`${tier}Price`]
       : null
-    : order.customerBasePrice
-  if (!isMoney(base)) return null
+    : customerMaterialBasePrice
+  if (!isMoney(base) || (!tier && base <= 0)) return null
   let designCost = 0
   for (const [field, category] of Object.entries(DESIGN_SLOTS)) {
     const slug = order[field as keyof typeof DESIGN_SLOTS]

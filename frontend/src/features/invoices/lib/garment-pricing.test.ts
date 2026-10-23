@@ -85,14 +85,18 @@ describe('garment pricing', () => {
     const order = {
       ...draft(),
       materialSource: 'customer' as const,
-      customerBasePrice: 15,
       collar: 'same',
     }
     expect(
-      calculateGarmentPrice(order, null, [option('neck', 2.5)])?.total,
+      calculateGarmentPrice(order, null, [option('neck', 2.5)], 15)?.total,
     ).toBe(17.5)
     expect(
-      calculateGarmentPrice({ ...order, collar: '' }, null, [])?.total,
+      calculateGarmentPrice(
+        { ...order, collar: '', materialAmount: 5 },
+        null,
+        [],
+        15,
+      )?.total,
     ).toBe(15)
   })
   it('rejects incomplete or invalid pricing instead of charging zero', () => {
@@ -108,16 +112,17 @@ describe('garment pricing', () => {
     ).toBeNull()
     expect(
       calculateGarmentPrice(
-        { ...draft(), materialSource: 'customer', customerBasePrice: '' },
+        { ...draft(), materialSource: 'customer' },
         null,
         [],
       ),
     ).toBeNull()
     expect(
       calculateGarmentPrice(
-        { ...draft(), materialSource: 'customer', customerBasePrice: -1 },
+        { ...draft(), materialSource: 'customer' },
         null,
         [],
+        -1,
       ),
     ).toBeNull()
   })

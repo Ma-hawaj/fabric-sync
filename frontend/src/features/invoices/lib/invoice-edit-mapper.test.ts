@@ -211,7 +211,7 @@ describe('mapInvoiceEditToForm', () => {
     expect(seeds.soldFromBranchName).toBe('Main Branch')
   })
 
-  it('round-trips a customer tailoring base and urgent charge separately from its calculated price', () => {
+  it('restores saved customer-material prices and urgency without submitting editable prices', () => {
     const fixture = editFixture()
     fixture.customers[0].orders[0].isUrgent = true
     const line = fixture.customers[0].orders[0]
@@ -226,7 +226,6 @@ describe('mapInvoiceEditToForm', () => {
     const { values, seeds } = mapInvoiceEditToForm(fixture)
     expect(values.customers[0].orders[0]).toMatchObject({
       materialSource: 'customer',
-      customerBasePrice: 15,
       price: 17.5,
       urgentCharge: 7,
       materialId: '',
@@ -240,11 +239,13 @@ describe('mapInvoiceEditToForm', () => {
     )
     const payload = invoicePayload(values)
     expect(payload.customers[0].orders[0]).toMatchObject({
-      customerBasePrice: 15,
       isUrgent: true,
     })
     expect(payload.customers[0].orders[0]).not.toHaveProperty('price')
     expect(payload.customers[0].orders[0]).not.toHaveProperty('basePrice')
+    expect(payload.customers[0].orders[0]).not.toHaveProperty(
+      'customerBasePrice',
+    )
     expect(payload).not.toHaveProperty('urgentCharge')
   })
 
