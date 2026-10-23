@@ -38,12 +38,31 @@ impl AppState {
         &self.token_introspection
     }
 
+    pub fn notifications(&self) -> &crate::features::notifications::Config {
+        &self.config.notifications
+    }
+
     pub fn db(&self) -> &PgPool {
         &self.db
     }
 
+    pub fn urgent_charge_rule(
+        &self,
+    ) -> Result<Option<crate::features::pricing::types::UrgentChargeRule>, crate::error::AppError>
+    {
+        self.config
+            .urgent_charge_rule()
+            .map_err(crate::error::AppError::Config)
+    }
+
     pub fn invoice_branding(&self) -> &InvoiceBranding {
         &self.config.invoice_branding
+    }
+
+    pub fn customer_material_base_price(&self) -> Result<Option<f64>, crate::error::AppError> {
+        self.config
+            .customer_material_base_price()
+            .map_err(crate::error::AppError::Config)
     }
 
     /// The zone printed documents write dates in, validated at boot.

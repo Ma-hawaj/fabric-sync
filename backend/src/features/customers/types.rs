@@ -4,6 +4,27 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 
+/// Shared by standalone customers and customers created with an invoice.
+pub fn normalize_customer_identity(
+    name: &str,
+    mobile_no: &str,
+) -> Result<(String, String), AppError> {
+    Ok((
+        normalized_field(name, "customer name")?,
+        normalized_field(mobile_no, "phone number")?,
+    ))
+}
+
+pub(super) fn normalized_field(value: &str, label: &str) -> Result<String, AppError> {
+    let trimmed = value.trim();
+
+    if trimmed.is_empty() {
+        return Err(AppError::BadRequest(format!("{label} cannot be empty")));
+    }
+
+    Ok(trimmed.to_string())
+}
+
 // What a measurement snapshot describes: the customer's body as measured, an
 // existing thobe copied stitch-for-stitch, or a sample kept on file. How the
 // garment should be cut: loose, fitted, or somewhere in between.
@@ -61,9 +82,11 @@ pub struct Measurement {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Customer {
+    pub whatsapp_notifications_enabled: bool,
     pub id: Uuid,
     pub name: String,
     pub mobile_no: String,
+    pub address: Option<String>,
     // Postgres builds this array itself (see the repository's `json_agg`), so
     // it decodes straight off the row rather than being grouped app-side.
     #[sqlx(json)]
@@ -131,8 +154,15 @@ pub struct CreateMeasurementInput {
 pub struct CreateCustomerInput {
     pub name: String,
     pub mobile_no: String,
+    #[serde(default = "default_whatsapp_notifications_enabled")]
+    pub whatsapp_notifications_enabled: bool,
+    pub address: Option<String>,
     #[serde(default)]
     pub measurement: Option<CreateMeasurementInput>,
+}
+
+fn default_whatsapp_notifications_enabled() -> bool {
+    true
 }
 
 /// Every field is optional so a partial update (e.g. just `mobileNo`) stays a
@@ -142,6 +172,9 @@ pub struct CreateCustomerInput {
 pub struct UpdateCustomerInput {
     pub name: Option<String>,
     pub mobile_no: Option<String>,
+    pub whatsapp_notifications_enabled: Option<bool>,
+    /// Omitted leaves it unchanged; an empty string clears the address.
+    pub address: Option<String>,
 }
 
 // Two snapshots count as "the same measurement" if every measured field

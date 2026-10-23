@@ -1,3 +1,4 @@
+import type { ReadinessFields } from '@/features/notifications/readiness-controls'
 import type { PaymentStatus, PaymentType } from './invoices'
 
 export type InvoiceLineKind = 'order' | 'product' | 'material' | 'gift_card'
@@ -5,6 +6,7 @@ export type InvoiceLineKind = 'order' | 'product' | 'material' | 'gift_card'
 export interface InvoiceParty {
   name: string
   mobileNo: string
+  address?: string | null
 }
 
 /**
@@ -16,6 +18,8 @@ export interface InvoiceParty {
  * line rather than per metre, so its `unitPrice` and `lineTotal` are equal.
  */
 export interface InvoiceLine {
+  isUrgent: boolean
+  urgentCharge: number
   kind: InvoiceLineKind
   /** Only set for an `order` line — lets it link straight to that order's tracking. */
   orderId: string | null
@@ -39,6 +43,7 @@ export interface InvoiceRedemption {
 
 /** The arithmetic behind the total, as the backend computed it. */
 export interface InvoiceTotals {
+  urgentCharge: number
   subtotal: number
   discount: number
   discountUnit: 'amount' | 'percent'
@@ -65,7 +70,8 @@ export interface InvoicePayment {
 }
 
 /** Shape of GET /invoices/:id. */
-export interface InvoiceDetail {
+export interface InvoiceDetail extends ReadinessFields {
+  collectionMethod: 'delivery' | 'pickup'
   id: string
   invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */
@@ -80,15 +86,15 @@ export interface InvoiceDetail {
   /** The most recent payment's method, if anything has been paid. */
   paymentMethod: PaymentType | null
   /** Goods receipt, separate from money: every order collected. */
-  received: boolean
+  collected: boolean
   /** Tailoring garments only, excluding retail products and gift cards. */
   orderCount: number
   collectedOrderCount: number
   /**
    * Latest collection across the invoice's tailoring lines, as an ISO
-   * datetime. Null until the first order is received.
+   * datetime. Null until the first order is collected.
    */
-  lastReceivedAt: string | null
+  lastCollectedAt: string | null
   lines: InvoiceLine[]
   redemptions: InvoiceRedemption[]
   payments: InvoicePayment[]

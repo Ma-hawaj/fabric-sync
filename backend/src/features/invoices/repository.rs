@@ -68,6 +68,8 @@ pub async fn fetch_invoice_detail(
             i.invoice_number,
             i.invoice_date,
             i.target_date,
+            i.urgent_charge::float8 AS "urgent_charge!",
+            i.collection_method,
             i.created_at,
             i.discount::float8 AS "discount!",
             i.discount_unit,
@@ -81,12 +83,12 @@ pub async fn fetch_invoice_detail(
             -- Goods receipt is separate from money: true once no order on
             -- the invoice is still pending collection. A retail-only invoice
             -- has no orders, so there is nothing to collect.
-            collection.order_count = collection.collected_order_count AS "received!",
+            collection.order_count = collection.collected_order_count AS "collected!",
             collection.order_count AS "order_count!",
             collection.collected_order_count AS "collected_order_count!",
             -- The latest collection across the invoice's tailoring lines
             -- (see the list query's `agg` lateral for the same derivation).
-            collection.last_received_at AS "last_received_at?",
+            collection.last_collected_at AS "last_collected_at?",
             i.total_price::float8 AS "total_price!",
             i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
             -- The `?` suffixes are for sqlx: it reads nullability off the
@@ -94,14 +96,15 @@ pub async fn fetch_invoice_detail(
             -- LEFT JOIN may not match.
             b.name AS "branch_name?",
             c.name AS "buyer_name?",
-            c.mobile_no AS "buyer_mobile_no?"
+            c.mobile_no AS "buyer_mobile_no?",
+            c.address AS "buyer_address?"
         FROM invoices i
         LEFT JOIN branch b ON b.id = i.branch_id
         LEFT JOIN customers c ON c.id = i.customer_id
         LEFT JOIN LATERAL (
             SELECT count(*) AS order_count,
-                   count(*) FILTER (WHERE status = 'received') AS collected_order_count,
-                   max(received_at) AS last_received_at
+                   count(*) FILTER (WHERE status = 'collected') AS collected_order_count,
+                   max(collected_at) AS last_collected_at
             FROM orders WHERE invoice_id = i.id
         ) collection ON true
         LEFT JOIN LATERAL (
@@ -143,12 +146,15 @@ pub async fn fetch_invoice_detail(
             o.id AS order_id,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile_no,
+            c.address AS customer_address,
             CASE WHEN o.material_source = 'customer'
                 THEN 'Customer-provided material: ' || o.customer_material_description
                 ELSE mat.name END AS "material_name!",
             COALESCE(mat.unit, 'meters') AS "material_unit!",
             o.material_amount::float8 AS "material_amount!",
             o.price::float8 AS "price!",
+            o.is_urgent,
+            o.urgent_charge::float8 AS "urgent_charge!",
             o.thobe_type,
             o.f_pocket,
             o.s_pocket,
@@ -218,6 +224,8 @@ pub async fn fetch_invoice_detail(
             };
             InvoiceDetailLine {
                 kind: InvoiceLineKind::Order,
+                is_urgent: row.is_urgent,
+                urgent_charge: row.urgent_charge,
                 order_id: Some(row.order_id),
                 description: row.material_name,
                 detail: order_specification(
@@ -233,6 +241,7 @@ pub async fn fetch_invoice_detail(
                 customer: Some(InvoiceParty {
                     name: row.customer_name,
                     mobile_no: row.customer_mobile_no,
+                    address: row.customer_address,
                 }),
                 quantity: row.material_amount,
                 unit: Some(row.material_unit),
@@ -258,6 +267,8 @@ pub async fn fetch_invoice_detail(
                 InvoiceLineKind::Product
             },
             order_id: None,
+            is_urgent: false,
+            urgent_charge: 0.0,
             description: row.description,
             detail: None,
             customer: None,
@@ -276,22 +287,28 @@ pub async fn fetch_invoice_detail(
             invoice_number: invoice.invoice_number,
             date: invoice.invoice_date,
             target_date: invoice.target_date,
+            urgent_charge: invoice.urgent_charge,
+            collection_method: invoice.collection_method,
             created_at: invoice.created_at,
             branch_name: invoice.branch_name,
             buyer: invoice
                 .buyer_name
                 .zip(invoice.buyer_mobile_no)
-                .map(|(name, mobile_no)| InvoiceParty { name, mobile_no }),
+                .map(|(name, mobile_no)| InvoiceParty {
+                    name,
+                    mobile_no,
+                    address: invoice.buyer_address,
+                }),
             discount: invoice.discount,
             discount_unit: invoice.discount_unit,
             payment_status: invoice.payment_status,
             total_price: invoice.total_price,
             amount_paid: invoice.amount_paid,
             payment_method: invoice.payment_method,
-            received: invoice.received,
+            collected: invoice.collected,
             order_count: invoice.order_count,
             collected_order_count: invoice.collected_order_count,
-            last_received_at: invoice.last_received_at,
+            last_collected_at: invoice.last_collected_at,
             gift_card_redeemed: invoice.gift_card_redeemed,
         },
         lines,
@@ -322,6 +339,8 @@ const SPEC: ListSpec = ListSpec {
             i.invoice_number,
             i.invoice_date,
             i.target_date,
+            i.urgent_charge::float8 AS urgent_charge,
+            i.collection_method,
             pay.status AS payment_status,
             i.total_price::float8 AS total_price,
             pay.paid AS amount_paid,
@@ -329,13 +348,14 @@ const SPEC: ListSpec = ListSpec {
             method.payment_type AS payment_method,
             NOT EXISTS(
                 SELECT 1 FROM orders o
-                WHERE o.invoice_id = i.id AND o.status <> 'received'
-            ) AS received,
+                WHERE o.invoice_id = i.id AND o.status <> 'collected'
+            ) AS collected,
             -- The latest collection across the invoice's tailoring lines.
-            -- NULL until the first order is received (and on retail-only
+            -- NULL until the first order is collected (and on retail-only
             -- invoices, which have no orders at all).
-            agg.last_received_at AS last_received_at,
+            agg.last_collected_at AS last_collected_at,
             COALESCE(agg.item_count, 0) AS order_count,
+            ready.readiness_status, ready.ready_order_count, ready.pending_order_count, ready.readiness_generation,
             COALESCE(agg.collected_order_count, 0) AS collected_order_count,
             i.gift_card_redeemed::float8 AS gift_card_redeemed,
             i.branch_id AS receiving_location_id,
@@ -367,10 +387,11 @@ const SPEC: ListSpec = ListSpec {
             ARRAY(SELECT DISTINCT unnest(COALESCE(agg.material_names, ARRAY[]::text[]) || COALESCE(items.material_names, ARRAY[]::text[]))) AS material_names
         FROM invoices i
         LEFT JOIN branch recv ON recv.id = i.branch_id
+        JOIN invoice_readiness ready ON ready.invoice_id = i.id
         LEFT JOIN LATERAL (
             SELECT
                 count(*) AS item_count,
-                count(*) FILTER (WHERE o.status = 'received') AS collected_order_count,
+                count(*) FILTER (WHERE o.status = 'collected') AS collected_order_count,
                 json_agg(DISTINCT jsonb_build_object(
                     'name', c.name,
                     'mobileNo', c.mobile_no
@@ -380,7 +401,7 @@ const SPEC: ListSpec = ListSpec {
                 array_agg(DISTINCT CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END) AS material_names,
                 json_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_locations,
                 array_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_location_names,
-                MAX(o.received_at) AS last_received_at
+                MAX(o.collected_at) AS last_collected_at
             FROM orders o
             JOIN measurements m ON m.id = o.measurement_id
             JOIN customers c ON c.id = m.customer_id
@@ -432,6 +453,10 @@ const SPEC: ListSpec = ListSpec {
         ),
         ("date", ColumnDef::new("invoice_date", ColumnKind::Date)),
         (
+            "collectionMethod",
+            ColumnDef::new("collection_method", ColumnKind::Text),
+        ),
+        (
             "targetDate",
             ColumnDef::new("target_date", ColumnKind::Date),
         ),
@@ -467,10 +492,14 @@ const SPEC: ListSpec = ListSpec {
             "paymentMethod",
             ColumnDef::new("payment_method", ColumnKind::Text),
         ),
-        ("received", ColumnDef::new("received", ColumnKind::Bool)),
+        ("collected", ColumnDef::new("collected", ColumnKind::Bool)),
         (
-            "lastReceivedAt",
-            ColumnDef::new("last_received_at", ColumnKind::Date),
+            "readinessStatus",
+            ColumnDef::new("readiness_status", ColumnKind::Text),
+        ),
+        (
+            "lastCollectedAt",
+            ColumnDef::new("last_collected_at", ColumnKind::Date),
         ),
         (
             "receivingLocation",
@@ -496,6 +525,7 @@ pub async fn insert_invoice(
     input: &CreateInvoiceInput,
     total_price: f64,
     gift_card_redeemed: f64,
+    urgent_charge: f64,
 ) -> Result<(Uuid, chrono::DateTime<chrono::Utc>), sqlx::Error> {
     // invoice_date is server-set (DEFAULT now()) and never taken from
     // input — staff promise a target_date instead. Returned so gift card
@@ -504,10 +534,12 @@ pub async fn insert_invoice(
         r#"
         INSERT INTO invoices (
             target_date, branch_id, discount, discount_unit,
-            total_price, customer_id, gift_card_redeemed
+            total_price, customer_id, gift_card_redeemed,
+            urgent_charge, collection_method
         )
         VALUES (
-            $1, $2, $3::float8, $4, $5::float8, $6, $7::float8
+            $1, $2, $3::float8, $4, $5::float8, $6, $7::float8,
+            $8::float8, $9
         )
         RETURNING id, invoice_date
         "#,
@@ -518,6 +550,8 @@ pub async fn insert_invoice(
         total_price,
         input.customer_id,
         gift_card_redeemed,
+        urgent_charge,
+        input.collection_method.as_str(),
     )
     .fetch_one(&mut **tx)
     .await
@@ -673,20 +707,20 @@ pub async fn order_belongs_to_invoice(
     .await?)
 }
 
-/// Marks every still-pending order on the invoice received. Already-received
-/// rows are left alone — re-stamping their `received_at` would rewrite when
+/// Marks every still-pending order on the invoice collected. Already-collected
+/// rows are left alone — re-stamping their `collected_at` would rewrite when
 /// they were actually collected, which matters once settlement can land after
-/// collection (see service::receive_invoice). The money is settled separately
+/// collection (see service::collect_invoice). The money is settled separately
 /// by the caller inserting a balancing payment.
-pub async fn mark_orders_received(
+pub async fn mark_orders_collected(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         UPDATE orders
-        SET status = 'received', received_at = now()
-        WHERE invoice_id = $1 AND status <> 'received'
+        SET status = 'collected', collected_at = now()
+        WHERE invoice_id = $1 AND status <> 'collected'
         "#,
         invoice_id,
     )
@@ -701,15 +735,16 @@ pub async fn insert_order(
     invoice_id: Uuid,
     measurement_id: Uuid,
     order: &CreateOrderInput,
+    urgent_charge: f64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
             thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd, more_details,
-            production_branch_id, material_source, customer_material_description
+            production_branch_id, material_source, customer_material_description, base_price, is_urgent, urgent_charge
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8, $18, $19::float8)
         "#,
         measurement_id,
         order.material_id,
@@ -730,6 +765,9 @@ pub async fn insert_order(
             .customer_material_description
             .as_deref()
             .map(str::trim),
+        order.base_price,
+        order.is_urgent,
+        urgent_charge,
     )
     .execute(&mut **tx)
     .await?;
@@ -838,6 +876,8 @@ pub async fn fetch_invoice_edit(
             i.invoice_number,
             i.invoice_date,
             i.target_date,
+            i.urgent_charge::float8 AS "urgent_charge!",
+            i.collection_method,
             i.branch_id,
             b.name AS "branch_name?",
             i.discount::float8 AS "discount!",
@@ -863,6 +903,7 @@ pub async fn fetch_invoice_edit(
             m.customer_id,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile_no,
+            c.address AS customer_address,
             m.id AS measurement_id,
             m.measurement_date,
             m.type,
@@ -904,6 +945,9 @@ pub async fn fetch_invoice_edit(
             b.name AS "production_location_name?",
             ms.quantity::float8 AS stock_quantity,
             o.price::float8 AS "price!",
+            o.base_price::float8 AS "base_price!",
+            o.is_urgent,
+            o.urgent_charge::float8 AS "urgent_charge!",
             o.thobe_type,
             o.f_pocket,
             o.s_pocket,
@@ -965,6 +1009,7 @@ pub async fn fetch_invoice_edit(
             mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
         };
         let order = InvoiceEditOrder {
+            base_price: row.base_price,
             material_id: row.material_id,
             material_source: row.material_source,
             customer_material_description: row.customer_material_description,
@@ -975,6 +1020,8 @@ pub async fn fetch_invoice_edit(
             production_location_name: row.production_location_name,
             stock_quantity: row.stock_quantity,
             price: row.price,
+            is_urgent: row.is_urgent,
+            urgent_charge: row.urgent_charge,
             thobe_type: row.thobe_type,
             f_pocket: row.f_pocket,
             s_pocket: row.s_pocket,
@@ -994,6 +1041,7 @@ pub async fn fetch_invoice_edit(
                 existing_customer_id: row.customer_id,
                 customer_name: row.customer_name,
                 customer_mobile_no: row.customer_mobile_no,
+                customer_address: row.customer_address,
                 measurement_id: Some(row.measurement_id),
                 measurement,
                 orders: vec![order],
@@ -1060,6 +1108,8 @@ pub async fn fetch_invoice_edit(
         invoice_number: header.invoice_number,
         date: header.invoice_date,
         target_date: header.target_date,
+        urgent_charge: header.urgent_charge,
+        collection_method: header.collection_method,
         branch_id: header.branch_id,
         branch_name: header.branch_name,
         discount: header.discount,
@@ -1099,7 +1149,7 @@ pub async fn fetch_invoice_edit(
 }
 
 /// True once any order on the invoice has been collected.
-pub async fn invoice_has_received_orders(
+pub async fn invoice_has_collected_orders(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
@@ -1107,7 +1157,7 @@ pub async fn invoice_has_received_orders(
         r#"
         SELECT EXISTS(
             SELECT 1 FROM orders
-            WHERE invoice_id = $1 AND status = 'received'
+            WHERE invoice_id = $1 AND status = 'collected'
         ) AS "exists!"
         "#,
         invoice_id,
@@ -1230,27 +1280,6 @@ pub async fn old_measurement_refs(
     )
     .fetch_all(&mut **tx)
     .await
-}
-
-/// True when no other invoice's orders point at this measurement: the row is
-/// exclusively this invoice's to rewrite or delete.
-pub async fn measurement_is_exclusive(
-    tx: &mut sqlx::PgTransaction<'_>,
-    measurement_id: Uuid,
-    invoice_id: Uuid,
-) -> Result<bool, sqlx::Error> {
-    Ok(!sqlx::query_scalar!(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM orders
-            WHERE measurement_id = $1 AND invoice_id != $2
-        ) AS "exists!"
-        "#,
-        measurement_id,
-        invoice_id,
-    )
-    .fetch_one(&mut **tx)
-    .await?)
 }
 
 /// True once a sold card has been spent anywhere — including on the invoice
@@ -1414,96 +1443,13 @@ pub async fn delete_gift_cards(
     Ok(())
 }
 
-pub async fn delete_measurements(
-    tx: &mut sqlx::PgTransaction<'_>,
-    measurement_ids: &[Uuid],
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"DELETE FROM measurements WHERE id = ANY($1)"#,
-        measurement_ids,
-    )
-    .execute(&mut **tx)
-    .await?;
-
-    Ok(())
-}
-
-// The in-place rewrite: same row id, corrected values. Only called for rows
-// the exclusivity check proved belong to this invoice alone.
-pub async fn update_measurement(
-    tx: &mut sqlx::PgTransaction<'_>,
-    measurement_id: Uuid,
-    measurement: &CreateMeasurementInput,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"
-        UPDATE measurements
-        SET measurement_date = $2,
-            front_height = $3::float8, back_height = $4::float8,
-            chest = $5::float8, waist = $6::float8,
-            hip = $7::float8, shoulder = $8::float8,
-            shoulder_down = $9::float8, sleeve_length = $10::float8,
-            neck_size = $11::float8, open_hand = $12::float8,
-            chest_up = $13::float8,
-            cuff_width = $14::float8, cuff_size = $15::float8,
-            neck_width = $16::float8,
-            armhole = $17::float8, fo_width = $18::float8,
-            fo = $19::float8,
-            bottom = $20::float8, bottom_fold = $21::float8,
-            full_body = $22::float8,
-            sleeve_half = $23::float8, open_fold = $24::float8,
-            front_pocket_length = $25::float8,
-            front_pocket_length_by_width = $26,
-            side_pocket = $27::float8,
-            side_pocket_length_by_width = $28,
-            mobile_pocket_length_by_width = $29,
-            type = $30, fit = $31
-        WHERE id = $1
-        "#,
-        measurement_id,
-        measurement.date,
-        measurement.front_height,
-        measurement.back_height,
-        measurement.chest,
-        measurement.waist,
-        measurement.hip,
-        measurement.shoulder,
-        measurement.shoulder_down,
-        measurement.sleeve_length,
-        measurement.neck_size,
-        measurement.open_hand,
-        measurement.chest_up,
-        measurement.cuff_width,
-        measurement.cuff_size,
-        measurement.neck_width,
-        measurement.armhole,
-        measurement.fo_width,
-        measurement.fo,
-        measurement.bottom,
-        measurement.bottom_fold,
-        measurement.full_body,
-        measurement.sleeve_half,
-        measurement.open_fold,
-        measurement.front_pocket_length,
-        measurement.front_pocket_length_by_width,
-        measurement.side_pocket,
-        measurement.side_pocket_length_by_width,
-        measurement.mobile_pocket_length_by_width,
-        measurement.r#type,
-        measurement.fit,
-    )
-    .execute(&mut **tx)
-    .await?;
-
-    Ok(())
-}
-
 pub async fn update_invoice_header(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
     input: &CreateInvoiceInput,
     total_price: f64,
     gift_card_redeemed: f64,
+    urgent_charge: f64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
@@ -1514,7 +1460,9 @@ pub async fn update_invoice_header(
             discount_unit = $5,
             customer_id = $6,
             total_price = $7::float8,
-            gift_card_redeemed = $8::float8
+            gift_card_redeemed = $8::float8,
+            urgent_charge = $9::float8,
+            collection_method = $10
         WHERE id = $1
         "#,
         invoice_id,
@@ -1525,6 +1473,8 @@ pub async fn update_invoice_header(
         input.customer_id,
         total_price,
         gift_card_redeemed,
+        urgent_charge,
+        input.collection_method.as_str(),
     )
     .execute(&mut **tx)
     .await?;

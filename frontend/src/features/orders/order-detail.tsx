@@ -1,4 +1,6 @@
+import { ReadinessControls } from '@/features/notifications/readiness-controls'
 import * as React from 'react'
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -22,7 +24,7 @@ import {
 import { designCategoryLabel } from '@/features/design-options/lib/design-option-categories'
 import { OrderTrackingPanel } from './components/order-tracking-panel'
 import { LogRepairDialog } from './components/log-repair-dialog'
-import { ReceiveOrderDialog } from './components/receive-order-dialog'
+import { CollectOrderDialog } from './components/collect-order-dialog'
 import { useOrder } from './hooks/use-order'
 import { printOrderDocument } from './lib/print-order'
 import type { OrderDetail } from './types/orders'
@@ -34,8 +36,8 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 
 export function OrderDetailPage({ orderId }: { orderId: string }) {
   const { data: order, isLoading, isError } = useOrder(orderId)
-  const [repairOrderId, setRepairOrderId] = React.useState<string | null>(null)
-  const [receiveOpen, setReceiveOpen] = React.useState(false)
+  const [repairOrderId, setRepairOrderId] = useState<string | null>(null)
+  const [collectOpen, setCollectOpen] = useState(false)
 
   if (isLoading) {
     return (
@@ -86,10 +88,15 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           </div>
 
           <div className="mt-2 flex flex-wrap gap-2">
+            {order.isUrgent && <Badge variant="destructive">Urgent</Badge>}
             <Badge
-              variant={order.status === 'received' ? 'default' : 'secondary'}
+              variant={order.status === 'collected' ? 'default' : 'secondary'}
             >
-              {order.status === 'received' ? 'Received' : 'Pending'}
+              {order.status === 'collected'
+                ? 'Collected'
+                : order.status === 'ready'
+                  ? 'Ready for pickup'
+                  : 'Pending'}
             </Badge>
             <Badge
               variant={
@@ -114,13 +121,21 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
 
         <div className="flex items-center gap-2">
           <ExportPdfButton order={order} />
+          <ReadinessControls
+            id={order.id}
+            invoiceId={order.invoiceId}
+            scope="orders"
+            status={order.status}
+            readyAt={order.readyAt}
+            readyBy={order.readyBy}
+          />
           <Button
             variant="outline"
             className="text-info hover:text-info/80 hover:bg-info/5 dark:hover:bg-info/10"
-            disabled={order.status === 'received'}
-            onClick={() => setReceiveOpen(true)}
+            disabled={order.status === 'collected'}
+            onClick={() => setCollectOpen(true)}
           >
-            {order.status === 'received' ? 'Received' : 'Mark Received'}
+            {order.status === 'collected' ? 'Collected' : 'Mark Collected'}
           </Button>
         </div>
       </div>
@@ -162,6 +177,12 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               <dt className="text-muted-foreground">Price</dt>
               <dd className="font-medium">
                 {currencyFormatter.format(order.price)}
+                {order.urgentCharge > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    Urgent charge:{' '}
+                    {currencyFormatter.format(order.urgentCharge)}
+                  </div>
+                )}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
@@ -226,9 +247,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         </dl>
       </section>
 
-      <ReceiveOrderDialog
-        order={receiveOpen ? order : null}
-        onOpenChange={(open) => !open && setReceiveOpen(false)}
+      <CollectOrderDialog
+        order={collectOpen ? order : null}
+        onOpenChange={(open) => !open && setCollectOpen(false)}
       />
 
       <LogRepairDialog
@@ -318,7 +339,7 @@ function DesignDetails({ order }: { order: OrderDetail }) {
 }
 
 function ExportPdfButton({ order }: { order: OrderDetail }) {
-  const [isPrinting, setIsPrinting] = React.useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
 
   return (
     <Button

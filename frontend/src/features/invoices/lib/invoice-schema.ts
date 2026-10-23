@@ -1,4 +1,7 @@
 import { z } from 'zod'
+import { customerIdentitySchema } from '@/features/customers/lib/customer-schema'
+import { measurementPayload } from '@/features/customers/hooks/use-create-customer'
+import { isMoney } from '@/lib/money'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 import {
   MEASUREMENT_FITS,
@@ -8,6 +11,7 @@ import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
   computeOrderLineTotal,
+  computeUrgentCharges,
   computeProductLineTotal,
   computeRedemptionTotal,
 } from './invoice-pricing'
@@ -43,6 +47,8 @@ const orderDraftSchema = z
     materialAmount: numberInputSchema,
     productionLocationId: z.string(),
     price: numberInputSchema,
+    isUrgent: z.boolean(),
+    urgentCharge: numberInputSchema,
   })
   .superRefine((order, ctx) => {
     if (
@@ -67,12 +73,13 @@ const orderDraftSchema = z
     }
     if (
       order.materialAmount === '' ||
-      !Number.isFinite(order.materialAmount) ||
+      !isMoney(order.materialAmount) ||
       order.materialAmount < 0.01
     ) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Enter a quantity of at least 0.01.',
+        message:
+          'Enter a quantity of at least 0.01 with at most two decimal places.',
         path: ['materialAmount'],
       })
     }
@@ -92,7 +99,7 @@ const orderDraftSchema = z
     ) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Enter a price.',
+        message: 'Complete the material and design pricing.',
         path: ['price'],
       })
     }
@@ -105,6 +112,7 @@ const customerDraftSchema = z
     existingCustomerId: z.string(),
     name: z.string(),
     mobileNo: z.string(),
+    address: z.string(),
     measurement: measurementDraftSchema,
     orders: z.array(orderDraftSchema).min(1, 'Add at least one order.'),
   })
@@ -118,20 +126,15 @@ const customerDraftSchema = z
         })
       }
     } else {
-      if (!customer.name.trim()) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'Enter a full name.',
-          path: ['name'],
-        })
-      }
-
-      if (!customer.mobileNo.trim()) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'Enter a phone number.',
-          path: ['mobileNo'],
-        })
+      const identity = customerIdentitySchema.safeParse(customer)
+      if (!identity.success) {
+        identity.error.issues.forEach((issue) =>
+          ctx.addIssue({
+            code: 'custom',
+            path: issue.path,
+            message: issue.message,
+          }),
+        )
       }
     }
 
@@ -290,6 +293,7 @@ export const invoiceFormSchema = z
         },
       ),
     receivingBranch: z.string(),
+    collectionMethod: z.enum(['delivery', 'pickup']),
     customerId: z.string(),
     productBranch: z.string(),
     discount: numberInputSchema,
@@ -324,6 +328,38 @@ export const invoiceFormSchema = z
     redemptions: z.array(redemptionDraftSchema),
   })
   .superRefine((value, ctx) => {
+    value.customers.forEach((customer, customerIndex) => {
+      customer.orders.forEach((order, orderIndex) => {
+        if (
+          order.isUrgent &&
+          (order.urgentCharge === '' ||
+            !Number.isFinite(order.urgentCharge) ||
+            Math.round(order.urgentCharge * 100) <= 0)
+        ) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'Urgent pricing is unavailable for this order.',
+            path: [
+              'customers',
+              customerIndex,
+              'orders',
+              orderIndex,
+              'urgentCharge',
+            ],
+          })
+        }
+      })
+    })
+    const hasUrgentOrders = value.customers.some((customer) =>
+      customer.orders.some((order) => order.isUrgent),
+    )
+    if (hasUrgentOrders && !value.targetDate) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick a target date for urgent orders.',
+        path: ['targetDate'],
+      })
+    }
     const hasOrders = value.customers.some(
       (customer) => customer.orders.length > 0,
     )
@@ -339,6 +375,40 @@ export const invoiceFormSchema = z
         path: ['customers'],
       })
     }
+
+    const newCustomers = new Map<string, number>()
+    const existingCustomers = new Map<string, number>()
+    value.customers.forEach((customer, index) => {
+      let key: string
+      let seen: Map<string, number>
+      let field: string
+      if (customer.mode === 'new') {
+        if (!customer.name.trim() || !customer.mobileNo.trim()) return
+        key = JSON.stringify([customer.name.trim(), customer.mobileNo.trim()])
+        seen = newCustomers
+        field = 'name'
+      } else {
+        if (!customer.existingCustomerId) return
+        // Dates do not distinguish measurements on the server either.
+        const measurement = measurementPayload(customer.measurement)
+        key = JSON.stringify([
+          customer.existingCustomerId,
+          { ...measurement, date: null },
+        ])
+        seen = existingCustomers
+        field = 'existingCustomerId'
+      }
+      const first = seen.get(key)
+      if (first === undefined) {
+        seen.set(key, index)
+      } else {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Already entered as Customer ${first + 1}. Add their orders there instead.`,
+          path: ['customers', index, field],
+        })
+      }
+    })
 
     // Product stock is held per location, so a sale has to name one.
     if (value.products.length && !value.productBranch) {
@@ -388,6 +458,7 @@ export const invoiceFormSchema = z
       ),
       discount: value.discount === '' ? 0 : value.discount,
       discountUnit: value.discountUnit,
+      urgentCharge: computeUrgentCharges(value.customers),
       redeemed: value.redemptions.reduce(
         (sum, redemption) => sum + computeRedemptionTotal(redemption),
         0,

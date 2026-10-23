@@ -20,6 +20,30 @@ function firstError(input: InventoryFormValues) {
 }
 
 describe('inventoryFormSchema', () => {
+  it('requires three valid prices for a new material, including explicit zero prices', () => {
+    const input = values({
+      mode: 'new',
+      name: 'Cotton',
+      entries: [entry('loc-1', 5)],
+      juniorPrice: 0,
+      normalPrice: 20,
+      largePrice: 30,
+    })
+    expect(firstError(input)).toBeNull()
+    for (const invalid of [
+      '',
+      -1,
+      0.001,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+    ] as const) {
+      expect(
+        inventoryFormSchema.safeParse({ ...input, juniorPrice: invalid })
+          .success,
+      ).toBe(false)
+    }
+  })
+
   it('passes for an existing material with one location entry', () => {
     const input = values({
       mode: 'existing',

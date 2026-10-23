@@ -1,6 +1,6 @@
 import { flexRender } from '@tanstack/react-table'
 import type { Row, Table as TanstackTable } from '@tanstack/react-table'
-import { Fragment } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type * as React from 'react'
 
 import { DataTablePagination } from '@/components/data-table/data-table-pagination'
@@ -14,11 +14,14 @@ import {
 } from '@/components/ui/table'
 import { getColumnPinningStyle } from '@/lib/data-table'
 import { cn } from '@/lib/utils'
+import { TableAppearanceContext } from './table-appearance'
+import type { TableDensity } from './table-appearance'
 
 interface DataTableProps<TData> extends React.ComponentProps<'div'> {
   table: TanstackTable<TData>
   actionBar?: React.ReactNode
   renderExpandedRow?: (row: Row<TData>) => React.ReactNode
+  isLoading?: boolean
 }
 
 export function DataTable<TData>({
@@ -27,30 +30,77 @@ export function DataTable<TData>({
   renderExpandedRow,
   children,
   className,
+  isLoading = false,
   ...props
 }: DataTableProps<TData>) {
+  const tableRef = useRef<HTMLTableElement>(null)
+  const [density, setDensityState] = useState<TableDensity>(() => {
+    try {
+      return localStorage.getItem('fabric-sync:density') === 'comfortable'
+        ? 'comfortable'
+        : 'compact'
+    } catch {
+      return 'compact'
+    }
+  })
+  const setDensity = (next: TableDensity) => {
+    setDensityState(next)
+    try {
+      localStorage.setItem('fabric-sync:density', next)
+    } catch {
+      /* Optional browser preference. */
+    }
+  }
+  const { pageIndex, pageSize } = table.getState().pagination
+  useEffect(() => {
+    const container = tableRef.current?.closest('[data-slot="table-container"]')
+    if (container) container.scrollTop = 0
+  }, [pageIndex, pageSize])
+
   return (
-    <div
-      className={cn(
-        'flex w-full flex-col gap-2.5 overflow-auto',
-        renderExpandedRow && '[container-type:inline-size]',
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      <div className="overflow-hidden rounded-md border">
-        <Table>
-          <TableHeader>
+    <TableAppearanceContext.Provider value={{ density, setDensity }}>
+      <div
+        data-density={density}
+        aria-busy={isLoading}
+        className={cn(
+          'flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-background',
+          '[&>[data-slot=table-container]]:min-h-0 [&>[data-slot=table-container]]:flex-1 [&>[data-slot=table-container]]:overflow-auto [&>[data-slot=table-container]]:overscroll-contain',
+          '[&_[data-slot=table-head]]:h-9 [&_[data-slot=table-head]]:bg-muted [&_[data-slot=table-head]]:px-2.5 [&_[data-slot=table-head]]:text-xs',
+          '[&_[data-slot=table-cell]]:overflow-hidden [&_[data-slot=table-cell]]:px-2.5 [&_[data-slot=table-cell]]:text-ellipsis',
+          density === 'comfortable'
+            ? '[&_[data-slot=table-cell]]:h-12 [&_[data-slot=table-cell]]:py-2.5 [&_[data-slot=table-cell]]:text-sm'
+            : '[&_[data-slot=table-cell]]:h-10 [&_[data-slot=table-cell]]:py-1 [&_[data-slot=table-cell]]:text-xs',
+          '[&_[data-slot=table-row]]:[--table-row-background:var(--background)] [&_[data-pinned]]:bg-(--table-row-background)',
+          '[&_[data-slot=table-header]>[data-slot=table-row]]:[--table-row-background:var(--muted)]',
+          '[&_[data-slot=table-body]>[data-slot=table-row]]:bg-(--table-row-background) [&_[data-slot=table-body]>[data-slot=table-row]:nth-child(even)]:[--table-row-background:color-mix(in_oklch,var(--muted)_28%,var(--background))] [&_[data-slot=table-body]>[data-slot=table-row]:hover]:[--table-row-background:var(--muted)]!',
+          renderExpandedRow && '[container-type:inline-size]',
+          className,
+        )}
+        {...props}
+      >
+        {children}
+        <Table
+          ref={tableRef}
+          className="min-w-full table-fixed"
+          style={{ width: table.getTotalSize() }}
+          aria-label="Records"
+        >
+          <TableHeader className="sticky top-0 z-20">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
                   <TableHead
                     key={header.id}
                     colSpan={header.colSpan}
+                    className={
+                      header.column.columnDef.meta?.align === 'end'
+                        ? 'text-end'
+                        : undefined
+                    }
                     style={{
                       ...getColumnPinningStyle({ column: header.column }),
                     }}
+                    data-pinned={header.column.getIsPinned() || undefined}
                   >
                     {header.isPlaceholder
                       ? null
@@ -58,19 +108,72 @@ export function DataTable<TData>({
                           header.column.columnDef.header,
                           header.getContext(),
                         )}
+                    {header.column.getCanResize() && (
+                      <div
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label={`Resize ${header.column.columnDef.meta?.label ?? header.column.id} column`}
+                        tabIndex={0}
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        onDoubleClick={() => header.column.resetSize()}
+                        onKeyDown={(event) => {
+                          if (
+                            event.key !== 'ArrowLeft' &&
+                            event.key !== 'ArrowRight'
+                          )
+                            return
+                          event.preventDefault()
+                          table.setColumnSizing((previous) => ({
+                            ...previous,
+                            [header.column.id]: Math.max(
+                              header.column.columnDef.minSize ?? 20,
+                              Math.min(
+                                header.column.columnDef.maxSize ??
+                                  Number.MAX_SAFE_INTEGER,
+                                header.column.getSize() +
+                                  (event.key === 'ArrowRight' ? 10 : -10),
+                              ),
+                            ),
+                          }))
+                        }}
+                        className="absolute inset-y-0 end-0 w-[5px] cursor-col-resize touch-none hover:bg-ring focus-visible:bg-ring"
+                      />
+                    )}
                   </TableHead>
                 ))}
               </TableRow>
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows.length ? (
+            {isLoading ? (
+              Array.from({ length: 8 }, (_, index) => (
+                <TableRow key={index}>
+                  {table.getVisibleLeafColumns().map((column) => (
+                    <TableCell key={column.id}>
+                      <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
                 <Fragment key={row.id}>
                   <TableRow data-state={row.getIsSelected() && 'selected'}>
                     {row.getVisibleCells().map((cell) => (
                       <TableCell
                         key={cell.id}
+                        className={
+                          cell.column.columnDef.meta?.align === 'end'
+                            ? 'text-end'
+                            : undefined
+                        }
+                        title={
+                          typeof cell.getValue() === 'string'
+                            ? cell.getValue<string>()
+                            : undefined
+                        }
+                        data-pinned={cell.column.getIsPinned() || undefined}
                         style={{
                           ...getColumnPinningStyle({ column: cell.column }),
                         }}
@@ -109,13 +212,13 @@ export function DataTable<TData>({
             )}
           </TableBody>
         </Table>
+        <div className="shrink-0 border-t bg-background px-3 py-2">
+          <DataTablePagination table={table} />
+          {actionBar &&
+            table.getFilteredSelectedRowModel().rows.length > 0 &&
+            actionBar}
+        </div>
       </div>
-      <div className="flex flex-col gap-2.5">
-        <DataTablePagination table={table} />
-        {actionBar &&
-          table.getFilteredSelectedRowModel().rows.length > 0 &&
-          actionBar}
-      </div>
-    </div>
+    </TableAppearanceContext.Provider>
   )
 }

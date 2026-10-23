@@ -5,6 +5,7 @@ export interface DesignOptionFormValues {
   /** The stored identity. Set once on create, read-only afterwards. */
   slug: string
   label: string
+  cost: number | ''
   sortOrder: number | ''
   isActive: boolean
   /** Data URL preview of the illustration. `null` means none. */
@@ -16,6 +17,7 @@ export function createEmptyDesignOptionForm(): DesignOptionFormValues {
     category: 'thob_type',
     slug: '',
     label: '',
+    cost: 0,
     sortOrder: '',
     isActive: true,
     imageDataUrl: null,
@@ -30,6 +32,7 @@ export function designOptionToFormValues(
     category: option.category as DesignCategory,
     slug: option.slug,
     label: option.label,
+    cost: option.cost,
     sortOrder: option.sortOrder,
     isActive: option.isActive,
     imageDataUrl,

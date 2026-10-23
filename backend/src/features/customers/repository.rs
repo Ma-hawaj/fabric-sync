@@ -23,6 +23,8 @@ const SPEC: ListSpec = ListSpec {
             c.id,
             c.name,
             c.mobile_no,
+            c.whatsapp_notifications_enabled,
+            c.address,
             max(m.measurement_date) AS last_measured_on,
             count(m.id) AS measurement_count,
             COALESCE(
@@ -191,13 +193,25 @@ pub async fn insert_measurement(
     .await
 }
 
-// Tx-scoped so the invoices feature can check it against a new snapshot
-// inside its own transaction before deciding whether to insert one.
+// Repairs compare new measurements with the customer's latest snapshot.
 pub async fn latest_measurement(
     tx: &mut sqlx::PgTransaction<'_>,
     customer_id: Uuid,
 ) -> Result<Option<(Uuid, CreateMeasurementInput)>, sqlx::Error> {
-    let row = sqlx::query!(
+    Ok(measurement_candidates(tx, customer_id, &[])
+        .await?
+        .into_iter()
+        .next())
+}
+
+// Immutable reuse candidates: the latest record and any records already
+// referenced by the invoice being edited. No measurement history is rewritten.
+pub async fn measurement_candidates(
+    tx: &mut sqlx::PgTransaction<'_>,
+    customer_id: Uuid,
+    invoice_measurement_ids: &[Uuid],
+) -> Result<Vec<(Uuid, CreateMeasurementInput)>, sqlx::Error> {
+    let rows = sqlx::query!(
         r#"
         SELECT
             id, measurement_date, type, fit,
@@ -213,52 +227,60 @@ pub async fn latest_measurement(
             side_pocket::float8, side_pocket_length_by_width,
             mobile_pocket_length_by_width
         FROM measurements
-        WHERE customer_id = $1
+        WHERE customer_id = $1 AND (
+            id = ANY($2) OR id = (
+                SELECT id FROM measurements WHERE customer_id = $1
+                ORDER BY measurement_date DESC, id DESC LIMIT 1
+            )
+        )
         ORDER BY measurement_date DESC, id DESC
-        LIMIT 1
         "#,
         customer_id,
+        invoice_measurement_ids,
     )
-    .fetch_optional(&mut **tx)
+    .fetch_all(&mut **tx)
     .await?;
 
-    Ok(row.map(|row| {
-        (
-            row.id,
-            CreateMeasurementInput {
-                date: row.measurement_date,
-                r#type: row.r#type,
-                fit: row.fit,
-                front_height: row.front_height,
-                back_height: row.back_height,
-                chest: row.chest,
-                waist: row.waist,
-                hip: row.hip,
-                shoulder: row.shoulder,
-                shoulder_down: row.shoulder_down,
-                sleeve_length: row.sleeve_length,
-                neck_size: row.neck_size,
-                open_hand: row.open_hand,
-                chest_up: row.chest_up,
-                cuff_width: row.cuff_width,
-                cuff_size: row.cuff_size,
-                neck_width: row.neck_width,
-                armhole: row.armhole,
-                fo_width: row.fo_width,
-                fo: row.fo,
-                bottom: row.bottom,
-                bottom_fold: row.bottom_fold,
-                full_body: row.full_body,
-                sleeve_half: row.sleeve_half,
-                open_fold: row.open_fold,
-                front_pocket_length: row.front_pocket_length,
-                front_pocket_length_by_width: row.front_pocket_length_by_width,
-                side_pocket: row.side_pocket,
-                side_pocket_length_by_width: row.side_pocket_length_by_width,
-                mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
-            },
-        )
-    }))
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.id,
+                CreateMeasurementInput {
+                    date: row.measurement_date,
+                    r#type: row.r#type,
+                    fit: row.fit,
+                    front_height: row.front_height,
+                    back_height: row.back_height,
+                    chest: row.chest,
+                    waist: row.waist,
+                    hip: row.hip,
+                    shoulder: row.shoulder,
+                    shoulder_down: row.shoulder_down,
+                    sleeve_length: row.sleeve_length,
+                    neck_size: row.neck_size,
+                    open_hand: row.open_hand,
+                    chest_up: row.chest_up,
+                    cuff_width: row.cuff_width,
+                    cuff_size: row.cuff_size,
+                    neck_width: row.neck_width,
+                    armhole: row.armhole,
+                    fo_width: row.fo_width,
+                    fo: row.fo,
+                    bottom: row.bottom,
+                    bottom_fold: row.bottom_fold,
+                    full_body: row.full_body,
+                    sleeve_half: row.sleeve_half,
+                    open_fold: row.open_fold,
+                    front_pocket_length: row.front_pocket_length,
+                    front_pocket_length_by_width: row.front_pocket_length_by_width,
+                    side_pocket: row.side_pocket,
+                    side_pocket_length_by_width: row.side_pocket_length_by_width,
+                    mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
+                },
+            )
+        })
+        .collect())
 }
 
 // Tx-scoped so the invoices feature can create new customers as part of an
@@ -267,15 +289,20 @@ pub async fn insert_customer(
     tx: &mut sqlx::PgTransaction<'_>,
     name: &str,
     mobile_no: &str,
+    whatsapp_notifications_enabled: bool,
+    address: Option<&str>,
 ) -> Result<Uuid, sqlx::Error> {
+    let address = address.map(str::trim);
     sqlx::query_scalar!(
         r#"
-        INSERT INTO customers (name, mobile_no)
-        VALUES ($1, $2)
+        INSERT INTO customers (name, mobile_no, whatsapp_notifications_enabled, address)
+        VALUES ($1, $2, $3, NULLIF(BTRIM($4), ''))
         RETURNING id
         "#,
         name,
         mobile_no,
+        whatsapp_notifications_enabled,
+        address,
     )
     .fetch_one(&mut **tx)
     .await
@@ -285,11 +312,20 @@ pub async fn create_customer(
     state: &AppState,
     name: &str,
     mobile_no: &str,
+    whatsapp_notifications_enabled: bool,
+    address: Option<&str>,
     measurement: Option<&CreateMeasurementInput>,
 ) -> Result<Uuid, sqlx::Error> {
     let mut tx = state.db().begin().await?;
 
-    let customer_id = insert_customer(&mut tx, name, mobile_no).await?;
+    let customer_id = insert_customer(
+        &mut tx,
+        name,
+        mobile_no,
+        whatsapp_notifications_enabled,
+        address,
+    )
+    .await?;
 
     if let Some(measurement) = measurement {
         insert_measurement(&mut tx, customer_id, measurement).await?;
@@ -309,18 +345,25 @@ pub async fn update_customer(
     customer_id: Uuid,
     name: Option<&str>,
     mobile_no: Option<&str>,
+    whatsapp_notifications_enabled: Option<bool>,
+    address: Option<&str>,
 ) -> Result<Option<Customer>, AppError> {
+    let address = address.map(str::trim);
     let updated = sqlx::query_scalar!(
         r#"
         UPDATE customers
         SET name = COALESCE($2, name),
-            mobile_no = COALESCE($3, mobile_no)
+            mobile_no = COALESCE($3, mobile_no),
+            whatsapp_notifications_enabled = COALESCE($4, whatsapp_notifications_enabled),
+            address = NULLIF(BTRIM(COALESCE($5, address)), '')
         WHERE id = $1
         RETURNING id
         "#,
         customer_id,
         name,
         mobile_no,
+        whatsapp_notifications_enabled,
+        address,
     )
     .fetch_optional(state.db())
     .await?;

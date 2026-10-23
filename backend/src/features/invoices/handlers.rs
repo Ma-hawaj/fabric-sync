@@ -15,8 +15,8 @@ use crate::{
 use super::{
     document, service,
     types::{
-        CreateInvoiceInput, CreatedInvoice, InvoiceDetail, InvoiceEdit, InvoiceListItem,
-        ReceiveInvoiceInput, ReceivedInvoice, RecordPaymentInput, RecordedPayment,
+        CollectInvoiceInput, CollectedInvoice, CreateInvoiceInput, CreatedInvoice, InvoiceDetail,
+        InvoiceEdit, InvoiceListItem, RecordPaymentInput, RecordedPayment,
     },
 };
 
@@ -82,14 +82,14 @@ pub async fn update_invoice(
     ))
 }
 
-pub async fn receive_invoice(
+pub async fn collect_invoice(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,
     Path(invoice_id): Path<Uuid>,
-    Json(input): Json<ReceiveInvoiceInput>,
-) -> Result<Json<ReceivedInvoice>, AppError> {
+    Json(input): Json<CollectInvoiceInput>,
+) -> Result<Json<CollectedInvoice>, AppError> {
     Ok(Json(
-        service::receive_invoice(&state, invoice_id, input.payment_type).await?,
+        service::collect_invoice(&state, invoice_id, input.payment_type).await?,
     ))
 }
 
@@ -108,6 +108,24 @@ pub async fn record_payment(
             input.amount,
             input.payment_type,
             input.order_id,
+        )
+        .await?,
+    ))
+}
+
+pub async fn mark_ready(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(invoice_id): Path<Uuid>,
+    Json(input): Json<crate::features::orders::readiness::ConfirmInput>,
+) -> Result<Json<crate::features::orders::readiness::ReadyResult>, AppError> {
+    Ok(Json(
+        crate::features::orders::readiness::confirm(
+            state.db(),
+            invoice_id,
+            None,
+            user.subject().unwrap_or("staff"),
+            input.confirmed_at_pickup_branch,
         )
         .await?,
     ))

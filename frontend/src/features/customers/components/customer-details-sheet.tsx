@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import {
@@ -44,10 +45,10 @@ export function CustomerDetailsSheet({
   customer,
   onOpenChange,
 }: CustomerDetailsSheetProps) {
-  const [activeMeasurementId, setActiveMeasurementId] = React.useState<
-    string | null
-  >(null)
-  const [hoveredField, setHoveredField] = React.useState<string | null>(null)
+  const [activeMeasurementId, setActiveMeasurementId] = useState<string | null>(
+    null,
+  )
+  const [hoveredField, setHoveredField] = useState<string | null>(null)
 
   React.useEffect(() => {
     setActiveMeasurementId(customer?.measurements[0]?.id ?? null)
@@ -63,7 +64,7 @@ export function CustomerDetailsSheet({
     )
   }, [customer, activeMeasurementId])
 
-  const [isPrinting, setIsPrinting] = React.useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
 
   const handlePrint = React.useCallback(() => {
     if (!customer || !activeMeasurement) return
@@ -97,6 +98,11 @@ export function CustomerDetailsSheet({
                   <SheetDescription className="text-muted-foreground mt-0.5">
                     Phone: {customer.mobileNo}
                   </SheetDescription>
+                  {customer.address && (
+                    <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">
+                      Address: {customer.address}
+                    </p>
+                  )}
                 </div>
                 {customer.measurements.length > 0 && (
                   <Button
@@ -139,12 +145,17 @@ export function CustomerDetailsSheet({
                 </div>
               ) : (
                 <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+                  <p className="px-3 py-2 text-xs text-muted-foreground">
+                    Totals and balances cover the whole invoice, including
+                    orders for family or friends.
+                  </p>
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Invoice</TableHead>
                         <TableHead>Date</TableHead>
-                        <TableHead>Total</TableHead>
+                        <TableHead>Invoice total</TableHead>
+                        <TableHead>Shared invoice balance</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -165,6 +176,9 @@ export function CustomerDetailsSheet({
                           </TableCell>
                           <TableCell>
                             {CURRENCY} {invoice.totalPrice.toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            {CURRENCY} {invoice.balanceDue.toFixed(2)}
                           </TableCell>
                           <TableCell>
                             <Badge

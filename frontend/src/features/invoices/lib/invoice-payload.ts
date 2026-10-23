@@ -35,7 +35,7 @@ function orderPayload(order: InvoiceOrderDraft) {
         : null,
     materialAmount: numberOrZero(order.materialAmount),
     productionLocationId: order.productionLocationId,
-    price: numberOrZero(order.price),
+    isUrgent: order.isUrgent,
     thobeType: blankToNull(order.thobeType),
     fPocket: blankToNull(order.fPocket),
     sPocket: blankToNull(order.sPocket),
@@ -53,7 +53,11 @@ function customerPayload(customer: InvoiceCustomerDraft) {
       customer.mode === 'existing' ? customer.existingCustomerId : null,
     newCustomer:
       customer.mode === 'new'
-        ? { name: customer.name, mobileNo: customer.mobileNo }
+        ? {
+            name: customer.name.trim(),
+            mobileNo: customer.mobileNo.trim(),
+            address: customer.address.trim(),
+          }
         : null,
     measurement: measurementPayload(customer.measurement),
     orders: customer.orders.map(orderPayload),
@@ -91,6 +95,7 @@ function redemptionPayload(redemption: GiftCardRedemptionDraft) {
 export function invoicePayload(values: InvoiceFormValues) {
   return {
     targetDate: values.targetDate || null,
+    collectionMethod: values.collectionMethod,
     branchId: values.receivingBranch || null,
     discount: numberOrZero(values.discount),
     discountUnit: values.discountUnit,

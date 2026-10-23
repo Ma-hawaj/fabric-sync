@@ -1,14 +1,18 @@
 import * as React from 'react'
-import {
-  NumberField as NumberFieldRoot,
-  NumberFieldGroup,
-  NumberFieldInput,
-} from '@/components/reui/number-field'
+import { useState } from 'react'
+import { NumberField as NumberFieldPrimitive } from '@base-ui/react/number-field'
 import { PhoneInput } from '@/components/reui/phone-input'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from '@/components/ui/input-group'
 import {
   Popover,
   PopoverContent,
@@ -31,7 +35,7 @@ import { CalendarIcon, XIcon } from 'lucide-react'
 // result. `AnyFormApi = any` sidesteps that — matching how this codebase
 // already types individual field render props (`field: any`) rather than
 // fighting the generics. Dynamic array paths (e.g.
-// `customers[0].measurement.chest`) also don't play well with TanStack
+// `items[0].details.value`) also don't play well with TanStack
 // Form's deep-key type inference, so field names below are plain strings
 // rather than the library's `DeepKeys<T>` type.
 export type AnyFormApi = any
@@ -62,7 +66,38 @@ export function TextField({ form, name, label }: FieldProps) {
   )
 }
 
-export function PhoneField({ form, name, label }: FieldProps) {
+export function TextareaField({ form, name, label }: FieldProps) {
+  const errorId = React.useId()
+  return (
+    <form.Field name={name as never}>
+      {(field: any) => (
+        <Field data-invalid={field.state.meta.errors.length > 0}>
+          <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
+          <Textarea
+            id={field.name}
+            rows={3}
+            value={field.state.value ?? ''}
+            aria-invalid={field.state.meta.errors.length > 0}
+            aria-describedby={
+              field.state.meta.errors.length > 0 ? errorId : undefined
+            }
+            onBlur={field.handleBlur}
+            onChange={(e) => field.handleChange(e.target.value)}
+          />
+          <FieldError id={errorId} errors={field.state.meta.errors} />
+        </Field>
+      )}
+    </form.Field>
+  )
+}
+
+export function PhoneField({
+  form,
+  name,
+  label,
+  defaultCountry,
+}: FieldProps &
+  Pick<React.ComponentProps<typeof PhoneInput>, 'defaultCountry'>) {
   return (
     <form.Field name={name as never}>
       {(field: any) => (
@@ -74,7 +109,7 @@ export function PhoneField({ form, name, label }: FieldProps) {
             aria-invalid={field.state.meta.errors.length > 0}
             onBlur={field.handleBlur}
             onChange={(value) => field.handleChange(value)}
-            defaultCountry={'BH'}
+            defaultCountry={defaultCountry}
           />
           <FieldError errors={field.state.meta.errors} />
         </Field>
@@ -94,7 +129,7 @@ export function NumberField({
       {(field: any) => (
         <Field data-invalid={field.state.meta.errors.length > 0}>
           <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
-          <NumberFieldRoot
+          <NumberFieldPrimitive.Root
             value={
               field.state.value === '' || field.state.value == null
                 ? null
@@ -102,20 +137,20 @@ export function NumberField({
             }
             onValueChange={(value) => field.handleChange(value ?? '')}
           >
-            <NumberFieldGroup>
-              <NumberFieldInput
+            <NumberFieldPrimitive.Group render={<InputGroup />}>
+              <NumberFieldPrimitive.Input
+                render={<InputGroupInput />}
                 id={field.name}
                 aria-invalid={field.state.meta.errors.length > 0}
                 onBlur={field.handleBlur}
-                className={unit ? 'pe-10' : undefined}
               />
               {unit && (
-                <span className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  {unit}
-                </span>
+                <InputGroupAddon align="inline-end">
+                  <InputGroupText>{unit}</InputGroupText>
+                </InputGroupAddon>
               )}
-            </NumberFieldGroup>
-          </NumberFieldRoot>
+            </NumberFieldPrimitive.Group>
+          </NumberFieldPrimitive.Root>
           <FieldError errors={field.state.meta.errors} />
         </Field>
       )}
@@ -186,7 +221,7 @@ export function DateField({
   label,
   placeholder,
 }: FieldProps & { placeholder?: string }) {
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = useState(false)
   return (
     <form.Field name={name as never}>
       {(field: any) => {

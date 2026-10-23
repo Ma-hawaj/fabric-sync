@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { moneyInputSchema } from '@/lib/money'
 
 // A blank string means "not entered yet", matching NumberField and the
 // `number | ''` shape in types/design-option-form.ts. The illustration itself
@@ -31,6 +32,7 @@ export const designOptionFormSchema = z.object({
     z.number().int().min(1, 'Enter a position of 1 or more.'),
     z.literal('').refine(() => false, { message: 'Enter a position.' }),
   ]),
+  cost: moneyInputSchema,
   isActive: z.boolean(),
   imageDataUrl: z.string().nullable(),
 })

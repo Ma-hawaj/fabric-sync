@@ -4,7 +4,7 @@ import { OrderStageFormPage } from '@/features/order-stages/order-stage-form'
 export const Route = createFileRoute(
   '/_authenticated/order-stages/$stageId/edit',
 )({
-  staticData: { title: 'Edit Stage' },
+  staticData: { title: 'Edit' },
   component: EditOrderStageRoute,
 })
 

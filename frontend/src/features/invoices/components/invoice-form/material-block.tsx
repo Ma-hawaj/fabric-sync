@@ -1,4 +1,4 @@
-import * as React from 'react'
+import { useEffect, useState } from 'react'
 import { XIcon } from 'lucide-react'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import { NumberField } from '@/components/form/fields'
@@ -34,11 +34,11 @@ export function MaterialBlock({
 }: MaterialBlockProps) {
   const base = `materials[${lineIndex}]`
   const stored = form.state.values.materials[lineIndex]
-  const [picked, setPicked] = React.useState<Material | null>(() =>
+  const [picked, setPicked] = useState<Material | null>(() =>
     initialMaterialForId(stored.materialId),
   )
   const stockDefault = useApplicableDefaultLocation('stock')
-  React.useEffect(() => {
+  useEffect(() => {
     if (stockDefault && !form.state.values.materials[lineIndex]?.branchId) {
       form.setFieldValue(`${base}.branchId` as never, stockDefault.id as never)
     }

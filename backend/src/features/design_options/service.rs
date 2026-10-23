@@ -165,6 +165,7 @@ pub async fn create_option(
     state: &AppState,
     input: CreateDesignOptionInput,
 ) -> Result<DesignOption, AppError> {
+    crate::features::pricing::service::validate_amount(input.cost)?;
     let category = normalized_category(&input.category)?;
     let slug = normalized_slug(&input.slug)?;
     let label = normalized_label(&input.label)?;
@@ -191,6 +192,7 @@ pub async fn create_option(
         sort_order,
         image.as_deref(),
         &image_mime,
+        input.cost,
     )
     .await?;
 
@@ -205,6 +207,9 @@ pub async fn update_option(
     input: UpdateDesignOptionInput,
 ) -> Result<DesignOption, AppError> {
     let label = input.label.as_deref().map(normalized_label).transpose()?;
+    if let Some(cost) = input.cost {
+        crate::features::pricing::service::validate_amount(cost)?;
+    }
 
     if let Some(sort_order) = input.sort_order {
         validate_sort_order(sort_order)?;
@@ -230,6 +235,7 @@ pub async fn update_option(
         touch_image,
         image.as_deref(),
         image_mime.as_deref(),
+        input.cost,
     )
     .await?
     .ok_or_else(|| AppError::NotFound(format!("design option {option_id} not found")))?;

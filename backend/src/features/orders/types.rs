@@ -33,6 +33,7 @@ pub enum RepairStatus {
     InProgress,
     Completed,
     Cancelled,
+    Received,
 }
 
 impl RepairStatus {
@@ -42,6 +43,7 @@ impl RepairStatus {
             Self::InProgress => "in_progress",
             Self::Completed => "completed",
             Self::Cancelled => "cancelled",
+            Self::Received => "received",
         }
     }
 }
@@ -61,7 +63,7 @@ pub struct StageRow {
 /// A recorded stage action, flat as it comes out of the database. One
 /// checklist per order — a repair is tracked by its own record and status,
 /// not by a second pass through these stages.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, sqlx::FromRow)]
 pub struct ProgressRow {
     pub order_id: Uuid,
     pub stage_id: Uuid,
@@ -92,6 +94,10 @@ pub struct RepairRow {
     pub charge: f64,
     pub status: String,
     pub completed_at: Option<DateTime<Utc>>,
+    pub received_at: Option<DateTime<Utc>>,
+    pub received_amount: f64,
+    pub received_payment_type: Option<String>,
+    pub fixed_measurement_id: Option<Uuid>,
     pub notes: Option<String>,
 }
 
@@ -118,10 +124,14 @@ pub struct OrderRow {
     pub material_id: Option<Uuid>,
     pub material_amount: f64,
     pub price: f64,
+    pub is_urgent: bool,
+    pub urgent_charge: f64,
     pub status: String,
     /// When the customer collected the garment, stamped automatically when
-    /// the order is received. Null while the order is still pending.
-    pub received_at: Option<DateTime<Utc>>,
+    /// the order is collected. Null while the order is still pending.
+    pub collected_at: Option<DateTime<Utc>>,
+    pub ready_at: Option<DateTime<Utc>>,
+    pub ready_by: Option<String>,
     /// The made-to-measure design choices, as stored on `orders` — the same
     /// columns the invoice document already renders per line. Exposed here so
     /// the order detail page and the printed order sheet can show them without
@@ -143,7 +153,7 @@ pub struct OrderRow {
     pub invoice_payment_status: String,
     pub invoice_balance_due: f64,
     /// Gift card tender on the invoice: settled alongside payments, so the
-    /// receive dialog shows it rather than leaving a gap between the total
+    /// collect dialog shows it rather than leaving a gap between the total
     /// and what was paid.
     pub invoice_gift_card_redeemed: f64,
     /// The method of the invoice's most recent payment, if any.
@@ -189,12 +199,16 @@ pub struct OrderRepair {
     pub charge: f64,
     pub status: String,
     pub completed_at: Option<DateTime<Utc>>,
+    pub received_at: Option<DateTime<Utc>>,
+    pub received_amount: f64,
+    pub received_payment_type: Option<String>,
+    pub fixed_measurement_id: Option<Uuid>,
     pub notes: Option<String>,
 }
 
 // One row of GET /orders — an order line joined with its invoice, customer,
 // and material for the orders list page, plus the invoice's payment state so
-// the page can show balance due and settle it via receive_order, and the
+// the page can show balance due and settle it via collect_order, and the
 // production checklist and repair history for the tracking sheet.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -216,10 +230,14 @@ pub struct OrderListItem {
     pub material_sku: Option<String>,
     pub material_amount: f64,
     pub price: f64,
+    pub is_urgent: bool,
+    pub urgent_charge: f64,
     pub status: String,
     /// When the customer collected the garment, stamped automatically when
-    /// the order is received. Null while the order is still pending.
-    pub received_at: Option<DateTime<Utc>>,
+    /// the order is collected. Null while the order is still pending.
+    pub collected_at: Option<DateTime<Utc>>,
+    pub ready_at: Option<DateTime<Utc>>,
+    pub ready_by: Option<String>,
     /// The made-to-measure design choices, as stored on `orders` — the same
     /// values the invoice document renders as chips per line. Carried on the
     /// list row (not just the detail) so the tracking sheet and the printed
@@ -257,7 +275,7 @@ pub struct OrderListItem {
     pub invoice_payment_status: String,
     pub invoice_balance_due: f64,
     /// Gift card tender on the invoice: settled alongside payments, so the
-    /// receive dialog shows it rather than leaving a gap between the total
+    /// collect dialog shows it rather than leaving a gap between the total
     /// and what was paid.
     pub invoice_gift_card_redeemed: f64,
     /// The method of the invoice's most recent payment, if any.
@@ -276,14 +294,14 @@ pub struct OrderDetail {
     pub measurement: Measurement,
 }
 
-/// Body for `POST /orders/:id/receive` — marks the order collected and records
+/// Body for `POST /orders/:id/collect` — marks the order collected and records
 /// the payment taken at that pickup. `amount` may be zero (collect with no
 /// money); when it is positive a `payment_type` is required. The invoice is
-/// settled in full only once every order on it is received *and* the balance
-/// reaches zero — see `receive_order`.
+/// settled in full only once every order on it is collected *and* the balance
+/// reaches zero — see `collect_order`.
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReceiveOrderInput {
+pub struct CollectOrderInput {
     #[serde(default)]
     pub amount: f64,
     #[serde(default)]
@@ -320,6 +338,7 @@ pub struct AssignStageInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateRepairInput {
+    pub measurement: Option<crate::features::customers::types::CreateMeasurementInput>,
     pub reason: String,
     #[serde(default)]
     pub charge: f64,
@@ -332,5 +351,55 @@ pub struct UpdateRepairInput {
     pub reason: Option<String>,
     pub charge: Option<f64>,
     pub status: Option<RepairStatus>,
+    pub notes: Option<String>,
+}
+
+/// Body for `POST /orders/:id/repairs/:repairId/receive` — hands the repaired
+/// garment back to the customer after completion. `amount` may be zero (hand
+/// over with no money); when positive a `payment_type` is required. The money
+/// is recorded on the repair row itself; the invoice ledger is untouched.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiveRepairInput {
+    #[serde(default)]
+    pub amount: f64,
+    #[serde(default)]
+    pub payment_type: Option<PaymentType>,
+}
+
+/// Body for `PUT /orders/:id/repairs/:repairId/measurement` — records the
+/// measurement fix a repair needed, for future orders. The order's own
+/// snapshot never moves; the fix is resolved like an invoice create (reuse the
+/// customer's latest row when nothing changed, else insert a fresh one) and
+/// its id is stored on the repair as `fixed_measurement_id`.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepairMeasurementFixInput {
+    pub measurement: crate::features::customers::types::CreateMeasurementInput,
+}
+
+/// One repair with the order/customer context a global tracking page needs —
+/// the shape `GET /repairs` returns. Flat on purpose: the page filters and
+/// sorts without joining client-side.
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct RepairListItem {
+    pub id: Uuid,
+    pub order_id: Uuid,
+    pub order_number: i64,
+    pub invoice_id: Uuid,
+    pub invoice_number: i64,
+    pub customer_name: String,
+    pub customer_mobile: String,
+    pub material: String,
+    pub reason: String,
+    pub reported_on: NaiveDate,
+    pub charge: f64,
+    pub status: String,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub received_at: Option<DateTime<Utc>>,
+    pub received_amount: f64,
+    pub received_payment_type: Option<String>,
+    pub fixed_measurement_id: Option<Uuid>,
     pub notes: Option<String>,
 }

@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            i.invoice_number,\n            i.invoice_date,\n            i.target_date,\n            i.urgent_charge::float8 AS \"urgent_charge!\",\n            i.collection_method,\n            i.branch_id,\n            b.name AS \"branch_name?\",\n            i.discount::float8 AS \"discount!\",\n            i.discount_unit,\n            i.customer_id\n        FROM invoices i\n        LEFT JOIN branch b ON b.id = i.branch_id\n        WHERE i.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "invoice_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "invoice_date",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "target_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 3,
+        "name": "urgent_charge!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "collection_method",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "branch_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "branch_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "discount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 8,
+        "name": "discount_unit",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "customer_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null,
+      false,
+      true,
+      false,
+      null,
+      false,
+      true
+    ]
+  },
+  "hash": "0bb6b0ab09b071ab0c81f83a0800ae585b3874575f31a53d49e1ebfc9073ef1e"
+}

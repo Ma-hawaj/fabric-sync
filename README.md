@@ -90,6 +90,14 @@ If a valid access token gets a 401 from the backend unexpectedly, check the `aud
 
 ## Backend
 
+Invoice creation and editing offer a WhatsApp preview before sending. Orders
+have an explicit **Ready for pickup** confirmation, with invoice readiness
+calculated from the remaining uncollected orders. All invoice customers are
+selected by default and destinations are deduplicated by normalized mobile.
+Invoice PDF exports and notification attachments share stored, server-rendered
+Chromium PDFs. See [notification setup and verification](docs/whatsapp-notifications.md)
+for sender templates, renderer configuration, delivery history, and retries.
+
 The backend reads configuration from environment variables (`backend/.env`
 via `dotenvy` when running locally — copy `backend/.env.example` there
 first).
@@ -190,3 +198,45 @@ TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/fabric_sync cargo 
 
 This opt-in test creates and removes its own schema. Ordinary backend tests do
 not need a database when the committed SQLx offline metadata is used.
+
+## Garment pricing
+
+Urgency is selected separately for each tailoring order. The server applies a
+VAT-inclusive urgent charge after invoice discounts, and the form displays it
+read-only. Set `URGENT_ORDER_CHARGE` to a positive amount and
+`URGENT_ORDER_CHARGE_UNIT` to `amount` (fixed BHD per urgent order) or `percent`
+(percentage of that order's calculated garment price). No rate is assumed:
+urgent orders cannot be saved until pricing is configured. Regular orders have
+no urgent charge. An invoice containing any urgent order requires a target date.
+
+Materials have junior, normal, and large garment prices, entered when creating
+a material or through its Edit Material dialog. Design options have an optional
+additional cost (zero by default). Prices include VAT.
+
+Quantity in metres selects the garment price; it does not multiply it. The shared
+range constants are `JUNIOR_BELOW_METRES` and `LARGE_ABOVE_METRES` in
+`frontend/src/features/invoices/lib/garment-pricing.ts`, mirrored by `JUNIOR_BELOW`
+and `LARGE_ABOVE` in `backend/src/features/pricing/service.rs`. Change both pairs
+together; a test checks that they agree. Defaults are junior below 3 m, normal
+3–4 m inclusive, and large above 4 m.
+
+The server calculates final prices from the catalog plus selected design costs.
+Customer-supplied fabric uses the fixed VAT-inclusive tailoring base configured
+by `CUSTOMER_MATERIAL_BASE_PRICE`, plus design costs. This is one price per order,
+independent of metres used. The form displays the price read-only; client-supplied
+price overrides are ignored. No amount is assumed, so customer-material orders
+cannot be saved until the fixed price is configured. Editing an invoice
+recalculates prices using the current pricing configuration and catalog; viewing
+or printing keeps the saved prices. Imported materials without tier prices must
+be configured before creating garment lines.
+
+Each material’s Actions menu includes Add Stock with that material already selected,
+so only locations and quantities need entering.
+Add Stock also opens a dialog from the inventory page, supporting existing materials,
+new materials with tier prices, and stock at multiple locations.
+
+Material details are read-only. Use the inventory row actions to edit a material
+(name, SKU, family, unit, and tier prices), remove stock, or move stock. Move Stock
+transfers a quantity from one location to another in one transaction; it refuses
+insufficient source stock and inactive or non-stock-holding destinations. Moves
+keep total material stock unchanged and can create a destination stock row.

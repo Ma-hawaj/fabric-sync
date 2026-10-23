@@ -2,6 +2,8 @@ import type { ReactFormExtendedApi } from '@tanstack/react-form'
 import { createEmptyMeasurement } from '@/features/customers/types/measurement-form'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 
+export type CollectionMethod = 'delivery' | 'pickup'
+
 export type CustomerMode = 'existing' | 'new'
 export type PaymentType = 'benefit' | 'cash' | 'card'
 // A flat amount in the business currency, or a percentage of the subtotal —
@@ -30,9 +32,10 @@ export interface InvoiceOrderDraft {
   // Where the garment is made. Shop material needs stock at this location;
   // customer fabric can use any active production location.
   productionLocationId: string
-  // Entered by staff per order line — materials carry no unit price to derive
-  // it from.
+  // Calculated preview; the backend calculates its own final price.
   price: NumberInput
+  isUrgent: boolean
+  urgentCharge: NumberInput
 }
 
 export interface InvoiceCustomerDraft {
@@ -45,6 +48,7 @@ export interface InvoiceCustomerDraft {
   // mode: 'new'
   name: string
   mobileNo: string
+  address: string
 
   measurement: MeasurementDraft
   orders: InvoiceOrderDraft[]
@@ -85,7 +89,7 @@ export interface GiftCardRedemptionDraft {
 }
 
 // One payment taken up front with the invoice. Later payments go through the
-// receive endpoints or a till payment, so the form only ever carries the
+// collect endpoints or a till payment, so the form only ever carries the
 // opening ones — usually zero or one row.
 export interface PaymentDraft {
   key: string
@@ -94,9 +98,10 @@ export interface PaymentDraft {
 }
 
 export interface InvoiceFormValues {
+  collectionMethod: CollectionMethod
   // When the garment is promised for, if at all — blank means no committed
-  // pickup. Staff-editable; the invoice's own date is server-set at
-  // creation and never enters the form.
+  // pickup. Required when any order is urgent. Staff-editable; the invoice's own
+  // date is server-set at creation and never enters the form.
   targetDate: string
   receivingBranch: string
   // Who a sale with no tailoring orders is billed to; a tailoring invoice
@@ -151,6 +156,8 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     materialAmount: '',
     productionLocationId: '',
     price: '',
+    isUrgent: false,
+    urgentCharge: '',
   }
 }
 
@@ -161,6 +168,7 @@ export function createEmptyCustomer(): InvoiceCustomerDraft {
     existingCustomerId: '',
     name: '',
     mobileNo: '',
+    address: '',
     measurement: createEmptyMeasurement(),
     orders: [createEmptyOrder()],
   }
@@ -174,6 +182,7 @@ export function createEmptyInvoiceForm(): InvoiceFormValues {
     // never records when the invoice was opened (the backend stamps that
     // itself).
     targetDate: '',
+    collectionMethod: 'pickup',
     receivingBranch: '',
     customerId: '',
     productBranch: '',

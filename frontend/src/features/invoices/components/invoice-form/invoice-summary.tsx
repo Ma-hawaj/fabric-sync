@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { SegmentedOptions } from '@/components/form/segmented-options'
 import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
 import { ORDER_RECEIVING_FILTERS } from '@/features/locations/lib/location-filters'
@@ -23,6 +24,8 @@ import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
   computeOrderLineTotal,
+  computeOrderUrgentCharge,
+  computeUrgentCharges,
   computeProductLineTotal,
   computeRedemptionTotal,
   VAT_RATE,
@@ -61,7 +64,7 @@ function customerDisplayName(
 interface CustomerLineItems {
   key: string
   customerName: string
-  orders: { key: string; label: string; total: number }[]
+  orders: { key: string; label: string; total: number; urgentCharge: number }[]
 }
 
 function buildLineItems(
@@ -75,6 +78,7 @@ function buildLineItems(
       key: order.key,
       label: `Order ${idx + 1}`,
       total: computeOrderLineTotal(order),
+      urgentCharge: computeOrderUrgentCharge(order),
     })),
   }))
 }
@@ -139,12 +143,40 @@ export function InvoiceSummary({
       <h3 className="text-sm font-semibold">Invoice Summary</h3>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <DateField
-          form={form}
-          name="targetDate"
-          label="Target Date (optional)"
-          placeholder="Pick a target date"
-        />
+        <form.Field name={'collectionMethod' as never}>
+          {(field: any) => (
+            <Field>
+              <FieldLabel id="collection-method-label">Collection</FieldLabel>
+              <SegmentedOptions
+                ariaLabel="Collection"
+                options={['Pickup', 'Delivery']}
+                value={field.state.value === 'delivery' ? 'Delivery' : 'Pickup'}
+                onChange={(value) => field.handleChange(value.toLowerCase())}
+                columns={2}
+              />
+            </Field>
+          )}
+        </form.Field>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <form.Subscribe
+          selector={(state: any) =>
+            state.values.customers.some((customer: InvoiceCustomerDraft) =>
+              customer.orders.some((order) => order.isUrgent),
+            )
+          }
+        >
+          {(isUrgent: boolean) => (
+            <DateField
+              form={form}
+              name="targetDate"
+              label={
+                isUrgent ? 'Target Date (required)' : 'Target Date (optional)'
+              }
+              placeholder="Pick a target date"
+            />
+          )}
+        </form.Subscribe>
         <form.Field name={'receivingBranch' as never}>
           {(field: any) => (
             <div className="space-y-2">
@@ -225,6 +257,7 @@ export function InvoiceSummary({
               InvoiceMaterialDraft[],
             ]
 
+          const urgentCharge = computeUrgentCharges(customers)
           const lineItems = buildLineItems(customers, customerNames.current)
           const productRows = [
             ...buildProductRows(products, productNames.current),
@@ -265,6 +298,12 @@ export function InvoiceSummary({
                       </span>
                       <span>
                         {CURRENCY} {order.total.toFixed(2)}
+                        {order.urgentCharge > 0 && (
+                          <span className="block text-xs">
+                            + {CURRENCY} {order.urgentCharge.toFixed(2)} urgent
+                            charge
+                          </span>
+                        )}
                       </span>
                     </div>
                   )),
@@ -341,6 +380,7 @@ export function InvoiceSummary({
                     giftCardSales,
                     discount: discount === '' ? 0 : discount,
                     discountUnit,
+                    urgentCharge,
                     redeemed: redemptions.reduce(
                       (sum, redemption) =>
                         sum + computeRedemptionTotal(redemption),
@@ -358,6 +398,16 @@ export function InvoiceSummary({
 
                   return (
                     <>
+                      {urgentCharge > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            Urgent charges (incl. VAT)
+                          </span>
+                          <span>
+                            {CURRENCY} {(urgentCharge || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">
                           VAT ({Math.round(VAT_RATE * 100)}%, incl.)
@@ -396,7 +446,7 @@ export function InvoiceSummary({
                       )}
 
                       {/* Payments taken up front with the invoice. Later ones
-                          go through the receive endpoints or a till payment,
+                          go through the collect endpoints or a till payment,
                           so this list is usually empty or a single advance. */}
                       <form.Field name={'payments' as never}>
                         {(paymentsField: any) => (
@@ -414,7 +464,7 @@ export function InvoiceSummary({
                             {paymentsLocked && (
                               <p className="text-xs text-muted-foreground">
                                 Already taken — an edit never changes money.
-                                Take further payments via Receive.
+                                Take further payments via Collect.
                               </p>
                             )}
                             {paymentsLocked &&

@@ -1,4 +1,4 @@
-import * as React from 'react'
+import { useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -69,8 +69,8 @@ function DesignOptionForm({ existing }: { existing?: DesignOption }) {
   // Clearing the stored illustration is separate from picking a new file: the
   // form field only ever carries a fresh upload, so "remove" needs its own
   // flag to tell "untouched" apart from "cleared" on submit.
-  const [clearImage, setClearImage] = React.useState(false)
-  const [fileError, setFileError] = React.useState<string | null>(null)
+  const [clearImage, setClearImage] = useState(false)
+  const [fileError, setFileError] = useState<string | null>(null)
 
   const form = useForm({
     defaultValues: existing
@@ -82,6 +82,7 @@ function DesignOptionForm({ existing }: { existing?: DesignOption }) {
         ? updateOption.mutateAsync({
             id: existing.id,
             label: value.label,
+            cost: Number(value.cost),
             sortOrder: Number(value.sortOrder),
             isActive: value.isActive,
             ...(value.imageDataUrl !== null
@@ -187,6 +188,11 @@ function DesignOptionForm({ existing }: { existing?: DesignOption }) {
 
           <TextField form={form} name="label" label="Display Label" />
           <NumberField form={form} name="sortOrder" label="Position" />
+          <NumberField
+            form={form}
+            name="cost"
+            label="Additional cost incl. VAT"
+          />
 
           <form.Field name="imageDataUrl">
             {(field) => {

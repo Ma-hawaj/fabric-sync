@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { printInvoiceDocument } from './print-invoice'
+import { downloadInvoicePdf, printInvoiceDocument } from './print-invoice'
 import { ApiError, apiClient } from '@/lib/api'
 
 const DOCUMENT_HTML = '<!doctype html><html><body>Invoice INV-42</body></html>'
@@ -61,6 +61,7 @@ function stubIframeBehaviour() {
 }
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   document.body.innerHTML = ''
@@ -97,5 +98,33 @@ describe('printInvoiceDocument', () => {
     expect(document.querySelector('iframe')).toBeNull()
 
     restore()
+  })
+})
+
+describe('downloadInvoicePdf', () => {
+  it('downloads the stored artifact returned by document preparation', async () => {
+    vi.useFakeTimers()
+    const pdf = new Blob(['%PDF-test'], { type: 'application/pdf' })
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
+      data: { id: 'artifact-42', filename: 'INV-42.pdf' },
+    })
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: pdf })
+    const create = vi.fn(() => 'blob:invoice')
+    vi.stubGlobal('URL', { createObjectURL: create, revokeObjectURL: vi.fn() })
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        expect(this.download).toBe('INV-42.pdf')
+        expect(this.href).toBe('blob:invoice')
+      })
+    await downloadInvoicePdf('inv-42')
+    expect(post).toHaveBeenCalledWith('/invoices/inv-42/documents')
+    expect(get).toHaveBeenCalledWith('/documents/artifact-42/content', {
+      responseType: 'blob',
+    })
+    expect(create).toHaveBeenCalledWith(pdf)
+    expect(click).toHaveBeenCalledOnce()
+    expect(document.querySelector('a')).toBeNull()
+    vi.runAllTimers()
   })
 })

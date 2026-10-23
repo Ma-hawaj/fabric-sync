@@ -19,15 +19,30 @@ pub fn router() -> Router<AppState> {
         // browser prints to PDF today is what an unattended PDF renderer will
         // be handed later.
         .route("/orders/:id/document", get(handlers::order_document))
-        .route("/orders/:id/receive", post(handlers::receive_order))
+        .route("/orders/:id/collect", post(handlers::collect_order))
+        .route("/orders/:id/ready", post(handlers::mark_ready))
+        .route("/orders/:id/reopen", post(handlers::reopen))
         .route("/orders/:id/stages/:stageId", post(handlers::set_stage))
         .route(
             "/orders/:id/stages/:stageId/assignee",
             put(handlers::set_assignee),
         )
+        .route("/repairs", get(handlers::list_all_repairs))
         .route("/orders/:id/repairs", post(handlers::create_repair))
         .route(
             "/orders/:id/repairs/:repairId",
             patch(handlers::update_repair),
+        )
+        .route(
+            "/orders/:id/repairs/:repairId/receive",
+            post(handlers::receive_repair),
+        )
+        .route(
+            "/orders/:id/repairs/:repairId/measurement",
+            put(handlers::set_repair_measurement),
+        )
+        .route(
+            "/orders/:id/repairs/:repairId/document",
+            get(handlers::repair_document),
         )
 }

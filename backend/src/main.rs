@@ -8,6 +8,8 @@ mod list;
 mod request_log;
 mod seed;
 mod state;
+#[cfg(test)]
+mod test_support;
 
 use std::net::SocketAddr;
 
@@ -45,6 +47,12 @@ async fn run() -> Result<(), error::AppError> {
     // A misspelled TIMEZONE must refuse to boot rather than silently print
     // UTC on every document.
     config.timezone().map_err(error::AppError::Config)?;
+    config
+        .urgent_charge_rule()
+        .map_err(error::AppError::Config)?;
+    config
+        .customer_material_base_price()
+        .map_err(error::AppError::Config)?;
     let address = SocketAddr::from(([0, 0, 0, 0], config.port));
     let listener = tokio::net::TcpListener::bind(address).await?;
     let db = PgPoolOptions::new()
@@ -69,12 +77,9 @@ async fn run() -> Result<(), error::AppError> {
     let zitadel_users = features::users::zitadel::ZitadelUserDirectory::discover(&config)
         .await
         .map_err(error::AppError::Auth)?;
-    let app = app::router(AppState::new(
-        config,
-        db,
-        token_introspection,
-        zitadel_users,
-    ));
+    let state = AppState::new(config, db, token_introspection, zitadel_users);
+    features::notifications::start(state.clone());
+    let app = app::router(state);
 
     tracing::info!("Listening on: {}", address);
     axum::serve(listener, app).await?;

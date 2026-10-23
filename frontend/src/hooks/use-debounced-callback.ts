@@ -21,5 +21,12 @@ export function useDebouncedCallback<T extends (...args: never[]) => unknown>(
     [handleCallback, delay],
   )
 
-  return setValue
+  const cancel = React.useCallback(
+    () => window.clearTimeout(debounceTimerRef.current),
+    [],
+  )
+  return React.useMemo(
+    () => Object.assign(setValue, { cancel }),
+    [setValue, cancel],
+  )
 }

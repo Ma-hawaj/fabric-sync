@@ -52,6 +52,8 @@ async function createCustomer(values: CustomerFormValues): Promise<Customer> {
   const { data } = await apiClient.post<Customer>('/customers', {
     name: values.name,
     mobileNo: values.mobileNo,
+    whatsappNotificationsEnabled: values.whatsappNotificationsEnabled,
+    address: values.address.trim(),
     measurement: values.addMeasurement
       ? measurementPayload(values.measurement)
       : null,

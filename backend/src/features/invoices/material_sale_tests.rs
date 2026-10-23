@@ -95,7 +95,7 @@ async fn material_sales_database() {
     }
     let detail = service::get_invoice(&state, created.id).await.unwrap();
     assert_eq!(detail.order_count, 0);
-    assert!(detail.received);
+    assert!(detail.collected);
     assert!(detail.lines[0].order_id.is_none());
     assert_eq!(detail.lines[0].unit.as_deref(), Some("meters"));
     assert_eq!(detail.totals.vat, 2.5);
@@ -197,6 +197,13 @@ async fn material_sales_database() {
         "INSERT INTO customers (name, mobile_no) VALUES ('Buyer', '123') RETURNING id",
     )
     .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE materials SET junior_price = 22, normal_price = 22, large_price = 22 WHERE id = $1",
+    )
+    .bind(material)
+    .execute(&pool)
     .await
     .unwrap();
     let mut mixed = sale(material, branch, 3.0);

@@ -1,10 +1,19 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { useStore } from '@tanstack/react-form'
+import { useQuery } from '@tanstack/react-query'
+import { Switch } from '@base-ui/react/switch'
+import { apiClient } from '@/lib/api'
+import {
+  calculateGarmentPrice,
+  calculateUrgentCharge,
+} from '../../lib/garment-pricing'
+import { usePricing } from '../../hooks/use-pricing'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { PRODUCTION_FILTERS } from '@/features/locations/lib/location-filters'
 import { XIcon } from 'lucide-react'
 import { NumberField, TextField } from '@/components/form/fields'
-import { DesignOptionGrid } from '@/components/form/design-option-grid'
+import { DesignOptionGrid } from '@/features/design-options/components/design-option-grid'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import { Button } from '@/components/ui/button'
 import {
@@ -31,7 +40,10 @@ import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-def
 import { GrossVatHint } from './gross-vat-hint'
 import { materialTotalStock } from '../../types/materials'
 import type { Material } from '../../types/materials'
-import type { InvoiceFormApi } from '../../types/invoice-form'
+import type {
+  InvoiceFormApi,
+  InvoiceOrderDraft,
+} from '../../types/invoice-form'
 
 function materialOptionLabel(material: Material) {
   return material.sku ? `${material.name} (${material.sku})` : material.name
@@ -57,7 +69,8 @@ function UnknownDesignValue({
       >
         Clear it
       </button>{' '}
-      or keep it — it still prints as text.
+      or select a catalog option to calculate pricing. Saved invoices still
+      print this value as text.
     </p>
   )
 }
@@ -83,7 +96,10 @@ function CatalogGrid({
     ...clearOption,
     ...selectCategoryOptions(options, category).map((option) => ({
       id: option.slug,
-      label: option.label,
+      label:
+        option.cost > 0
+          ? `${option.label} (+${CURRENCY} ${option.cost.toFixed(2)})`
+          : option.label,
       image: designOptionImageSrc(option),
     })),
   ]
@@ -91,7 +107,10 @@ function CatalogGrid({
     <form.Field name={name as never}>
       {(field: any) => {
         const stored: string = field.state.value ?? ''
-        const known = stored === '' || items.some((item) => item.id === stored)
+        const savedOption = options.find(
+          (option) => option.category === category && option.slug === stored,
+        )
+        const known = stored === '' || savedOption != null
         return (
           <div className="space-y-1.5">
             <DesignOptionGrid
@@ -105,6 +124,12 @@ function CatalogGrid({
                 value={stored}
                 onClear={() => field.handleChange('')}
               />
+            )}
+            {savedOption && !savedOption.isActive && (
+              <p className="text-xs text-muted-foreground">
+                Saved option {savedOption.label} is retired. Its cost is
+                included.
+              </p>
             )}
           </div>
         )
@@ -164,11 +189,10 @@ export function OrderBlock({
       customers?: { orders?: { materialId?: string }[] }[]
     }
   ).customers?.[customerIndex]?.orders?.[orderIndex]?.materialId
-  const [pickedMaterial, setPickedMaterial] = React.useState<Material | null>(
-    () =>
-      storedMaterialId
-        ? (initialMaterialForId?.(storedMaterialId) ?? null)
-        : null,
+  const [pickedMaterial, setPickedMaterial] = useState<Material | null>(() =>
+    storedMaterialId
+      ? (initialMaterialForId?.(storedMaterialId) ?? null)
+      : null,
   )
   // Shop fabric needs stock at the default location. Customer fabric can use
   // the active production default directly. Never overwrite a chosen location.
@@ -203,8 +227,66 @@ export function OrderBlock({
   ])
   // The whole design catalog, shared across every order block on the form —
   // one cached request for all seven pickers, however many orders there are.
-  const { data: designOptions = [], isLoading: designLoading } =
-    useDesignOptions()
+  const {
+    data: designOptions = [],
+    isLoading: designLoading,
+    isError: designError,
+  } = useDesignOptions()
+  const draft = useStore(
+    form.store,
+    (state): InvoiceOrderDraft | undefined =>
+      state.values.customers[customerIndex]?.orders[orderIndex],
+  )
+  const selectedId = draft?.materialId ?? ''
+  const pickedMatches = pickedMaterial?.id === selectedId
+  const hasPickedPrices =
+    pickedMatches &&
+    pickedMaterial.juniorPrice != null &&
+    pickedMaterial.normalPrice != null &&
+    pickedMaterial.largePrice != null
+  // Edit-form seeds contain stock and labels but not current catalog prices.
+  const { data: currentMaterial, isError: materialError } = useQuery({
+    queryKey: ['materials', 'pricing', selectedId],
+    queryFn: async () =>
+      (await apiClient.get<Material>(`/materials/${selectedId}`)).data,
+    enabled: materialSource === 'shop' && !!selectedId && !hasPickedPrices,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  })
+  const pricingMaterial = hasPickedPrices
+    ? pickedMaterial
+    : (currentMaterial ?? null)
+  const { data: pricingRules } = usePricing()
+  const pricing =
+    draft &&
+    !designLoading &&
+    !designError &&
+    !(materialError && !hasPickedPrices)
+      ? calculateGarmentPrice(
+          draft,
+          pricingMaterial,
+          designOptions,
+          pricingRules?.customerMaterialBasePrice ?? null,
+        )
+      : null
+  const computedPrice = pricing?.total ?? ''
+  const computedUrgentCharge = draft?.isUrgent
+    ? calculateUrgentCharge(computedPrice, pricingRules?.urgentCharge)
+    : 0
+  React.useEffect(() => {
+    if (draft && draft.urgentCharge !== computedUrgentCharge) {
+      form.setFieldValue(
+        `${base}.urgentCharge` as never,
+        computedUrgentCharge as never,
+      )
+      if (form.state.submissionAttempts > 0) void form.validate('submit')
+    }
+  }, [form, base, draft, computedUrgentCharge])
+  React.useEffect(() => {
+    if (draft && draft.price !== computedPrice) {
+      form.setFieldValue(`${base}.price` as never, computedPrice as never)
+    }
+  }, [form, base, draft, computedPrice])
 
   return (
     <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
@@ -499,25 +581,92 @@ export function OrderBlock({
             label="Quantity (m)"
           />
 
-          <div>
-            <NumberField
-              form={form}
-              name={`${base}.price`}
-              label={`Price incl. VAT (${CURRENCY})`}
-            />
-            {/* Prices are entered gross — the hint splits what was typed
-                into net and VAT so staff quote knowing both. */}
-            <form.Subscribe
-              selector={(state: any) =>
-                state.values.customers[customerIndex]?.orders[orderIndex]
-                  ?.price ?? ''
-              }
-            >
-              {(price: number | '') => <GrossVatHint gross={price} />}
-            </form.Subscribe>
+          <div className="space-y-2">
+            <form.Field name={`${base}.price` as never}>
+              {(field: any) => (
+                <Field data-invalid={field.state.meta.errors.length > 0}>
+                  <FieldLabel>Price incl. VAT ({CURRENCY})</FieldLabel>
+                  <output
+                    aria-label={`Price incl. VAT (${CURRENCY})`}
+                    className="text-sm font-semibold"
+                  >
+                    {pricing ? `${CURRENCY} ${pricing.total.toFixed(2)}` : '—'}
+                  </output>
+                  {pricing ? (
+                    <p className="text-xs text-muted-foreground">
+                      {pricing.tier
+                        ? `${pricing.tier[0].toUpperCase()}${pricing.tier.slice(1)}`
+                        : 'Fixed tailoring base'}
+                      : {pricing.base.toFixed(2)} + designs:{' '}
+                      {pricing.designCost.toFixed(2)}
+                    </p>
+                  ) : (
+                    <p
+                      role={designError || materialError ? 'alert' : undefined}
+                      className="text-xs text-muted-foreground"
+                    >
+                      {designError || materialError
+                        ? 'Could not load pricing. Reload to try again.'
+                        : materialSource === 'customer' &&
+                            pricingRules?.customerMaterialBasePrice == null
+                          ? 'Customer-material pricing is unavailable. Contact an administrator.'
+                          : 'Choose a priced material, quantity and valid designs.'}
+                    </p>
+                  )}
+                  <FieldError errors={field.state.meta.errors} />
+                </Field>
+              )}
+            </form.Field>
+            <GrossVatHint gross={computedPrice} />
           </div>
+          {draft?.isUrgent && (
+            <div className="space-y-1.5">
+              <Label>Urgent charge incl. VAT ({CURRENCY})</Label>
+              <output
+                aria-label={`Urgent charge incl. VAT (${CURRENCY})`}
+                className="block text-sm font-semibold"
+              >
+                {draft.urgentCharge === ''
+                  ? '—'
+                  : `${CURRENCY} ${draft.urgentCharge.toFixed(2)}`}
+              </output>
+              <p className="text-xs text-muted-foreground">
+                {computedUrgentCharge === ''
+                  ? 'Urgent pricing is unavailable. Contact an administrator.'
+                  : 'Applied automatically for this order.'}
+              </p>
+              <form.Field name={`${base}.urgentCharge` as never}>
+                {(field: any) => (
+                  <FieldError errors={field.state.meta.errors} />
+                )}
+              </form.Field>
+            </div>
+          )}
         </div>
       </div>
+
+      <form.Field name={`${base}.isUrgent` as never}>
+        {(field: any) => (
+          <Field orientation="horizontal">
+            <Switch.Root
+              id={field.name}
+              checked={field.state.value}
+              onCheckedChange={(checked) => {
+                field.handleChange(checked)
+                if (form.state.submissionAttempts > 0)
+                  void form.validate('submit')
+              }}
+              onBlur={field.handleBlur}
+              className="inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full bg-input outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring data-checked:bg-primary"
+            >
+              <Switch.Thumb className="ms-0.5 block size-4 rounded-full bg-background shadow-sm transition-transform data-checked:translate-x-4 rtl:data-checked:-translate-x-4" />
+            </Switch.Root>
+            <FieldLabel htmlFor={field.name}>
+              Urgent <span className="sr-only">order {orderNumber}</span>
+            </FieldLabel>
+          </Field>
+        )}
+      </form.Field>
     </div>
   )
 }

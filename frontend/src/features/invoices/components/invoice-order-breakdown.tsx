@@ -10,6 +10,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useOrders } from '@/features/orders/hooks/use-orders'
+import { OrderPriorityIndicator } from '@/features/orders/components/order-priority-indicator'
 import type { Order } from '@/features/orders/types/orders'
 import { CURRENCY } from '@/lib/currency'
 
@@ -80,7 +81,10 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
               <div className="text-end text-sm">
                 <p className="font-medium">
                   {currencyFormatter.format(
-                    group.orders.reduce((sum, order) => sum + order.price, 0),
+                    group.orders.reduce(
+                      (sum, order) => sum + order.price + order.urgentCharge,
+                      0,
+                    ),
                   )}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -103,13 +107,16 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
                 {group.orders.map((order) => (
                   <TableRow key={order.id}>
                     <TableCell>
-                      <Link
-                        to="/orders/$orderId"
-                        params={{ orderId: order.id }}
-                        className="font-mono text-info hover:underline"
-                      >
-                        ORD-{order.orderNumber}
-                      </Link>
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <Link
+                          to="/orders/$orderId"
+                          params={{ orderId: order.id }}
+                          className="font-mono text-info hover:underline"
+                        >
+                          ORD-{order.orderNumber}
+                        </Link>
+                        <OrderPriorityIndicator isUrgent={order.isUrgent} />
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div>{order.material}</div>
@@ -119,14 +126,27 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
                     <TableCell>
                       <Badge
                         variant={
-                          order.status === 'received' ? 'default' : 'secondary'
+                          order.status === 'collected' ? 'default' : 'secondary'
                         }
                       >
-                        {order.status === 'received' ? 'Collected' : 'Pending'}
+                        {order.status === 'collected'
+                          ? 'Collected'
+                          : order.status === 'ready'
+                            ? 'Ready for pickup'
+                            : 'In progress'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-end tabular-nums">
-                      {currencyFormatter.format(order.price)}
+                      {currencyFormatter.format(
+                        order.price + order.urgentCharge,
+                      )}
+                      {order.urgentCharge > 0 && (
+                        <div className="text-xs text-muted-foreground">
+                          Includes{' '}
+                          {currencyFormatter.format(order.urgentCharge)} urgent
+                          charge
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
