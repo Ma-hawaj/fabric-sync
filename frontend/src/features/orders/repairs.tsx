@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { useListParams } from '@/hooks/use-list-params'
 import { useDataTable } from '@/hooks/use-data-table'
@@ -11,8 +12,9 @@ import { printRepairDocument } from './lib/print-repair'
 import type { RepairListItem } from './types/orders'
 
 export function RepairsPage() {
-  const [receiveRepair, setReceiveRepair] =
-    React.useState<RepairListItem | null>(null)
+  const [receiveRepair, setReceiveRepair] = useState<RepairListItem | null>(
+    null,
+  )
 
   const columns = React.useMemo(
     () =>
@@ -45,7 +47,10 @@ export function RepairsPage() {
   })
 
   return (
-    <div className="space-y-4">
+    <div
+      data-slot="list-page"
+      className="flex h-full min-h-0 min-w-0 flex-col gap-3 [&>:first-child]:shrink-0"
+    >
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Repairs</h1>
         <p className="text-muted-foreground">
@@ -54,15 +59,9 @@ export function RepairsPage() {
         </p>
       </div>
 
-      {isLoading ? (
-        <div className="text-center text-sm text-muted-foreground">
-          Loading repairs...
-        </div>
-      ) : (
-        <DataTable table={table}>
-          <DataTableToolbar table={table} />
-        </DataTable>
-      )}
+      <DataTable table={table} isLoading={isLoading}>
+        <DataTableToolbar table={table} />
+      </DataTable>
 
       <ReceiveRepairDialog
         repair={receiveRepair}

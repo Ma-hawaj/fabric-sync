@@ -1,11 +1,9 @@
-import {
-  parseAsInteger,
-  parseAsStringLiteral,
-  useQueryState,
-  useQueryStates,
-} from 'nuqs'
+import { parseAsInteger, parseAsStringLiteral, useQueryState } from 'nuqs'
 import type { ColumnDef } from '@tanstack/react-table'
 import * as React from 'react'
+import { useState } from 'react'
+import { useTableFilters } from './use-table-filters'
+import { readTablePreferences } from '@/lib/table-preferences'
 
 import { getColumnDefId } from '@/lib/data-table'
 import { getSortingStateParser } from '@/lib/parsers'
@@ -15,10 +13,7 @@ import {
   PAGE_KEY,
   PER_PAGE_KEY,
   SORT_KEY,
-  buildFilterParsers,
   toApiSearchParams,
-  toColumnFilters,
-  toFilterDsl,
 } from '@/lib/list-params'
 import type { ExtendedColumnSort } from '@/types/data-table'
 
@@ -41,9 +36,10 @@ export function useListParams<TData>({
   defaultPerPage = DEFAULT_PER_PAGE,
 }: UseListParamsOptions<TData>) {
   const [page] = useQueryState(PAGE_KEY, parseAsInteger.withDefault(1))
+  const [saved] = useState(readTablePreferences)
   const [perPage] = useQueryState(
     PER_PAGE_KEY,
-    parseAsInteger.withDefault(defaultPerPage),
+    parseAsInteger.withDefault(saved.pageSize ?? defaultPerPage),
   )
 
   const columnIds = React.useMemo(
@@ -67,15 +63,9 @@ export function useListParams<TData>({
     parseAsStringLiteral(['and', 'or']).withDefault('and'),
   )
 
-  const filterParsers = React.useMemo(
-    () => buildFilterParsers(columns),
-    [columns],
-  )
-  const [filterValues] = useQueryStates(filterParsers)
+  const { validFilters: filters } = useTableFilters(columns)
 
   return React.useMemo(() => {
-    const filters = toFilterDsl(columns, toColumnFilters(filterValues))
-
     return {
       page,
       perPage,
@@ -87,5 +77,5 @@ export function useListParams<TData>({
         joinOperator,
       }),
     }
-  }, [columns, filterValues, joinOperator, page, perPage, sorting])
+  }, [filters, joinOperator, page, perPage, sorting])
 }

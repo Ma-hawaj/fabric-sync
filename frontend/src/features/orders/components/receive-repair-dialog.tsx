@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -44,8 +45,8 @@ export function ReceiveRepairDialog({
   onOpenChange,
 }: ReceiveRepairDialogProps) {
   const receiveRepair = useReceiveRepair()
-  const [amount, setAmount] = React.useState('')
-  const [paymentType, setPaymentType] = React.useState<PaymentType | ''>('')
+  const [amount, setAmount] = useState('')
+  const [paymentType, setPaymentType] = useState<PaymentType | ''>('')
 
   // Prefill with the quoted charge — staff collecting for the repair usually
   // take exactly that, and a free rework just confirms with zero.

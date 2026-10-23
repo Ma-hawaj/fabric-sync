@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -42,7 +43,7 @@ export function CollectInvoiceDialog({
   onOpenChange,
 }: CollectInvoiceDialogProps) {
   const collectInvoice = useCollectInvoice()
-  const [paymentType, setPaymentType] = React.useState<PaymentType | ''>('')
+  const [paymentType, setPaymentType] = useState<PaymentType | ''>('')
 
   React.useEffect(() => {
     setPaymentType('')

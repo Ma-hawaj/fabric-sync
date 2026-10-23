@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import {
   MeasurementFields,
@@ -33,11 +34,11 @@ interface LogRepairDialogProps {
 
 export function LogRepairDialog({ order, onOpenChange }: LogRepairDialogProps) {
   const createRepair = useCreateRepair()
-  const [reason, setReason] = React.useState('')
-  const [charge, setCharge] = React.useState('')
-  const [notes, setNotes] = React.useState('')
-  const [updateMeasurement, setUpdateMeasurement] = React.useState(false)
-  const [measurementError, setMeasurementError] = React.useState('')
+  const [reason, setReason] = useState('')
+  const [charge, setCharge] = useState('')
+  const [notes, setNotes] = useState('')
+  const [updateMeasurement, setUpdateMeasurement] = useState(false)
+  const [measurementError, setMeasurementError] = useState('')
   const form = useForm({
     defaultValues: {
       measurement: measurementFromSnapshot(order?.measurement ?? null),

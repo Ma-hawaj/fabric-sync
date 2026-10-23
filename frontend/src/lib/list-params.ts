@@ -31,7 +31,7 @@ export const FILTERS_KEY = 'filters'
 export const JOIN_OPERATOR_KEY = 'joinOperator'
 export const ARRAY_SEPARATOR = ','
 
-export const DEFAULT_PER_PAGE = 10
+export const DEFAULT_PER_PAGE = 25
 
 /** Columns whose filter control writes a value into the URL. */
 export function filterableColumns<TData>(columns: ColumnDef<TData>[]) {

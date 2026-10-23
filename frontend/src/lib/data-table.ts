@@ -47,9 +47,7 @@ export function getColumnPinningStyle<TData>({
       : undefined,
     left: isPinned === 'left' ? `${column.getStart('left')}px` : undefined,
     right: isPinned === 'right' ? `${column.getAfter('right')}px` : undefined,
-    opacity: isPinned ? 0.97 : 1,
     position: isPinned ? 'sticky' : 'relative',
-    background: isPinned ? 'var(--background)' : 'var(--background)',
     width: column.getSize(),
     zIndex: isPinned ? 1 : undefined,
   }
@@ -79,6 +77,24 @@ export function getDefaultFilterOperator(filterVariant: FilterVariant) {
   return operators[0]?.value ?? (filterVariant === 'text' ? 'iLike' : 'eq')
 }
 
+/** Match the API's scalar, list, and two-bound value shapes on operator changes. */
+export function getFilterValueForOperator(
+  value: string | string[],
+  operator: FilterOperator,
+): string | string[] {
+  if (operator === 'isEmpty' || operator === 'isNotEmpty') return ''
+  if (operator === 'isBetween') {
+    // A blank upper bound is open-ended; retain the existing value as the lower bound.
+    return Array.isArray(value) ? [value[0] ?? '', value[1] ?? ''] : [value, '']
+  }
+  if (operator === 'inArray' || operator === 'notInArray') {
+    return Array.isArray(value) ? value : value ? [value] : []
+  }
+  return Array.isArray(value)
+    ? (value.find((entry) => entry !== '') ?? '')
+    : value
+}
+
 export function getValidFilters<TData>(
   filters: ExtendedColumnFilter<TData>[],
 ): ExtendedColumnFilter<TData>[] {
@@ -87,7 +103,7 @@ export function getValidFilters<TData>(
       filter.operator === 'isEmpty' ||
       filter.operator === 'isNotEmpty' ||
       (Array.isArray(filter.value)
-        ? filter.value.length > 0
+        ? filter.value.some((value) => value !== '')
         : filter.value !== ''),
   )
 }

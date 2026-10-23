@@ -3,6 +3,7 @@
 import type { ColumnSort, SortDirection, Table } from '@tanstack/react-table'
 import { ArrowDownUp, ChevronsUpDown, GripVertical, Trash2 } from 'lucide-react'
 import * as React from 'react'
+import { useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -56,7 +57,7 @@ export function DataTableSortList<TData>({
   const id = React.useId()
   const labelId = React.useId()
   const descriptionId = React.useId()
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = useState(false)
   const addButtonRef = React.useRef<HTMLButtonElement>(null)
 
   const sorting = table.getState().sorting
@@ -286,9 +287,8 @@ function DataTableSortItem({
   const fieldTriggerId = `${sortItemId}-field-trigger`
   const directionListboxId = `${sortItemId}-direction-listbox`
 
-  const [showFieldSelector, setShowFieldSelector] = React.useState(false)
-  const [showDirectionSelector, setShowDirectionSelector] =
-    React.useState(false)
+  const [showFieldSelector, setShowFieldSelector] = useState(false)
+  const [showDirectionSelector, setShowDirectionSelector] = useState(false)
 
   const onItemKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {

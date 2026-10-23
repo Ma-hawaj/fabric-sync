@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -430,8 +431,8 @@ function RepairsSection({
 
 function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
   const updateRepair = useUpdateRepair()
-  const [receiveOpen, setReceiveOpen] = React.useState(false)
-  const [isPrinting, setIsPrinting] = React.useState(false)
+  const [receiveOpen, setReceiveOpen] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
   const finished = isRepairFinished(repair.status)
 
   // The global dialogs work on the flat RepairListItem shape — build one from

@@ -1,4 +1,4 @@
-import * as React from 'react'
+import { useState } from 'react'
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AsyncCombobox } from '@/components/form/async-combobox'
@@ -57,7 +57,7 @@ export function ProductBlock({
       products?: { productId?: string }[]
     }
   ).products?.[lineIndex]?.productId
-  const [picked, setPicked] = React.useState<Product | null>(() =>
+  const [picked, setPicked] = useState<Product | null>(() =>
     storedProductId ? (initialProductForId?.(storedProductId) ?? null) : null,
   )
 

@@ -3,6 +3,7 @@
 import type { Column, Table } from '@tanstack/react-table'
 import { X } from 'lucide-react'
 import * as React from 'react'
+import { useState } from 'react'
 
 import { DataTableDateFilter } from '@/components/data-table/data-table-date-filter'
 import { DataTableFacetedFilter } from '@/components/data-table/data-table-faceted-filter'
@@ -38,7 +39,7 @@ export function DataTableToolbar<TData>({
       role="toolbar"
       aria-orientation="horizontal"
       className={cn(
-        'flex w-full items-start justify-between gap-2 p-1',
+        'flex w-full shrink-0 items-start justify-between gap-2 border-b p-3',
         className,
       )}
       {...props}
@@ -88,7 +89,7 @@ function DataTableTextFilter<TData>({
   // syncs external changes back (Reset, browser back/forward) but not the
   // user's own keystrokes, since those don't move `getFilterValue()` until the
   // debounce lands.
-  const [draft, setDraft] = React.useState(() => {
+  const [draft, setDraft] = useState(() => {
     return (column.getFilterValue() as string | undefined) ?? ''
   })
 
