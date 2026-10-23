@@ -194,6 +194,9 @@ costs. Editing an invoice recalculates prices using the current catalog; viewing
 or printing keeps the saved prices. Imported materials without tier prices must
 be configured before creating garment lines.
 
+Add Stock opens a dialog from the inventory page, supporting existing materials,
+new materials with tier prices, and stock at multiple locations.
+
 Material details are read-only. Use the inventory row actions to edit a material
 (name, SKU, family, unit, and tier prices), remove stock, or move stock. Move Stock
 transfers a quantity from one location to another in one transaction; it refuses

@@ -1,6 +1,4 @@
 import * as React from 'react'
-import { useState } from 'react'
-import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { useDataTable } from '@/hooks/use-data-table'
 import { Button } from '@/components/ui/button'
@@ -8,6 +6,7 @@ import { DataTable } from '@/components/data-table/data-table'
 import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-advanced-toolbar'
 import { getInventoryColumns } from './components/inventory-columns'
 import { InventoryDetailsSheet } from './components/inventory-details-sheet'
+import { AddStockDialog } from './components/add-stock-dialog'
 import { EditMaterialDialog } from './components/edit-material-dialog'
 import { TransferStockDialog } from './components/transfer-stock-dialog'
 import { RemoveStockDialog } from './components/remove-stock-dialog'
@@ -20,10 +19,12 @@ export function InventoryPage() {
   // Unfiltered on purpose: this facet lists where stock already sits, so a
   // since-deactivated location should stay selectable here.
   const { data: locations } = useAllLocations()
-  const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(
+  const [addStockOpen, setAddStockOpen] = React.useState(false)
+  const [selectedMaterial, setSelectedMaterial] =
+    React.useState<Material | null>(null)
+  const [removeMaterial, setRemoveMaterial] = React.useState<Material | null>(
     null,
   )
-  const [removeMaterial, setRemoveMaterial] = useState<Material | null>(null)
 
   const [editMaterial, setEditMaterial] = React.useState<Material | null>(null)
   const [transferMaterial, setTransferMaterial] =
@@ -75,7 +76,7 @@ export function InventoryPage() {
             Material availability across all locations.
           </p>
         </div>
-        <Button nativeButton={false} render={<Link to="/inventory/new" />}>
+        <Button onClick={() => setAddStockOpen(true)}>
           <PlusIcon className="h-4 w-4" />
           Add Stock
         </Button>
@@ -84,6 +85,8 @@ export function InventoryPage() {
       <DataTable isLoading={isLoading} table={table}>
         <DataTableAdvancedToolbar table={table} defaultSearchColumnId="name" />
       </DataTable>
+
+      <AddStockDialog open={addStockOpen} onOpenChange={setAddStockOpen} />
 
       <InventoryDetailsSheet
         material={selectedMaterial}

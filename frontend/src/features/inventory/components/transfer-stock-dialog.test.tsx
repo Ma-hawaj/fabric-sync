@@ -77,7 +77,13 @@ async function chooseDestination() {
 describe('move stock dialog', () => {
   it('moves stock once and refreshes material and order availability', async () => {
     const { close, invalidate } = renderDialog()
+    expect(
+      screen.getByRole('combobox', { name: 'From location' }).textContent,
+    ).toContain('Warehouse')
     await chooseDestination()
+    expect(
+      screen.getByRole('combobox', { name: 'To location' }).textContent,
+    ).toContain('Workshop')
     fireEvent.change(screen.getByLabelText('Quantity to move'), {
       target: { value: '3.25' },
     })

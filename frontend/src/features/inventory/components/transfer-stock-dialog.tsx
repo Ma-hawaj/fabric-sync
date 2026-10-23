@@ -126,6 +126,10 @@ function TransferStockForm({
           <Field data-invalid={field.state.meta.errors.length > 0}>
             <FieldLabel htmlFor={field.name}>From location</FieldLabel>
             <Select
+              items={sources.map((stock) => ({
+                value: stock.locationId,
+                label: `${stock.location} (${stock.quantity} ${material.unit})`,
+              }))}
               value={field.state.value}
               onValueChange={(value) => {
                 field.handleChange(value ?? '')
@@ -156,6 +160,12 @@ function TransferStockForm({
                 <Field data-invalid={field.state.meta.errors.length > 0}>
                   <FieldLabel htmlFor={field.name}>To location</FieldLabel>
                   <Select
+                    items={destinations
+                      .filter((location) => location.id !== source)
+                      .map((location) => ({
+                        value: location.id,
+                        label: location.name,
+                      }))}
                     value={field.state.value}
                     onValueChange={(value) => field.handleChange(value ?? '')}
                   >
