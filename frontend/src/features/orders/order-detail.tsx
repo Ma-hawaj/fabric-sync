@@ -1,4 +1,6 @@
+import { ReadinessControls } from '@/features/notifications/readiness-controls'
 import * as React from 'react'
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,16 +17,14 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  FRONT_POCKET,
-  NECK,
-  PATTI,
-  SLEEVE,
-  THOB_TYPE,
-} from '@/features/invoices/data/design-catalog'
-import type { ThobDesignOption } from '@/features/invoices/data/design-catalog'
+  designOptionImageSrc,
+  findCategoryOptionIncludingRetired,
+  useDesignOptions,
+} from '@/features/design-options/hooks/use-design-options'
+import { designCategoryLabel } from '@/features/design-options/lib/design-option-categories'
 import { OrderTrackingPanel } from './components/order-tracking-panel'
 import { LogRepairDialog } from './components/log-repair-dialog'
-import { ReceiveOrderDialog } from './components/receive-order-dialog'
+import { CollectOrderDialog } from './components/collect-order-dialog'
 import { useOrder } from './hooks/use-order'
 import { printOrderDocument } from './lib/print-order'
 import type { OrderDetail } from './types/orders'
@@ -36,8 +36,8 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 
 export function OrderDetailPage({ orderId }: { orderId: string }) {
   const { data: order, isLoading, isError } = useOrder(orderId)
-  const [repairOrderId, setRepairOrderId] = React.useState<string | null>(null)
-  const [receiveOpen, setReceiveOpen] = React.useState(false)
+  const [repairOrderId, setRepairOrderId] = useState<string | null>(null)
+  const [collectOpen, setCollectOpen] = useState(false)
 
   if (isLoading) {
     return (
@@ -89,9 +89,13 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
 
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge
-              variant={order.status === 'received' ? 'default' : 'secondary'}
+              variant={order.status === 'collected' ? 'default' : 'secondary'}
             >
-              {order.status === 'received' ? 'Received' : 'Pending'}
+              {order.status === 'collected'
+                ? 'Collected'
+                : order.status === 'ready'
+                  ? 'Ready for pickup'
+                  : 'Pending'}
             </Badge>
             <Badge
               variant={
@@ -116,13 +120,21 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
 
         <div className="flex items-center gap-2">
           <ExportPdfButton order={order} />
+          <ReadinessControls
+            id={order.id}
+            invoiceId={order.invoiceId}
+            scope="orders"
+            status={order.status}
+            readyAt={order.readyAt}
+            readyBy={order.readyBy}
+          />
           <Button
             variant="outline"
             className="text-info hover:text-info/80 hover:bg-info/5 dark:hover:bg-info/10"
-            disabled={order.status === 'received'}
-            onClick={() => setReceiveOpen(true)}
+            disabled={order.status === 'collected'}
+            onClick={() => setCollectOpen(true)}
           >
-            {order.status === 'received' ? 'Received' : 'Mark Received'}
+            {order.status === 'collected' ? 'Collected' : 'Mark Collected'}
           </Button>
         </div>
       </div>
@@ -147,7 +159,14 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           <dl className="space-y-1 text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Material</dt>
-              <dd className="font-medium">{order.material}</dd>
+              <dd className="font-medium">
+                {order.material}
+                {order.materialSource === 'customer' && (
+                  <span className="block text-xs text-muted-foreground">
+                    Customer-provided material
+                  </span>
+                )}
+              </dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Quantity</dt>
@@ -221,9 +240,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         </dl>
       </section>
 
-      <ReceiveOrderDialog
-        order={receiveOpen ? order : null}
-        onOpenChange={(open) => !open && setReceiveOpen(false)}
+      <CollectOrderDialog
+        order={collectOpen ? order : null}
+        onOpenChange={(open) => !open && setCollectOpen(false)}
       />
 
       <LogRepairDialog
@@ -235,37 +254,35 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
 }
 
 // The made-to-measure choices, in the same fixed slot order the invoice
-// document prints them in. A stored value that matches a catalog id shows its
-// illustration; a legacy free-text value (e.g. "Saudi") shows as text only.
+// document prints them in. A stored value that matches a catalog slug shows
+// its illustration when one was uploaded; a legacy free-text value (e.g.
+// "Saudi") shows as text only.
 const DESIGN_SLOTS: {
-  label: string
+  category: string
   value: (order: OrderDetail) => string | null
-  options: ThobDesignOption[]
 }[] = [
-  {
-    label: 'Thobe Type',
-    value: (order) => order.thobeType,
-    options: THOB_TYPE,
-  },
-  { label: 'Collar', value: (order) => order.collar, options: NECK },
-  { label: 'Sleeve', value: (order) => order.sleeve, options: SLEEVE },
-  {
-    label: 'Front Pocket',
-    value: (order) => order.fPocket,
-    options: FRONT_POCKET,
-  },
-  { label: 'Patti', value: (order) => order.patti, options: PATTI },
-  // EMD has no illustrated catalog — its options carry no images, so any
-  // stored value renders as text.
-  { label: 'EMD', value: (order) => order.emd, options: [] },
+  { category: 'thob_type', value: (order) => order.thobeType },
+  { category: 'neck', value: (order) => order.collar },
+  { category: 'sleeve', value: (order) => order.sleeve },
+  { category: 'front_pocket', value: (order) => order.fPocket },
+  { category: 'side_pocket', value: (order) => order.sPocket },
+  { category: 'patti', value: (order) => order.patti },
+  { category: 'emd', value: (order) => order.emd },
 ]
 
 function DesignDetails({ order }: { order: OrderDetail }) {
+  const { data: options = [] } = useDesignOptions()
   const slots = DESIGN_SLOTS.map((slot) => {
     const raw = slot.value(order)?.trim() ?? ''
     if (!raw) return null
-    const match = slot.options.find((option) => option.id === raw)
-    return { label: slot.label, raw, match: match ?? null }
+    const match =
+      findCategoryOptionIncludingRetired(options, slot.category, raw) ?? null
+    return {
+      label: designCategoryLabel(slot.category),
+      raw,
+      match,
+      image: match ? designOptionImageSrc(match) : null,
+    }
   }).filter((slot): slot is NonNullable<typeof slot> => slot !== null)
   const note = order.moreDetails?.trim() || null
 
@@ -286,10 +303,10 @@ function DesignDetails({ order }: { order: OrderDetail }) {
               key={slot.label}
               className="flex flex-col items-center gap-1.5 rounded-lg border border-border/60 bg-background p-2 text-center"
             >
-              {slot.match ? (
+              {slot.image ? (
                 <img
-                  src={slot.match.image}
-                  alt={slot.match.label}
+                  src={slot.image}
+                  alt={slot.match?.label ?? slot.raw}
                   draggable={false}
                   className="h-20 w-full object-contain"
                 />
@@ -315,7 +332,7 @@ function DesignDetails({ order }: { order: OrderDetail }) {
 }
 
 function ExportPdfButton({ order }: { order: OrderDetail }) {
-  const [isPrinting, setIsPrinting] = React.useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
 
   return (
     <Button

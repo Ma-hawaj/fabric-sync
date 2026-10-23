@@ -4,7 +4,7 @@ import { InvoiceEditPage } from '@/features/invoices/invoice-edit'
 export const Route = createFileRoute(
   '/_authenticated/invoices/$invoiceId/edit',
 )({
-  staticData: { title: 'Edit Invoice' },
+  staticData: { title: 'Edit' },
   component: InvoiceEditRoute,
 })
 

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COALESCE(MAX(sort_order), 0) + 1 AS \"next!\"\n        FROM design_options\n        WHERE category = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "next!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "41c6bc67cbd2b7fd1f373750058417b2707b2dc6c7aa03fcc8bf2bdb8126044b"
+}

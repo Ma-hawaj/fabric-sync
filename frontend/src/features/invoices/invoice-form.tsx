@@ -1,4 +1,5 @@
-import * as React from 'react'
+import { NotificationDialog } from '@/features/notifications/notification-dialog'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { FileDownIcon, PlusIcon } from 'lucide-react'
@@ -22,7 +23,7 @@ import { useCreateInvoice } from './hooks/use-create-invoice'
 import type { CreatedInvoice } from './lib/invoice-payload'
 import type { InvoiceEditSeeds } from './lib/invoice-edit-mapper'
 import { invoiceFormSchema } from './lib/invoice-schema'
-import { printInvoiceDocument } from './lib/print-invoice'
+import { downloadInvoicePdf } from './lib/print-invoice'
 import {
   createEmptyCustomer,
   createEmptyGiftCardLine,
@@ -76,18 +77,14 @@ export function InvoiceForm({
   // render (its own subscriptions to the line items already re-render it).
   // On edit they start seeded from the loaded invoice, so the summary reads
   // correctly before anything is re-picked.
-  const pickedCustomersRef = React.useRef(
-    new Map<string, Customer>(seeds?.customers),
-  )
-  const pickedProductsRef = React.useRef(
-    new Map<string, Product>(seeds?.products),
-  )
-  const rememberCustomer = React.useCallback((customer: Customer | null) => {
+  const pickedCustomersRef = useRef(new Map<string, Customer>(seeds?.customers))
+  const pickedProductsRef = useRef(new Map<string, Product>(seeds?.products))
+  const rememberCustomer = useCallback((customer: Customer | null) => {
     if (customer) {
       pickedCustomersRef.current.set(customer.id, customer)
     }
   }, [])
-  const rememberProduct = React.useCallback((product: Product | null) => {
+  const rememberProduct = useCallback((product: Product | null) => {
     if (product) {
       pickedProductsRef.current.set(product.id, product)
     }
@@ -95,7 +92,7 @@ export function InvoiceForm({
   // The picked "Sold From" branch's name feeds each product line's
   // availability text, which needs a named location the way the old whole-list
   // lookup provided it.
-  const [soldFromBranchName, setSoldFromBranchName] = React.useState(
+  const [soldFromBranchName, setSoldFromBranchName] = useState(
     seeds?.soldFromBranchName ?? '',
   )
   // Gift card expiry is checked against the sale date, not the promised
@@ -105,7 +102,10 @@ export function InvoiceForm({
 
   // Which of the two submit buttons was pressed. A ref rather than state
   // because it is read once inside onSubmit and must not re-render the form.
-  const exportAfterSave = React.useRef(false)
+  const exportAfterSave = useRef(false)
+  const [notificationInvoiceId, setNotificationInvoiceId] = useState<
+    string | null
+  >(null)
 
   // The user's default location pre-fills the two branch pickers below —
   // receiving when it takes orders, sold-from when it holds stock. Only empty
@@ -145,7 +145,7 @@ export function InvoiceForm({
       if (exportAfterSave.current) {
         exportAfterSave.current = false
         try {
-          await printInvoiceDocument(saved.id)
+          await downloadInvoicePdf(saved.id)
         } catch {
           toast.error(
             `The invoice was ${savedVerb}, but the PDF could not be opened.`,
@@ -153,11 +153,11 @@ export function InvoiceForm({
         }
       }
 
-      await navigate({ to: '/invoices' })
+      setNotificationInvoiceId(saved.id)
     },
   })
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (receivingDefault && form.state.values.receivingBranch === '') {
       form.setFieldValue(
         'receivingBranch' as never,
@@ -174,6 +174,14 @@ export function InvoiceForm({
 
   return (
     <div className="space-y-6">
+      <NotificationDialog
+        invoiceId={notificationInvoiceId}
+        kind={editing ? 'invoice_updated' : 'invoice_created'}
+        onClose={() => {
+          setNotificationInvoiceId(null)
+          void navigate({ to: '/invoices' })
+        }}
+      />
       <div>
         <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
         <p className="text-muted-foreground">{subtitle}</p>
@@ -187,7 +195,7 @@ export function InvoiceForm({
         }}
         className="space-y-6"
       >
-        <form.Field name="customers">
+        <form.Field name="customers" mode="array">
           {(customersField) => (
             <div className="space-y-6">
               {customersField.state.value.map((customer, index) => (
@@ -205,6 +213,9 @@ export function InvoiceForm({
                   }
                   initialMaterialForId={(id) =>
                     seeds?.materials.get(id) ?? null
+                  }
+                  locationLabelForId={(id) =>
+                    seeds?.locationLabels.get(id) ?? null
                   }
                   materialLabelForId={(id) =>
                     seeds?.materialLabels.get(id) ?? null
@@ -274,7 +285,7 @@ export function InvoiceForm({
             }
           </form.Subscribe>
 
-          <form.Field name="products">
+          <form.Field name="products" mode="array">
             {(productsField) => (
               <div className="space-y-3">
                 <form.Subscribe
@@ -329,7 +340,7 @@ export function InvoiceForm({
             </p>
           </div>
 
-          <form.Field name="giftCards">
+          <form.Field name="giftCards" mode="array">
             {(giftCardsField) => (
               <div className="space-y-3">
                 {giftCardsField.state.value.map((line, index) => (
@@ -356,7 +367,7 @@ export function InvoiceForm({
             )}
           </form.Field>
 
-          <form.Field name="redemptions">
+          <form.Field name="redemptions" mode="array">
             {(redemptionsField) => (
               <div className="space-y-3">
                 {redemptionsField.state.value.map((line, index) => (

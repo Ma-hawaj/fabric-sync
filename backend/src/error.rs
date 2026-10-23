@@ -5,6 +5,8 @@ use axum::{
 
 #[derive(Debug)]
 pub enum AppError {
+    Unavailable(String),
+    External(String),
     Auth(String),
     Unauthorized(String),
     Io(std::io::Error),
@@ -21,10 +23,10 @@ pub enum AppError {
     /// template can be replaced at runtime (INVOICE_TEMPLATE_DIR), so this is
     /// the one 500 an operator can cause — and fix — without a deploy.
     Template(String),
-    /// A per-request call to Authentik's Users API failed (network error or
-    /// an unexpected response shape) — a 500, but distinct from `Auth`,
-    /// which is boot-time OIDC-discovery failure only.
-    Authentik(String),
+    /// A per-request call to Zitadel's Users API failed (token exchange,
+    /// network error, or an unexpected response shape) — a 500, but distinct
+    /// from `Auth`, which is boot-time OIDC-discovery failure only.
+    Zitadel(String),
 }
 
 impl From<std::io::Error> for AppError {
@@ -79,6 +81,8 @@ impl From<sqlx::migrate::MigrateError> for AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
+            Self::Unavailable(message) => (StatusCode::SERVICE_UNAVAILABLE, message),
+            Self::External(message) => (StatusCode::BAD_GATEWAY, message),
             Self::Auth(error) => (StatusCode::INTERNAL_SERVER_ERROR, error),
             Self::Unauthorized(message) => (StatusCode::UNAUTHORIZED, message),
             Self::Io(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
@@ -89,7 +93,7 @@ impl IntoResponse for AppError {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             Self::Config(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
             Self::Template(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
-            Self::Authentik(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
+            Self::Zitadel(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
         };
 
         // Folded into the canonical "request completed" line (see

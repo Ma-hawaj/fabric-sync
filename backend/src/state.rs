@@ -1,6 +1,6 @@
 use crate::auth::TokenIntrospection;
 use crate::config::{Config, InvoiceBranding};
-use crate::features::users::authentik::AuthentikUserDirectory;
+use crate::features::users::zitadel::ZitadelUserDirectory;
 use sqlx::PgPool;
 
 #[derive(Clone, Debug)]
@@ -8,7 +8,7 @@ pub struct AppState {
     config: Config,
     db: PgPool,
     token_introspection: TokenIntrospection,
-    authentik_users: AuthentikUserDirectory,
+    zitadel_users: ZitadelUserDirectory,
 }
 
 impl AppState {
@@ -16,13 +16,13 @@ impl AppState {
         config: Config,
         db: PgPool,
         token_introspection: TokenIntrospection,
-        authentik_users: AuthentikUserDirectory,
+        zitadel_users: ZitadelUserDirectory,
     ) -> Self {
         Self {
             config,
             db,
             token_introspection,
-            authentik_users,
+            zitadel_users,
         }
     }
 
@@ -36,6 +36,10 @@ impl AppState {
 
     pub fn token_introspection(&self) -> &TokenIntrospection {
         &self.token_introspection
+    }
+
+    pub fn notifications(&self) -> &crate::features::notifications::Config {
+        &self.config.notifications
     }
 
     pub fn db(&self) -> &PgPool {
@@ -53,7 +57,7 @@ impl AppState {
             .map_err(crate::error::AppError::Config)
     }
 
-    pub fn authentik_users(&self) -> &AuthentikUserDirectory {
-        &self.authentik_users
+    pub fn zitadel_users(&self) -> &ZitadelUserDirectory {
+        &self.zitadel_users
     }
 }

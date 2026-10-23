@@ -27,6 +27,7 @@ pub struct InvoiceDetailRows {
 fn order_specification(
     thobe_type: Option<String>,
     f_pocket: Option<String>,
+    s_pocket: Option<String>,
     collar: Option<String>,
     sleeve: Option<String>,
     patti: Option<String>,
@@ -36,6 +37,7 @@ fn order_specification(
     let parts: Vec<String> = [
         ("Thobe", thobe_type),
         ("Pocket", f_pocket),
+        ("Side pocket", s_pocket),
         ("Collar", collar),
         ("Sleeve", sleeve),
         ("Patti", patti),
@@ -78,13 +80,12 @@ pub async fn fetch_invoice_detail(
             -- Goods receipt is separate from money: true once no order on
             -- the invoice is still pending collection. A retail-only invoice
             -- has no orders, so there is nothing to collect.
-            NOT EXISTS(
-                SELECT 1 FROM orders o
-                WHERE o.invoice_id = i.id AND o.status <> 'received'
-            ) AS "received!",
+            collection.order_count = collection.collected_order_count AS "collected!",
+            collection.order_count AS "order_count!",
+            collection.collected_order_count AS "collected_order_count!",
             -- The latest collection across the invoice's tailoring lines
             -- (see the list query's `agg` lateral for the same derivation).
-            (SELECT MAX(o.received_at) FROM orders o WHERE o.invoice_id = i.id) AS "last_received_at?",
+            collection.last_collected_at AS "last_collected_at?",
             i.total_price::float8 AS "total_price!",
             i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
             -- The `?` suffixes are for sqlx: it reads nullability off the
@@ -96,6 +97,12 @@ pub async fn fetch_invoice_detail(
         FROM invoices i
         LEFT JOIN branch b ON b.id = i.branch_id
         LEFT JOIN customers c ON c.id = i.customer_id
+        LEFT JOIN LATERAL (
+            SELECT count(*) AS order_count,
+                   count(*) FILTER (WHERE status = 'collected') AS collected_order_count,
+                   max(collected_at) AS last_collected_at
+            FROM orders WHERE invoice_id = i.id
+        ) collection ON true
         LEFT JOIN LATERAL (
             SELECT
                 COALESCE(SUM(amount), 0)::float8 AS paid,
@@ -135,12 +142,15 @@ pub async fn fetch_invoice_detail(
             o.id AS order_id,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile_no,
-            mat.name AS material_name,
-            mat.unit AS material_unit,
+            CASE WHEN o.material_source = 'customer'
+                THEN 'Customer-provided material: ' || o.customer_material_description
+                ELSE mat.name END AS "material_name!",
+            COALESCE(mat.unit, 'meters') AS "material_unit!",
             o.material_amount::float8 AS "material_amount!",
             o.price::float8 AS "price!",
             o.thobe_type,
             o.f_pocket,
+            o.s_pocket,
             o.collar,
             o.sleeve,
             o.patti,
@@ -149,7 +159,7 @@ pub async fn fetch_invoice_detail(
         FROM orders o
         JOIN measurements m ON m.id = o.measurement_id
         JOIN customers c ON c.id = m.customer_id
-        JOIN materials mat ON mat.id = o.material_id
+        LEFT JOIN materials mat ON mat.id = o.material_id
         WHERE o.invoice_id = $1
         ORDER BY o.id
         "#,
@@ -199,6 +209,7 @@ pub async fn fetch_invoice_detail(
                 collar: row.collar,
                 sleeve: row.sleeve,
                 f_pocket: row.f_pocket,
+                s_pocket: row.s_pocket,
                 patti: row.patti,
                 emd: row.emd,
                 more_details: row.more_details,
@@ -210,6 +221,7 @@ pub async fn fetch_invoice_detail(
                 detail: order_specification(
                     design_values.thobe_type.clone(),
                     design_values.f_pocket.clone(),
+                    design_values.s_pocket.clone(),
                     design_values.collar.clone(),
                     design_values.sleeve.clone(),
                     design_values.patti.clone(),
@@ -272,8 +284,10 @@ pub async fn fetch_invoice_detail(
             total_price: invoice.total_price,
             amount_paid: invoice.amount_paid,
             payment_method: invoice.payment_method,
-            received: invoice.received,
-            last_received_at: invoice.last_received_at,
+            collected: invoice.collected,
+            order_count: invoice.order_count,
+            collected_order_count: invoice.collected_order_count,
+            last_collected_at: invoice.last_collected_at,
             gift_card_redeemed: invoice.gift_card_redeemed,
         },
         lines,
@@ -301,6 +315,7 @@ const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
             i.id,
+            i.invoice_number,
             i.invoice_date,
             i.target_date,
             pay.status AS payment_status,
@@ -310,12 +325,15 @@ const SPEC: ListSpec = ListSpec {
             method.payment_type AS payment_method,
             NOT EXISTS(
                 SELECT 1 FROM orders o
-                WHERE o.invoice_id = i.id AND o.status <> 'received'
-            ) AS received,
+                WHERE o.invoice_id = i.id AND o.status <> 'collected'
+            ) AS collected,
             -- The latest collection across the invoice's tailoring lines.
-            -- NULL until the first order is received (and on retail-only
+            -- NULL until the first order is collected (and on retail-only
             -- invoices, which have no orders at all).
-            agg.last_received_at AS last_received_at,
+            agg.last_collected_at AS last_collected_at,
+            COALESCE(agg.item_count, 0) AS order_count,
+            ready.readiness_status, ready.ready_order_count, ready.pending_order_count, ready.readiness_generation,
+            COALESCE(agg.collected_order_count, 0) AS collected_order_count,
             i.gift_card_redeemed::float8 AS gift_card_redeemed,
             i.branch_id AS receiving_location_id,
             recv.name AS receiving_location,
@@ -346,24 +364,26 @@ const SPEC: ListSpec = ListSpec {
             COALESCE(agg.material_names, ARRAY[]::text[]) AS material_names
         FROM invoices i
         LEFT JOIN branch recv ON recv.id = i.branch_id
+        JOIN invoice_readiness ready ON ready.invoice_id = i.id
         LEFT JOIN LATERAL (
             SELECT
                 count(*) AS item_count,
+                count(*) FILTER (WHERE o.status = 'collected') AS collected_order_count,
                 json_agg(DISTINCT jsonb_build_object(
                     'name', c.name,
                     'mobileNo', c.mobile_no
                 )) AS customers,
-                json_agg(DISTINCT mat.name) AS materials,
+                json_agg(DISTINCT CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END) AS materials,
                 string_agg(DISTINCT c.name, ', ') AS customer_names,
                 string_agg(DISTINCT c.mobile_no, ', ') AS customer_mobiles,
-                array_agg(DISTINCT mat.name) AS material_names,
+                array_agg(DISTINCT CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END) AS material_names,
                 json_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_locations,
                 array_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_location_names,
-                MAX(o.received_at) AS last_received_at
+                MAX(o.collected_at) AS last_collected_at
             FROM orders o
             JOIN measurements m ON m.id = o.measurement_id
             JOIN customers c ON c.id = m.customer_id
-            JOIN materials mat ON mat.id = o.material_id
+            LEFT JOIN materials mat ON mat.id = o.material_id
             LEFT JOIN branch prod ON prod.id = o.production_branch_id
             WHERE o.invoice_id = i.id
         ) agg ON true
@@ -404,6 +424,10 @@ const SPEC: ListSpec = ListSpec {
     "#,
     columns: &[
         ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        (
+            "invoiceNumber",
+            ColumnDef::new("invoice_number", ColumnKind::Number),
+        ),
         ("date", ColumnDef::new("invoice_date", ColumnKind::Date)),
         (
             "targetDate",
@@ -441,10 +465,14 @@ const SPEC: ListSpec = ListSpec {
             "paymentMethod",
             ColumnDef::new("payment_method", ColumnKind::Text),
         ),
-        ("received", ColumnDef::new("received", ColumnKind::Bool)),
+        ("collected", ColumnDef::new("collected", ColumnKind::Bool)),
         (
-            "lastReceivedAt",
-            ColumnDef::new("last_received_at", ColumnKind::Date),
+            "readinessStatus",
+            ColumnDef::new("readiness_status", ColumnKind::Text),
+        ),
+        (
+            "lastCollectedAt",
+            ColumnDef::new("last_collected_at", ColumnKind::Date),
         ),
         (
             "receivingLocation",
@@ -647,20 +675,20 @@ pub async fn order_belongs_to_invoice(
     .await?)
 }
 
-/// Marks every still-pending order on the invoice received. Already-received
-/// rows are left alone — re-stamping their `received_at` would rewrite when
+/// Marks every still-pending order on the invoice collected. Already-collected
+/// rows are left alone — re-stamping their `collected_at` would rewrite when
 /// they were actually collected, which matters once settlement can land after
-/// collection (see service::receive_invoice). The money is settled separately
+/// collection (see service::collect_invoice). The money is settled separately
 /// by the caller inserting a balancing payment.
-pub async fn mark_orders_received(
+pub async fn mark_orders_collected(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         UPDATE orders
-        SET status = 'received', received_at = now()
-        WHERE invoice_id = $1 AND status <> 'received'
+        SET status = 'collected', collected_at = now()
+        WHERE invoice_id = $1 AND status <> 'collected'
         "#,
         invoice_id,
     )
@@ -680,10 +708,10 @@ pub async fn insert_order(
         r#"
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
-            thobe_type, f_pocket, collar, sleeve, patti, emd, more_details,
-            production_branch_id
+            thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd, more_details,
+            production_branch_id, material_source, customer_material_description, base_price
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8)
         "#,
         measurement_id,
         order.material_id,
@@ -692,12 +720,19 @@ pub async fn insert_order(
         order.price,
         order.thobe_type,
         order.f_pocket,
+        order.s_pocket,
         order.collar,
         order.sleeve,
         order.patti,
         order.emd,
         order.more_details,
         order.production_location_id,
+        order.material_source.as_str(),
+        order
+            .customer_material_description
+            .as_deref()
+            .map(str::trim),
+        order.base_price,
     )
     .execute(&mut **tx)
     .await?;
@@ -764,7 +799,7 @@ pub async fn insert_gift_card_item(
 
 /// Old tailoring lines, for restoring the material they consumed.
 pub struct OldOrderLine {
-    pub material_id: Uuid,
+    pub material_id: Option<Uuid>,
     pub production_branch_id: Option<Uuid>,
     pub material_amount: f64,
 }
@@ -863,15 +898,19 @@ pub async fn fetch_invoice_edit(
             m.side_pocket_length_by_width,
             m.mobile_pocket_length_by_width,
             o.material_id,
-            mat.name AS material_name,
-            mat.unit AS material_unit,
+            o.material_source,
+            o.customer_material_description,
+            COALESCE(mat.name, o.customer_material_description) AS "material_name!",
+            COALESCE(mat.unit, 'meters') AS "material_unit!",
             o.material_amount::float8 AS "material_amount!",
             o.production_branch_id,
             b.name AS "production_location_name?",
             ms.quantity::float8 AS stock_quantity,
             o.price::float8 AS "price!",
+            o.base_price::float8 AS "base_price!",
             o.thobe_type,
             o.f_pocket,
+            o.s_pocket,
             o.collar,
             o.sleeve,
             o.patti,
@@ -880,7 +919,7 @@ pub async fn fetch_invoice_edit(
         FROM orders o
         JOIN measurements m ON m.id = o.measurement_id
         JOIN customers c ON c.id = m.customer_id
-        JOIN materials mat ON mat.id = o.material_id
+        LEFT JOIN materials mat ON mat.id = o.material_id
         LEFT JOIN branch b ON b.id = o.production_branch_id
         LEFT JOIN material_stock ms
             ON ms.material_id = o.material_id
@@ -930,7 +969,10 @@ pub async fn fetch_invoice_edit(
             mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
         };
         let order = InvoiceEditOrder {
+            base_price: row.base_price,
             material_id: row.material_id,
+            material_source: row.material_source,
+            customer_material_description: row.customer_material_description,
             material_name: row.material_name,
             material_unit: row.material_unit,
             material_amount: row.material_amount,
@@ -940,6 +982,7 @@ pub async fn fetch_invoice_edit(
             price: row.price,
             thobe_type: row.thobe_type,
             f_pocket: row.f_pocket,
+            s_pocket: row.s_pocket,
             collar: row.collar,
             sleeve: row.sleeve,
             patti: row.patti,
@@ -1060,7 +1103,7 @@ pub async fn fetch_invoice_edit(
 }
 
 /// True once any order on the invoice has been collected.
-pub async fn invoice_has_received_orders(
+pub async fn invoice_has_collected_orders(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
@@ -1068,7 +1111,7 @@ pub async fn invoice_has_received_orders(
         r#"
         SELECT EXISTS(
             SELECT 1 FROM orders
-            WHERE invoice_id = $1 AND status = 'received'
+            WHERE invoice_id = $1 AND status = 'collected'
         ) AS "exists!"
         "#,
         invoice_id,
@@ -1386,4 +1429,14 @@ pub async fn update_invoice_header(
     .await?;
 
     Ok(())
+}
+
+pub async fn is_production_location(
+    tx: &mut sqlx::PgTransaction<'_>,
+    location_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query_scalar!(
+        "SELECT EXISTS(SELECT 1 FROM branch WHERE id = $1 AND is_active AND holds_stock) AS \"usable!\"",
+        location_id,
+    ).fetch_one(&mut **tx).await?)
 }

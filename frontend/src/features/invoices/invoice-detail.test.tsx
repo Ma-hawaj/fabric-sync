@@ -5,6 +5,20 @@ import { InvoiceDetailPage } from './invoice-detail'
 import type { InvoiceDetail } from './types/invoice-detail'
 
 const navigateMock = vi.fn()
+vi.mock('@/features/notifications/notification-dialog', () => ({
+  NotificationDialog: ({
+    invoiceId,
+    kind,
+  }: {
+    invoiceId: string | null
+    kind: string
+  }) =>
+    invoiceId ? (
+      <p>
+        Preview {kind} for {invoiceId}
+      </p>
+    ) : null,
+}))
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigateMock,
   Link: ({
@@ -32,8 +46,10 @@ const DETAIL: InvoiceDetail = {
   buyer: null,
   paymentStatus: 'partial',
   paymentMethod: 'benefit',
-  received: false,
-  lastReceivedAt: null,
+  collected: false,
+  orderCount: 1,
+  collectedOrderCount: 0,
+  lastCollectedAt: null,
   lines: [
     {
       kind: 'order',
@@ -103,6 +119,16 @@ describe('InvoiceDetailPage', () => {
     navigateMock.mockClear()
   })
 
+  it('opens a separate resend preview without editing the invoice', () => {
+    renderPage(DETAIL)
+    expect(screen.queryByText('Preview manual_resend for inv-1')).toBeNull()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Resend invoice via WhatsApp' }),
+    )
+    expect(screen.getByText('Preview manual_resend for inv-1')).toBeTruthy()
+    expect(navigateMock).not.toHaveBeenCalled()
+  })
+
   it('titles the page with the human-readable invoice number', () => {
     renderPage(DETAIL)
 
@@ -143,7 +169,7 @@ describe('InvoiceDetailPage', () => {
   })
 
   it('shows collection separately from payment and still allows editing with an advance taken', () => {
-    renderPage({ ...DETAIL, received: false })
+    renderPage({ ...DETAIL, collected: false })
 
     expect(screen.queryByText('Pending collection')).toBeTruthy()
     expect(screen.queryByText('Partially paid')).toBeTruthy()
@@ -152,13 +178,13 @@ describe('InvoiceDetailPage', () => {
     ).toBe(false)
   })
 
-  it('marks a collected invoice received and leaves edit validation to saving', () => {
+  it('marks a collected invoice collected and leaves edit validation to saving', () => {
     renderPage({
       ...DETAIL,
-      received: true,
+      collected: true,
     })
 
-    expect(screen.queryByText('Received')).toBeTruthy()
+    expect(screen.queryByText('Collected')).toBeTruthy()
     expect(
       screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
     ).toBe(false)
@@ -167,7 +193,7 @@ describe('InvoiceDetailPage', () => {
   it('allows editing a retail-only invoice', () => {
     renderPage({
       ...DETAIL,
-      received: true,
+      collected: true,
       lines: [DETAIL.lines[1]],
     })
     expect(

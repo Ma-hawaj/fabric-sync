@@ -23,6 +23,7 @@ const SPEC: ListSpec = ListSpec {
             c.id,
             c.name,
             c.mobile_no,
+            c.whatsapp_notifications_enabled,
             max(m.measurement_date) AS last_measured_on,
             count(m.id) AS measurement_count,
             COALESCE(
@@ -191,6 +192,17 @@ pub async fn insert_measurement(
     .await
 }
 
+// Repairs compare new measurements with the customer's latest snapshot.
+pub async fn latest_measurement(
+    tx: &mut sqlx::PgTransaction<'_>,
+    customer_id: Uuid,
+) -> Result<Option<(Uuid, CreateMeasurementInput)>, sqlx::Error> {
+    Ok(measurement_candidates(tx, customer_id, &[])
+        .await?
+        .into_iter()
+        .next())
+}
+
 // Immutable reuse candidates: the latest record and any records already
 // referenced by the invoice being edited. No measurement history is rewritten.
 pub async fn measurement_candidates(
@@ -276,15 +288,17 @@ pub async fn insert_customer(
     tx: &mut sqlx::PgTransaction<'_>,
     name: &str,
     mobile_no: &str,
+    whatsapp_notifications_enabled: bool,
 ) -> Result<Uuid, sqlx::Error> {
     sqlx::query_scalar!(
         r#"
-        INSERT INTO customers (name, mobile_no)
-        VALUES ($1, $2)
+        INSERT INTO customers (name, mobile_no, whatsapp_notifications_enabled)
+        VALUES ($1, $2, $3)
         RETURNING id
         "#,
         name,
         mobile_no,
+        whatsapp_notifications_enabled,
     )
     .fetch_one(&mut **tx)
     .await
@@ -294,11 +308,13 @@ pub async fn create_customer(
     state: &AppState,
     name: &str,
     mobile_no: &str,
+    whatsapp_notifications_enabled: bool,
     measurement: Option<&CreateMeasurementInput>,
 ) -> Result<Uuid, sqlx::Error> {
     let mut tx = state.db().begin().await?;
 
-    let customer_id = insert_customer(&mut tx, name, mobile_no).await?;
+    let customer_id =
+        insert_customer(&mut tx, name, mobile_no, whatsapp_notifications_enabled).await?;
 
     if let Some(measurement) = measurement {
         insert_measurement(&mut tx, customer_id, measurement).await?;
@@ -318,18 +334,21 @@ pub async fn update_customer(
     customer_id: Uuid,
     name: Option<&str>,
     mobile_no: Option<&str>,
+    whatsapp_notifications_enabled: Option<bool>,
 ) -> Result<Option<Customer>, AppError> {
     let updated = sqlx::query_scalar!(
         r#"
         UPDATE customers
         SET name = COALESCE($2, name),
-            mobile_no = COALESCE($3, mobile_no)
+            mobile_no = COALESCE($3, mobile_no),
+            whatsapp_notifications_enabled = COALESCE($4, whatsapp_notifications_enabled)
         WHERE id = $1
         RETURNING id
         "#,
         customer_id,
         name,
         mobile_no,
+        whatsapp_notifications_enabled,
     )
     .fetch_optional(state.db())
     .await?;

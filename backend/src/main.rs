@@ -8,6 +8,8 @@ mod list;
 mod request_log;
 mod seed;
 mod state;
+#[cfg(test)]
+mod test_support;
 
 use std::net::SocketAddr;
 
@@ -53,6 +55,12 @@ async fn run() -> Result<(), error::AppError> {
         .await?;
     sqlx::migrate!().run(&db).await?;
 
+    seed::run_reference_data(&db).await?;
+
+    if config.seed_design_options {
+        seed::run_design_options(&db).await?;
+    }
+
     if config.seed_dev_data {
         seed::run(&db).await?;
     }
@@ -60,15 +68,12 @@ async fn run() -> Result<(), error::AppError> {
     let token_introspection = auth::TokenIntrospection::discover(&config)
         .await
         .map_err(error::AppError::Auth)?;
-    let authentik_users = features::users::authentik::AuthentikUserDirectory::discover(&config)
+    let zitadel_users = features::users::zitadel::ZitadelUserDirectory::discover(&config)
         .await
         .map_err(error::AppError::Auth)?;
-    let app = app::router(AppState::new(
-        config,
-        db,
-        token_introspection,
-        authentik_users,
-    ));
+    let state = AppState::new(config, db, token_introspection, zitadel_users);
+    features::notifications::start(state.clone());
+    let app = app::router(state);
 
     tracing::info!("Listening on: {}", address);
     axum::serve(listener, app).await?;

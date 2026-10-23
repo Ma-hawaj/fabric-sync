@@ -111,12 +111,16 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
     )
 
     const orders: InvoiceOrderDraft[] = block.orders.map((line) => {
-      if (!seeds.materials.has(line.materialId)) {
+      if (line.materialId && !seeds.materials.has(line.materialId)) {
         seeds.materials.set(line.materialId, {
           id: line.materialId,
           name: line.materialName,
           sku: null,
           unit: line.materialUnit,
+          family: null,
+          juniorPrice: null,
+          normalPrice: null,
+          largePrice: null,
           locations:
             line.productionLocationId == null
               ? []
@@ -129,7 +133,8 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
                 ],
         })
       }
-      seeds.materialLabels.set(line.materialId, line.materialName)
+      if (line.materialId)
+        seeds.materialLabels.set(line.materialId, line.materialName)
       if (line.productionLocationId) {
         seeds.locationLabels.set(
           line.productionLocationId,
@@ -141,14 +146,19 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
         key: crypto.randomUUID(),
         thobeType: nullToBlank(line.thobeType),
         fPocket: nullToBlank(line.fPocket),
+        sPocket: nullToBlank(line.sPocket),
         collar: nullToBlank(line.collar),
         sleeve: nullToBlank(line.sleeve),
         patti: nullToBlank(line.patti),
         emd: nullToBlank(line.emd),
         moreDetails: nullToBlank(line.moreDetails),
-        materialId: line.materialId,
+        materialSource: line.materialSource,
+        customerMaterialDescription: line.customerMaterialDescription ?? '',
+        materialId: line.materialId ?? '',
         materialAmount: line.materialAmount,
         productionLocationId: line.productionLocationId ?? '',
+        customerBasePrice:
+          line.materialSource === 'customer' ? line.basePrice : '',
         price: line.price,
       }
     })

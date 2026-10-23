@@ -54,6 +54,8 @@ function editFixture(): InvoiceEdit {
         },
         orders: [
           {
+            materialSource: 'shop',
+            customerMaterialDescription: null,
             materialId: '0197fdd2-6a67-7000-8000-000000000003',
             materialName: 'Linen',
             materialUnit: 'meters',
@@ -61,9 +63,11 @@ function editFixture(): InvoiceEdit {
             productionLocationId: '0197fdd2-6a67-7000-8000-000000000005',
             productionLocationName: 'Main Branch',
             stockQuantity: 10,
+            basePrice: 100,
             price: 100,
             thobeType: 'saudi-classic',
             fPocket: null,
+            sPocket: 'type-2',
             collar: null,
             sleeve: null,
             patti: null,
@@ -140,6 +144,7 @@ describe('mapInvoiceEditToForm', () => {
     expect(order.price).toBe(100)
     expect(order.thobeType).toBe('saudi-classic')
     expect(order.collar).toBe('')
+    expect(order.sPocket).toBe('type-2')
     expect(order.emd).toBe('6')
   })
 
@@ -183,6 +188,30 @@ describe('mapInvoiceEditToForm', () => {
       },
     ])
     expect(seeds.soldFromBranchName).toBe('Main Branch')
+  })
+
+  it('round-trips customer fabric and its production label without fabricating inventory', () => {
+    const fixture = editFixture()
+    const line = fixture.customers[0].orders[0]
+    line.materialSource = 'customer'
+    line.basePrice = 15
+    line.materialId = null
+    line.materialName = 'White linen'
+    line.customerMaterialDescription = 'White linen'
+    line.stockQuantity = null
+    const { values, seeds } = mapInvoiceEditToForm(fixture)
+    expect(values.customers[0].orders[0]).toMatchObject({
+      materialSource: 'customer',
+      customerBasePrice: 15,
+      materialId: '',
+      customerMaterialDescription: 'White linen',
+      materialAmount: 2,
+      productionLocationId: line.productionLocationId,
+    })
+    expect(seeds.materials.size).toBe(0)
+    expect(seeds.locationLabels.get(line.productionLocationId!)).toBe(
+      'Main Branch',
+    )
   })
 
   it('leaves the product branch blank when there are no product lines', () => {

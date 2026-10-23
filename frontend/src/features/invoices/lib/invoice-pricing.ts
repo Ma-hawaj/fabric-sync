@@ -15,8 +15,8 @@ export function numberOrZero(value: NumberInput): number {
   return value === '' ? 0 : value
 }
 
-// Each order line's price is entered by staff (materials carry no unit
-// price); a blank or non-positive entry counts as 0 in the summary.
+// Each garment carries its calculated preview; an incomplete price counts
+// as zero in the summary and prevents submission.
 export function computeOrderLineTotal(order: InvoiceOrderDraft): number {
   return typeof order.price === 'number' && order.price > 0 ? order.price : 0
 }

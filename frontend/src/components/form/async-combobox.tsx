@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { Loader2Icon } from 'lucide-react'
 
 import {
@@ -19,6 +20,10 @@ import { useInfiniteListQuery } from '@/hooks/use-infinite-list-query'
 
 /** How long a keystroke is left alone before it becomes a server search. */
 const SEARCH_DEBOUNCE_MS = 250
+
+interface ComboboxChangeDetails {
+  reason: string
+}
 
 interface AsyncComboboxProps<T> {
   /** Endpoint path, e.g. `/customers`. */
@@ -70,16 +75,17 @@ export function AsyncCombobox<T>({
   emptyMessage = 'No matches found.',
   disabled = false,
 }: AsyncComboboxProps<T>) {
-  const [search, setSearch] = React.useState('')
-  const [debouncedSearch, setDebouncedSearch] = React.useState('')
+  const [search, setSearch] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
 
   React.useEffect(() => {
     const timer = window.setTimeout(
-      () => setDebouncedSearch(search),
+      () => setDebouncedSearch(isSearching ? search : ''),
       SEARCH_DEBOUNCE_MS,
     )
     return () => window.clearTimeout(timer)
-  }, [search])
+  }, [isSearching, search])
 
   // A fresh infinite query (page 1) per search text; pages accumulate after.
   const infinite = useInfiniteListQuery<T>({
@@ -91,7 +97,10 @@ export function AsyncCombobox<T>({
     perPage,
   })
 
-  const rows = optionsFromPages(infinite.data?.pages, toOption)
+  const rows = React.useMemo(
+    () => optionsFromPages(infinite.data?.pages, toOption),
+    [infinite.data?.pages, toOption],
+  )
 
   // Raw rows by option value, so a `onSelectRow` consumer can read fields off
   // the chosen row (measurements, stock, unit price) that the flattened option
@@ -109,6 +118,10 @@ export function AsyncCombobox<T>({
     return map
   }, [infinite.data?.pages, toOption])
 
+  const selectedOptionCache = React.useRef(
+    new Map<string, AsyncComboboxOption>(),
+  )
+
   const selectedOption = React.useMemo(() => {
     const loaded = rows.find((option) => option.value === value)
     if (loaded) {
@@ -117,13 +130,26 @@ export function AsyncCombobox<T>({
     if (value == null) {
       return null
     }
+    const cached = selectedOptionCache.current.get(value)
+    if (cached) {
+      return cached
+    }
     const label = getValueLabel?.(value)
     return label ? { value, label } : null
   }, [rows, value, getValueLabel])
 
+  React.useEffect(() => {
+    if (selectedOption) {
+      selectedOptionCache.current.set(selectedOption.value, selectedOption)
+    }
+  }, [selectedOption])
+
+  const selectedLabel = selectedOption?.label ?? ''
+  const inputValue = isSearching ? search : selectedLabel
+
   // Trim for `options` so the rendered `filteredItems` drives `data-empty`.
   const options = React.useMemo(() => {
-    if (search.trim() !== '') {
+    if (isSearching && search.trim() !== '') {
       return rows
     }
     if (!selectedOption) {
@@ -133,30 +159,44 @@ export function AsyncCombobox<T>({
       return rows
     }
     return [selectedOption, ...rows]
-  }, [rows, selectedOption, search])
+  }, [rows, selectedOption, isSearching, search])
 
   const listRef = React.useRef<HTMLElement | null>(null)
 
   // Flipping the search after a selection or a dismissed popup drops the
-  // now-stale filter (selection clears it; closing without one keeps the list
-  // fresh for the next open). Only the input's own text survives either way,
-  // because with an uncontrolled `inputValue` Base UI renders the label.
-  const resetSearch = React.useCallback(() => setSearch(''), [])
-
-  const handleInputValueChange = React.useCallback((input: string) => {
-    setSearch(input)
+  // now-stale filter. The selected label is rendered separately from the
+  // search text, so Base UI cannot overwrite a partially edited query when
+  // the selected option object is recreated.
+  const resetSearch = React.useCallback(() => {
+    setSearch('')
+    setIsSearching(false)
   }, [])
+
+  const handleInputValueChange = React.useCallback(
+    (input: string, details: ComboboxChangeDetails) => {
+      if (details.reason === 'input-change') {
+        setSearch(input)
+        setIsSearching(true)
+      } else {
+        resetSearch()
+      }
+    },
+    [resetSearch],
+  )
 
   const handleValueChange = React.useCallback(
     (option: AsyncComboboxOption | null) => {
       const next = option ? option.value : null
+      if (option) {
+        selectedOptionCache.current.set(option.value, option)
+      }
       onValueChange(next)
       if (onSelectRow) {
         onSelectRow(next ? (rowByValue.get(next) ?? null) : null)
       }
-      setSearch('')
+      resetSearch()
     },
-    [onValueChange, onSelectRow, rowByValue],
+    [onValueChange, onSelectRow, resetSearch, rowByValue],
   )
 
   // Load the next page when the sentinel at the bottom of the list scrolls into
@@ -206,6 +246,7 @@ export function AsyncCombobox<T>({
       value={selectedOption}
       onValueChange={handleValueChange}
       isItemEqualToValue={(a, b) => a.value === b.value}
+      inputValue={inputValue}
       onInputValueChange={handleInputValueChange}
       onOpenChange={(open) => {
         if (!open) {

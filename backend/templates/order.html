@@ -22,7 +22,7 @@
     amounts   — quantities only: the order sheet is an internal production
                 document, so no money figures are printed; the sole key the
                 template reads is `materialAmount`.
-    designs   — the made-to-measure choices (Thobe / Collar / Sleeve / Pocket / Patti / EMD).
+    designs   — the made-to-measure choices (Thobe / Collar / Sleeve / Front Pocket / Side Pocket / Patti / EMD).
     design_note — the free-text more-details note, or empty.
     thob_viewbox — the sheet's viewBox, shared with the frontend thobe sheet.
     thob_slots — value slots in sheet order: id, key (into `thob_values`),
@@ -41,8 +41,9 @@
     thob_dims — thin dimension/leader lines; thob_arrows — their filled heads.
 #}
 {%- set order_status_labels = {
-  "pending": "Pending",
-  "received": "Received"
+  "pending": "In progress",
+  "ready": "Ready for pickup",
+  "collected": "Collected"
 } -%}
 {%- set measurement_labels = {
   "frontHeight": "Front Height",
@@ -335,7 +336,7 @@
       }
 
       /* One bordered "Design" panel: a heading and then a vertical stack of
-         cells, one per slot (Thobe / Collar / Sleeve / Pocket / Patti / EMD).
+         cells, one per slot (Thobe / Collar / Sleeve / Front Pocket / Side Pocket / Patti / EMD).
          A catalog match fills its cell with a raster; a legacy value that
          matches nothing fills the label only, so the sheet reads the same
          shape either way. The panel never splits across pages. */
@@ -633,7 +634,7 @@
         <dl>
           <div class="row">
             <dt>Material / SKU</dt>
-            <dd dir="ltr">{% if order.materialSku %}{{ order.materialSku }}{% else %}{{ order.material }}{% endif %}</dd>
+            <dd dir="ltr">{% if order.materialSource == "customer" %}Customer-provided material: {% endif %}{% if order.materialSku %}{{ order.materialSku }}{% else %}{{ order.material }}{% endif %}</dd>
           </div>
           <div class="row">
             <dt>Quantity</dt>

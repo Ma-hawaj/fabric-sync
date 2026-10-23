@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
@@ -34,7 +35,7 @@ export function RedemptionBlock({
 
   // Looked up on a debounce rather than per keystroke; the field itself stays
   // the source of truth for what gets submitted.
-  const [lookupCode, setLookupCode] = React.useState('')
+  const [lookupCode, setLookupCode] = useState('')
   const scheduleLookup = useDebouncedCallback(
     (code: string) => setLookupCode(code),
     400,

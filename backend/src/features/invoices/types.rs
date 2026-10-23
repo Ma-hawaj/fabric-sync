@@ -45,21 +45,44 @@ impl PaymentType {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum MaterialSource {
+    #[default]
+    Shop,
+    Customer,
+}
+
+impl MaterialSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Shop => "shop",
+            Self::Customer => "customer",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateOrderInput {
-    pub material_id: Uuid,
+    #[serde(default)]
+    pub material_source: MaterialSource,
+    pub material_id: Option<Uuid>,
+    pub customer_material_description: Option<String>,
     pub material_amount: f64,
-    // Where material_amount comes off — material_stock is per-location, so an
-    // order has to name one, the same way a product line names a branch_id.
-    // Stored directly as orders.production_branch_id, so production location
-    // is known from creation rather than left for staff to assign later.
+    // Where the garment is made. Shop fabric is deducted from stock here;
+    // customer fabric needs an active production location without a stock row.
+    // Stored directly as orders.production_branch_id for delivery tracking.
     pub production_location_id: Uuid,
-    // Entered by staff per order line; materials carry no unit price to derive
-    // it from.
+    pub customer_base_price: Option<f64>,
+    // Resolved by the service, never accepted from a client.
+    #[serde(skip_deserializing)]
+    pub base_price: f64,
+    #[serde(skip_deserializing)]
     pub price: f64,
     pub thobe_type: Option<String>,
     pub f_pocket: Option<String>,
+    pub s_pocket: Option<String>,
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub patti: Option<String>,
@@ -127,7 +150,7 @@ pub struct InvoiceCustomerInput {
 }
 
 /// One payment taken with the invoice: an advance collected up front. Later
-/// payments go through `POST /invoices/:id/payments` or the receive
+/// payments go through `POST /invoices/:id/payments` or the collect
 /// endpoints, which is why this carries no `order_id`.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -186,7 +209,10 @@ pub struct CreatedInvoice {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEditOrder {
-    pub material_id: Uuid,
+    pub base_price: f64,
+    pub material_source: String,
+    pub material_id: Option<Uuid>,
+    pub customer_material_description: Option<String>,
     pub material_name: String,
     /// The unit the availability hint prints ("Available: X meters").
     pub material_unit: String,
@@ -200,6 +226,7 @@ pub struct InvoiceEditOrder {
     pub price: f64,
     pub thobe_type: Option<String>,
     pub f_pocket: Option<String>,
+    pub s_pocket: Option<String>,
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub patti: Option<String>,
@@ -299,31 +326,31 @@ pub struct InvoiceListCustomer {
     pub mobile_no: String,
 }
 
-/// Body for `POST /invoices/:id/receive` — marks every order on the invoice
-/// received and settles the remaining balance in one action, for when the
+/// Body for `POST /invoices/:id/collect` — marks every order on the invoice
+/// collected and settles the remaining balance in one action, for when the
 /// customer collects everything (and pays) at once rather than picking up
-/// order lines individually (see features::orders::receive_order). Omitted
+/// order lines individually (see features::orders::collect_order). Omitted
 /// when nothing is left to pay — collecting a fully-paid invoice takes no
 /// money.
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReceiveInvoiceInput {
+pub struct CollectInvoiceInput {
     #[serde(default)]
     pub payment_type: Option<PaymentType>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReceivedInvoice {
+pub struct CollectedInvoice {
     pub id: Uuid,
     pub payment_status: String,
     pub amount_paid: f64,
     pub balance_due: f64,
     pub payment_method: Option<String>,
     /// Goods receipt, separate from money: true once no order on the invoice
-    /// is still pending collection. Always true from the bulk-receive call,
+    /// is still pending collection. Always true from the bulk-collect call,
     /// which marks every pending order.
-    pub received: bool,
+    pub collected: bool,
 }
 
 /// Body for `POST /invoices/:id/payments` — a till payment not tied to
@@ -420,6 +447,7 @@ pub struct OrderDesignValues {
     pub collar: Option<String>,
     pub sleeve: Option<String>,
     pub f_pocket: Option<String>,
+    pub s_pocket: Option<String>,
     pub patti: Option<String>,
     pub emd: Option<String>,
     /// The free-text line note. Not a design slot; printed beneath the chips.
@@ -482,11 +510,14 @@ pub struct InvoiceRecord {
     pub payment_method: Option<String>,
     /// Goods receipt, separate from money: true once no order on the invoice
     /// is still pending collection.
-    pub received: bool,
+    pub collected: bool,
+    /// Tailoring garments only; retail products and gift cards are excluded.
+    pub order_count: i64,
+    pub collected_order_count: i64,
     /// The latest collection time across the invoice's tailoring lines,
-    /// derived as MAX(orders.received_at). Null until the first order is
-    /// received (and on retail-only invoices, which have no orders).
-    pub last_received_at: Option<DateTime<Utc>>,
+    /// derived as MAX(orders.collected_at). Null until the first order is
+    /// collected (and on retail-only invoices, which have no orders).
+    pub last_collected_at: Option<DateTime<Utc>>,
     pub gift_card_redeemed: f64,
 }
 
@@ -495,6 +526,8 @@ pub struct InvoiceRecord {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceDetail {
+    #[serde(flatten)]
+    pub readiness: crate::features::orders::readiness::Summary,
     pub id: Uuid,
     /// Sequential and human-readable, unlike `id`. Formatted for display by
     /// the consumer, which is why it stays a number here.
@@ -513,12 +546,15 @@ pub struct InvoiceDetail {
     /// full history is in `payments`.
     pub payment_method: Option<String>,
     /// Goods receipt, separate from money: true once no order on the invoice
-    /// is still pending collection. The edit form and the receive actions
+    /// is still pending collection. The edit form and the collect actions
     /// both read this rather than inferring it from the payment status.
-    pub received: bool,
+    pub collected: bool,
+    /// Tailoring garments only; retail products and gift cards are excluded.
+    pub order_count: i64,
+    pub collected_order_count: i64,
     /// The latest collection time across the invoice's tailoring lines.
-    /// Null until the first order is received.
-    pub last_received_at: Option<DateTime<Utc>>,
+    /// Null until the first order is collected.
+    pub last_collected_at: Option<DateTime<Utc>>,
     pub lines: Vec<InvoiceDetailLine>,
     pub redemptions: Vec<InvoiceRedemptionLine>,
     pub payments: Vec<InvoicePayment>,
@@ -528,7 +564,12 @@ pub struct InvoiceDetail {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceListItem {
+    #[sqlx(flatten)]
+    #[serde(flatten)]
+    pub readiness: crate::features::orders::readiness::Summary,
     pub id: Uuid,
+    /// The human-readable invoice identity shown as `INV-###` in the UI.
+    pub invoice_number: i64,
     #[sqlx(rename = "invoice_date")]
     pub date: DateTime<Utc>,
     pub target_date: Option<NaiveDate>,
@@ -548,11 +589,14 @@ pub struct InvoiceListItem {
     pub payment_method: Option<String>,
     /// Goods receipt, separate from money: true once no order on the invoice
     /// is still pending collection. Backs the list's collection filter.
-    pub received: bool,
+    pub collected: bool,
+    /// Tailoring garments only; retail products and gift cards are excluded.
+    pub order_count: i64,
+    pub collected_order_count: i64,
     /// The latest collection time across the invoice's tailoring lines.
-    /// Null until the first order is received (and on retail-only invoices,
+    /// Null until the first order is collected (and on retail-only invoices,
     /// which have no orders).
-    pub last_received_at: Option<DateTime<Utc>>,
+    pub last_collected_at: Option<DateTime<Utc>>,
     /// Gift card tender applied to this invoice. Not part of `amount_paid`:
     /// together they add up to `total_price` on a settled invoice.
     pub gift_card_redeemed: f64,

@@ -1,4 +1,4 @@
-import type { ColumnDef } from '@tanstack/react-table'
+import { defineColumns } from '@/lib/define-columns'
 import { Link } from '@tanstack/react-router'
 import { ListChecksIcon, CheckIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -19,7 +19,8 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 
 const statusOptions = [
   { label: 'Pending', value: 'pending' },
-  { label: 'Received', value: 'received' },
+  { label: 'Ready for pickup', value: 'ready' },
+  { label: 'Collected', value: 'collected' },
 ]
 
 const paymentStatusOptions = [
@@ -42,12 +43,13 @@ export function getOrderColumns(
   stageOptions: { label: string; value: string }[],
   receivingOptions: { label: string; value: string }[],
   productionOptions: { label: string; value: string }[],
-  onReceive: (order: Order) => void,
+  onCollect: (order: Order) => void,
   onOpen: (order: Order) => void,
-): ColumnDef<Order, any>[] {
-  return [
+) {
+  return defineColumns<Order>()([
     {
       accessorKey: 'orderNumber',
+      size: 88,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Order" />
       ),
@@ -70,6 +72,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'invoiceNumber',
+      size: 88,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Invoice" />
       ),
@@ -108,10 +111,23 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'customerName',
+      cell: ({ row }) => (
+        <div
+          className="truncate leading-tight"
+          title={`${row.original.customerName} · ${row.original.customerMobile}`}
+        >
+          <div className="truncate font-medium">
+            {row.original.customerName}
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {row.original.customerMobile}
+          </span>
+        </div>
+      ),
+      size: 190,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Customer Name" />
       ),
-      cell: ({ row }) => <div>{row.getValue('customerName')}</div>,
       enableSorting: true,
       enableColumnFilter: true,
       meta: {
@@ -122,6 +138,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'customerMobile',
+      size: 150,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Customer Mobile" />
       ),
@@ -136,10 +153,20 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'material',
+      size: 138,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Material" />
       ),
-      cell: ({ row }) => <div>{row.getValue('material')}</div>,
+      cell: ({ row }) => (
+        <div>
+          {row.getValue('material')}
+          {row.original.materialSource === 'customer' && (
+            <div className="text-xs text-muted-foreground">
+              Customer-provided material
+            </div>
+          )}
+        </div>
+      ),
       enableSorting: true,
       enableColumnFilter: true,
       meta: {
@@ -151,6 +178,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'materialAmount',
+      size: 90,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Quantity" />
       ),
@@ -164,6 +192,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'receivingLocation',
+      size: 114,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Receiving" />
       ),
@@ -181,6 +210,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'productionLocation',
+      size: 114,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Production" />
       ),
@@ -207,6 +237,7 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'price',
+      size: 110,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Price" />
       ),
@@ -224,50 +255,70 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'status',
+      size: 96,
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} label="Status" />
+        <DataTableColumnHeader column={column} label="Collection" />
       ),
       cell: ({ row }) => {
         const status = row.getValue<Order['status']>('status')
         return (
-          <Badge variant={status === 'received' ? 'default' : 'secondary'}>
-            {status === 'received' ? 'Received' : 'Pending'}
+          <Badge variant={status === 'collected' ? 'default' : 'secondary'}>
+            {status === 'collected'
+              ? 'Collected'
+              : status === 'ready'
+                ? 'Ready for pickup'
+                : 'Pending'}
           </Badge>
         )
       },
       enableSorting: true,
       enableColumnFilter: true,
       meta: {
-        label: 'Status',
+        label: 'Collection',
         variant: 'multiSelect',
         options: statusOptions,
       },
     },
     {
-      accessorKey: 'receivedAt',
+      accessorKey: 'collectedAt',
+      meta: { label: 'Collected At', variant: 'dateRange' },
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} label="Received At" />
+        <DataTableColumnHeader column={column} label="Collected At" />
       ),
       cell: ({ row }) => {
-        const receivedAt = row.getValue<Date | null>('receivedAt')
-        if (!receivedAt) return <div className="text-muted-foreground">—</div>
-        return <div>{receivedAt.toLocaleString()}</div>
+        const collectedAt = row.getValue<Date | null>('collectedAt')
+        if (!collectedAt) return <div className="text-muted-foreground">—</div>
+        return <div>{collectedAt.toLocaleString()}</div>
       },
       enableSorting: true,
-      enableColumnFilter: false,
+      enableColumnFilter: true,
     },
     {
       id: 'stage',
       accessorFn: currentStageLabel,
+      size: 164,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Stage" />
       ),
       cell: ({ row }) => {
         const label = row.getValue<string>('stage')
+        const current = row.original.stages.find(
+          (entry) => entry.applicable && entry.status === 'pending',
+        )
         return (
-          <Badge variant={label === COMPLETED ? 'default' : 'secondary'}>
-            {label}
-          </Badge>
+          <div className="flex items-center gap-2 overflow-hidden">
+            <Badge variant={label === COMPLETED ? 'default' : 'secondary'}>
+              {label}
+            </Badge>
+            {current?.assigneeName && (
+              <span
+                className="truncate text-xs text-muted-foreground"
+                title={current.assigneeName}
+              >
+                {current.assigneeName}
+              </span>
+            )}
+          </div>
         )
       },
       enableSorting: true,
@@ -282,6 +333,8 @@ export function getOrderColumns(
     {
       id: 'repairs',
       accessorFn: openRepairCount,
+      size: 80,
+      meta: { label: 'Repairs' },
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Repairs" />
       ),
@@ -302,6 +355,8 @@ export function getOrderColumns(
       id: 'balanceDue',
       // Server-computed: the total less gift card tender and every payment.
       accessorFn: (order) => order.invoiceBalanceDue,
+      size: 116,
+      meta: { label: 'Balance Due' },
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Balance Due" />
       ),
@@ -345,6 +400,7 @@ export function getOrderColumns(
     {
       id: 'paymentMethod',
       accessorFn: (order) => order.invoicePaymentMethod,
+      meta: { label: 'Payment method' },
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Payment Method" />
       ),
@@ -358,6 +414,8 @@ export function getOrderColumns(
     },
     {
       id: 'actions',
+      size: 72,
+      meta: { label: 'Actions' },
       header: 'Actions',
       enablePinning: true,
       cell: ({ row }) => {
@@ -372,10 +430,10 @@ export function getOrderColumns(
               },
               {
                 label:
-                  order.status === 'received' ? 'Received' : 'Mark Received',
+                  order.status === 'collected' ? 'Collected' : 'Mark Collected',
                 icon: CheckIcon,
-                disabled: order.status === 'received',
-                onClick: () => onReceive(order),
+                disabled: order.status === 'collected',
+                onClick: () => onCollect(order),
                 separatorBefore: true,
               },
             ]}
@@ -383,5 +441,5 @@ export function getOrderColumns(
         )
       },
     },
-  ]
+  ])
 }

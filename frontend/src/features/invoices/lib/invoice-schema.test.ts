@@ -62,6 +62,59 @@ function firstError(customers: InvoiceCustomerDraft[]) {
 }
 
 describe('invoiceFormSchema', () => {
+  it('accepts customer fabric without an inventory material and requires its description', () => {
+    const customer = {
+      ...createEmptyCustomer(),
+      existingCustomerId: 'cust-1',
+      measurement: validMeasurement(),
+      orders: [
+        {
+          ...validOrder(),
+          materialSource: 'customer' as const,
+          customerBasePrice: 15,
+          materialId: '',
+          customerMaterialDescription: 'White linen',
+        },
+      ],
+    }
+    expect(firstError([customer])).toBeNull()
+    customer.orders[0].customerMaterialDescription = '  '
+    expect(firstError([customer])?.path).toEqual([
+      'customers',
+      0,
+      'orders',
+      0,
+      'customerMaterialDescription',
+    ])
+  })
+
+  it('rejects zero and negative fabric quantities for either source', () => {
+    for (const materialSource of ['shop', 'customer'] as const) {
+      for (const materialAmount of [0, -1, 0.001]) {
+        const customer = {
+          ...createEmptyCustomer(),
+          existingCustomerId: 'cust-1',
+          measurement: validMeasurement(),
+          orders: [
+            {
+              ...validOrder(),
+              materialSource,
+              materialAmount,
+              customerMaterialDescription: 'Linen',
+            },
+          ],
+        }
+        expect(firstError([customer])?.path).toEqual([
+          'customers',
+          0,
+          'orders',
+          0,
+          'materialAmount',
+        ])
+      }
+    }
+  })
+
   it('passes without a target date', () => {
     const customer = {
       ...createEmptyCustomer(),
@@ -243,7 +296,7 @@ describe('invoiceFormSchema', () => {
       ],
     }
     const error = firstError([customer])
-    expect(error?.message).toMatch(/enter a price/i)
+    expect(error?.message).toMatch(/complete the material and design pricing/i)
     expect(error?.path).toEqual(['customers', 0, 'orders', 0, 'price'])
   })
 

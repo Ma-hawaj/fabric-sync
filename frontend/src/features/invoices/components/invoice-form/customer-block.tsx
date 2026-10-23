@@ -1,4 +1,4 @@
-import * as React from 'react'
+import { useState } from 'react'
 import { PlusIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FieldError } from '@/components/ui/field'
@@ -33,6 +33,7 @@ interface CustomerBlockProps {
   initialMaterialForId?: (id: string) => Material | null
   /** The label for a stored material id (edit forms). */
   materialLabelForId?: (id: string) => string | null
+  locationLabelForId?: (id: string) => string | null
   onRemove: () => void
   removable: boolean
 }
@@ -46,6 +47,7 @@ export function CustomerBlock({
   customerLabelForId,
   initialMaterialForId,
   materialLabelForId,
+  locationLabelForId,
   onRemove,
   removable,
 }: CustomerBlockProps) {
@@ -59,7 +61,7 @@ export function CustomerBlock({
       customers?: { existingCustomerId?: string }[]
     }
   ).customers?.[customerIndex]?.existingCustomerId
-  const [picked, setPicked] = React.useState<Customer | null>(() =>
+  const [picked, setPicked] = useState<Customer | null>(() =>
     storedId ? (initialCustomerForId?.(storedId) ?? null) : null,
   )
 
@@ -166,6 +168,7 @@ export function CustomerBlock({
                       form={form}
                       name={`${base}.mobileNo`}
                       label="Phone"
+                      defaultCountry="BH"
                     />
 
                     <p className="text-xs text-muted-foreground">
@@ -195,7 +198,7 @@ export function CustomerBlock({
         </form.Subscribe>
       </div>
 
-      <form.Field name={`${base}.orders` as never}>
+      <form.Field name={`${base}.orders` as never} mode="array">
         {(ordersField: any) => (
           <div className="space-y-4">
             {ordersField.state.value.map((order: any, orderIndex: number) => (
@@ -207,6 +210,7 @@ export function CustomerBlock({
                 orderNumber={orderIndex + 1}
                 initialMaterialForId={initialMaterialForId}
                 materialLabelForId={materialLabelForId}
+                locationLabelForId={locationLabelForId}
                 removable={ordersField.state.value.length > 1}
                 onRemove={() => ordersField.removeValue(orderIndex)}
               />

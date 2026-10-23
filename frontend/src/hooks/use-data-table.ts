@@ -9,8 +9,10 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import type {
+  ColumnDef,
   ColumnFiltersState,
   ColumnPinningState,
+  ColumnSizingState,
   PaginationState,
   RowSelectionState,
   SortingState,
@@ -22,6 +24,7 @@ import type {
 import { parseAsInteger, useQueryState, useQueryStates } from 'nuqs'
 import type { UseQueryStateOptions } from 'nuqs'
 import * as React from 'react'
+import { useState } from 'react'
 
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
 import { getColumnDefId } from '@/lib/data-table'
@@ -37,13 +40,26 @@ import {
   toColumnFilters,
 } from '@/lib/list-params'
 import { getSortingStateParser } from '@/lib/parsers'
-import type { ExtendedColumnSort, QueryKeys } from '@/types/data-table'
+import {
+  readTablePreferences,
+  saveTablePreferences,
+  tablePreferenceKey,
+} from '@/lib/table-preferences'
+import type {
+  DataTableInstance,
+  ExtendedColumnSort,
+  QueryKeys,
+} from '@/types/data-table'
 
 const DEBOUNCE_MS = 300
 const THROTTLE_MS = 50
 
-interface UseDataTableProps<TData> extends Omit<
+interface UseDataTableProps<
+  TData,
+  TColumns extends ColumnDef<TData, any>[],
+> extends Omit<
   TableOptions<TData>,
+  | 'columns'
   | 'state'
   | 'pageCount'
   | 'getCoreRowModel'
@@ -51,6 +67,7 @@ interface UseDataTableProps<TData> extends Omit<
   | 'manualPagination'
   | 'manualSorting'
 > {
+  columns: TColumns
   pageCount?: number
   manualFiltering?: boolean
   manualPagination?: boolean
@@ -69,7 +86,10 @@ interface UseDataTableProps<TData> extends Omit<
   startTransition?: React.TransitionStartFunction
 }
 
-export function useDataTable<TData>(props: UseDataTableProps<TData>) {
+export function useDataTable<
+  TData,
+  const TColumns extends ColumnDef<TData, any>[],
+>(props: UseDataTableProps<TData, TColumns>) {
   const {
     columns,
     pageCount,
@@ -107,11 +127,18 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     [history, scroll, shallow, clearOnDefault, startTransition],
   )
 
-  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>(
+  const [preferenceKey] = useState(tablePreferenceKey)
+  const [saved] = useState(readTablePreferences)
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>(
     initialState?.rowSelection ?? {},
   )
-  const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>(initialState?.columnVisibility ?? {})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    ...initialState?.columnVisibility,
+    ...saved.visibility,
+  })
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(
+    saved.sizing ?? {},
+  )
 
   const [page, setPage] = useQueryState(
     pageKey,
@@ -121,7 +148,11 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     perPageKey,
     parseAsInteger
       .withOptions(queryStateOptions)
-      .withDefault(initialState?.pagination?.pageSize ?? DEFAULT_PER_PAGE),
+      .withDefault(
+        initialState?.pagination?.pageSize ??
+          saved.pageSize ??
+          DEFAULT_PER_PAGE,
+      ),
   )
 
   const pagination: PaginationState = React.useMemo(() => {
@@ -130,6 +161,14 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       pageSize: perPage,
     }
   }, [page, perPage])
+
+  React.useEffect(() => {
+    saveTablePreferences(preferenceKey, {
+      visibility: columnVisibility,
+      sizing: columnSizing,
+      pageSize: perPage,
+    })
+  }, [preferenceKey, columnVisibility, columnSizing, perPage])
 
   const onPaginationChange = React.useCallback(
     (updaterOrValue: Updater<PaginationState>) => {
@@ -246,15 +285,8 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     ],
   )
 
-  const hasActionsColumn = React.useMemo(
-    () => columns.some((column) => getColumnDefId(column) === 'actions'),
-    [columns],
-  )
-
-  const [columnPinning, setColumnPinning] = React.useState<ColumnPinningState>(
-    hasActionsColumn
-      ? { ...(initialState?.columnPinning ?? {}), right: ['actions'] }
-      : (initialState?.columnPinning ?? {}),
+  const [columnPinning, setColumnPinning] = useState<ColumnPinningState>(
+    initialState?.columnPinning ?? {},
   )
 
   const table = useReactTable({
@@ -266,11 +298,15 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       pagination,
       sorting,
       columnVisibility,
+      columnSizing,
       rowSelection,
       columnFilters,
       columnPinning,
     },
     defaultColumn: {
+      size: 140,
+      minSize: 64,
+      maxSize: 600,
       ...tableProps.defaultColumn,
       enableColumnFilter: false,
     },
@@ -281,6 +317,8 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     onSortingChange,
     onColumnFiltersChange,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnSizingChange: setColumnSizing,
+    columnResizeMode: 'onChange',
     onColumnPinningChange: setColumnPinning,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -294,6 +332,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     manualFiltering,
     meta: {
       ...tableProps.meta,
+      advancedFilters: enableAdvancedFilter,
       queryKeys: {
         page: pageKey,
         perPage: perPageKey,
@@ -305,7 +344,12 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   })
 
   return React.useMemo(
-    () => ({ table, shallow, debounceMs, throttleMs }),
+    () => ({
+      table: table as DataTableInstance<TData, TColumns>,
+      shallow,
+      debounceMs,
+      throttleMs,
+    }),
     [table, shallow, debounceMs, throttleMs],
   )
 }

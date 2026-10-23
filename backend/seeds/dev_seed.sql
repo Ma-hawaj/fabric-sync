@@ -42,6 +42,14 @@ INSERT INTO materials (id, name, sku, unit) VALUES
     ('019a0000-0003-7000-8000-000000000005', 'Korean Polyester',   'KP-500', 'meters'),
     ('019a0000-0003-7000-8000-000000000006', 'Premium Wool Blend', 'WB-600', 'meters');
 
+-- Example garment prices; quantity selects a tier rather than multiplying it.
+UPDATE materials SET junior_price = 20, normal_price = 30, large_price = 40
+WHERE id IN (
+    '019a0000-0003-7000-8000-000000000001', '019a0000-0003-7000-8000-000000000002',
+    '019a0000-0003-7000-8000-000000000003', '019a0000-0003-7000-8000-000000000004',
+    '019a0000-0003-7000-8000-000000000005', '019a0000-0003-7000-8000-000000000006'
+);
+
 -- Some materials sit at more than one location, which is the case the
 -- per-material/location stock table exists for.
 INSERT INTO material_stock (id, material_id, branch_id, quantity) VALUES
@@ -133,23 +141,23 @@ INSERT INTO invoice_payments (id, invoice_id, order_id, amount, payment_type, pa
 -- delivery stage is reported as not applicable), and 11 and 12 have no
 -- production location assigned yet.
 --
--- The five design columns hold the DESIGN CATALOG SLUGS (see
--- frontend/src/features/invoices/data/design-catalog.ts), not free text — the
+-- The six design columns hold the DESIGN CATALOG SLUGS (see the
+-- `design_options` table, managed at /design-options), not free text — the
 -- printed invoice looks each one up against the catalog and embeds the
 -- matching illustration; a value that matches nothing prints without a
--- picture. Pick options from those arrays when editing this import.
+-- picture. Pick options from that table when editing this import.
 INSERT INTO orders (
     id, measurement_id, material_id, material_amount, invoice_id, price,
     thobe_type, f_pocket, collar, sleeve, patti, more_details,
-    status, received_at, production_branch_id
+    status, collected_at, production_branch_id
 ) VALUES
     ('019a0000-0009-7000-8000-000000000001', '019a0000-0007-7000-8000-000000000002', '019a0000-0003-7000-8000-000000000001', 3.50, '019a0000-0008-7000-8000-000000000001', 450.00, 'normal',  'round',  'china',  'cuff',  'zip', 'Customer prefers a softer collar.', 'pending',  NULL,                     '019a0000-0001-7000-8000-000000000003'),
     ('019a0000-0009-7000-8000-000000000002', '019a0000-0007-7000-8000-000000000002', '019a0000-0003-7000-8000-000000000002', 3.25, '019a0000-0008-7000-8000-000000000001', 380.00, 'hezazi',  'straight-clip', 'new-shirt-collor', 'double-cuff', 'zip-show', NULL,                                'pending',  NULL,                     '019a0000-0001-7000-8000-000000000003'),
     ('019a0000-0009-7000-8000-000000000003', '019a0000-0007-7000-8000-000000000003', '019a0000-0003-7000-8000-000000000003', 4.00, '019a0000-0008-7000-8000-000000000002', 500.00, '9-mode-front-back-chepsa', 'round-clip', '1-n-1-b', 'double-cuff-thobx', 'zip-thobx-steel', NULL, 'pending',  NULL,                     '019a0000-0001-7000-8000-000000000003'),
     ('019a0000-0009-7000-8000-000000000004', '019a0000-0007-7000-8000-000000000003', '019a0000-0003-7000-8000-000000000003', 4.00, '019a0000-0008-7000-8000-000000000002', 500.00, 'upline',  'v-clip', 'normal',  'open',  'zip-street', 'Second identical thobe.', 'pending',  NULL,                     '019a0000-0001-7000-8000-000000000003'),
-    ('019a0000-0009-7000-8000-000000000005', '019a0000-0007-7000-8000-000000000003', '019a0000-0003-7000-8000-000000000005', 3.75, '019a0000-0008-7000-8000-000000000002', 420.00, 's-c-f-p', 'straight', '3-n-2-t', '1', 'inside-button', NULL, 'received', now() - interval '2 days', '019a0000-0001-7000-8000-000000000003'),
-    ('019a0000-0009-7000-8000-000000000006', '019a0000-0007-7000-8000-000000000005', '019a0000-0003-7000-8000-000000000004', 4.25, '019a0000-0008-7000-8000-000000000003', 600.00, 'tatriz',  'volut', 'china',  'cuff',  'show-button', 'Linen — press on low heat.', 'received', now() - interval '20 days', '019a0000-0001-7000-8000-000000000001'),
-    ('019a0000-0009-7000-8000-000000000007', '019a0000-0007-7000-8000-000000000005', '019a0000-0003-7000-8000-000000000004', 4.25, '019a0000-0008-7000-8000-000000000003', 600.00, 'front-chepsa', 'normal', 'normal',  'double-cuff',  '3-show-button', NULL, 'received', now() - interval '20 days', '019a0000-0001-7000-8000-000000000001'),
+    ('019a0000-0009-7000-8000-000000000005', '019a0000-0007-7000-8000-000000000003', '019a0000-0003-7000-8000-000000000005', 3.75, '019a0000-0008-7000-8000-000000000002', 420.00, 's-c-f-p', 'straight', '3-n-2-t', '1', 'inside-button', NULL, 'collected', now() - interval '2 days', '019a0000-0001-7000-8000-000000000003'),
+    ('019a0000-0009-7000-8000-000000000006', '019a0000-0007-7000-8000-000000000005', '019a0000-0003-7000-8000-000000000004', 4.25, '019a0000-0008-7000-8000-000000000003', 600.00, 'tatriz',  'volut', 'china',  'cuff',  'show-button', 'Linen — press on low heat.', 'collected', now() - interval '20 days', '019a0000-0001-7000-8000-000000000001'),
+    ('019a0000-0009-7000-8000-000000000007', '019a0000-0007-7000-8000-000000000005', '019a0000-0003-7000-8000-000000000004', 4.25, '019a0000-0008-7000-8000-000000000003', 600.00, 'front-chepsa', 'normal', 'normal',  'double-cuff',  '3-show-button', NULL, 'collected', now() - interval '20 days', '019a0000-0001-7000-8000-000000000001'),
     ('019a0000-0009-7000-8000-000000000008', '019a0000-0007-7000-8000-000000000006', '019a0000-0003-7000-8000-000000000005', 3.00, '019a0000-0008-7000-8000-000000000004', 350.00, 'back-chepsa', 'cross-inside', 'new-shirt-collor', '5', 'down-stiching-zip', NULL, 'pending',  NULL,                     '019a0000-0001-7000-8000-000000000003'),
     ('019a0000-0009-7000-8000-000000000009', '019a0000-0007-7000-8000-000000000006', '019a0000-0003-7000-8000-000000000005', 3.00, '019a0000-0008-7000-8000-000000000004', 350.00, 'front-back-chepsa', 'cross-clip', '4-n-1-b', '6', 'no-canvas-zip', NULL, 'pending',  NULL,                     '019a0000-0001-7000-8000-000000000003'),
     ('019a0000-0009-7000-8000-00000000000a', '019a0000-0007-7000-8000-000000000006', '019a0000-0003-7000-8000-000000000001', 3.00, '019a0000-0008-7000-8000-000000000004', 350.00, '9-mode-front-chepsa', 'm', '10', '4', 'no-canvas-no-stitching-show-button', NULL, 'pending',  NULL,                     '019a0000-0001-7000-8000-000000000003'),

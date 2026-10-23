@@ -4,6 +4,7 @@ import type { Column, Table } from '@tanstack/react-table'
 import { BadgeCheck, CalendarIcon, ListFilter, Text, X } from 'lucide-react'
 import { useQueryState } from 'nuqs'
 import * as React from 'react'
+import { useState } from 'react'
 
 import { DataTableRangeFilter } from '@/components/data-table/data-table-range-filter'
 import { Button } from '@/components/ui/button'
@@ -33,6 +34,7 @@ import {
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
 import { getDefaultFilterOperator, getFilterOperators } from '@/lib/data-table'
 import { formatDate } from '@/lib/format'
+import { parseFilterDate, serializeFilterDate } from '@/lib/filter-date'
 import { generateId } from '@/lib/id'
 import { getFiltersStateParser } from '@/lib/parsers'
 import { cn } from '@/lib/utils'
@@ -70,10 +72,11 @@ export function DataTableFilterMenu<TData>({
       .filter((column) => column.columnDef.enableColumnFilter)
   }, [table])
 
-  const [open, setOpen] = React.useState(false)
-  const [selectedColumn, setSelectedColumn] =
-    React.useState<Column<TData> | null>(null)
-  const [inputValue, setInputValue] = React.useState('')
+  const [open, setOpen] = useState(false)
+  const [selectedColumn, setSelectedColumn] = useState<Column<TData> | null>(
+    null,
+  )
+  const [inputValue, setInputValue] = useState('')
   const triggerRef = React.useRef<HTMLButtonElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
 
@@ -342,10 +345,9 @@ function DataTableFilterItem<TData>({
   onFilterRemove,
 }: DataTableFilterItemProps<TData>) {
   {
-    const [showFieldSelector, setShowFieldSelector] = React.useState(false)
-    const [showOperatorSelector, setShowOperatorSelector] =
-      React.useState(false)
-    const [showValueSelector, setShowValueSelector] = React.useState(false)
+    const [showFieldSelector, setShowFieldSelector] = useState(false)
+    const [showOperatorSelector, setShowOperatorSelector] = useState(false)
+    const [showValueSelector, setShowValueSelector] = useState(false)
 
     const column = columns.find((col) => col.id === filter.id)
 
@@ -552,8 +554,8 @@ function FilterValueSelector<TData>({
           autoFocus
           captionLayout="dropdown"
           mode="single"
-          selected={value ? new Date(value) : undefined}
-          onSelect={(date) => onSelect(date?.getTime().toString() ?? '')}
+          selected={parseFilterDate(value)}
+          onSelect={(date) => onSelect(serializeFilterDate(date))}
         />
       )
 
@@ -781,13 +783,11 @@ function onFilterInputRender<TData>({
       const inputListboxId = `${inputId}-listbox`
 
       const dateValue = Array.isArray(filter.value)
-        ? filter.value.filter(Boolean)
-        : [filter.value, filter.value].filter(Boolean)
+        ? filter.value
+        : [filter.value, filter.value]
 
-      const startDate = dateValue[0]
-        ? new Date(Number(dateValue[0]))
-        : undefined
-      const endDate = dateValue[1] ? new Date(Number(dateValue[1])) : undefined
+      const startDate = dateValue[0] ? parseFilterDate(dateValue[0]) : undefined
+      const endDate = dateValue[1] ? parseFilterDate(dateValue[1]) : undefined
 
       const isSameDate =
         startDate &&
@@ -829,23 +829,13 @@ function onFilterInputRender<TData>({
                 autoFocus
                 captionLayout="dropdown"
                 mode="range"
-                selected={
-                  dateValue.length === 2
-                    ? {
-                        from: new Date(Number(dateValue[0])),
-                        to: new Date(Number(dateValue[1])),
-                      }
-                    : {
-                        from: new Date(),
-                        to: new Date(),
-                      }
-                }
+                selected={{ from: startDate, to: endDate }}
                 onSelect={(date) => {
                   onFilterUpdate(filter.filterId, {
                     value: date
                       ? [
-                          (date.from?.getTime() ?? '').toString(),
-                          (date.to?.getTime() ?? '').toString(),
+                          serializeFilterDate(date.from),
+                          serializeFilterDate(date.to),
                         ]
                       : [],
                   })
@@ -857,11 +847,11 @@ function onFilterInputRender<TData>({
                 captionLayout="dropdown"
                 mode="single"
                 selected={
-                  dateValue[0] ? new Date(Number(dateValue[0])) : undefined
+                  dateValue[0] ? parseFilterDate(dateValue[0]) : undefined
                 }
                 onSelect={(date) => {
                   onFilterUpdate(filter.filterId, {
-                    value: (date?.getTime() ?? '').toString(),
+                    value: serializeFilterDate(date),
                   })
                 }}
               />

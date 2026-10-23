@@ -121,15 +121,22 @@ export function stageTimingLabel(entry: OrderStageEntry): string | null {
 const REPAIR_STATUS_LABELS: Record<RepairStatus, string> = {
   open: 'Open',
   in_progress: 'In progress',
-  completed: 'Completed',
+  completed: 'Ready',
   cancelled: 'Cancelled',
+  received: 'Collected',
 }
 
 export function repairStatusLabel(status: RepairStatus): string {
   return REPAIR_STATUS_LABELS[status]
 }
 
-/** Cancelled and completed repairs are finished; the rest still need work. */
+/** Completed, cancelled and received repairs are finished; the rest need work. */
+export function isRepairFinished(status: RepairStatus): boolean {
+  return (
+    status === 'completed' || status === 'cancelled' || status === 'received'
+  )
+}
+
 export function openRepairCount(order: Order): number {
   return order.repairs.filter(
     (repair) => repair.status === 'open' || repair.status === 'in_progress',

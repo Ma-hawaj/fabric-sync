@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import {
   NumberField as NumberFieldRoot,
   NumberFieldGroup,
@@ -31,7 +32,7 @@ import { CalendarIcon, XIcon } from 'lucide-react'
 // result. `AnyFormApi = any` sidesteps that — matching how this codebase
 // already types individual field render props (`field: any`) rather than
 // fighting the generics. Dynamic array paths (e.g.
-// `customers[0].measurement.chest`) also don't play well with TanStack
+// `items[0].details.value`) also don't play well with TanStack
 // Form's deep-key type inference, so field names below are plain strings
 // rather than the library's `DeepKeys<T>` type.
 export type AnyFormApi = any
@@ -62,7 +63,13 @@ export function TextField({ form, name, label }: FieldProps) {
   )
 }
 
-export function PhoneField({ form, name, label }: FieldProps) {
+export function PhoneField({
+  form,
+  name,
+  label,
+  defaultCountry,
+}: FieldProps &
+  Pick<React.ComponentProps<typeof PhoneInput>, 'defaultCountry'>) {
   return (
     <form.Field name={name as never}>
       {(field: any) => (
@@ -74,7 +81,7 @@ export function PhoneField({ form, name, label }: FieldProps) {
             aria-invalid={field.state.meta.errors.length > 0}
             onBlur={field.handleBlur}
             onChange={(value) => field.handleChange(value)}
-            defaultCountry={'BH'}
+            defaultCountry={defaultCountry}
           />
           <FieldError errors={field.state.meta.errors} />
         </Field>
@@ -107,10 +114,6 @@ export function NumberField({
                 id={field.name}
                 aria-invalid={field.state.meta.errors.length > 0}
                 onBlur={field.handleBlur}
-                onChange={(e) => {
-                  const raw = e.currentTarget.value
-                  field.handleChange(raw === '' ? '' : Number(raw))
-                }}
                 className={unit ? 'pe-10' : undefined}
               />
               {unit && (
@@ -190,7 +193,7 @@ export function DateField({
   label,
   placeholder,
 }: FieldProps & { placeholder?: string }) {
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = useState(false)
   return (
     <form.Field name={name as never}>
       {(field: any) => {

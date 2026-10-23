@@ -16,22 +16,23 @@ export interface InvoiceOrderDraft {
 
   thobeType: string
   fPocket: string
+  sPocket: string
   collar: string
   sleeve: string
   patti: string
   emd: string
   moreDetails: string
 
+  materialSource: 'shop' | 'customer'
+  customerMaterialDescription: string
   materialId: string
   materialAmount: NumberInput
-  // Where materialAmount comes off — material stock is held per location, and
-  // different orders on the same invoice can use materials stocked at
-  // different locations, so this has to be per order rather than one
-  // invoice-wide field (unlike productBranch, where every product line
-  // sells from the same register).
+  // Where the garment is made. Shop material needs stock at this location;
+  // customer fabric can use any active production location.
   productionLocationId: string
-  // Entered by staff per order line — materials carry no unit price to derive
-  // it from.
+  // Manual tailoring base only for customer-supplied fabric.
+  customerBasePrice: NumberInput
+  // Calculated preview; the backend calculates its own final price.
   price: NumberInput
 }
 
@@ -77,7 +78,7 @@ export interface GiftCardRedemptionDraft {
 }
 
 // One payment taken up front with the invoice. Later payments go through the
-// receive endpoints or a till payment, so the form only ever carries the
+// collect endpoints or a till payment, so the form only ever carries the
 // opening ones — usually zero or one row.
 export interface PaymentDraft {
   key: string
@@ -130,14 +131,18 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     key: crypto.randomUUID(),
     thobeType: '',
     fPocket: '',
+    sPocket: '',
     collar: '',
     sleeve: '',
     patti: '',
     emd: '',
     moreDetails: '',
+    materialSource: 'shop',
+    customerMaterialDescription: '',
     materialId: '',
     materialAmount: '',
     productionLocationId: '',
+    customerBasePrice: '',
     price: '',
   }
 }

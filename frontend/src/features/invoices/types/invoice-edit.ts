@@ -36,7 +36,9 @@ export interface InvoiceEditMeasurement {
 }
 
 export interface InvoiceEditOrder {
-  materialId: string
+  materialSource: 'shop' | 'customer'
+  customerMaterialDescription: string | null
+  materialId: string | null
   materialName: string
   materialUnit: string
   materialAmount: number
@@ -44,9 +46,11 @@ export interface InvoiceEditOrder {
   productionLocationName: string | null
   /** Live stock at the production location — seeds the "Made At" picker. */
   stockQuantity: number | null
+  basePrice: number
   price: number
   thobeType: string | null
   fPocket: string | null
+  sPocket: string | null
   collar: string | null
   sleeve: string | null
   patti: string | null

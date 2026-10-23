@@ -1,4 +1,4 @@
-import * as React from 'react'
+import { useMemo } from 'react'
 import { InvoiceForm } from './invoice-form'
 import { useInvoiceEdit } from './hooks/use-invoice-edit'
 import { useUpdateInvoice } from './hooks/use-update-invoice'
@@ -8,7 +8,7 @@ export function InvoiceEditPage({ invoiceId }: { invoiceId: string }) {
   const { data: edit, isLoading, isError } = useInvoiceEdit(invoiceId)
   const updateInvoice = useUpdateInvoice(invoiceId)
 
-  const mapped = React.useMemo(
+  const mapped = useMemo(
     () => (edit ? mapInvoiceEditToForm(edit) : null),
     [edit],
   )

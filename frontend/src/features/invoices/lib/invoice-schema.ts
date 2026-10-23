@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { customerIdentitySchema } from '@/features/customers/lib/customer-schema'
 import { measurementPayload } from '@/features/customers/hooks/use-create-customer'
+import { isMoney } from '@/lib/money'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 import {
   MEASUREMENT_FITS,
@@ -33,22 +34,61 @@ const orderDraftSchema = z
     key: z.string(),
     thobeType: z.string(),
     fPocket: z.string(),
+    sPocket: z.string(),
     collar: z.string(),
     sleeve: z.string(),
     patti: z.string(),
     emd: z.string(),
     moreDetails: z.string(),
+    materialSource: z.enum(['shop', 'customer']),
+    customerMaterialDescription: z.string(),
     materialId: z.string(),
     materialAmount: numberInputSchema,
     productionLocationId: z.string(),
+    customerBasePrice: numberInputSchema,
     price: numberInputSchema,
   })
   .superRefine((order, ctx) => {
-    if (!order.materialId || order.materialAmount === '') {
+    if (
+      order.materialSource === 'shop' &&
+      (!order.materialId || order.materialAmount === '')
+    ) {
       ctx.addIssue({
         code: 'custom',
         message: 'Pick a material and quantity.',
         path: ['materialId'],
+      })
+    }
+    if (
+      order.materialSource === 'customer' &&
+      !order.customerMaterialDescription.trim()
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Describe the customer-provided material.',
+        path: ['customerMaterialDescription'],
+      })
+    }
+    if (
+      order.materialAmount === '' ||
+      !isMoney(order.materialAmount) ||
+      order.materialAmount < 0.01
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'Enter a quantity of at least 0.01 with at most two decimal places.',
+        path: ['materialAmount'],
+      })
+    }
+    if (
+      order.materialSource === 'customer' &&
+      !isMoney(order.customerBasePrice)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter a tailoring base price.',
+        path: ['customerBasePrice'],
       })
     }
     // Material stock is held per location, and comes off automatically when
@@ -60,10 +100,14 @@ const orderDraftSchema = z
         path: ['productionLocationId'],
       })
     }
-    if (order.price === '') {
+    if (
+      order.price === '' ||
+      !Number.isFinite(order.price) ||
+      order.price < 0
+    ) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Enter a price.',
+        message: 'Complete the material and design pricing.',
         path: ['price'],
       })
     }
