@@ -8,6 +8,8 @@ pub enum ColumnKind {
     Text,
     Number,
     Date,
+    /// A `timestamptz`, compared by calendar day in the viewer's time zone.
+    DateTime,
     Bool,
     Uuid,
     /// A Postgres `text[]`, filtered with array overlap rather than equality.

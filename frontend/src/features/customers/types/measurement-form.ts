@@ -1,3 +1,5 @@
+import { localDateString } from '@/lib/date'
+
 // A blank string means "not entered yet" for a numeric field, distinct from 0.
 export type NumberInput = number | ''
 
@@ -59,7 +61,7 @@ export interface MeasurementDraft {
 export function createEmptyMeasurement(): MeasurementDraft {
   return {
     loadedFromId: null,
-    date: new Date().toISOString().slice(0, 10),
+    date: localDateString(),
     type: '',
     fit: '',
     frontHeight: '',

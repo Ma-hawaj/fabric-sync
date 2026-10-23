@@ -1,3 +1,5 @@
+import { parseDate } from '@/lib/date'
+
 export interface Measurement {
   id: string
   customerId: string
@@ -83,12 +85,12 @@ export function toCustomer(dto: CustomerDto): Customer {
     ...dto,
     measurements: (dto.measurements ?? []).map((measurement) => ({
       ...measurement,
-      date: new Date(measurement.date),
+      date: parseDate(measurement.date),
     })),
     invoices: (dto.invoices ?? []).map((invoice) => ({
       ...invoice,
       invoiceDate: new Date(invoice.invoiceDate),
-      targetDate: invoice.targetDate ? new Date(invoice.targetDate) : null,
+      targetDate: invoice.targetDate ? parseDate(invoice.targetDate) : null,
     })),
   }
 }

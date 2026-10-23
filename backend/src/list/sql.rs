@@ -81,7 +81,7 @@ fn build_filtered(
     let predicates = params
         .filters
         .iter()
-        .map(|filter| predicate(spec, filter, &mut binds))
+        .map(|filter| predicate(spec, filter, params.time_zone, &mut binds))
         .collect::<Result<Vec<_>, _>>()?;
 
     if !predicates.is_empty() {
@@ -116,6 +116,7 @@ fn quote(identifier: &str) -> String {
 fn predicate(
     spec: &ListSpec,
     filter: &FilterItem,
+    time_zone: chrono_tz::Tz,
     binds: &mut Vec<BindValue>,
 ) -> Result<String, AppError> {
     let column = spec.column(&filter.id)?;
@@ -138,7 +139,19 @@ fn predicate(
         ColumnKind::TextArray => array_predicate(&name, filter, binds),
         ColumnKind::Bool => bool_predicate(&name, filter, binds),
         ColumnKind::Text | ColumnKind::Uuid => text_predicate(&name, column, filter, binds),
-        ColumnKind::Number | ColumnKind::Date => scalar_predicate(&name, column, filter, binds),
+        ColumnKind::DateTime => {
+            if filter.operator == FilterOperator::IsBetween
+                && filter.value.as_pair()? == (None, None)
+            {
+                return Ok("TRUE".to_string());
+            }
+            binds.push(BindValue::Text(time_zone.name().to_string()));
+            let local_date = format!("({name} AT TIME ZONE ${})::date", binds.len());
+            scalar_predicate(&local_date, column, filter, time_zone, binds)
+        }
+        ColumnKind::Number | ColumnKind::Date => {
+            scalar_predicate(&name, column, filter, time_zone, binds)
+        }
     }
 }
 
@@ -269,6 +282,7 @@ fn scalar_predicate(
     name: &str,
     column: ColumnDef,
     filter: &FilterItem,
+    time_zone: chrono_tz::Tz,
     binds: &mut Vec<BindValue>,
 ) -> Result<String, AppError> {
     let comparison = match filter.operator {
@@ -282,12 +296,12 @@ fn scalar_predicate(
     };
 
     if let Some(comparison) = comparison {
-        binds.push(scalar_bind(column, filter.value.as_one()?)?);
+        binds.push(scalar_bind(column, filter.value.as_one()?, time_zone)?);
         return Ok(format!("{name} {comparison} ${}", binds.len()));
     }
 
     if filter.operator == FilterOperator::Ne {
-        binds.push(scalar_bind(column, filter.value.as_one()?)?);
+        binds.push(scalar_bind(column, filter.value.as_one()?, time_zone)?);
         return Ok(format!("{name} IS DISTINCT FROM ${}", binds.len()));
     }
 
@@ -297,11 +311,11 @@ fn scalar_predicate(
     let mut parts = Vec::new();
 
     if let Some(lower) = lower {
-        binds.push(scalar_bind(column, lower)?);
+        binds.push(scalar_bind(column, lower, time_zone)?);
         parts.push(format!("{name} >= ${}", binds.len()));
     }
     if let Some(upper) = upper {
-        binds.push(scalar_bind(column, upper)?);
+        binds.push(scalar_bind(column, upper, time_zone)?);
         parts.push(format!("{name} <= ${}", binds.len()));
     }
 
@@ -333,14 +347,18 @@ fn text_list_bind(column: ColumnDef, value: &FilterValue) -> Result<BindValue, A
     }
 }
 
-fn scalar_bind(column: ColumnDef, raw: &str) -> Result<BindValue, AppError> {
+fn scalar_bind(
+    column: ColumnDef,
+    raw: &str,
+    time_zone: chrono_tz::Tz,
+) -> Result<BindValue, AppError> {
     match column.kind {
         ColumnKind::Number => raw
             .trim()
             .parse::<f64>()
             .map(BindValue::Number)
             .map_err(|_| AppError::BadRequest(format!("`{raw}` is not a number"))),
-        ColumnKind::Date => parse_date(raw).map(BindValue::Date),
+        ColumnKind::Date | ColumnKind::DateTime => parse_date(raw, time_zone).map(BindValue::Date),
         _ => Ok(BindValue::Text(raw.to_string())),
     }
 }
@@ -351,16 +369,13 @@ fn parse_uuid(raw: &str) -> Result<Uuid, AppError> {
 
 /// Dates arrive in two spellings: the date-picker controls emit epoch
 /// milliseconds, while a hand-written or shared URL carries `YYYY-MM-DD`. Both
-/// are accepted, and epoch values are read in UTC.
-fn parse_date(raw: &str) -> Result<NaiveDate, AppError> {
+/// are accepted; epochs are read in the same time zone as the browser picker.
+fn parse_date(raw: &str, time_zone: chrono_tz::Tz) -> Result<NaiveDate, AppError> {
     let raw = raw.trim();
 
-    if !raw.is_empty() && raw.bytes().all(|byte| byte.is_ascii_digit()) {
-        return raw
-            .parse::<i64>()
-            .ok()
-            .and_then(DateTime::from_timestamp_millis)
-            .map(|timestamp| timestamp.date_naive())
+    if let Ok(epoch) = raw.parse::<i64>() {
+        return DateTime::from_timestamp_millis(epoch)
+            .map(|timestamp| timestamp.with_timezone(&time_zone).date_naive())
             .ok_or_else(|| AppError::BadRequest(format!("`{raw}` is not a date")));
     }
 
@@ -381,12 +396,16 @@ mod tests {
     use serde_json::json;
 
     const SPEC: ListSpec = ListSpec {
-        base_sql: "SELECT id, name, total, due_on, active, tags FROM widgets",
+        base_sql: "SELECT id, name, total, due_on, created_at, active, tags FROM widgets",
         columns: &[
             ("id", ColumnDef::new("id", ColumnKind::Uuid)),
             ("name", ColumnDef::new("name", ColumnKind::Text)),
             ("total", ColumnDef::new("total", ColumnKind::Number)),
             ("dueOn", ColumnDef::new("due_on", ColumnKind::Date)),
+            (
+                "createdAt",
+                ColumnDef::new("created_at", ColumnKind::DateTime),
+            ),
             ("active", ColumnDef::new("active", ColumnKind::Bool)),
             ("tags", ColumnDef::new("tags", ColumnKind::TextArray)),
         ],
@@ -400,6 +419,108 @@ mod tests {
 
     fn filtered(filters: serde_json::Value) -> Result<BuiltQuery, AppError> {
         build(&SPEC, &params(json!({ "filters": filters.to_string() })))
+    }
+
+    #[test]
+    fn picker_epochs_are_dates_in_the_viewers_zone() {
+        use chrono::TimeZone;
+        let moment = chrono::Utc.with_ymd_and_hms(2026, 7, 30, 21, 0, 0).unwrap();
+        assert_eq!(
+            parse_date(
+                &moment.timestamp_millis().to_string(),
+                chrono_tz::Asia::Bahrain
+            )
+            .unwrap(),
+            NaiveDate::from_ymd_opt(2026, 7, 31).unwrap()
+        );
+        let moment = chrono::Utc.with_ymd_and_hms(2026, 7, 31, 2, 0, 0).unwrap();
+        assert_eq!(
+            parse_date(
+                &moment.timestamp_millis().to_string(),
+                chrono_tz::America::Los_Angeles
+            )
+            .unwrap(),
+            NaiveDate::from_ymd_opt(2026, 7, 30).unwrap()
+        );
+        // New York's midnight moves from 05:00 to 04:00 UTC over DST.
+        for (day, hour) in [(8, 5), (9, 4)] {
+            let moment = chrono::Utc
+                .with_ymd_and_hms(2026, 3, day, hour, 0, 0)
+                .unwrap();
+            assert_eq!(
+                parse_date(
+                    &moment.timestamp_millis().to_string(),
+                    chrono_tz::America::New_York
+                )
+                .unwrap(),
+                NaiveDate::from_ymd_opt(2026, 3, day).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn an_unbounded_timestamp_range_does_not_bind_an_unused_zone() {
+        let built = filtered(json!([{
+            "id": "createdAt", "value": ["", ""],
+            "variant": "dateRange", "operator": "isBetween"
+        }]))
+        .unwrap();
+        assert!(built.sql.contains("WHERE TRUE"));
+        assert!(built.binds.is_empty());
+    }
+
+    #[test]
+    fn timestamp_filters_compare_whole_local_days_for_pages_and_counts() {
+        let params = params(json!({
+            "timeZone": "America/New_York",
+            "filters": json!([{
+                "id": "createdAt", "value": ["2026-03-08", "2026-03-09"],
+                "variant": "dateRange", "operator": "isBetween"
+            }]).to_string()
+        }));
+        let built = build(&SPEC, &params).unwrap();
+        assert!(built
+            .sql
+            .contains("(base.\"created_at\" AT TIME ZONE $1)::date >= $2"));
+        assert!(built
+            .sql
+            .contains("(base.\"created_at\" AT TIME ZONE $1)::date <= $3"));
+        assert_eq!(
+            built.binds,
+            vec![
+                BindValue::Text("America/New_York".to_string()),
+                BindValue::Date(NaiveDate::from_ymd_opt(2026, 3, 8).unwrap()),
+                BindValue::Date(NaiveDate::from_ymd_opt(2026, 3, 9).unwrap()),
+            ]
+        );
+        assert_eq!(build_count(&SPEC, &params).unwrap().binds, built.binds);
+    }
+
+    #[test]
+    fn exact_timestamp_day_filters_and_plain_calendar_dates_use_local_days() {
+        let built = build(
+            &SPEC,
+            &params(json!({
+                "timeZone": "Asia/Bahrain",
+                "filters": json!([
+                    {"id": "createdAt", "value": "2026-07-31", "variant": "date", "operator": "eq"},
+                    {"id": "dueOn", "value": "2026-08-01", "variant": "date", "operator": "eq"}
+                ]).to_string()
+            })),
+        )
+        .unwrap();
+        assert!(built
+            .sql
+            .contains("(base.\"created_at\" AT TIME ZONE $1)::date = $2"));
+        assert!(built.sql.contains("base.\"due_on\" = $3"));
+        assert_eq!(
+            built.binds,
+            vec![
+                BindValue::Text("Asia/Bahrain".to_string()),
+                BindValue::Date(NaiveDate::from_ymd_opt(2026, 7, 31).unwrap()),
+                BindValue::Date(NaiveDate::from_ymd_opt(2026, 8, 1).unwrap()),
+            ]
+        );
     }
 
     #[test]

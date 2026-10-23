@@ -1,3 +1,5 @@
+import { parseDate } from '@/lib/date'
+
 import { MEASUREMENT_GROUPS, fieldsInGroup } from '../data/measurement-fields'
 import type { MeasurementField } from '../data/measurement-fields'
 import {
@@ -214,7 +216,7 @@ function measurementsGrid(measurement: Measurement): string {
 }
 
 function formatMeasurementDate(date: Date | string): string {
-  return new Date(date).toLocaleDateString('en-GB', {
+  return parseDate(date).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',

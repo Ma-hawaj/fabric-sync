@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
 import { CURRENCY } from '@/lib/currency'
+import { parseDate } from '@/lib/date'
 import type { Invoice, PaymentStatus } from '../types/invoices'
 
 const paymentTypeLabels: Record<
@@ -132,7 +133,7 @@ export const getInvoiceColumns = (
     {
       id: 'targetDate',
       accessorFn: (invoice) =>
-        invoice.targetDate ? new Date(invoice.targetDate) : null,
+        invoice.targetDate ? parseDate(invoice.targetDate) : null,
       size: 128,
       meta: { label: 'Target date', variant: 'dateRange' },
       header: ({ column }) => (

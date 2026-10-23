@@ -44,13 +44,22 @@ async fn main() -> Result<(), error::AppError> {
 
 async fn run() -> Result<(), error::AppError> {
     let config = Config::from_env();
-    // A misspelled TIMEZONE must refuse to boot rather than silently print
-    // UTC on every document.
-    config.timezone().map_err(error::AppError::Config)?;
+    let time_zone = config.timezone().map_err(error::AppError::Config)?;
     let address = SocketAddr::from(([0, 0, 0, 0], config.port));
     let listener = tokio::net::TcpListener::bind(address).await?;
     let db = PgPoolOptions::new()
         .max_connections(5)
+        // Calendar rules such as gift-card expiry use the shop's local day.
+        // Set every connection, including replacements opened by the pool.
+        .after_connect(move |connection, _| {
+            Box::pin(async move {
+                sqlx::query("SELECT set_config('TimeZone', $1, false)")
+                    .bind(time_zone.name())
+                    .execute(connection)
+                    .await?;
+                Ok(())
+            })
+        })
         .connect(&config.database_url)
         .await?;
     sqlx::migrate!().run(&db).await?;

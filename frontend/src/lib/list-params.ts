@@ -182,6 +182,8 @@ export function toApiSearchParams<TData>({
 
   search.set(PAGE_KEY, String(page))
   search.set(PER_PAGE_KEY, String(perPage))
+  // Compare timestamp filters by calendar day in the viewer's time zone.
+  search.set('timeZone', Intl.DateTimeFormat().resolvedOptions().timeZone)
 
   if (sorting.length > 0) {
     search.set(SORT_KEY, JSON.stringify(sorting))

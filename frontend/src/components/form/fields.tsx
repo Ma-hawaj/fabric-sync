@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { localDateString, parseDate } from '@/lib/date'
 import { CalendarIcon, XIcon } from 'lucide-react'
 
 // TanStack Form's extended API type has 11 validator generic params beyond
@@ -164,24 +165,11 @@ export function SelectField({
   )
 }
 
-// ISO calendar dates (`yyyy-mm-dd`) are parsed from their parts rather than
-// `new Date(value)`, which reads the string as UTC midnight and can render
-// the previous day behind a positive UTC offset.
+// Parse calendar dates in the viewer's time zone, like the other date fields.
 function parseIsoDate(value: string): Date | undefined {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
-  if (!match) return undefined
-  const date = new Date(
-    Number(match[1]),
-    Number(match[2]) - 1,
-    Number(match[3]),
-  )
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined
+  const date = parseDate(value)
   return Number.isNaN(date.getTime()) ? undefined : date
-}
-
-function toIsoDate(date: Date): string {
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  return `${date.getFullYear()}-${month}-${day}`
 }
 
 // A calendar popover for an ISO date string, blank when unset. The value
@@ -231,7 +219,9 @@ export function DateField({
                     mode="single"
                     selected={date}
                     onSelect={(selected) => {
-                      field.handleChange(selected ? toIsoDate(selected) : '')
+                      field.handleChange(
+                        selected ? localDateString(selected) : '',
+                      )
                       setOpen(false)
                     }}
                   />

@@ -1,8 +1,10 @@
+import { parseDate } from './date'
+
 export function formatDate(
   date: Date | string | number | undefined,
   opts: Intl.DateTimeFormatOptions = {},
 ) {
-  if (!date) return ''
+  if (date === undefined || date === '') return ''
 
   try {
     return new Intl.DateTimeFormat('en-US', {
@@ -10,7 +12,7 @@ export function formatDate(
       day: opts.day ?? 'numeric',
       year: opts.year ?? 'numeric',
       ...opts,
-    }).format(new Date(date))
+    }).format(parseDate(date))
   } catch (_err) {
     return ''
   }

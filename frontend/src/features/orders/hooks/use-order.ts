@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
+import { parseDate } from '@/lib/date'
 import type { Measurement } from '@/features/customers/types/customers'
 import type { OrderDetail } from '../types/orders'
 
@@ -18,7 +19,10 @@ async function fetchOrder(orderId: string): Promise<OrderDetail> {
     // Dates arrive as ISO strings off the wire; the rest of the app expects
     // real Dates (the list hook parses invoiceDate the same way).
     invoiceDate: new Date(data.invoiceDate),
-    measurement: { ...data.measurement, date: new Date(data.measurement.date) },
+    measurement: {
+      ...data.measurement,
+      date: parseDate(data.measurement.date),
+    },
   }
 }
 

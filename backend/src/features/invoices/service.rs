@@ -1601,7 +1601,7 @@ pub async fn create_invoice(
         &mut tx,
         invoice_id,
         // Expiry is a calendar date; the sale's moment carries a time.
-        invoice_date.date_naive(),
+        invoice_date.with_timezone(&state.timezone()?).date_naive(),
         &input.gift_card_redemptions,
     )
     .await?;
@@ -1775,7 +1775,10 @@ pub async fn update_invoice(
     write_redemptions(
         &mut tx,
         invoice_id,
-        locked.invoice_date.date_naive(),
+        locked
+            .invoice_date
+            .with_timezone(&state.timezone()?)
+            .date_naive(),
         &input.gift_card_redemptions,
     )
     .await?;
