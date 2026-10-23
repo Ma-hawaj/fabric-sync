@@ -1,15 +1,17 @@
 import * as React from 'react'
 import { useState } from 'react'
-import {
-  NumberField as NumberFieldRoot,
-  NumberFieldGroup,
-  NumberFieldInput,
-} from '@/components/reui/number-field'
+import { NumberField as NumberFieldPrimitive } from '@base-ui/react/number-field'
 import { PhoneInput } from '@/components/reui/phone-input'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from '@/components/ui/input-group'
 import {
   Popover,
   PopoverContent,
@@ -101,7 +103,7 @@ export function NumberField({
       {(field: any) => (
         <Field data-invalid={field.state.meta.errors.length > 0}>
           <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
-          <NumberFieldRoot
+          <NumberFieldPrimitive.Root
             value={
               field.state.value === '' || field.state.value == null
                 ? null
@@ -109,20 +111,20 @@ export function NumberField({
             }
             onValueChange={(value) => field.handleChange(value ?? '')}
           >
-            <NumberFieldGroup>
-              <NumberFieldInput
+            <NumberFieldPrimitive.Group render={<InputGroup />}>
+              <NumberFieldPrimitive.Input
+                render={<InputGroupInput />}
                 id={field.name}
                 aria-invalid={field.state.meta.errors.length > 0}
                 onBlur={field.handleBlur}
-                className={unit ? 'pe-10' : undefined}
               />
               {unit && (
-                <span className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  {unit}
-                </span>
+                <InputGroupAddon align="inline-end">
+                  <InputGroupText>{unit}</InputGroupText>
+                </InputGroupAddon>
               )}
-            </NumberFieldGroup>
-          </NumberFieldRoot>
+            </NumberFieldPrimitive.Group>
+          </NumberFieldPrimitive.Root>
           <FieldError errors={field.state.meta.errors} />
         </Field>
       )}
