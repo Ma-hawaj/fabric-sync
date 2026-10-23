@@ -61,13 +61,16 @@ vi.mock('@/lib/api', () => ({
   ApiError: class ApiError extends Error {},
 }))
 
-function Harness({ order = {} }: { order?: Partial<InvoiceOrderDraft> } = {}) {
+function Harness({
+  order = {},
+  isUrgent = false,
+}: { order?: Partial<InvoiceOrderDraft>; isUrgent?: boolean } = {}) {
   const form = useForm({
     defaultValues: {
       customers: [
         {
           ...createEmptyCustomer(),
-          orders: [{ ...createEmptyCustomer().orders[0], ...order }],
+          orders: [{ ...createEmptyCustomer().orders[0], isUrgent, ...order }],
         },
       ],
     },
@@ -86,6 +89,13 @@ function Harness({ order = {} }: { order?: Partial<InvoiceOrderDraft> } = {}) {
     '/design-options': DESIGN_OPTIONS,
   })
   apiGet.mockImplementation(async (url: string) => {
+    if (new URL(url, 'http://localhost').pathname === '/pricing')
+      return {
+        data: {
+          urgentCharge: { amount: 5, unit: 'amount' },
+          customerMaterialBasePrice: 15,
+        },
+      }
     const id = new URL(url, 'http://localhost').pathname.match(
       /^\/materials\/([^/]+)$/,
     )?.[1]
@@ -146,6 +156,48 @@ async function pickMaterial(name: RegExp | string) {
 }
 
 describe('OrderBlock', () => {
+  it('applies a read-only urgent charge and clears it only for this order when made regular', async () => {
+    render(
+      <Harness
+        isUrgent
+        order={{ materialId: 'mat-1', materialAmount: 3, emd: '6' }}
+      />,
+    )
+    const charge = await screen.findByLabelText(
+      `Urgent charge incl. VAT (${CURRENCY})`,
+    )
+    expect(charge.tagName).toBe('OUTPUT')
+    await waitFor(() => expect(charge.textContent).toContain('5.00'))
+    expect(
+      screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
+    ).toContain('22.50')
+    fireEvent.change(screen.getByLabelText('Quantity (m)'), {
+      target: { value: '4.01' },
+    })
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order).toMatchObject({
+        price: 32.5,
+        isUrgent: true,
+        urgentCharge: 5,
+      })
+    })
+    fireEvent.click(screen.getByRole('switch', { name: 'Urgent order 1' }))
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order).toMatchObject({
+        price: 32.5,
+        isUrgent: false,
+        urgentCharge: 0,
+      })
+    })
+    expect(
+      screen.queryByLabelText(`Urgent charge incl. VAT (${CURRENCY})`),
+    ).toBeNull()
+  })
+
   it('creates a customer fabric order with a production location that has no inventory stock', async () => {
     render(<Harness />)
     fireEvent.click(screen.getByRole('radio', { name: 'Customer' }))
@@ -356,30 +408,35 @@ describe('OrderBlock', () => {
     ).not.toContain('9999')
   })
 
-  it('adds designs to the editable customer-fabric tailoring base', async () => {
+  it('uses the fixed customer-material price and keeps it read-only across quantity changes', async () => {
     render(
-      <Harness
-        order={{
-          materialSource: 'customer',
-          materialAmount: 3,
-          customerBasePrice: 15,
-        }}
-      />,
+      <Harness order={{ materialSource: 'customer', materialAmount: 3 }} />,
     )
+    expect(
+      screen.queryByLabelText(`Tailoring base incl. VAT (${CURRENCY})`),
+    ).toBeNull()
     fireEvent.click(await screen.findByRole('radio', { name: /6 \(\+/ }))
     await waitFor(() =>
       expect(
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
       ).toContain('17.50'),
     )
-    fireEvent.change(
-      screen.getByLabelText(`Tailoring base incl. VAT (${CURRENCY})`),
-      { target: { value: '20' } },
+    expect(screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).tagName).toBe(
+      'OUTPUT',
     )
+    fireEvent.change(screen.getByLabelText('Quantity (m)'), {
+      target: { value: '5' },
+    })
     await waitFor(() =>
       expect(
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
-      ).toContain('22.50'),
+      ).toContain('17.50'),
+    )
+    fireEvent.click(screen.getByRole('radio', { name: 'None' }))
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
+      ).toContain('15.00'),
     )
   })
 

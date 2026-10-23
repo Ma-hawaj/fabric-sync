@@ -2,8 +2,13 @@ import * as React from 'react'
 import { useState } from 'react'
 import { useStore } from '@tanstack/react-form'
 import { useQuery } from '@tanstack/react-query'
+import { Switch } from '@base-ui/react/switch'
 import { apiClient } from '@/lib/api'
-import { calculateGarmentPrice } from '../../lib/garment-pricing'
+import {
+  calculateGarmentPrice,
+  calculateUrgentCharge,
+} from '../../lib/garment-pricing'
+import { usePricing } from '../../hooks/use-pricing'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { PRODUCTION_FILTERS } from '@/features/locations/lib/location-filters'
 import { XIcon } from 'lucide-react'
@@ -251,14 +256,32 @@ export function OrderBlock({
   const pricingMaterial = hasPickedPrices
     ? pickedMaterial
     : (currentMaterial ?? null)
+  const { data: pricingRules } = usePricing()
   const pricing =
     draft &&
     !designLoading &&
     !designError &&
     !(materialError && !hasPickedPrices)
-      ? calculateGarmentPrice(draft, pricingMaterial, designOptions)
+      ? calculateGarmentPrice(
+          draft,
+          pricingMaterial,
+          designOptions,
+          pricingRules?.customerMaterialBasePrice ?? null,
+        )
       : null
   const computedPrice = pricing?.total ?? ''
+  const computedUrgentCharge = draft?.isUrgent
+    ? calculateUrgentCharge(computedPrice, pricingRules?.urgentCharge)
+    : 0
+  React.useEffect(() => {
+    if (draft && draft.urgentCharge !== computedUrgentCharge) {
+      form.setFieldValue(
+        `${base}.urgentCharge` as never,
+        computedUrgentCharge as never,
+      )
+      if (form.state.submissionAttempts > 0) void form.validate('submit')
+    }
+  }, [form, base, draft, computedUrgentCharge])
   React.useEffect(() => {
     if (draft && draft.price !== computedPrice) {
       form.setFieldValue(`${base}.price` as never, computedPrice as never)
@@ -559,13 +582,6 @@ export function OrderBlock({
           />
 
           <div className="space-y-2">
-            {materialSource === 'customer' && (
-              <NumberField
-                form={form}
-                name={`${base}.customerBasePrice`}
-                label={`Tailoring base incl. VAT (${CURRENCY})`}
-              />
-            )}
             <form.Field name={`${base}.price` as never}>
               {(field: any) => (
                 <Field data-invalid={field.state.meta.errors.length > 0}>
@@ -580,7 +596,7 @@ export function OrderBlock({
                     <p className="text-xs text-muted-foreground">
                       {pricing.tier
                         ? `${pricing.tier[0].toUpperCase()}${pricing.tier.slice(1)}`
-                        : 'Tailoring'}
+                        : 'Fixed tailoring base'}
                       : {pricing.base.toFixed(2)} + designs:{' '}
                       {pricing.designCost.toFixed(2)}
                     </p>
@@ -591,7 +607,10 @@ export function OrderBlock({
                     >
                       {designError || materialError
                         ? 'Could not load pricing. Reload to try again.'
-                        : 'Choose a priced material, quantity and valid designs, or enter a customer tailoring base.'}
+                        : materialSource === 'customer' &&
+                            pricingRules?.customerMaterialBasePrice == null
+                          ? 'Customer-material pricing is unavailable. Contact an administrator.'
+                          : 'Choose a priced material, quantity and valid designs.'}
                     </p>
                   )}
                   <FieldError errors={field.state.meta.errors} />
@@ -600,8 +619,54 @@ export function OrderBlock({
             </form.Field>
             <GrossVatHint gross={computedPrice} />
           </div>
+          {draft?.isUrgent && (
+            <div className="space-y-1.5">
+              <Label>Urgent charge incl. VAT ({CURRENCY})</Label>
+              <output
+                aria-label={`Urgent charge incl. VAT (${CURRENCY})`}
+                className="block text-sm font-semibold"
+              >
+                {draft.urgentCharge === ''
+                  ? '—'
+                  : `${CURRENCY} ${draft.urgentCharge.toFixed(2)}`}
+              </output>
+              <p className="text-xs text-muted-foreground">
+                {computedUrgentCharge === ''
+                  ? 'Urgent pricing is unavailable. Contact an administrator.'
+                  : 'Applied automatically for this order.'}
+              </p>
+              <form.Field name={`${base}.urgentCharge` as never}>
+                {(field: any) => (
+                  <FieldError errors={field.state.meta.errors} />
+                )}
+              </form.Field>
+            </div>
+          )}
         </div>
       </div>
+
+      <form.Field name={`${base}.isUrgent` as never}>
+        {(field: any) => (
+          <Field orientation="horizontal">
+            <Switch.Root
+              id={field.name}
+              checked={field.state.value}
+              onCheckedChange={(checked) => {
+                field.handleChange(checked)
+                if (form.state.submissionAttempts > 0)
+                  void form.validate('submit')
+              }}
+              onBlur={field.handleBlur}
+              className="inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full bg-input outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring data-checked:bg-primary"
+            >
+              <Switch.Thumb className="ms-0.5 block size-4 rounded-full bg-background shadow-sm transition-transform data-checked:translate-x-4 rtl:data-checked:-translate-x-4" />
+            </Switch.Root>
+            <FieldLabel htmlFor={field.name}>
+              Urgent <span className="sr-only">order {orderNumber}</span>
+            </FieldLabel>
+          </Field>
+        )}
+      </form.Field>
     </div>
   )
 }

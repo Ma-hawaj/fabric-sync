@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { TextField, PhoneField } from '@/components/form/fields'
+import { TextField, PhoneField, TextareaField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { MeasurementFields } from './components/measurement-fields'
 import { useCustomer } from './hooks/use-customer'
@@ -59,6 +59,7 @@ function CustomerForm({ existing }: { existing?: Customer }) {
             name: value.name,
             mobileNo: value.mobileNo,
             whatsappNotificationsEnabled: value.whatsappNotificationsEnabled,
+            address: value.address,
           })
         : createCustomer.mutateAsync(value)
       toast.promise(pending, {
@@ -110,6 +111,11 @@ function CustomerForm({ existing }: { existing?: Customer }) {
             name="mobileNo"
             label="Phone"
             defaultCountry="BH"
+          />
+          <TextareaField
+            form={form}
+            name="address"
+            label="Address (optional)"
           />
           <form.Field name="whatsappNotificationsEnabled">
             {(field) => (

@@ -4,11 +4,26 @@ import { describe, expect, it } from 'vitest'
 import { createEmptyOrder } from '../types/invoice-form'
 import {
   calculateGarmentPrice,
+  calculateUrgentCharge,
   JUNIOR_BELOW_METRES,
   LARGE_ABOVE_METRES,
 } from './garment-pricing'
 import type { Material } from '../types/materials'
 import type { DesignOption } from '@/features/design-options/types/design-option'
+
+describe('automatic urgent pricing', () => {
+  it('calculates a fixed or percentage charge without manual input', () => {
+    expect(calculateUrgentCharge(22.5, { amount: 5, unit: 'amount' })).toBe(5)
+    expect(calculateUrgentCharge(27.5, { amount: 10, unit: 'percent' })).toBe(
+      2.75,
+    )
+    expect(calculateUrgentCharge(22.55, { amount: 10, unit: 'percent' })).toBe(
+      2.26,
+    )
+    expect(calculateUrgentCharge(20, null)).toBe('')
+    expect(calculateUrgentCharge('', { amount: 5, unit: 'amount' })).toBe('')
+  })
+})
 
 const material: Material = {
   id: 'm1',
@@ -70,14 +85,18 @@ describe('garment pricing', () => {
     const order = {
       ...draft(),
       materialSource: 'customer' as const,
-      customerBasePrice: 15,
       collar: 'same',
     }
     expect(
-      calculateGarmentPrice(order, null, [option('neck', 2.5)])?.total,
+      calculateGarmentPrice(order, null, [option('neck', 2.5)], 15)?.total,
     ).toBe(17.5)
     expect(
-      calculateGarmentPrice({ ...order, collar: '' }, null, [])?.total,
+      calculateGarmentPrice(
+        { ...order, collar: '', materialAmount: 5 },
+        null,
+        [],
+        15,
+      )?.total,
     ).toBe(15)
   })
   it('rejects incomplete or invalid pricing instead of charging zero', () => {
@@ -93,16 +112,17 @@ describe('garment pricing', () => {
     ).toBeNull()
     expect(
       calculateGarmentPrice(
-        { ...draft(), materialSource: 'customer', customerBasePrice: '' },
+        { ...draft(), materialSource: 'customer' },
         null,
         [],
       ),
     ).toBeNull()
     expect(
       calculateGarmentPrice(
-        { ...draft(), materialSource: 'customer', customerBasePrice: -1 },
+        { ...draft(), materialSource: 'customer' },
         null,
         [],
+        -1,
       ),
     ).toBeNull()
   })

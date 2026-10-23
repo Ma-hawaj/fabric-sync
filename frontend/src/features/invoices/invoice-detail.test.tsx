@@ -39,6 +39,7 @@ vi.mock('@tanstack/react-router', () => ({
 const DETAIL: InvoiceDetail = {
   id: 'inv-1',
   invoiceNumber: 42,
+  collectionMethod: 'pickup',
   date: '2026-07-28T09:30:00Z',
   targetDate: '2026-08-04',
   createdAt: '2026-07-28T09:30:00Z',
@@ -53,6 +54,8 @@ const DETAIL: InvoiceDetail = {
   lines: [
     {
       kind: 'order',
+      isUrgent: false,
+      urgentCharge: 0,
       orderId: 'order-1',
       description: 'Japanese Toray Cotton',
       detail: 'Thobe: Saudi · Collar: Classic',
@@ -65,6 +68,8 @@ const DETAIL: InvoiceDetail = {
     },
     {
       kind: 'gift_card',
+      isUrgent: false,
+      urgentCharge: 0,
       orderId: null,
       description: 'Gift card GC-2026-A1',
       detail: null,
@@ -87,6 +92,7 @@ const DETAIL: InvoiceDetail = {
     },
   ],
   totals: {
+    urgentCharge: 0,
     subtotal: 100,
     discount: 0,
     discountUnit: 'amount',
@@ -115,6 +121,32 @@ function renderPage(detail: InvoiceDetail | null) {
 }
 
 describe('InvoiceDetailPage', () => {
+  it('shows delivery, priority, addresses, and the urgent charge on saved invoices', () => {
+    renderPage({
+      ...DETAIL,
+      lines: [
+        { ...DETAIL.lines[0], isUrgent: true, urgentCharge: 10 },
+        DETAIL.lines[1],
+      ],
+      collectionMethod: 'delivery',
+      buyer: {
+        name: 'Buyer',
+        mobileNo: '12345',
+        address: 'Building 1, Road 2',
+      },
+      totals: {
+        ...DETAIL.totals,
+        urgentCharge: 10,
+        total: 310,
+        balanceDue: 250,
+      },
+    })
+    expect(screen.getByRole('img', { name: 'Urgent order' })).toBeTruthy()
+    expect(screen.getByText('Delivery')).toBeTruthy()
+    expect(screen.getByText('Building 1, Road 2')).toBeTruthy()
+    expect(screen.getByText('Urgent charges (incl. VAT)')).toBeTruthy()
+    expect(screen.getByText(/Urgent charge for this order/)).toBeTruthy()
+  })
   beforeEach(() => {
     navigateMock.mockClear()
   })

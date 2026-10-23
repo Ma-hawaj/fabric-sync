@@ -395,6 +395,8 @@ fn assemble_order(
         material_sku: row.material_sku,
         material_amount: row.material_amount,
         price: row.price,
+        is_urgent: row.is_urgent,
+        urgent_charge: row.urgent_charge,
         status: row.status,
         collected_at: row.collected_at,
         ready_at: row.ready_at,

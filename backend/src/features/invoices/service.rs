@@ -71,12 +71,14 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         gift_card_sales,
         invoice.discount,
         discount_unit,
+        invoice.urgent_charge,
     );
 
     let payments = repository::list_payments(state, invoice_id).await?;
 
     Ok(InvoiceDetail {
         readiness: crate::features::orders::readiness::summary(state.db(), invoice_id).await?,
+        collection_method: invoice.collection_method,
         id: invoice.id,
         invoice_number: invoice.invoice_number,
         date: invoice.date,
@@ -94,6 +96,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         redemptions: rows.redemptions,
         payments,
         totals: InvoiceTotalsBreakdown {
+            urgent_charge: invoice.urgent_charge,
             subtotal: totals.subtotal,
             discount: invoice.discount,
             discount_unit: invoice.discount_unit,
@@ -347,6 +350,7 @@ fn breakdown(
     gift_card_sales: f64,
     discount: f64,
     discount_unit: DiscountUnit,
+    urgent_charge: f64,
 ) -> Breakdown {
     let subtotal = round2(taxable_gross);
 
@@ -357,7 +361,8 @@ fn breakdown(
     // A discount bigger than the sale doesn't turn into a refund.
     .min(subtotal);
 
-    let gross = round2(subtotal - discount_amount);
+    // Urgency is an extra VAT-inclusive service charge, added after discounts.
+    let gross = round2(subtotal - discount_amount + round2(urgent_charge));
     let taxable = round2(gross / (1.0 + VAT_RATE));
     let vat = round2(gross - taxable);
     let gift_card_sales = round2(gift_card_sales);
@@ -379,9 +384,18 @@ fn breakdown(
 struct InvoiceTotals {
     total: f64,
     redeemed: f64,
+    urgent_charge: f64,
 }
 
 fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
+    let urgent_charge = round2(
+        input
+            .customers
+            .iter()
+            .flat_map(|customer| &customer.orders)
+            .map(|order| round2(order.urgent_charge))
+            .sum(),
+    );
     let order_subtotal: f64 = input
         .customers
         .iter()
@@ -401,10 +415,12 @@ fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
         gift_card_sales,
         input.discount,
         input.discount_unit,
+        urgent_charge,
     );
 
     InvoiceTotals {
         total: totals.total,
+        urgent_charge,
         redeemed: round2(
             input
                 .gift_card_redemptions
@@ -432,6 +448,7 @@ fn price_order(
     order: &mut CreateOrderInput,
     materials: &HashMap<Uuid, Option<(f64, f64, f64)>>,
     designs: &HashMap<(String, String), f64>,
+    customer_material_base_price: Option<f64>,
 ) -> Result<(), AppError> {
     use crate::features::pricing::service::{tier_price, validate_amount};
     validate_order(order)?;
@@ -448,8 +465,11 @@ fn price_order(
             })?;
             tier_price(order.material_amount, junior, normal, large)
         }
-        MaterialSource::Customer => order.customer_base_price.expect("validated base price"),
+        MaterialSource::Customer => customer_material_base_price.ok_or_else(|| {
+            AppError::BadRequest("customer-material tailoring price is not configured".into())
+        })?,
     };
+    validate_amount(base)?;
     let mut surcharge = 0.0;
     for (category, slug) in selected_designs(order) {
         if let Some(slug) = slug.filter(|slug| !slug.is_empty()) {
@@ -471,6 +491,8 @@ fn price_order(
 async fn resolve_order_prices(
     tx: &mut sqlx::PgTransaction<'_>,
     input: &mut CreateInvoiceInput,
+    urgent_rule: Option<crate::features::pricing::types::UrgentChargeRule>,
+    customer_material_base_price: Option<f64>,
 ) -> Result<(), AppError> {
     let orders: Vec<&CreateOrderInput> = input
         .customers
@@ -531,7 +553,12 @@ async fn resolve_order_prices(
         .iter_mut()
         .flat_map(|customer| &mut customer.orders)
     {
-        price_order(order, &materials, &designs)?;
+        price_order(order, &materials, &designs, customer_material_base_price)?;
+        order.urgent_charge = crate::features::pricing::service::urgent_charge(
+            order.price,
+            order.is_urgent,
+            urgent_rule,
+        )?;
     }
     Ok(())
 }
@@ -548,12 +575,6 @@ fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
         return Err(AppError::BadRequest(
             "an order price cannot be negative".into(),
         ));
-    }
-    if order.material_source == MaterialSource::Customer {
-        let base = order.customer_base_price.ok_or_else(|| {
-            AppError::BadRequest("enter a tailoring base price for customer fabric".into())
-        })?;
-        crate::features::pricing::service::validate_amount(base)?;
     }
     match order.material_source {
         MaterialSource::Shop
@@ -578,6 +599,16 @@ fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
 }
 
 fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
+    let has_urgent_orders = input
+        .customers
+        .iter()
+        .flat_map(|customer| &customer.orders)
+        .any(|order| order.is_urgent);
+    if has_urgent_orders && input.target_date.is_none() {
+        return Err(AppError::BadRequest(
+            "urgent orders need a target date".to_string(),
+        ));
+    }
     let has_orders = input
         .customers
         .iter()
@@ -641,6 +672,14 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
 
         validate_measurement(&customer.measurement)?;
         for order in &customer.orders {
+            if !order.urgent_charge.is_finite()
+                || (order.is_urgent && round2(order.urgent_charge) <= 0.0)
+                || (!order.is_urgent && order.urgent_charge != 0.0)
+            {
+                return Err(AppError::BadRequest(
+                    "each urgent order needs a positive extra charge; regular orders cannot have one".into(),
+                ));
+            }
             validate_order(order)?;
         }
     }
@@ -706,7 +745,13 @@ async fn resolve_customer_id(
         (None, Some(new_customer)) => {
             let (name, mobile_no) =
                 normalize_customer_identity(&new_customer.name, &new_customer.mobile_no)?;
-            customers_repository::insert_customer(tx, &name, &mobile_no, true)
+            customers_repository::insert_customer(
+                tx,
+                &name,
+                &mobile_no,
+                true,
+                new_customer.address.as_deref(),
+            )
                 .await
                 .map_err(|error| match &error {
                     sqlx::Error::Database(db_error)
@@ -773,31 +818,35 @@ mod tests {
             (("neck".into(), "same".into()), 2.25),
             (("sleeve".into(), "same".into()), 3.5),
         ]);
-        price_order(&mut garment, &materials, &designs).unwrap();
+        price_order(&mut garment, &materials, &designs, None).unwrap();
         assert_eq!(garment.base_price, 30.0);
         assert_eq!(garment.price, 35.75);
-        price_order(&mut garment, &materials, &designs).unwrap();
+        price_order(&mut garment, &materials, &designs, None).unwrap();
         assert_eq!(garment.price, 35.75);
     }
 
     #[test]
-    fn customer_fabric_adds_designs_to_the_manual_base() {
+    fn customer_fabric_uses_the_fixed_base_and_ignores_client_prices() {
         let mut raw = order(9999.0);
         raw["materialSource"] = serde_json::json!("customer");
         raw["materialId"] = serde_json::Value::Null;
         raw["customerMaterialDescription"] = serde_json::json!("White linen");
-        raw["customerBasePrice"] = serde_json::json!(15.0);
+        raw["customerBasePrice"] = serde_json::json!(9999.0);
         raw["emd"] = serde_json::json!("6");
         let mut garment = serde_json::from_value(raw.clone()).unwrap();
         let designs = HashMap::from([(("emd".into(), "6".into()), 2.5)]);
-        price_order(&mut garment, &HashMap::new(), &designs).unwrap();
+        price_order(&mut garment, &HashMap::new(), &designs, Some(15.0)).unwrap();
         assert_eq!(garment.base_price, 15.0);
+        assert_eq!(garment.price, 17.5);
+        garment.material_amount = 5.0;
+        price_order(&mut garment, &HashMap::new(), &designs, Some(15.0)).unwrap();
         assert_eq!(garment.price, 17.5);
         raw["customerBasePrice"] = serde_json::Value::Null;
         assert!(price_order(
             &mut serde_json::from_value(raw).unwrap(),
             &HashMap::new(),
-            &designs
+            &designs,
+            None
         )
         .is_err());
     }
@@ -806,13 +855,20 @@ mod tests {
     fn missing_prices_and_unknown_designs_cannot_become_free() {
         let mut garment: CreateOrderInput = serde_json::from_value(order(100.0)).unwrap();
         let id = garment.material_id.unwrap();
-        assert!(price_order(&mut garment, &HashMap::new(), &HashMap::new()).is_err());
-        assert!(price_order(&mut garment, &HashMap::from([(id, None)]), &HashMap::new()).is_err());
+        assert!(price_order(&mut garment, &HashMap::new(), &HashMap::new(), None).is_err());
+        assert!(price_order(
+            &mut garment,
+            &HashMap::from([(id, None)]),
+            &HashMap::new(),
+            None
+        )
+        .is_err());
         garment.collar = Some("unknown".into());
         assert!(price_order(
             &mut garment,
             &HashMap::from([(id, Some((0.0, 0.0, 0.0)))]),
-            &HashMap::new()
+            &HashMap::new(),
+            None
         )
         .is_err());
         garment.collar = None;
@@ -820,6 +876,7 @@ mod tests {
             &mut garment,
             &HashMap::from([(id, Some((0.0, 0.0, 0.0)))]),
             &HashMap::new(),
+            None,
         )
         .unwrap();
         assert_eq!(garment.price, 0.0);
@@ -1005,6 +1062,272 @@ mod tests {
     }
 
     #[test]
+    fn urgency_adds_a_taxable_charge_after_the_discount() {
+        let mut invoice = invoice(10.0, "percent", vec![customer(vec![order(100.0)])]);
+        invoice.customers[0].orders[0].is_urgent = true;
+        invoice.customers[0].orders[0].urgent_charge = 20.0;
+        assert!(validate(&invoice).is_ok());
+        assert_eq!(compute_totals(&invoice).total, 110.0);
+        let totals = breakdown(100.0, 50.0, 10.0, DiscountUnit::Percent, 20.0);
+        assert_eq!(totals.taxable, 100.0);
+        assert_eq!(totals.vat, 10.0);
+        assert_eq!(totals.total, 160.0);
+    }
+
+    #[sqlx::test]
+    async fn automatic_pricing_keeps_urgent_fees_separate_through_edits(db: sqlx::PgPool) {
+        let (_, _, production, _) = crate::test_support::invoice(&db, 0, false).await;
+        let material_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO materials(name,junior_price,normal_price,large_price) VALUES('Priced cotton',10,20,30) RETURNING id",
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO material_stock(material_id,branch_id,quantity) VALUES($1,$2,100)")
+            .bind(material_id)
+            .bind(production)
+            .execute(&db)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO design_options(category,slug,label,cost) VALUES('emd','urgent-compat','Embroidery',2.5),('neck','urgent-compat','Collar',3.5)")
+            .execute(&db)
+            .await
+            .unwrap();
+        let mut shop = order(9999.0);
+        shop["materialId"] = serde_json::json!(material_id);
+        shop["materialAmount"] = serde_json::json!(2.99);
+        shop["productionLocationId"] = serde_json::json!(production);
+        shop["emd"] = serde_json::json!("urgent-compat");
+        shop["isUrgent"] = serde_json::json!(true);
+        shop["urgentCharge"] = serde_json::json!(9999.0);
+        let mut customer_fabric = order(9999.0);
+        customer_fabric["materialSource"] = serde_json::json!("customer");
+        customer_fabric["materialId"] = serde_json::Value::Null;
+        customer_fabric["customerMaterialDescription"] = serde_json::json!("Customer linen");
+        customer_fabric["productionLocationId"] = serde_json::json!(production);
+        customer_fabric["customerBasePrice"] = serde_json::json!(9999.0);
+        customer_fabric["collar"] = serde_json::json!("urgent-compat");
+        customer_fabric["isUrgent"] = serde_json::json!(false);
+        customer_fabric["urgentCharge"] = serde_json::json!(777.0);
+        // Deserialize the HTTP shape directly: submitted prices cannot override the catalog.
+        let mut input: CreateInvoiceInput = serde_json::from_value(serde_json::json!({
+            "targetDate": "2026-11-01",
+            "discount": 10.0,
+            "discountUnit": "percent",
+            "customers": [{
+                "newCustomer": {
+                    "name": "  Family customer  ",
+                    "mobileNo": "  33112233  ",
+                    "address": "\n\t Building 1\nRoad 2 \t\n",
+                },
+                "measurement": { "date": "2026-10-23", "type": "body", "fit": "medium" },
+                "orders": [shop, customer_fabric],
+            }],
+        }))
+        .unwrap();
+        let state = crate::test_support::state(db.clone(), None, None).await;
+        let mut overpaid = input.clone();
+        overpaid.payments = vec![serde_json::from_value(serde_json::json!({
+            "amount": 40.0, "paymentType": "cash"
+        }))
+        .unwrap()];
+        assert!(matches!(
+            create_invoice(&state, overpaid).await,
+            Err(AppError::BadRequest(_))
+        ));
+
+        // Only the first order is urgent. Client-submitted charges are ignored.
+        // (10 + 2.5 + 15 + 3.5) * 90% + 5 = 32.90.
+        let created = create_invoice(&state, input.clone()).await.unwrap();
+        assert_eq!(created.total_price, 32.9);
+        let editing = get_invoice_for_edit(&state, created.id).await.unwrap();
+        let customer = &editing.customers[0];
+        assert_eq!(customer.customer_name, "Family customer");
+        assert_eq!(customer.customer_mobile_no, "33112233");
+        assert_eq!(
+            customer.customer_address.as_deref(),
+            Some("Building 1\nRoad 2")
+        );
+        let original_measurement_id = customer.measurement_id.unwrap();
+        input.customers[0].existing_customer_id = Some(customer.existing_customer_id);
+        input.customers[0].new_customer = None;
+        let orders = &editing.customers[0].orders;
+        assert_eq!(
+            (
+                orders[0].base_price,
+                orders[0].price,
+                orders[0].urgent_charge
+            ),
+            (10.0, 12.5, 5.0)
+        );
+        assert_eq!(
+            (
+                orders[1].base_price,
+                orders[1].price,
+                orders[1].urgent_charge
+            ),
+            (15.0, 18.5, 0.0)
+        );
+
+        // A higher material tier changes the garment price, keeping both fees intact.
+        input.customers[0].orders[0].material_amount = 4.01;
+        input.customers[0].measurement.chest = Some(100.0);
+        let updated = update_invoice(&state, created.id, input.clone())
+            .await
+            .unwrap();
+        assert_eq!(updated.total_price, 50.9);
+        sqlx::query(
+            "UPDATE design_options SET cost=4.5 WHERE category='emd' AND slug='urgent-compat'",
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let updated = update_invoice(&state, created.id, input.clone())
+            .await
+            .unwrap();
+        assert_eq!(updated.total_price, 52.7);
+        let editing = get_invoice_for_edit(&state, created.id).await.unwrap();
+        assert_eq!(editing.customers[0].orders[0].price, 34.5);
+        assert_eq!(editing.customers[0].orders[0].base_price, 30.0);
+        assert_eq!(editing.customers[0].orders[0].urgent_charge, 5.0);
+        assert_eq!(editing.customers[0].orders[1].urgent_charge, 0.0);
+        assert!(editing.customers[0].orders[0].is_urgent);
+        assert!(!editing.customers[0].orders[1].is_urgent);
+        assert_ne!(
+            editing.customers[0].measurement_id,
+            Some(original_measurement_id)
+        );
+        let history = customers_repository::get_customer(&state, customer.existing_customer_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(history.measurements.len(), 2);
+        let original = history
+            .measurements
+            .iter()
+            .find(|measurement| measurement.id == original_measurement_id)
+            .unwrap();
+        assert_eq!(original.chest, None);
+        assert_eq!(editing.customers[0].measurement.chest, Some(100.0));
+        let detail = get_invoice(&state, created.id).await.unwrap();
+        assert_eq!(detail.totals.subtotal, 53.0);
+        assert_eq!(detail.totals.discount_amount, 5.3);
+        assert_eq!(detail.totals.urgent_charge, 5.0);
+        assert_eq!(detail.totals.total, updated.total_price);
+        let stock: f64 = sqlx::query_scalar(
+            "SELECT quantity::float8 FROM material_stock WHERE material_id=$1 AND branch_id=$2",
+        )
+        .bind(material_id)
+        .bind(production)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(stock, 95.99);
+        let html = super::super::document::render_invoice_document(&state, created.id)
+            .await
+            .unwrap();
+        assert_eq!(html.matches("Urgent charge for this order").count(), 1);
+        assert!(html.contains("5.000") && html.contains("52.700"));
+
+        input.customers[0].orders[1].is_urgent = true;
+        assert_eq!(
+            update_invoice(&state, created.id, input.clone())
+                .await
+                .unwrap()
+                .total_price,
+            57.7
+        );
+        input.customers[0].orders[0].is_urgent = false;
+        let mixed = update_invoice(&state, created.id, input.clone())
+            .await
+            .unwrap();
+        assert_eq!(mixed.total_price, 52.7);
+        let mixed_edit = get_invoice_for_edit(&state, created.id).await.unwrap();
+        assert!(!mixed_edit.customers[0].orders[0].is_urgent);
+        assert!(mixed_edit.customers[0].orders[1].is_urgent);
+        assert_eq!(mixed_edit.customers[0].orders[0].urgent_charge, 0.0);
+        assert_eq!(mixed_edit.customers[0].orders[1].urgent_charge, 5.0);
+
+        input.target_date = None;
+        for order in &mut input.customers[0].orders {
+            order.is_urgent = false;
+            order.urgent_charge = 0.0;
+        }
+        assert_eq!(
+            update_invoice(&state, created.id, input)
+                .await
+                .unwrap()
+                .total_price,
+            47.7
+        );
+    }
+
+    #[test]
+    fn urgency_sums_each_order_across_customers_without_charging_retail_lines() {
+        let mut invoice = invoice(
+            10.0,
+            "percent",
+            vec![customer(vec![order(100.0)]), customer(vec![order(100.0)])],
+        );
+        invoice.customers[1].existing_customer_id = Some(Uuid::from_u128(8));
+        invoice.customers[0].orders[0].is_urgent = true;
+        invoice.customers[0].orders[0].urgent_charge = 10.01;
+        invoice.customers[1].orders[0].is_urgent = true;
+        invoice.customers[1].orders[0].urgent_charge = 20.02;
+        invoice.products = vec![serde_json::from_value(product(1.0, 50.0)).unwrap()];
+        invoice.gift_cards = vec![serde_json::from_value(gift_card(25.0)).unwrap()];
+        assert!(validate(&invoice).is_ok());
+        let totals = compute_totals(&invoice);
+        assert_eq!(totals.urgent_charge, 30.03);
+        assert_eq!(totals.total, 280.03);
+        invoice.customers[1].orders[0].urgent_charge = 0.0;
+        assert!(validate(&invoice).is_err());
+    }
+
+    #[test]
+    fn urgency_requires_a_positive_charge_and_regular_invoices_have_none() {
+        let mut invoice = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
+        assert!(!invoice.customers[0].orders[0].is_urgent);
+        assert_eq!(invoice.collection_method.as_str(), "pickup");
+        invoice.customers[0].orders[0].is_urgent = true;
+        for charge in [0.0, -1.0, 0.004, f64::NAN, f64::INFINITY] {
+            invoice.customers[0].orders[0].urgent_charge = charge;
+            assert!(validate(&invoice).is_err(), "{charge}");
+        }
+        invoice.customers[0].orders[0].urgent_charge = 0.01;
+        assert!(validate(&invoice).is_ok());
+        invoice.customers[0].orders[0].is_urgent = false;
+        assert!(validate(&invoice).is_err());
+    }
+
+    #[test]
+    fn urgency_requires_a_target_date_but_regular_invoices_can_omit_it() {
+        let mut invoice = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
+        let target_date = invoice.target_date;
+        invoice.target_date = None;
+        assert!(validate(&invoice).is_ok());
+
+        invoice.customers[0].orders[0].is_urgent = true;
+        invoice.customers[0].orders[0].urgent_charge = 10.0;
+        let error = validate(&invoice).unwrap_err();
+        assert!(matches!(error, AppError::BadRequest(message) if message.contains("target date")));
+
+        invoice.target_date = target_date;
+        assert!(validate(&invoice).is_ok());
+    }
+
+    #[test]
+    fn collection_method_accepts_only_delivery_or_pickup() {
+        use super::super::types::CollectionMethod;
+        for method in ["delivery", "pickup"] {
+            let parsed: CollectionMethod =
+                serde_json::from_value(serde_json::json!(method)).unwrap();
+            assert_eq!(parsed.as_str(), method);
+        }
+        assert!(serde_json::from_value::<CollectionMethod>(serde_json::json!("courier")).is_err());
+    }
+
+    #[test]
     fn line_prices_are_gross_so_no_vat_is_added_on_top() {
         let input = invoice(
             0.0,
@@ -1098,7 +1421,7 @@ mod tests {
     // the extracted VAT always sum back to the discounted gross.
     #[test]
     fn the_breakdown_splits_the_discounted_gross_into_net_and_vat() {
-        let totals = breakdown(133.33, 0.0, 7.5, DiscountUnit::Percent);
+        let totals = breakdown(133.33, 0.0, 7.5, DiscountUnit::Percent, 0.0);
         assert_eq!(totals.subtotal, 133.33);
         assert_eq!(totals.discount_amount, 10.0);
         // 123.33 gross deflates to a 112.12 net with 11.21 of VAT inside it.
@@ -1116,7 +1439,7 @@ mod tests {
     fn the_breakdown_reports_the_discount_it_actually_applied() {
         // Asking for 500 off a 100 sale discounts 100, not 500 — otherwise the
         // document would print a discount line that overshoots the subtotal.
-        let totals = breakdown(100.0, 0.0, 500.0, DiscountUnit::Amount);
+        let totals = breakdown(100.0, 0.0, 500.0, DiscountUnit::Amount, 0.0);
         assert_eq!(totals.discount_amount, 100.0);
         assert_eq!(totals.taxable, 0.0);
         assert_eq!(totals.vat, 0.0);
@@ -1125,7 +1448,7 @@ mod tests {
 
     #[test]
     fn gift_card_sales_stay_out_of_the_vat_base_but_inside_the_total() {
-        let totals = breakdown(100.0, 200.0, 0.0, DiscountUnit::Amount);
+        let totals = breakdown(100.0, 200.0, 0.0, DiscountUnit::Amount, 0.0);
         // 100 gross holds 90.91 of net and 9.09 of VAT; the card joins
         // the total untaxed.
         assert_eq!(totals.taxable, 90.91);
@@ -1184,6 +1507,7 @@ mod tests {
         invoice.customers[0].new_customer = Some(super::super::types::NewCustomerInput {
             name: "Ahmed".to_string(),
             mobile_no: "0500000000".to_string(),
+            address: None,
         });
         assert!(validate(&invoice).is_err());
     }
@@ -1461,7 +1785,14 @@ async fn write_customer_orders(
             }
         }
 
-        repository::insert_order(tx, invoice_id, measurement_id, order).await?;
+        repository::insert_order(
+            tx,
+            invoice_id,
+            measurement_id,
+            order,
+            round2(order.urgent_charge),
+        )
+        .await?;
     }
 
     Ok(())
@@ -1564,7 +1895,13 @@ pub async fn create_invoice(
     mut input: CreateInvoiceInput,
 ) -> Result<CreatedInvoice, AppError> {
     let mut tx = state.db().begin().await?;
-    resolve_order_prices(&mut tx, &mut input).await?;
+    resolve_order_prices(
+        &mut tx,
+        &mut input,
+        state.urgent_charge_rule()?,
+        state.customer_material_base_price()?,
+    )
+    .await?;
     validate(&input)?;
 
     let totals = compute_totals(&input);
@@ -1572,8 +1909,14 @@ pub async fn create_invoice(
     // invoice_date is server-set (DEFAULT now()) — the only date staff enter
     // is the promised target_date. Its actual value comes back here so gift
     // card expiry is checked against the creation date.
-    let (invoice_id, invoice_date) =
-        repository::insert_invoice(&mut tx, &input, totals.total, totals.redeemed).await?;
+    let (invoice_id, invoice_date) = repository::insert_invoice(
+        &mut tx,
+        &input,
+        totals.total,
+        totals.redeemed,
+        totals.urgent_charge,
+    )
+    .await?;
 
     for payment in &input.payments {
         repository::insert_payment(
@@ -1659,7 +2002,13 @@ pub async fn update_invoice(
     // already legitimately held.
     input.payments = Vec::new();
     let mut tx = state.db().begin().await?;
-    resolve_order_prices(&mut tx, &mut input).await?;
+    resolve_order_prices(
+        &mut tx,
+        &mut input,
+        state.urgent_charge_rule()?,
+        state.customer_material_base_price()?,
+    )
+    .await?;
     validate(&input)?;
 
     let totals = compute_totals(&input);
@@ -1780,8 +2129,15 @@ pub async fn update_invoice(
     )
     .await?;
 
-    repository::update_invoice_header(&mut tx, invoice_id, &input, totals.total, totals.redeemed)
-        .await?;
+    repository::update_invoice_header(
+        &mut tx,
+        invoice_id,
+        &input,
+        totals.total,
+        totals.redeemed,
+        totals.urgent_charge,
+    )
+    .await?;
 
     tx.commit().await?;
 

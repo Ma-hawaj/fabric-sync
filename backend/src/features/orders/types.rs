@@ -124,6 +124,8 @@ pub struct OrderRow {
     pub material_id: Option<Uuid>,
     pub material_amount: f64,
     pub price: f64,
+    pub is_urgent: bool,
+    pub urgent_charge: f64,
     pub status: String,
     /// When the customer collected the garment, stamped automatically when
     /// the order is collected. Null while the order is still pending.
@@ -228,6 +230,8 @@ pub struct OrderListItem {
     pub material_sku: Option<String>,
     pub material_amount: f64,
     pub price: f64,
+    pub is_urgent: bool,
+    pub urgent_charge: f64,
     pub status: String,
     /// When the customer collected the garment, stamped automatically when
     /// the order is collected. Null while the order is still pending.

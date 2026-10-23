@@ -4,14 +4,19 @@ import type { Order } from '../types/orders'
 const ENDPOINT = '/orders'
 const QUERY_KEY = 'orders'
 
-type OrderResponse = Omit<Order, 'invoiceDate' | 'collectedAt'> & {
+type OrderResponse = Omit<
+  Order,
+  'invoiceDate' | 'collectedAt' | 'urgentCharge'
+> & {
   invoiceDate: string
   collectedAt: string | null
+  urgentCharge?: number
 }
 
 // The date filter and the invoice-date column both work on a real `Date`.
 const toOrder = (order: OrderResponse): Order => ({
   ...order,
+  urgentCharge: order.urgentCharge ?? 0,
   invoiceDate: new Date(order.invoiceDate),
   collectedAt: order.collectedAt ? new Date(order.collectedAt) : null,
 })

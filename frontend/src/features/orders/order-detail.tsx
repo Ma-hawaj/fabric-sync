@@ -88,6 +88,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           </div>
 
           <div className="mt-2 flex flex-wrap gap-2">
+            {order.isUrgent && <Badge variant="destructive">Urgent</Badge>}
             <Badge
               variant={order.status === 'collected' ? 'default' : 'secondary'}
             >
@@ -176,6 +177,12 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               <dt className="text-muted-foreground">Price</dt>
               <dd className="font-medium">
                 {currencyFormatter.format(order.price)}
+                {order.urgentCharge > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    Urgent charge:{' '}
+                    {currencyFormatter.format(order.urgentCharge)}
+                  </div>
+                )}
               </dd>
             </div>
             <div className="flex justify-between gap-4">

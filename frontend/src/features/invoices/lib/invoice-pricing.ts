@@ -1,6 +1,7 @@
 import type {
   GiftCardRedemptionDraft,
   InvoiceGiftCardDraft,
+  InvoiceCustomerDraft,
   InvoiceOrderDraft,
   InvoiceProductDraft,
   NumberInput,
@@ -19,6 +20,32 @@ export function numberOrZero(value: NumberInput): number {
 // as zero in the summary and prevents submission.
 export function computeOrderLineTotal(order: InvoiceOrderDraft): number {
   return typeof order.price === 'number' && order.price > 0 ? order.price : 0
+}
+
+export function computeOrderUrgentCharge(order: InvoiceOrderDraft): number {
+  if (!order.isUrgent) return 0
+  const charge = order.urgentCharge
+  return typeof charge === 'number' && Number.isFinite(charge) && charge > 0
+    ? Math.round(charge * 100) / 100
+    : 0
+}
+
+export function computeUrgentCharges(
+  customers: InvoiceCustomerDraft[],
+): number {
+  return (
+    Math.round(
+      customers.reduce(
+        (sum, customer) =>
+          sum +
+          customer.orders.reduce(
+            (total, order) => total + computeOrderUrgentCharge(order),
+            0,
+          ),
+        0,
+      ) * 100,
+    ) / 100
+  )
 }
 
 // A product line is the one thing priced per unit — products carry a list
@@ -88,6 +115,7 @@ export function computeInvoiceTotals(input: {
   giftCardSales: number
   discount: number
   discountUnit: 'amount' | 'percent'
+  urgentCharge?: number
   redeemed: number
   paid: number
 }): InvoiceGrossTotals {
@@ -98,7 +126,9 @@ export function computeInvoiceTotals(input: {
     input.discount,
     input.discountUnit,
   )
-  const gross = Math.round((grossSubtotal - discountAmount) * 100) / 100
+  const urgentCharge = Math.round((input.urgentCharge ?? 0) * 100) / 100
+  const gross =
+    Math.round((grossSubtotal - discountAmount + urgentCharge) * 100) / 100
   const taxable = extractNet(gross)
   const vat = extractVat(gross)
   const giftCardSales = Math.round(input.giftCardSales * 100) / 100

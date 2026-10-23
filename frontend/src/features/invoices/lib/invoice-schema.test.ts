@@ -62,6 +62,53 @@ function firstError(customers: InvoiceCustomerDraft[]) {
 }
 
 describe('invoiceFormSchema', () => {
+  it('requires a target date when any order is urgent', () => {
+    const input = values({
+      customers: [
+        {
+          ...createEmptyCustomer(),
+          existingCustomerId: 'cust-1',
+          measurement: validMeasurement(),
+          orders: [{ ...validOrder(), urgentCharge: 10 }],
+        },
+      ],
+    })
+    const targetDate = input.targetDate
+    input.targetDate = ''
+    expect(firstErrorFor(input)).toBeNull()
+    input.customers[0].orders[0].isUrgent = true
+    const issue = firstErrorFor(input)
+    expect(issue?.path).toEqual(['targetDate'])
+    expect(issue?.message).toMatch(/target date.*urgent/i)
+    input.targetDate = targetDate
+    expect(firstErrorFor(input)).toBeNull()
+  })
+  it('requires resolved pricing for urgent orders and includes it in payment validation', () => {
+    const input = values({
+      customers: [
+        {
+          ...createEmptyCustomer(),
+          existingCustomerId: 'cust-1',
+          measurement: validMeasurement(),
+          orders: [
+            { ...validOrder(), price: 20, isUrgent: true, urgentCharge: 5 },
+            { ...validOrder(), price: 20, isUrgent: true, urgentCharge: 5 },
+          ],
+        },
+      ],
+      payments: [{ ...createEmptyPayment(), amount: 50, paymentType: 'cash' }],
+    })
+    expect(firstErrorFor(input)).toBeNull()
+    for (const urgentCharge of ['', 0, -1, 0.004] as const) {
+      input.customers[0].orders[1].urgentCharge = urgentCharge
+      const issue = firstErrorFor(input)
+      expect(issue?.path).toEqual(['customers', 0, 'orders', 1, 'urgentCharge'])
+      expect(issue?.message).toMatch(/urgent pricing/i)
+    }
+    input.customers[0].orders[1].urgentCharge = 5
+    input.payments[0].amount = 51
+    expect(firstErrorFor(input)?.path).toEqual(['payments'])
+  })
   it('accepts customer fabric without an inventory material and requires its description', () => {
     const customer = {
       ...createEmptyCustomer(),
@@ -71,7 +118,6 @@ describe('invoiceFormSchema', () => {
         {
           ...validOrder(),
           materialSource: 'customer' as const,
-          customerBasePrice: 15,
           materialId: '',
           customerMaterialDescription: 'White linen',
         },

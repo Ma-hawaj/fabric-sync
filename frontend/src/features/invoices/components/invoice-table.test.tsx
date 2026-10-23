@@ -25,6 +25,8 @@ vi.mock('@tanstack/react-router', () => ({
 const invoice: Invoice = {
   id: 'invoice-one',
   invoiceNumber: 42,
+  collectionMethod: 'pickup',
+  urgentCharge: 0,
   date: '2026-10-17T10:00:00Z',
   targetDate: null,
   customers: [
@@ -200,6 +202,37 @@ describe('Invoice table', () => {
       screen.queryByRole('region', { name: 'Invoice order breakdown' }),
     ).toBeNull()
     expect(screen.getAllByRole('row')).toHaveLength(2)
+  })
+  it('marks only urgent orders in the breakdown and includes their fee once', async () => {
+    vi.mocked(apiClient.get).mockImplementation(
+      apiGetMock({
+        '/orders': orders.map((order) => ({
+          ...order,
+          isUrgent: order.id === 'a2',
+          urgentCharge: order.id === 'a2' ? 5 : 0,
+        })),
+      }),
+    )
+    renderTable()
+    expect(screen.queryByRole('img', { name: 'Urgent order' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Show orders/ }))
+    const urgent = (
+      await screen.findByRole('link', { name: 'ORD-102' })
+    ).closest('tr')!
+    const regular = screen.getByRole('link', { name: 'ORD-101' }).closest('tr')!
+    expect(
+      within(urgent).getByRole('img', { name: 'Urgent order' }),
+    ).toBeTruthy()
+    expect(
+      within(regular).queryByRole('img', { name: 'Urgent order' }),
+    ).toBeNull()
+    expect(within(urgent).getByText('BHD 30.000')).toBeTruthy()
+    expect(
+      within(urgent).getByText(/Includes BHD 5.000 urgent charge/),
+    ).toBeTruthy()
+    expect(
+      within(urgent.closest('section')!).getByText('BHD 50.000'),
+    ).toBeTruthy()
   })
   it.each([
     [0, 3],

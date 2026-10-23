@@ -626,6 +626,12 @@
               {% endif %}
             </dd>
           </div>
+          {% if order.isUrgent %}
+          <div class="row">
+            <dt>Priority</dt>
+            <dd>Urgent</dd>
+          </div>
+          {% endif %}
         </dl>
       </div>
 

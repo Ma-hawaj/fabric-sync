@@ -24,6 +24,7 @@ const SPEC: ListSpec = ListSpec {
             c.name,
             c.mobile_no,
             c.whatsapp_notifications_enabled,
+            c.address,
             max(m.measurement_date) AS last_measured_on,
             count(m.id) AS measurement_count,
             COALESCE(
@@ -289,16 +290,19 @@ pub async fn insert_customer(
     name: &str,
     mobile_no: &str,
     whatsapp_notifications_enabled: bool,
+    address: Option<&str>,
 ) -> Result<Uuid, sqlx::Error> {
+    let address = address.map(str::trim);
     sqlx::query_scalar!(
         r#"
-        INSERT INTO customers (name, mobile_no, whatsapp_notifications_enabled)
-        VALUES ($1, $2, $3)
+        INSERT INTO customers (name, mobile_no, whatsapp_notifications_enabled, address)
+        VALUES ($1, $2, $3, NULLIF(BTRIM($4), ''))
         RETURNING id
         "#,
         name,
         mobile_no,
         whatsapp_notifications_enabled,
+        address,
     )
     .fetch_one(&mut **tx)
     .await
@@ -309,12 +313,19 @@ pub async fn create_customer(
     name: &str,
     mobile_no: &str,
     whatsapp_notifications_enabled: bool,
+    address: Option<&str>,
     measurement: Option<&CreateMeasurementInput>,
 ) -> Result<Uuid, sqlx::Error> {
     let mut tx = state.db().begin().await?;
 
-    let customer_id =
-        insert_customer(&mut tx, name, mobile_no, whatsapp_notifications_enabled).await?;
+    let customer_id = insert_customer(
+        &mut tx,
+        name,
+        mobile_no,
+        whatsapp_notifications_enabled,
+        address,
+    )
+    .await?;
 
     if let Some(measurement) = measurement {
         insert_measurement(&mut tx, customer_id, measurement).await?;
@@ -335,13 +346,16 @@ pub async fn update_customer(
     name: Option<&str>,
     mobile_no: Option<&str>,
     whatsapp_notifications_enabled: Option<bool>,
+    address: Option<&str>,
 ) -> Result<Option<Customer>, AppError> {
+    let address = address.map(str::trim);
     let updated = sqlx::query_scalar!(
         r#"
         UPDATE customers
         SET name = COALESCE($2, name),
             mobile_no = COALESCE($3, mobile_no),
-            whatsapp_notifications_enabled = COALESCE($4, whatsapp_notifications_enabled)
+            whatsapp_notifications_enabled = COALESCE($4, whatsapp_notifications_enabled),
+            address = NULLIF(BTRIM(COALESCE($5, address)), '')
         WHERE id = $1
         RETURNING id
         "#,
@@ -349,6 +363,7 @@ pub async fn update_customer(
         name,
         mobile_no,
         whatsapp_notifications_enabled,
+        address,
     )
     .fetch_optional(state.db())
     .await?;

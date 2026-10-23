@@ -20,6 +20,7 @@ export const customerIdentitySchema = z.object({
 export const customerFormSchema = customerIdentitySchema
   .extend({
     whatsappNotificationsEnabled: z.boolean(),
+    address: z.string(),
     addMeasurement: z.boolean(),
     measurement: measurementDraftSchema,
   })

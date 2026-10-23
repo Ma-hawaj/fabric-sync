@@ -11,6 +11,7 @@ import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
   computeOrderLineTotal,
+  computeUrgentCharges,
   computeProductLineTotal,
   computeRedemptionTotal,
 } from './invoice-pricing'
@@ -45,8 +46,9 @@ const orderDraftSchema = z
     materialId: z.string(),
     materialAmount: numberInputSchema,
     productionLocationId: z.string(),
-    customerBasePrice: numberInputSchema,
     price: numberInputSchema,
+    isUrgent: z.boolean(),
+    urgentCharge: numberInputSchema,
   })
   .superRefine((order, ctx) => {
     if (
@@ -81,16 +83,6 @@ const orderDraftSchema = z
         path: ['materialAmount'],
       })
     }
-    if (
-      order.materialSource === 'customer' &&
-      !isMoney(order.customerBasePrice)
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Enter a tailoring base price.',
-        path: ['customerBasePrice'],
-      })
-    }
     // Material stock is held per location, and comes off automatically when
     // the invoice is saved, so each order has to name one.
     if (!order.productionLocationId) {
@@ -120,6 +112,7 @@ const customerDraftSchema = z
     existingCustomerId: z.string(),
     name: z.string(),
     mobileNo: z.string(),
+    address: z.string(),
     measurement: measurementDraftSchema,
     orders: z.array(orderDraftSchema).min(1, 'Add at least one order.'),
   })
@@ -300,6 +293,7 @@ export const invoiceFormSchema = z
         },
       ),
     receivingBranch: z.string(),
+    collectionMethod: z.enum(['delivery', 'pickup']),
     customerId: z.string(),
     productBranch: z.string(),
     discount: numberInputSchema,
@@ -311,6 +305,38 @@ export const invoiceFormSchema = z
     redemptions: z.array(redemptionDraftSchema),
   })
   .superRefine((value, ctx) => {
+    value.customers.forEach((customer, customerIndex) => {
+      customer.orders.forEach((order, orderIndex) => {
+        if (
+          order.isUrgent &&
+          (order.urgentCharge === '' ||
+            !Number.isFinite(order.urgentCharge) ||
+            Math.round(order.urgentCharge * 100) <= 0)
+        ) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'Urgent pricing is unavailable for this order.',
+            path: [
+              'customers',
+              customerIndex,
+              'orders',
+              orderIndex,
+              'urgentCharge',
+            ],
+          })
+        }
+      })
+    })
+    const hasUrgentOrders = value.customers.some((customer) =>
+      customer.orders.some((order) => order.isUrgent),
+    )
+    if (hasUrgentOrders && !value.targetDate) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick a target date for urgent orders.',
+        path: ['targetDate'],
+      })
+    }
     const hasOrders = value.customers.some(
       (customer) => customer.orders.length > 0,
     )
@@ -404,6 +430,7 @@ export const invoiceFormSchema = z
       ),
       discount: value.discount === '' ? 0 : value.discount,
       discountUnit: value.discountUnit,
+      urgentCharge: computeUrgentCharges(value.customers),
       redeemed: value.redemptions.reduce(
         (sum, redemption) => sum + computeRedemptionTotal(redemption),
         0,

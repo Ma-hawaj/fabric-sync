@@ -50,6 +50,8 @@ const ORDER: OrderDetail = {
   materialSku: 'JTC-001',
   materialAmount: 3.5,
   price: 100,
+  isUrgent: false,
+  urgentCharge: 0,
   status: 'pending',
   collectedAt: null,
   thobeType: 'thobx',

@@ -18,6 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { CURRENCY } from '@/lib/currency'
+import { OrderPriorityIndicator } from '@/features/orders/components/order-priority-indicator'
 import {
   ArrowLeftIcon,
   FileDownIcon,
@@ -108,6 +109,9 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 
         <div className="flex flex-wrap items-center gap-2">
           <ReadinessBadge {...detail} />
+          <Badge variant="outline">
+            {detail.collectionMethod === 'delivery' ? 'Delivery' : 'Pickup'}
+          </Badge>
           <Badge
             variant={invoice.paymentStatus === 'paid' ? 'default' : 'outline'}
             className="capitalize"
@@ -173,6 +177,11 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                   <div className="text-xs text-muted-foreground">
                     {customer.mobileNo}
                   </div>
+                  {customer.address && (
+                    <div className="text-xs whitespace-pre-line text-muted-foreground">
+                      {customer.address}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -212,10 +221,19 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                     }
                   >
                     <TableCell>
-                      <div className="font-medium">{line.description}</div>
+                      <div className="flex items-center gap-1.5 font-medium">
+                        <span>{line.description}</span>
+                        <OrderPriorityIndicator isUrgent={line.isUrgent} />
+                      </div>
                       {line.customer && (
                         <div className="text-xs text-muted-foreground">
                           {line.customer.name}
+                        </div>
+                      )}
+                      {line.urgentCharge > 0 && (
+                        <div className="text-xs text-muted-foreground">
+                          Urgent charge for this order (incl. VAT):{' '}
+                          {currencyFormatter.format(line.urgentCharge)}
                         </div>
                       )}
                       {line.detail && (
@@ -268,6 +286,12 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
             <TotalRow
               label="Gift cards sold"
               value={detail.totals.giftCardSales}
+            />
+          )}
+          {detail.totals.urgentCharge > 0 && (
+            <TotalRow
+              label="Urgent charges (incl. VAT)"
+              value={detail.totals.urgentCharge}
             />
           )}
           <TotalRow label="Total" value={detail.totals.total} emphasis />
@@ -434,6 +458,8 @@ function toInvoice(detail: InvoiceDetail): Invoice {
       ),
     ],
     totalPrice: detail.totals.total,
+    urgentCharge: detail.totals.urgentCharge,
+    collectionMethod: detail.collectionMethod,
     paymentStatus: detail.paymentStatus,
     amountPaid: detail.totals.amountPaid,
     balanceDue: detail.totals.balanceDue,

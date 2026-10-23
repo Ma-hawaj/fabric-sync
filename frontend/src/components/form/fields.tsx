@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   InputGroup,
   InputGroupAddon,
@@ -59,6 +60,31 @@ export function TextField({ form, name, label }: FieldProps) {
             onChange={(e) => field.handleChange(e.target.value)}
           />
           <FieldError errors={field.state.meta.errors} />
+        </Field>
+      )}
+    </form.Field>
+  )
+}
+
+export function TextareaField({ form, name, label }: FieldProps) {
+  const errorId = React.useId()
+  return (
+    <form.Field name={name as never}>
+      {(field: any) => (
+        <Field data-invalid={field.state.meta.errors.length > 0}>
+          <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
+          <Textarea
+            id={field.name}
+            rows={3}
+            value={field.state.value ?? ''}
+            aria-invalid={field.state.meta.errors.length > 0}
+            aria-describedby={
+              field.state.meta.errors.length > 0 ? errorId : undefined
+            }
+            onBlur={field.handleBlur}
+            onChange={(e) => field.handleChange(e.target.value)}
+          />
+          <FieldError id={errorId} errors={field.state.meta.errors} />
         </Field>
       )}
     </form.Field>

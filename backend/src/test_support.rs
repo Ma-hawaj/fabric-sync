@@ -7,6 +7,9 @@ use uuid::Uuid;
 
 pub async fn state(db: PgPool, renderer: Option<String>, provider: Option<String>) -> AppState {
     let mut config = Config::from_env();
+    config.urgent_charge_amount = Some("5".into());
+    config.urgent_charge_unit = "amount".into();
+    config.customer_material_base_price = Some("15".into());
     config.oauth_issuer_url = "http://127.0.0.1:1".into();
     config.oauth_introspection_url = Some("http://127.0.0.1:1/introspect".into());
     config.zitadel_users_client_id = Some("test".into());

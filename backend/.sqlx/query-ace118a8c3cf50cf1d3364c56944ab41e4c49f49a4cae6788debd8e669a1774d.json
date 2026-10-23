@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO customers (name, mobile_no, whatsapp_notifications_enabled, address)\n        VALUES ($1, $2, $3, NULLIF(BTRIM($4), ''))\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ace118a8c3cf50cf1d3364c56944ab41e4c49f49a4cae6788debd8e669a1774d"
+}

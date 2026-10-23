@@ -36,6 +36,7 @@ export interface InvoiceEditMeasurement {
 }
 
 export interface InvoiceEditOrder {
+  isUrgent: boolean
   materialSource: 'shop' | 'customer'
   customerMaterialDescription: string | null
   materialId: string | null
@@ -48,6 +49,7 @@ export interface InvoiceEditOrder {
   stockQuantity: number | null
   basePrice: number
   price: number
+  urgentCharge: number
   thobeType: string | null
   fPocket: string | null
   sPocket: string | null
@@ -62,6 +64,7 @@ export interface InvoiceEditCustomer {
   existingCustomerId: string
   customerName: string
   customerMobileNo: string
+  customerAddress?: string | null
   /** The immutable snapshot currently referenced by the orders. */
   measurementId: string | null
   measurement: InvoiceEditMeasurement
@@ -92,6 +95,8 @@ export interface InvoiceEditRedemption {
 
 /** Shape of GET /invoices/:id/edit — the invoice as entered, not as printed. */
 export interface InvoiceEdit {
+  urgentCharge: number
+  collectionMethod: 'delivery' | 'pickup'
   id: string
   invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */

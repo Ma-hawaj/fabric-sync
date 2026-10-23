@@ -42,6 +42,7 @@ pub async fn create_customer(
         &name,
         &mobile_no,
         input.whatsapp_notifications_enabled,
+        input.address.as_deref(),
         input.measurement.as_ref(),
     )
     .await?;
@@ -71,7 +72,11 @@ pub async fn update_customer(
         .map(|mobile_no| normalized_field(mobile_no, "phone number"))
         .transpose()?;
 
-    if name.is_none() && mobile_no.is_none() && input.whatsapp_notifications_enabled.is_none() {
+    if name.is_none()
+        && mobile_no.is_none()
+        && input.whatsapp_notifications_enabled.is_none()
+        && input.address.is_none()
+    {
         return Err(AppError::BadRequest("nothing to update".to_string()));
     }
 
@@ -81,6 +86,7 @@ pub async fn update_customer(
         name.as_deref(),
         mobile_no.as_deref(),
         input.whatsapp_notifications_enabled,
+        input.address.as_deref(),
     )
     .await?
     .ok_or_else(|| AppError::NotFound(format!("customer {customer_id} not found")))?;
@@ -115,6 +121,61 @@ mod tests {
         for value in ["", "   ", "\t\n"] {
             let error = normalized_field(value, "customer name").unwrap_err();
             assert!(matches!(error, AppError::BadRequest(_)), "{value:?}");
+        }
+    }
+
+    #[sqlx::test]
+    async fn multiline_addresses_are_trimmed_and_blank_addresses_clear(pool: sqlx::PgPool) {
+        let state = crate::test_support::state(pool, None, None).await;
+        for (index, blank) in ["", "   ", "\r\n\t", "\u{2003}\u{a0}\t\n"]
+            .iter()
+            .enumerate()
+        {
+            let customer = create_customer(
+                &state,
+                serde_json::from_value(serde_json::json!({
+                    "name": format!("Address customer {index}"), "mobileNo": "33112233",
+                    "address": blank,
+                }))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(customer.address, None);
+
+            let updated = update_customer(
+                &state,
+                customer.id,
+                serde_json::from_value(serde_json::json!({
+                    "address": "\n\t Building 10\nRoad 20, Manama \r\n\u{2003}",
+                }))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                updated.address.as_deref(),
+                Some("Building 10\nRoad 20, Manama")
+            );
+
+            let preserved = update_customer(
+                &state,
+                customer.id,
+                serde_json::from_value(serde_json::json!({"whatsappNotificationsEnabled": false}))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(preserved.address, updated.address);
+
+            let cleared = update_customer(
+                &state,
+                customer.id,
+                serde_json::from_value(serde_json::json!({"address": blank})).unwrap(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(cleared.address, None);
         }
     }
 

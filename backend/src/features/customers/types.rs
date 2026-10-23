@@ -86,6 +86,7 @@ pub struct Customer {
     pub id: Uuid,
     pub name: String,
     pub mobile_no: String,
+    pub address: Option<String>,
     // Postgres builds this array itself (see the repository's `json_agg`), so
     // it decodes straight off the row rather than being grouped app-side.
     #[sqlx(json)]
@@ -155,6 +156,7 @@ pub struct CreateCustomerInput {
     pub mobile_no: String,
     #[serde(default = "default_whatsapp_notifications_enabled")]
     pub whatsapp_notifications_enabled: bool,
+    pub address: Option<String>,
     #[serde(default)]
     pub measurement: Option<CreateMeasurementInput>,
 }
@@ -171,6 +173,8 @@ pub struct UpdateCustomerInput {
     pub name: Option<String>,
     pub mobile_no: Option<String>,
     pub whatsapp_notifications_enabled: Option<bool>,
+    /// Omitted leaves it unchanged; an empty string clears the address.
+    pub address: Option<String>,
 }
 
 // Two snapshots count as "the same measurement" if every measured field

@@ -114,6 +114,8 @@ export interface Order {
   materialSku: string | null
   materialAmount: number
   price: number
+  isUrgent: boolean
+  urgentCharge: number
   status: OrderStatus
   /**
    * When the customer collected the garment, as an ISO datetime — parsed to

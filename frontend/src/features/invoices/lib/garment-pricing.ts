@@ -3,6 +3,23 @@ import type { DesignOption } from '@/features/design-options/types/design-option
 import type { InvoiceOrderDraft } from '../types/invoice-form'
 import type { Material } from '../types/materials'
 
+export interface UrgentChargeRule {
+  amount: number
+  unit: 'amount' | 'percent'
+}
+
+export function calculateUrgentCharge(
+  price: number | '',
+  rule: UrgentChargeRule | null | undefined,
+): number | '' {
+  if (!isMoney(price) || !rule || !isMoney(rule.amount) || rule.amount <= 0)
+    return ''
+  const raw =
+    rule.unit === 'percent' ? (price * rule.amount) / 100 : rule.amount
+  const charge = Math.round(raw * 100) / 100
+  return isMoney(charge) && charge > 0 ? charge : ''
+}
+
 // Shared ranges for every material. Keep in sync with the two constants in
 // backend/src/features/pricing/service.rs. Boundaries belong to normal.
 export const JUNIOR_BELOW_METRES = 3
@@ -41,6 +58,7 @@ export function calculateGarmentPrice(
   order: InvoiceOrderDraft,
   material: Material | null,
   options: DesignOption[],
+  customerMaterialBasePrice: number | null = null,
 ): GarmentPrice | null {
   if (
     order.materialAmount === '' ||
@@ -54,8 +72,8 @@ export function calculateGarmentPrice(
     ? material?.id === order.materialId
       ? material[`${tier}Price`]
       : null
-    : order.customerBasePrice
-  if (!isMoney(base)) return null
+    : customerMaterialBasePrice
+  if (!isMoney(base) || (!tier && base <= 0)) return null
   let designCost = 0
   for (const [field, category] of Object.entries(DESIGN_SLOTS)) {
     const slug = order[field as keyof typeof DESIGN_SLOTS]

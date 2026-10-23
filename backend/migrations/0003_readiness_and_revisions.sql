@@ -80,7 +80,8 @@ CREATE TRIGGER payments_notification_revision BEFORE INSERT OR UPDATE OR DELETE 
 CREATE FUNCTION customer_notification_revision() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE invoice_key UUID;
 BEGIN
-    IF (NEW.name,NEW.mobile_no,NEW.whatsapp_notifications_enabled) IS DISTINCT FROM (OLD.name,OLD.mobile_no,OLD.whatsapp_notifications_enabled) THEN
+    -- Address changes affect the rendered invoice just like contact details.
+    IF (NEW.name,NEW.mobile_no,NEW.whatsapp_notifications_enabled,NEW.address) IS DISTINCT FROM (OLD.name,OLD.mobile_no,OLD.whatsapp_notifications_enabled,OLD.address) THEN
         FOR invoice_key IN SELECT i.id FROM invoices i WHERE i.customer_id=OLD.id OR EXISTS(SELECT 1 FROM orders o JOIN measurements m ON m.id=o.measurement_id WHERE o.invoice_id=i.id AND m.customer_id=OLD.id) ORDER BY i.id LOOP
             UPDATE invoices SET notification_revision=notification_revision+1 WHERE id=invoice_key;
         END LOOP;

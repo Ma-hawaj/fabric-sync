@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { InvoiceFormPage } from './invoice-form'
 
@@ -18,6 +18,38 @@ function renderPage() {
 }
 
 describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
+  it('requires a target date for an urgent order and clears the error when that order becomes regular', async () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Add Another Order' }))
+    const urgentOptions = screen.getAllByRole('switch', {
+      name: /Urgent order/,
+    })
+    fireEvent.click(urgentOptions[0])
+    expect(urgentOptions[0].getAttribute('aria-checked')).toBe('true')
+    expect(urgentOptions[1].getAttribute('aria-checked')).toBe('false')
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    })
+
+    expect(
+      await screen.findByText('Pick a target date for urgent orders.'),
+    ).toBeTruthy()
+    expect(
+      screen
+        .getByLabelText('Target Date (required)')
+        .getAttribute('aria-invalid'),
+    ).toBe('true')
+
+    fireEvent.click(urgentOptions[0])
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    })
+    await waitFor(() => {
+      expect(
+        screen.queryByText('Pick a target date for urgent orders.'),
+      ).toBeNull()
+    })
+  })
   it('shows the zod error inline on the field and a banner, blocking submit', async () => {
     renderPage()
 
