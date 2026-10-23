@@ -178,7 +178,7 @@ describe('OrderBlock', () => {
         urgentCharge: 5,
       })
     })
-    fireEvent.click(screen.getByRole('radio', { name: 'Regular' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Urgent order 1' }))
     await waitFor(() => {
       const order = JSON.parse(screen.getByTestId('draft').textContent)
         .customers[0].orders[0]

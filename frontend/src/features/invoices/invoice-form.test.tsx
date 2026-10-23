@@ -21,7 +21,9 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
   it('requires a target date for an urgent order and clears the error when that order becomes regular', async () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'Add Another Order' }))
-    const urgentOptions = screen.getAllByRole('radio', { name: 'Urgent' })
+    const urgentOptions = screen.getAllByRole('switch', {
+      name: /Urgent order/,
+    })
     fireEvent.click(urgentOptions[0])
     expect(urgentOptions[0].getAttribute('aria-checked')).toBe('true')
     expect(urgentOptions[1].getAttribute('aria-checked')).toBe('false')
@@ -38,7 +40,7 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
         .getAttribute('aria-invalid'),
     ).toBe('true')
 
-    fireEvent.click(screen.getAllByRole('radio', { name: 'Regular' })[0])
+    fireEvent.click(urgentOptions[0])
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     })

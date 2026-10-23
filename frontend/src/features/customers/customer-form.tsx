@@ -112,6 +112,11 @@ function CustomerForm({ existing }: { existing?: Customer }) {
             label="Phone"
             defaultCountry="BH"
           />
+          <TextareaField
+            form={form}
+            name="address"
+            label="Address (optional)"
+          />
           <form.Field name="whatsappNotificationsEnabled">
             {(field) => (
               <label className="flex items-start gap-2 text-sm">
@@ -126,11 +131,6 @@ function CustomerForm({ existing }: { existing?: Customer }) {
               </label>
             )}
           </form.Field>
-          <TextareaField
-            form={form}
-            name="address"
-            label="Address (optional)"
-          />
         </div>
 
         {!existing && (

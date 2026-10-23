@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useState } from 'react'
 import { useStore } from '@tanstack/react-form'
 import { useQuery } from '@tanstack/react-query'
+import { Switch } from '@base-ui/react/switch'
 import { apiClient } from '@/lib/api'
 import {
   calculateGarmentPrice,
@@ -296,19 +297,23 @@ export function OrderBlock({
 
       <form.Field name={`${base}.isUrgent` as never}>
         {(field: any) => (
-          <Field>
-            <FieldLabel>Priority</FieldLabel>
-            <SegmentedOptions
-              ariaLabel={`Order ${orderNumber} priority`}
-              options={['Regular', 'Urgent']}
-              value={field.state.value ? 'Urgent' : 'Regular'}
-              onChange={(value) => {
-                field.handleChange(value === 'Urgent')
+          <Field orientation="horizontal">
+            <Switch.Root
+              id={field.name}
+              checked={field.state.value}
+              onCheckedChange={(checked) => {
+                field.handleChange(checked)
                 if (form.state.submissionAttempts > 0)
                   void form.validate('submit')
               }}
-              columns={2}
-            />
+              onBlur={field.handleBlur}
+              className="inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full bg-input outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring data-checked:bg-primary"
+            >
+              <Switch.Thumb className="ms-0.5 block size-4 rounded-full bg-background shadow-sm transition-transform data-checked:translate-x-4 rtl:data-checked:-translate-x-4" />
+            </Switch.Root>
+            <FieldLabel htmlFor={field.name}>
+              Urgent <span className="sr-only">order {orderNumber}</span>
+            </FieldLabel>
           </Field>
         )}
       </form.Field>
