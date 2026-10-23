@@ -117,17 +117,23 @@ function rowValue(label: string) {
 // Line prices are gross (VAT included): a 90 order holds 81.82 of net and
 // 8.18 of VAT, and the total is the 90 quoted — never 90 plus tax.
 describe('InvoiceSummary', () => {
-  it('shows urgency in totals and removes the charge when switched to regular', () => {
+  it('shows order urgency totals without an invoice priority control', () => {
     render(
       <Harness
         defaultValues={baseValues({
           customers: [
             {
               ...customerWithOrder(100),
-              orders: [{ ...createEmptyOrder(), price: 100, urgentCharge: 10 }],
+              orders: [
+                {
+                  ...createEmptyOrder(),
+                  price: 100,
+                  isUrgent: true,
+                  urgentCharge: 10,
+                },
+              ],
             },
           ],
-          isUrgent: true,
           collectionMethod: 'delivery',
         })}
       />,
@@ -141,27 +147,35 @@ describe('InvoiceSummary', () => {
     expect(rowValue('Urgent charges (incl. VAT)')).toBe(`${CURRENCY} 10.00`)
     expect(screen.getByText(`+ ${CURRENCY} 10.00 urgent charge`)).toBeTruthy()
     expect(screen.getByLabelText('Target Date (required)')).toBeTruthy()
-    fireEvent.click(screen.getByRole('radio', { name: 'Regular' }))
-    expect(screen.getByLabelText('Target Date (optional)')).toBeTruthy()
-    expect(rowValue('Total')).toBe(`${CURRENCY} 100.00`)
-    expect(screen.queryByText('Urgent charges (incl. VAT)')).toBeNull()
-    fireEvent.click(screen.getByRole('radio', { name: 'Urgent' }))
-    expect(screen.getByLabelText('Target Date (required)')).toBeTruthy()
-    expect(rowValue('Total')).toBe(`${CURRENCY} 100.00`)
+    expect(screen.queryByRole('radio', { name: 'Regular' })).toBeNull()
+    expect(screen.queryByRole('radio', { name: 'Urgent' })).toBeNull()
   })
   it('sums different urgency charges for multiple orders and excludes products and gift cards', () => {
     render(
       <Harness
         defaultValues={baseValues({
-          isUrgent: true,
           customers: [
             {
               ...customerWithOrder(100),
-              orders: [{ ...createEmptyOrder(), price: 100, urgentCharge: 10 }],
+              orders: [
+                {
+                  ...createEmptyOrder(),
+                  price: 100,
+                  isUrgent: true,
+                  urgentCharge: 10,
+                },
+              ],
             },
             {
               ...customerWithOrder(100),
-              orders: [{ ...createEmptyOrder(), price: 100, urgentCharge: 20 }],
+              orders: [
+                {
+                  ...createEmptyOrder(),
+                  price: 100,
+                  isUrgent: true,
+                  urgentCharge: 20,
+                },
+              ],
             },
           ],
           products: [productLine(1, 50)],

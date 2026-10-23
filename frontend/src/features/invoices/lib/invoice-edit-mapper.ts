@@ -161,7 +161,8 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
         customerBasePrice:
           line.materialSource === 'customer' ? line.basePrice : '',
         price: line.price,
-        urgentCharge: line.urgentCharge === 0 ? '' : line.urgentCharge,
+        isUrgent: line.isUrgent,
+        urgentCharge: line.urgentCharge,
       }
     })
 
@@ -245,7 +246,6 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
 
   const values: InvoiceFormValues = {
     targetDate: edit.targetDate ?? '',
-    isUrgent: edit.isUrgent,
     collectionMethod: edit.collectionMethod,
     receivingBranch: edit.branchId ?? '',
     customerId: edit.customerId ?? '',

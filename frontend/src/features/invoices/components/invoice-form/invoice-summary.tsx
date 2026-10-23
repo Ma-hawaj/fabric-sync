@@ -153,42 +153,15 @@ export function InvoiceSummary({
             </Field>
           )}
         </form.Field>
-        <form.Field name={'isUrgent' as never}>
-          {(field: any) => (
-            <Field>
-              <FieldLabel id="invoice-priority-label">Priority</FieldLabel>
-              <SegmentedOptions
-                ariaLabel="Priority"
-                options={['Regular', 'Urgent']}
-                value={field.state.value ? 'Urgent' : 'Regular'}
-                onChange={(value) => {
-                  field.handleChange(value === 'Urgent')
-                  if (value === 'Regular') {
-                    form.state.values.customers.forEach(
-                      (customer, customerIndex) => {
-                        customer.orders.forEach((_order, orderIndex) => {
-                          form.setFieldValue(
-                            `customers[${customerIndex}].orders[${orderIndex}].urgentCharge` as never,
-                            '' as never,
-                          )
-                        })
-                      },
-                    )
-                  }
-                  // Priority changes the date and charge requirements. Refresh
-                  // their existing submit errors even if neither field changed.
-                  if (form.state.submissionAttempts > 0) {
-                    void form.validate('submit')
-                  }
-                }}
-                columns={2}
-              />
-            </Field>
-          )}
-        </form.Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <form.Subscribe selector={(state: any) => state.values.isUrgent}>
+        <form.Subscribe
+          selector={(state: any) =>
+            state.values.customers.some((customer: InvoiceCustomerDraft) =>
+              customer.orders.some((order) => order.isUrgent),
+            )
+          }
+        >
           {(isUrgent: boolean) => (
             <DateField
               form={form}
@@ -268,17 +241,14 @@ export function InvoiceSummary({
           state.values.customers,
           state.values.products,
           state.values.giftCards,
-          state.values.isUrgent,
         ]}
       >
         {(subscribedLines: any) => {
-          const [customers, products, giftCards, invoiceIsUrgent] =
-            subscribedLines as [
-              InvoiceCustomerDraft[],
-              InvoiceProductDraft[],
-              InvoiceGiftCardDraft[],
-              boolean,
-            ]
+          const [customers, products, giftCards] = subscribedLines as [
+            InvoiceCustomerDraft[],
+            InvoiceProductDraft[],
+            InvoiceGiftCardDraft[],
+          ]
 
           const urgentCharge = computeUrgentCharges(customers)
           const lineItems = buildLineItems(customers, customerNames.current)
@@ -312,7 +282,7 @@ export function InvoiceSummary({
                       </span>
                       <span>
                         {CURRENCY} {order.total.toFixed(2)}
-                        {invoiceIsUrgent && order.urgentCharge > 0 && (
+                        {order.urgentCharge > 0 && (
                           <span className="block text-xs">
                             + {CURRENCY} {order.urgentCharge.toFixed(2)} urgent
                             charge
@@ -374,23 +344,16 @@ export function InvoiceSummary({
                   state.values.discountUnit,
                   state.values.payments,
                   state.values.redemptions,
-                  state.values.isUrgent,
                 ]}
               >
                 {(subscribed: any) => {
-                  const [
-                    discount,
-                    discountUnit,
-                    payments,
-                    redemptions,
-                    isUrgent,
-                  ] = subscribed as [
-                    number | '',
-                    DiscountUnit,
-                    PaymentDraft[],
-                    GiftCardRedemptionDraft[],
-                    boolean,
-                  ]
+                  const [discount, discountUnit, payments, redemptions] =
+                    subscribed as [
+                      number | '',
+                      DiscountUnit,
+                      PaymentDraft[],
+                      GiftCardRedemptionDraft[],
+                    ]
                   // Line prices are gross (VAT included): the discount comes
                   // off the gross and VAT is extracted from it — the shared
                   // computeInvoiceTotals keeps this in step with the backend's
@@ -401,7 +364,7 @@ export function InvoiceSummary({
                     giftCardSales,
                     discount: discount === '' ? 0 : discount,
                     discountUnit,
-                    urgentCharge: isUrgent ? urgentCharge : 0,
+                    urgentCharge,
                     redeemed: redemptions.reduce(
                       (sum, redemption) =>
                         sum + computeRedemptionTotal(redemption),
@@ -419,7 +382,7 @@ export function InvoiceSummary({
 
                   return (
                     <>
-                      {isUrgent && (
+                      {urgentCharge > 0 && (
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">
                             Urgent charges (incl. VAT)

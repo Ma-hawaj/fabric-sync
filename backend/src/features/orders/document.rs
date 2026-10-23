@@ -748,6 +748,7 @@ mod tests {
         order.material_source = "customer".into();
         order.material = "White <linen>".into();
         order.material_sku = None;
+        order.is_urgent = true;
         let detail = OrderDetail {
             order,
             invoice_number: 7,
@@ -756,6 +757,7 @@ mod tests {
         let html = test_render(&detail, &branding());
         assert!(html.contains("Customer-provided material:"));
         assert!(html.contains("White &lt;linen&gt;"));
+        assert!(html.contains("Urgent"));
     }
 
     fn test_render(detail: &OrderDetail, branding: &InvoiceBranding) -> String {
@@ -1097,6 +1099,7 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         material_sku: Some("CTN-001".to_string()),
         material_amount: 3.5,
         price: 100.0,
+        is_urgent: false,
         urgent_charge: 0.0,
         status: "pending".to_string(),
         collected_at: None,

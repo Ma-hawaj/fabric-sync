@@ -83,6 +83,8 @@ impl MaterialSource {
 #[serde(rename_all = "camelCase")]
 pub struct CreateOrderInput {
     #[serde(default)]
+    pub is_urgent: bool,
+    #[serde(skip_deserializing)]
     pub urgent_charge: f64,
     #[serde(default)]
     pub material_source: MaterialSource,
@@ -183,10 +185,8 @@ pub struct CreatePaymentInput {
 #[serde(rename_all = "camelCase")]
 pub struct CreateInvoiceInput {
     #[serde(default)]
-    pub is_urgent: bool,
-    #[serde(default)]
     pub collection_method: CollectionMethod,
-    /// When the garment is promised for. Required for urgent invoices,
+    /// When the garment is promised for. Required when any order is urgent,
     /// optional otherwise, and staff-editable — this is what the form's
     /// date picker writes. The invoice's own date
     /// (`invoice_date`) is server-set at creation and never taken from input.
@@ -234,6 +234,7 @@ pub struct CreatedInvoice {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEditOrder {
+    pub is_urgent: bool,
     pub base_price: f64,
     pub urgent_charge: f64,
     pub material_source: String,
@@ -325,7 +326,6 @@ pub struct InvoicePayment {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEdit {
-    pub is_urgent: bool,
     pub urgent_charge: f64,
     pub collection_method: String,
     pub id: Uuid,
@@ -440,6 +440,7 @@ pub enum InvoiceLineKind {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceDetailLine {
+    pub is_urgent: bool,
     /// VAT-inclusive urgency charge for this tailoring order; zero for retail.
     pub urgent_charge: f64,
     pub kind: InvoiceLineKind,
@@ -526,7 +527,6 @@ pub struct InvoiceTotalsBreakdown {
 /// the table no longer stores them.
 #[derive(Clone, Debug)]
 pub struct InvoiceRecord {
-    pub is_urgent: bool,
     pub urgent_charge: f64,
     pub collection_method: String,
     pub id: Uuid,
@@ -565,7 +565,6 @@ pub struct InvoiceRecord {
 pub struct InvoiceDetail {
     #[serde(flatten)]
     pub readiness: crate::features::orders::readiness::Summary,
-    pub is_urgent: bool,
     pub collection_method: String,
     pub id: Uuid,
     /// Sequential and human-readable, unlike `id`. Formatted for display by
@@ -606,7 +605,6 @@ pub struct InvoiceListItem {
     #[sqlx(flatten)]
     #[serde(flatten)]
     pub readiness: crate::features::orders::readiness::Summary,
-    pub is_urgent: bool,
     pub urgent_charge: f64,
     pub collection_method: String,
     pub id: Uuid,

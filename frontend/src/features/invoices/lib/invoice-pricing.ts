@@ -23,6 +23,7 @@ export function computeOrderLineTotal(order: InvoiceOrderDraft): number {
 }
 
 export function computeOrderUrgentCharge(order: InvoiceOrderDraft): number {
+  if (!order.isUrgent) return 0
   const charge = order.urgentCharge
   return typeof charge === 'number' && Number.isFinite(charge) && charge > 0
     ? Math.round(charge * 100) / 100

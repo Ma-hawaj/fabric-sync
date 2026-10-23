@@ -114,6 +114,7 @@ export interface Order {
   materialSku: string | null
   materialAmount: number
   price: number
+  isUrgent: boolean
   urgentCharge: number
   status: OrderStatus
   /**

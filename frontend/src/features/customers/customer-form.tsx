@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { TextField, PhoneField } from '@/components/form/fields'
+import { TextField, PhoneField, TextareaField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { MeasurementFields } from './components/measurement-fields'
 import { useCustomer } from './hooks/use-customer'
@@ -126,7 +126,11 @@ function CustomerForm({ existing }: { existing?: Customer }) {
               </label>
             )}
           </form.Field>
-          <TextField form={form} name="address" label="Address (optional)" />
+          <TextareaField
+            form={form}
+            name="address"
+            label="Address (optional)"
+          />
         </div>
 
         {!existing && (

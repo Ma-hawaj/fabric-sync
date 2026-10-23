@@ -58,6 +58,7 @@ function order(overrides: Partial<Order>): Order {
     materialSku: 'JC-001',
     materialAmount: 3.5,
     price: 450,
+    isUrgent: false,
     urgentCharge: 0,
     status: 'pending',
     collectedAt: null,

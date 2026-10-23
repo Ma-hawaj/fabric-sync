@@ -108,7 +108,6 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 
         <div className="flex flex-wrap items-center gap-2">
           <ReadinessBadge {...detail} />
-          {detail.isUrgent && <Badge variant="destructive">Urgent</Badge>}
           <Badge variant="outline">
             {detail.collectionMethod === 'delivery' ? 'Delivery' : 'Pickup'}
           </Badge>
@@ -228,6 +227,9 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                           {line.customer.name}
                         </div>
                       )}
+                      {line.isUrgent && (
+                        <Badge variant="destructive">Urgent</Badge>
+                      )}
                       {line.urgentCharge > 0 && (
                         <div className="text-xs text-muted-foreground">
                           Urgent charge for this order (incl. VAT):{' '}
@@ -286,7 +288,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
               value={detail.totals.giftCardSales}
             />
           )}
-          {detail.isUrgent && (
+          {detail.totals.urgentCharge > 0 && (
             <TotalRow
               label="Urgent charges (incl. VAT)"
               value={detail.totals.urgentCharge}
@@ -456,7 +458,6 @@ function toInvoice(detail: InvoiceDetail): Invoice {
       ),
     ],
     totalPrice: detail.totals.total,
-    isUrgent: detail.isUrgent,
     urgentCharge: detail.totals.urgentCharge,
     collectionMethod: detail.collectionMethod,
     paymentStatus: detail.paymentStatus,

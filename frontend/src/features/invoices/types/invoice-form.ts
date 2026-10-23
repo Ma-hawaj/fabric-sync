@@ -36,6 +36,7 @@ export interface InvoiceOrderDraft {
   customerBasePrice: NumberInput
   // Calculated preview; the backend calculates its own final price.
   price: NumberInput
+  isUrgent: boolean
   urgentCharge: NumberInput
 }
 
@@ -91,10 +92,9 @@ export interface PaymentDraft {
 }
 
 export interface InvoiceFormValues {
-  isUrgent: boolean
   collectionMethod: CollectionMethod
   // When the garment is promised for, if at all — blank means no committed
-  // pickup. Required for urgent invoices. Staff-editable; the invoice's own
+  // pickup. Required when any order is urgent. Staff-editable; the invoice's own
   // date is server-set at creation and never enters the form.
   targetDate: string
   receivingBranch: string
@@ -150,6 +150,7 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     productionLocationId: '',
     customerBasePrice: '',
     price: '',
+    isUrgent: false,
     urgentCharge: '',
   }
 }
@@ -175,7 +176,6 @@ export function createEmptyInvoiceForm(): InvoiceFormValues {
     // never records when the invoice was opened (the backend stamps that
     // itself).
     targetDate: '',
-    isUrgent: false,
     collectionMethod: 'pickup',
     receivingBranch: '',
     customerId: '',

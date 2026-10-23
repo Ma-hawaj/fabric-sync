@@ -18,6 +18,7 @@ export interface InvoiceParty {
  * line rather than per metre, so its `unitPrice` and `lineTotal` are equal.
  */
 export interface InvoiceLine {
+  isUrgent: boolean
   urgentCharge: number
   kind: InvoiceLineKind
   /** Only set for an `order` line — lets it link straight to that order's tracking. */
@@ -70,7 +71,6 @@ export interface InvoicePayment {
 
 /** Shape of GET /invoices/:id. */
 export interface InvoiceDetail extends ReadinessFields {
-  isUrgent: boolean
   collectionMethod: 'delivery' | 'pickup'
   id: string
   invoiceNumber: number

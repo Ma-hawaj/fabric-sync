@@ -7,7 +7,6 @@ function editFixture(): InvoiceEdit {
   return {
     id: '0197fdd2-6a67-7000-8000-000000000001',
     invoiceNumber: 42,
-    isUrgent: false,
     collectionMethod: 'pickup',
     urgentCharge: 0,
     date: '2026-07-19',
@@ -69,6 +68,7 @@ function editFixture(): InvoiceEdit {
             stockQuantity: 10,
             basePrice: 100,
             price: 100,
+            isUrgent: false,
             urgentCharge: 0,
             thobeType: 'saudi-classic',
             fPocket: null,
@@ -101,15 +101,15 @@ function editFixture(): InvoiceEdit {
 describe('mapInvoiceEditToForm', () => {
   it('restores urgency, collection method, and customer addresses when editing', () => {
     const edit = editFixture()
-    edit.isUrgent = true
+    edit.customers[0].orders[0].isUrgent = true
     edit.customers[0].orders[0].urgentCharge = 12.5
     edit.collectionMethod = 'delivery'
     edit.customers[0].customerAddress = 'Building 1, Road 2'
     const { values, seeds } = mapInvoiceEditToForm(edit)
     expect(values).toMatchObject({
-      isUrgent: true,
       collectionMethod: 'delivery',
     })
+    expect(values.customers[0].orders[0].isUrgent).toBe(true)
     expect(values.customers[0].orders[0].urgentCharge).toBe(12.5)
     expect(
       seeds.customers.get(edit.customers[0].existingCustomerId)?.address,
@@ -213,7 +213,7 @@ describe('mapInvoiceEditToForm', () => {
 
   it('round-trips a customer tailoring base and urgent charge separately from its calculated price', () => {
     const fixture = editFixture()
-    fixture.isUrgent = true
+    fixture.customers[0].orders[0].isUrgent = true
     const line = fixture.customers[0].orders[0]
     line.materialSource = 'customer'
     line.basePrice = 15
@@ -241,7 +241,7 @@ describe('mapInvoiceEditToForm', () => {
     const payload = invoicePayload(values)
     expect(payload.customers[0].orders[0]).toMatchObject({
       customerBasePrice: 15,
-      urgentCharge: 7,
+      isUrgent: true,
     })
     expect(payload.customers[0].orders[0]).not.toHaveProperty('price')
     expect(payload.customers[0].orders[0]).not.toHaveProperty('basePrice')

@@ -3,6 +3,23 @@ import type { DesignOption } from '@/features/design-options/types/design-option
 import type { InvoiceOrderDraft } from '../types/invoice-form'
 import type { Material } from '../types/materials'
 
+export interface UrgentChargeRule {
+  amount: number
+  unit: 'amount' | 'percent'
+}
+
+export function calculateUrgentCharge(
+  price: number | '',
+  rule: UrgentChargeRule | null | undefined,
+): number | '' {
+  if (!isMoney(price) || !rule || !isMoney(rule.amount) || rule.amount <= 0)
+    return ''
+  const raw =
+    rule.unit === 'percent' ? (price * rule.amount) / 100 : rule.amount
+  const charge = Math.round(raw * 100) / 100
+  return isMoney(charge) && charge > 0 ? charge : ''
+}
+
 // Shared ranges for every material. Keep in sync with the two constants in
 // backend/src/features/pricing/service.rs. Boundaries belong to normal.
 export const JUNIOR_BELOW_METRES = 3

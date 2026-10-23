@@ -78,7 +78,6 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
 
     Ok(InvoiceDetail {
         readiness: crate::features::orders::readiness::summary(state.db(), invoice_id).await?,
-        is_urgent: invoice.is_urgent,
         collection_method: invoice.collection_method,
         id: invoice.id,
         invoice_number: invoice.invoice_number,
@@ -488,6 +487,7 @@ fn price_order(
 async fn resolve_order_prices(
     tx: &mut sqlx::PgTransaction<'_>,
     input: &mut CreateInvoiceInput,
+    urgent_rule: Option<crate::features::pricing::types::UrgentChargeRule>,
 ) -> Result<(), AppError> {
     let orders: Vec<&CreateOrderInput> = input
         .customers
@@ -549,6 +549,11 @@ async fn resolve_order_prices(
         .flat_map(|customer| &mut customer.orders)
     {
         price_order(order, &materials, &designs)?;
+        order.urgent_charge = crate::features::pricing::service::urgent_charge(
+            order.price,
+            order.is_urgent,
+            urgent_rule,
+        )?;
     }
     Ok(())
 }
@@ -595,21 +600,20 @@ fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
 }
 
 fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
-    if input.is_urgent && input.target_date.is_none() {
+    let has_urgent_orders = input
+        .customers
+        .iter()
+        .flat_map(|customer| &customer.orders)
+        .any(|order| order.is_urgent);
+    if has_urgent_orders && input.target_date.is_none() {
         return Err(AppError::BadRequest(
-            "urgent invoices need a target date".to_string(),
+            "urgent orders need a target date".to_string(),
         ));
     }
     let has_orders = input
         .customers
         .iter()
         .any(|customer| !customer.orders.is_empty());
-
-    if input.is_urgent && !has_orders {
-        return Err(AppError::BadRequest(
-            "an urgent invoice needs at least one tailoring order".into(),
-        ));
-    }
 
     if !has_orders && input.products.is_empty() && input.gift_cards.is_empty() {
         return Err(AppError::BadRequest(
@@ -647,8 +651,8 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
         validate_measurement(&customer.measurement)?;
         for order in &customer.orders {
             if !order.urgent_charge.is_finite()
-                || (input.is_urgent && round2(order.urgent_charge) <= 0.0)
-                || (!input.is_urgent && order.urgent_charge != 0.0)
+                || (order.is_urgent && round2(order.urgent_charge) <= 0.0)
+                || (!order.is_urgent && order.urgent_charge != 0.0)
             {
                 return Err(AppError::BadRequest(
                     "each urgent order needs a positive extra charge; regular orders cannot have one".into(),
@@ -922,7 +926,7 @@ mod tests {
     #[test]
     fn urgency_adds_a_taxable_charge_after_the_discount() {
         let mut invoice = invoice(10.0, "percent", vec![customer(vec![order(100.0)])]);
-        invoice.is_urgent = true;
+        invoice.customers[0].orders[0].is_urgent = true;
         invoice.customers[0].orders[0].urgent_charge = 20.0;
         assert!(validate(&invoice).is_ok());
         assert_eq!(compute_totals(&invoice).total, 110.0);
@@ -930,96 +934,6 @@ mod tests {
         assert_eq!(totals.taxable, 100.0);
         assert_eq!(totals.vat, 10.0);
         assert_eq!(totals.total, 160.0);
-    }
-
-    #[sqlx::test]
-    async fn urgent_order_charges_survive_create_edit_and_print(db: sqlx::PgPool) {
-        let (_, _, production, _) = crate::test_support::invoice(&db, 0, false).await;
-        let customer_id: Uuid = sqlx::query_scalar("SELECT id FROM customers LIMIT 1")
-            .fetch_one(&db)
-            .await
-            .unwrap();
-        let state = crate::test_support::state(db.clone(), None, None).await;
-        let mut input = invoice(
-            0.0,
-            "amount",
-            vec![customer(vec![order(100.0), order(100.0)])],
-        );
-        input.is_urgent = true;
-        input.customers[0].existing_customer_id = Some(customer_id);
-        for (order, charge) in input.customers[0].orders.iter_mut().zip([10.0, 20.0]) {
-            order.material_source = MaterialSource::Customer;
-            order.material_id = None;
-            order.customer_material_description = Some("Customer cotton".into());
-            order.production_location_id = production;
-            order.urgent_charge = charge;
-        }
-        let created = create_invoice(&state, input.clone()).await.unwrap();
-        assert_eq!(created.total_price, 230.0);
-        let detail = get_invoice(&state, created.id).await.unwrap();
-        assert_eq!(detail.totals.urgent_charge, 30.0);
-        assert_eq!(detail.totals.balance_due, 230.0);
-        assert_eq!(
-            detail
-                .lines
-                .iter()
-                .map(|line| line.urgent_charge)
-                .collect::<Vec<_>>(),
-            vec![10.0, 20.0]
-        );
-        let editing = get_invoice_for_edit(&state, created.id).await.unwrap();
-        assert_eq!(editing.customers[0].orders[0].urgent_charge, 10.0);
-        assert_eq!(editing.customers[0].orders[1].urgent_charge, 20.0);
-        let html = super::super::document::render_invoice_document(&state, created.id)
-            .await
-            .unwrap();
-        assert_eq!(html.matches("Urgent charge for this order").count(), 2);
-        assert!(html.contains("10.000") && html.contains("20.000") && html.contains("30.000"));
-        input.customers[0].orders[0].urgent_charge = 15.0;
-        assert_eq!(
-            update_invoice(&state, created.id, input.clone())
-                .await
-                .unwrap()
-                .total_price,
-            235.0
-        );
-        let updated = get_invoice(&state, created.id).await.unwrap();
-        assert_eq!(updated.totals.urgent_charge, 35.0);
-        let stored_charge: f64 =
-            sqlx::query_scalar("SELECT urgent_charge::float8 FROM invoices WHERE id = $1")
-                .bind(created.id)
-                .fetch_one(&db)
-                .await
-                .unwrap();
-        assert_eq!(stored_charge, 35.0);
-        input.customers[0].orders[0].urgent_charge = 1.005;
-        let rounded_charge = round2(1.005);
-        update_invoice(&state, created.id, input.clone())
-            .await
-            .unwrap();
-        let rounded = get_invoice(&state, created.id).await.unwrap();
-        assert_eq!(rounded.lines[0].urgent_charge, rounded_charge);
-        assert_eq!(rounded.totals.urgent_charge, 20.0 + rounded_charge);
-        input.is_urgent = false;
-        input.target_date = None;
-        for order in &mut input.customers[0].orders {
-            order.urgent_charge = 0.0;
-        }
-        assert_eq!(
-            update_invoice(&state, created.id, input)
-                .await
-                .unwrap()
-                .total_price,
-            200.0
-        );
-        assert_eq!(
-            get_invoice(&state, created.id)
-                .await
-                .unwrap()
-                .totals
-                .urgent_charge,
-            0.0
-        );
     }
 
     #[sqlx::test]
@@ -1050,7 +964,8 @@ mod tests {
         shop["materialAmount"] = serde_json::json!(2.99);
         shop["productionLocationId"] = serde_json::json!(production);
         shop["emd"] = serde_json::json!("urgent-compat");
-        shop["urgentCharge"] = serde_json::json!(5.0);
+        shop["isUrgent"] = serde_json::json!(true);
+        shop["urgentCharge"] = serde_json::json!(9999.0);
         let mut customer_fabric = order(9999.0);
         customer_fabric["materialSource"] = serde_json::json!("customer");
         customer_fabric["materialId"] = serde_json::Value::Null;
@@ -1058,10 +973,10 @@ mod tests {
         customer_fabric["productionLocationId"] = serde_json::json!(production);
         customer_fabric["customerBasePrice"] = serde_json::json!(15.0);
         customer_fabric["collar"] = serde_json::json!("urgent-compat");
-        customer_fabric["urgentCharge"] = serde_json::json!(7.0);
+        customer_fabric["isUrgent"] = serde_json::json!(false);
+        customer_fabric["urgentCharge"] = serde_json::json!(777.0);
         // Deserialize the HTTP shape directly: submitted prices cannot override the catalog.
         let mut input: CreateInvoiceInput = serde_json::from_value(serde_json::json!({
-            "isUrgent": true,
             "targetDate": "2026-11-01",
             "discount": 10.0,
             "discountUnit": "percent",
@@ -1083,9 +998,10 @@ mod tests {
             Err(AppError::BadRequest(_))
         ));
 
-        // (10 + 2.5 + 15 + 3.5) * 90% + 5 + 7 = 39.90.
+        // Only the first order is urgent. Client-submitted charges are ignored.
+        // (10 + 2.5 + 15 + 3.5) * 90% + 5 = 32.90.
         let created = create_invoice(&state, input.clone()).await.unwrap();
-        assert_eq!(created.total_price, 39.9);
+        assert_eq!(created.total_price, 32.9);
         let editing = get_invoice_for_edit(&state, created.id).await.unwrap();
         let orders = &editing.customers[0].orders;
         assert_eq!(
@@ -1102,7 +1018,7 @@ mod tests {
                 orders[1].price,
                 orders[1].urgent_charge
             ),
-            (15.0, 18.5, 7.0)
+            (15.0, 18.5, 0.0)
         );
 
         // A higher material tier changes the garment price, keeping both fees intact.
@@ -1110,7 +1026,7 @@ mod tests {
         let updated = update_invoice(&state, created.id, input.clone())
             .await
             .unwrap();
-        assert_eq!(updated.total_price, 57.9);
+        assert_eq!(updated.total_price, 50.9);
         sqlx::query(
             "UPDATE design_options SET cost=4.5 WHERE category='emd' AND slug='urgent-compat'",
         )
@@ -1120,16 +1036,18 @@ mod tests {
         let updated = update_invoice(&state, created.id, input.clone())
             .await
             .unwrap();
-        assert_eq!(updated.total_price, 59.7);
+        assert_eq!(updated.total_price, 52.7);
         let editing = get_invoice_for_edit(&state, created.id).await.unwrap();
         assert_eq!(editing.customers[0].orders[0].price, 34.5);
         assert_eq!(editing.customers[0].orders[0].base_price, 30.0);
         assert_eq!(editing.customers[0].orders[0].urgent_charge, 5.0);
-        assert_eq!(editing.customers[0].orders[1].urgent_charge, 7.0);
+        assert_eq!(editing.customers[0].orders[1].urgent_charge, 0.0);
+        assert!(editing.customers[0].orders[0].is_urgent);
+        assert!(!editing.customers[0].orders[1].is_urgent);
         let detail = get_invoice(&state, created.id).await.unwrap();
         assert_eq!(detail.totals.subtotal, 53.0);
         assert_eq!(detail.totals.discount_amount, 5.3);
-        assert_eq!(detail.totals.urgent_charge, 12.0);
+        assert_eq!(detail.totals.urgent_charge, 5.0);
         assert_eq!(detail.totals.total, updated.total_price);
         let stock: f64 = sqlx::query_scalar(
             "SELECT quantity::float8 FROM material_stock WHERE material_id=$1 AND branch_id=$2",
@@ -1143,12 +1061,31 @@ mod tests {
         let html = super::super::document::render_invoice_document(&state, created.id)
             .await
             .unwrap();
-        assert_eq!(html.matches("Urgent charge for this order").count(), 2);
-        assert!(html.contains("5.000") && html.contains("7.000") && html.contains("59.700"));
+        assert_eq!(html.matches("Urgent charge for this order").count(), 1);
+        assert!(html.contains("5.000") && html.contains("52.700"));
 
-        input.is_urgent = false;
+        input.customers[0].orders[1].is_urgent = true;
+        assert_eq!(
+            update_invoice(&state, created.id, input.clone())
+                .await
+                .unwrap()
+                .total_price,
+            57.7
+        );
+        input.customers[0].orders[0].is_urgent = false;
+        let mixed = update_invoice(&state, created.id, input.clone())
+            .await
+            .unwrap();
+        assert_eq!(mixed.total_price, 52.7);
+        let mixed_edit = get_invoice_for_edit(&state, created.id).await.unwrap();
+        assert!(!mixed_edit.customers[0].orders[0].is_urgent);
+        assert!(mixed_edit.customers[0].orders[1].is_urgent);
+        assert_eq!(mixed_edit.customers[0].orders[0].urgent_charge, 0.0);
+        assert_eq!(mixed_edit.customers[0].orders[1].urgent_charge, 5.0);
+
         input.target_date = None;
         for order in &mut input.customers[0].orders {
+            order.is_urgent = false;
             order.urgent_charge = 0.0;
         }
         assert_eq!(
@@ -1167,8 +1104,9 @@ mod tests {
             "percent",
             vec![customer(vec![order(100.0)]), customer(vec![order(100.0)])],
         );
-        invoice.is_urgent = true;
+        invoice.customers[0].orders[0].is_urgent = true;
         invoice.customers[0].orders[0].urgent_charge = 10.01;
+        invoice.customers[1].orders[0].is_urgent = true;
         invoice.customers[1].orders[0].urgent_charge = 20.02;
         invoice.products = vec![serde_json::from_value(product(1.0, 50.0)).unwrap()];
         invoice.gift_cards = vec![serde_json::from_value(gift_card(25.0)).unwrap()];
@@ -1181,25 +1119,18 @@ mod tests {
     }
 
     #[test]
-    fn retail_only_invoices_cannot_carry_an_order_urgency_charge() {
-        let mut invoice = retail_invoice(serde_json::json!({"products": [product(1.0, 50.0)]}));
-        invoice.is_urgent = true;
-        assert!(validate(&invoice).is_err());
-    }
-
-    #[test]
     fn urgency_requires_a_positive_charge_and_regular_invoices_have_none() {
         let mut invoice = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
-        assert!(!invoice.is_urgent);
+        assert!(!invoice.customers[0].orders[0].is_urgent);
         assert_eq!(invoice.collection_method.as_str(), "pickup");
-        invoice.is_urgent = true;
+        invoice.customers[0].orders[0].is_urgent = true;
         for charge in [0.0, -1.0, 0.004, f64::NAN, f64::INFINITY] {
             invoice.customers[0].orders[0].urgent_charge = charge;
             assert!(validate(&invoice).is_err(), "{charge}");
         }
         invoice.customers[0].orders[0].urgent_charge = 0.01;
         assert!(validate(&invoice).is_ok());
-        invoice.is_urgent = false;
+        invoice.customers[0].orders[0].is_urgent = false;
         assert!(validate(&invoice).is_err());
     }
 
@@ -1210,7 +1141,7 @@ mod tests {
         invoice.target_date = None;
         assert!(validate(&invoice).is_ok());
 
-        invoice.is_urgent = true;
+        invoice.customers[0].orders[0].is_urgent = true;
         invoice.customers[0].orders[0].urgent_charge = 10.0;
         let error = validate(&invoice).unwrap_err();
         assert!(matches!(error, AppError::BadRequest(message) if message.contains("target date")));
@@ -1762,7 +1693,7 @@ pub async fn create_invoice(
     mut input: CreateInvoiceInput,
 ) -> Result<CreatedInvoice, AppError> {
     let mut tx = state.db().begin().await?;
-    resolve_order_prices(&mut tx, &mut input).await?;
+    resolve_order_prices(&mut tx, &mut input, state.urgent_charge_rule()?).await?;
     validate(&input)?;
 
     let totals = compute_totals(&input);
@@ -1879,7 +1810,7 @@ pub async fn update_invoice(
     // already legitimately held.
     input.payments = Vec::new();
     let mut tx = state.db().begin().await?;
-    resolve_order_prices(&mut tx, &mut input).await?;
+    resolve_order_prices(&mut tx, &mut input, state.urgent_charge_rule()?).await?;
     validate(&input)?;
 
     let totals = compute_totals(&input);

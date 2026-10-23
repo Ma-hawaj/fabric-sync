@@ -36,6 +36,7 @@ export interface InvoiceEditMeasurement {
 }
 
 export interface InvoiceEditOrder {
+  isUrgent: boolean
   materialSource: 'shop' | 'customer'
   customerMaterialDescription: string | null
   materialId: string | null
@@ -94,7 +95,6 @@ export interface InvoiceEditRedemption {
 
 /** Shape of GET /invoices/:id/edit — the invoice as entered, not as printed. */
 export interface InvoiceEdit {
-  isUrgent: boolean
   urgentCharge: number
   collectionMethod: 'delivery' | 'pickup'
   id: string

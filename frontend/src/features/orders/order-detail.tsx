@@ -88,6 +88,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           </div>
 
           <div className="mt-2 flex flex-wrap gap-2">
+            {order.isUrgent && <Badge variant="destructive">Urgent</Badge>}
             <Badge
               variant={order.status === 'collected' ? 'default' : 'secondary'}
             >

@@ -14,7 +14,6 @@ export interface InvoiceCustomer {
 // payments (the ledger); `amountPaid` is their sum and `paymentMethod` the
 // most recent one's method.
 export interface Invoice extends ReadinessFields {
-  isUrgent: boolean
   urgentCharge: number
   collectionMethod: 'delivery' | 'pickup'
   id: string

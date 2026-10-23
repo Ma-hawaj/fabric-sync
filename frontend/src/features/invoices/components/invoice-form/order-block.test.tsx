@@ -67,11 +67,10 @@ function Harness({
 }: { order?: Partial<InvoiceOrderDraft>; isUrgent?: boolean } = {}) {
   const form = useForm({
     defaultValues: {
-      isUrgent,
       customers: [
         {
           ...createEmptyCustomer(),
-          orders: [{ ...createEmptyCustomer().orders[0], ...order }],
+          orders: [{ ...createEmptyCustomer().orders[0], isUrgent, ...order }],
         },
       ],
     },
@@ -90,6 +89,8 @@ function Harness({
     '/design-options': DESIGN_OPTIONS,
   })
   apiGet.mockImplementation(async (url: string) => {
+    if (new URL(url, 'http://localhost').pathname === '/pricing')
+      return { data: { urgentCharge: { amount: 5, unit: 'amount' } } }
     const id = new URL(url, 'http://localhost').pathname.match(
       /^\/materials\/([^/]+)$/,
     )?.[1]
@@ -150,30 +151,18 @@ async function pickMaterial(name: RegExp | string) {
 }
 
 describe('OrderBlock', () => {
-  it('keeps the urgent charge separate when automatic garment pricing changes', async () => {
+  it('applies a read-only urgent charge and clears it only for this order when made regular', async () => {
     render(
       <Harness
         isUrgent
-        order={{
-          materialId: 'mat-1',
-          materialAmount: 3,
-          emd: '6',
-          urgentCharge: 10,
-        }}
+        order={{ materialId: 'mat-1', materialAmount: 3, emd: '6' }}
       />,
     )
-    await waitFor(() =>
-      expect(
-        screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
-      ).toContain('22.50'),
+    const charge = await screen.findByLabelText(
+      `Urgent charge incl. VAT (${CURRENCY})`,
     )
-    const field = screen.getByLabelText(`Urgent charge incl. VAT (${CURRENCY})`)
-    fireEvent.change(field, { target: { value: '15' } })
-    fireEvent.blur(field)
-    expect(
-      JSON.parse(screen.getByTestId('draft').textContent).customers[0].orders[0]
-        .urgentCharge,
-    ).toBe(15)
+    expect(charge.tagName).toBe('OUTPUT')
+    await waitFor(() => expect(charge.textContent).toContain('5.00'))
     expect(
       screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
     ).toContain('22.50')
@@ -183,8 +172,25 @@ describe('OrderBlock', () => {
     await waitFor(() => {
       const order = JSON.parse(screen.getByTestId('draft').textContent)
         .customers[0].orders[0]
-      expect(order).toMatchObject({ price: 32.5, urgentCharge: 15 })
+      expect(order).toMatchObject({
+        price: 32.5,
+        isUrgent: true,
+        urgentCharge: 5,
+      })
     })
+    fireEvent.click(screen.getByRole('radio', { name: 'Regular' }))
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order).toMatchObject({
+        price: 32.5,
+        isUrgent: false,
+        urgentCharge: 0,
+      })
+    })
+    expect(
+      screen.queryByLabelText(`Urgent charge incl. VAT (${CURRENCY})`),
+    ).toBeNull()
   })
 
   it('creates a customer fabric order with a production location that has no inventory stock', async () => {

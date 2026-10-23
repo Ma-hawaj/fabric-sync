@@ -25,7 +25,6 @@ vi.mock('@tanstack/react-router', () => ({
 const invoice: Invoice = {
   id: 'invoice-one',
   invoiceNumber: 42,
-  isUrgent: false,
   collectionMethod: 'pickup',
   urgentCharge: 0,
   date: '2026-10-17T10:00:00Z',

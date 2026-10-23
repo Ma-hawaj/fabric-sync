@@ -54,13 +54,16 @@ export function getOrderColumns(
         <DataTableColumnHeader column={column} label="Order" />
       ),
       cell: ({ row }) => (
-        <Link
-          to="/orders/$orderId"
-          params={{ orderId: row.original.id }}
-          className="font-mono font-medium text-info hover:underline"
-        >
-          ORD-{row.getValue<number>('orderNumber')}
-        </Link>
+        <div className="flex flex-col items-start gap-1">
+          <Link
+            to="/orders/$orderId"
+            params={{ orderId: row.original.id }}
+            className="font-mono font-medium text-info hover:underline"
+          >
+            ORD-{row.getValue<number>('orderNumber')}
+          </Link>
+          {row.original.isUrgent && <Badge variant="destructive">Urgent</Badge>}
+        </div>
       ),
       enableSorting: true,
       enableColumnFilter: true,

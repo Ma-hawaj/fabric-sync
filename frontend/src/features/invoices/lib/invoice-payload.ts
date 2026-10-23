@@ -25,7 +25,7 @@ function blankToNull(value: string): string | null {
   return value === '' ? null : value
 }
 
-function orderPayload(order: InvoiceOrderDraft, isUrgent: boolean) {
+function orderPayload(order: InvoiceOrderDraft) {
   return {
     materialSource: order.materialSource,
     materialId: order.materialSource === 'shop' ? order.materialId : null,
@@ -35,7 +35,7 @@ function orderPayload(order: InvoiceOrderDraft, isUrgent: boolean) {
         : null,
     materialAmount: numberOrZero(order.materialAmount),
     productionLocationId: order.productionLocationId,
-    urgentCharge: isUrgent ? numberOrZero(order.urgentCharge) : 0,
+    isUrgent: order.isUrgent,
     customerBasePrice:
       order.materialSource === 'customer'
         ? numberOrZero(order.customerBasePrice)
@@ -51,7 +51,7 @@ function orderPayload(order: InvoiceOrderDraft, isUrgent: boolean) {
   }
 }
 
-function customerPayload(customer: InvoiceCustomerDraft, isUrgent: boolean) {
+function customerPayload(customer: InvoiceCustomerDraft) {
   return {
     existingCustomerId:
       customer.mode === 'existing' ? customer.existingCustomerId : null,
@@ -64,7 +64,7 @@ function customerPayload(customer: InvoiceCustomerDraft, isUrgent: boolean) {
           }
         : null,
     measurement: measurementPayload(customer.measurement),
-    orders: customer.orders.map((order) => orderPayload(order, isUrgent)),
+    orders: customer.orders.map(orderPayload),
   }
 }
 
@@ -99,7 +99,6 @@ function redemptionPayload(redemption: GiftCardRedemptionDraft) {
 export function invoicePayload(values: InvoiceFormValues) {
   return {
     targetDate: values.targetDate || null,
-    isUrgent: values.isUrgent,
     collectionMethod: values.collectionMethod,
     branchId: values.receivingBranch || null,
     discount: numberOrZero(values.discount),
@@ -115,9 +114,7 @@ export function invoicePayload(values: InvoiceFormValues) {
     // Only meaningful for a sale with no orders to find a customer through;
     // it is left blank otherwise.
     customerId: values.customerId || null,
-    customers: values.customers.map((customer) =>
-      customerPayload(customer, values.isUrgent),
-    ),
+    customers: values.customers.map(customerPayload),
     products: values.products.map((line) =>
       productPayload(line, values.productBranch),
     ),

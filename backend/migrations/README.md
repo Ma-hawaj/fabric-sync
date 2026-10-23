@@ -7,8 +7,8 @@ SQLx applies the files in version order:
 
 1. `0001_core_schema.sql` creates the business tables, including the complete
    order lifecycle (`pending`, `ready`, `collected`), customer addresses,
-   notification preferences, invoice urgency and collection method, and per-order
-   urgent charges. The invoice charge column stores the computed sum of its
+   notification preferences, invoice collection method, and per-order urgency
+   and automatic charges. The invoice charge column stores the computed sum of its
    order charges.
 2. `0002_notification_schema.sql` creates immutable PDF artifacts, notification
    previews and approvals, recipients, delivery attempts, and webhook storage.

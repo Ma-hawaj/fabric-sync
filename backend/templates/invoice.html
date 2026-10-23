@@ -478,12 +478,6 @@
             <dt>الاستلام<span class="en">Collection</span></dt>
             <dd>{% if invoice.collectionMethod == 'delivery' %}توصيل <span class="en">Delivery</span>{% else %}استلام <span class="en">Pickup</span>{% endif %}</dd>
           </div>
-          {% if invoice.isUrgent %}
-          <div class="row">
-            <dt>الأولوية<span class="en">Priority</span></dt>
-            <dd>عاجل <span class="en">Urgent</span></dd>
-          </div>
-          {% endif %}
           <div class="row">
             <dt>الحالة<span class="en">Status</span></dt>
             <dd>
@@ -590,6 +584,9 @@
                   </div>
                 </div>
               {% endif %}
+              {% if line.isUrgent %}
+                <span class="line-note">عاجل · Urgent order</span>
+              {% endif %}
               {% if line.urgentCharge > 0 %}
                 <span class="line-note">رسوم الاستعجال لهذا الطلب · Urgent charge for this order (incl. VAT): {{ currency }} {{ amounts["line" ~ loop.index0 ~ "UrgentCharge"] }}</span>
               {% endif %}
@@ -654,7 +651,7 @@
             </td>
             <td class="num">{{ currency }} {{ amounts.vat }}</td>
           </tr>
-          {% if invoice.isUrgent %}
+          {% if invoice.totals.urgentCharge > 0 %}
             <tr>
               <td class="label">رسوم الاستعجال <span class="en">Urgent charges (incl. VAT)</span></td>
               <td class="num">{{ currency }} {{ amounts.urgentCharge }}</td>

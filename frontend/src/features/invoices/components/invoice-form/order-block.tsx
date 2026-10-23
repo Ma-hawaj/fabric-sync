@@ -3,7 +3,11 @@ import { useState } from 'react'
 import { useStore } from '@tanstack/react-form'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
-import { calculateGarmentPrice } from '../../lib/garment-pricing'
+import {
+  calculateGarmentPrice,
+  calculateUrgentCharge,
+} from '../../lib/garment-pricing'
+import { usePricing } from '../../hooks/use-pricing'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { PRODUCTION_FILTERS } from '@/features/locations/lib/location-filters'
 import { XIcon } from 'lucide-react'
@@ -259,6 +263,19 @@ export function OrderBlock({
       ? calculateGarmentPrice(draft, pricingMaterial, designOptions)
       : null
   const computedPrice = pricing?.total ?? ''
+  const { data: pricingRules } = usePricing()
+  const computedUrgentCharge = draft?.isUrgent
+    ? calculateUrgentCharge(computedPrice, pricingRules?.urgentCharge)
+    : 0
+  React.useEffect(() => {
+    if (draft && draft.urgentCharge !== computedUrgentCharge) {
+      form.setFieldValue(
+        `${base}.urgentCharge` as never,
+        computedUrgentCharge as never,
+      )
+      if (form.state.submissionAttempts > 0) void form.validate('submit')
+    }
+  }, [form, base, draft, computedUrgentCharge])
   React.useEffect(() => {
     if (draft && draft.price !== computedPrice) {
       form.setFieldValue(`${base}.price` as never, computedPrice as never)
@@ -276,6 +293,25 @@ export function OrderBlock({
           </Button>
         )}
       </div>
+
+      <form.Field name={`${base}.isUrgent` as never}>
+        {(field: any) => (
+          <Field>
+            <FieldLabel>Priority</FieldLabel>
+            <SegmentedOptions
+              ariaLabel={`Order ${orderNumber} priority`}
+              options={['Regular', 'Urgent']}
+              value={field.state.value ? 'Urgent' : 'Regular'}
+              onChange={(value) => {
+                field.handleChange(value === 'Urgent')
+                if (form.state.submissionAttempts > 0)
+                  void form.validate('submit')
+              }}
+              columns={2}
+            />
+          </Field>
+        )}
+      </form.Field>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="space-y-1.5">
@@ -600,17 +636,29 @@ export function OrderBlock({
             </form.Field>
             <GrossVatHint gross={computedPrice} />
           </div>
-          <form.Subscribe selector={(state: any) => state.values.isUrgent}>
-            {(isUrgent: boolean) =>
-              isUrgent && (
-                <NumberField
-                  form={form}
-                  name={`${base}.urgentCharge`}
-                  label={`Urgent charge incl. VAT (${CURRENCY})`}
-                />
-              )
-            }
-          </form.Subscribe>
+          {draft?.isUrgent && (
+            <div className="space-y-1.5">
+              <Label>Urgent charge incl. VAT ({CURRENCY})</Label>
+              <output
+                aria-label={`Urgent charge incl. VAT (${CURRENCY})`}
+                className="block text-sm font-semibold"
+              >
+                {draft.urgentCharge === ''
+                  ? '—'
+                  : `${CURRENCY} ${draft.urgentCharge.toFixed(2)}`}
+              </output>
+              <p className="text-xs text-muted-foreground">
+                {computedUrgentCharge === ''
+                  ? 'Urgent pricing is unavailable. Contact an administrator.'
+                  : 'Applied automatically for this order.'}
+              </p>
+              <form.Field name={`${base}.urgentCharge` as never}>
+                {(field: any) => (
+                  <FieldError errors={field.state.meta.errors} />
+                )}
+              </form.Field>
+            </div>
+          )}
         </div>
       </div>
     </div>

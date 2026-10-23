@@ -472,7 +472,6 @@ mod tests {
     #[test]
     fn the_document_prints_collection_urgency_and_customer_address() {
         let mut detail = tests_support::detail();
-        detail.is_urgent = true;
         detail.collection_method = "delivery".to_string();
         detail.totals.urgent_charge = 10.0;
         detail.buyer = Some(InvoiceParty {
@@ -498,7 +497,6 @@ mod tests {
         assert!(html.contains("Urgent charges (incl. VAT)"));
         assert!(html.contains("10.000"));
         assert!(html.contains("Building 1 &lt;Road 2&gt;"));
-        detail.is_urgent = false;
         detail.totals.urgent_charge = 0.0;
         detail.collection_method = "pickup".to_string();
         let html = render(&detail);
@@ -765,7 +763,6 @@ mod tests_support {
             target_date: Some(NaiveDate::from_ymd_opt(2026, 8, 6).unwrap()),
             created_at: Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),
             branch_name: None,
-            is_urgent: false,
             collection_method: "pickup".to_string(),
             buyer: None,
             payment_status: "paid".to_string(),

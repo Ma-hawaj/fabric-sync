@@ -54,6 +54,11 @@ describe('saving the customer WhatsApp preference', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Full Name' }), {
       target: { value: 'Ahmed Hassan' },
     })
+    const address = screen.getByRole('textbox', { name: 'Address (optional)' })
+    expect(address.tagName).toBe('TEXTAREA')
+    fireEvent.change(address, {
+      target: { value: 'Building 1\nRoad 2, Manama' },
+    })
     expect(apiClient.patch).not.toHaveBeenCalled()
     expect(apiClient.post).not.toHaveBeenCalled()
 
@@ -63,7 +68,7 @@ describe('saving the customer WhatsApp preference', () => {
         name: 'Ahmed Hassan',
         mobileNo: '+97333112233',
         whatsappNotificationsEnabled: false,
-        address: '',
+        address: 'Building 1\nRoad 2, Manama',
       }),
     )
     expect(apiClient.patch).toHaveBeenCalledTimes(1)

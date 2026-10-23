@@ -69,9 +69,8 @@ CREATE TABLE invoices (
     -- When the garment is promised for, if at all. Staff-editable, unlike
     -- invoice_date above; blank means no committed pickup.
     target_date DATE,
-    is_urgent BOOLEAN NOT NULL DEFAULT false,
     -- Computed sum of the individual order charges, kept for invoice totals.
-    urgent_charge NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    urgent_charge NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (urgent_charge >= 0),
     collection_method TEXT NOT NULL DEFAULT 'pickup'
         CHECK (collection_method IN ('delivery', 'pickup')),
     branch_id UUID REFERENCES branch(id),
@@ -88,9 +87,7 @@ CREATE TABLE invoices (
     -- total_price - gift_card_redeemed.
     gift_card_redeemed NUMERIC(10, 2) NOT NULL DEFAULT 0,
     notification_revision BIGINT NOT NULL DEFAULT 0,
-    readiness_generation BIGINT NOT NULL DEFAULT 0,
-    CONSTRAINT invoices_urgent_charge_check
-        CHECK ((is_urgent AND urgent_charge > 0) OR (NOT is_urgent AND urgent_charge = 0))
+    readiness_generation BIGINT NOT NULL DEFAULT 0
 );
 
 CREATE TABLE measurements (
@@ -150,7 +147,10 @@ CREATE TABLE orders (
     invoice_id UUID NOT NULL REFERENCES invoices(id),
     price NUMERIC(10, 2) NOT NULL,
     base_price NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (base_price >= 0),
-    urgent_charge NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (urgent_charge >= 0),
+    is_urgent BOOLEAN NOT NULL DEFAULT false,
+    urgent_charge NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    CONSTRAINT orders_urgent_charge_check
+        CHECK ((is_urgent AND urgent_charge > 0) OR (NOT is_urgent AND urgent_charge = 0)),
     thobe_type TEXT,
     f_pocket TEXT,
     s_pocket TEXT,

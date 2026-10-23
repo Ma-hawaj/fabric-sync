@@ -46,6 +46,7 @@ const orderDraftSchema = z
     productionLocationId: z.string(),
     customerBasePrice: numberInputSchema,
     price: numberInputSchema,
+    isUrgent: z.boolean(),
     urgentCharge: numberInputSchema,
   })
   .superRefine((order, ctx) => {
@@ -306,7 +307,6 @@ export const invoiceFormSchema = z
         },
       ),
     receivingBranch: z.string(),
-    isUrgent: z.boolean(),
     collectionMethod: z.enum(['delivery', 'pickup']),
     customerId: z.string(),
     productBranch: z.string(),
@@ -322,14 +322,14 @@ export const invoiceFormSchema = z
     value.customers.forEach((customer, customerIndex) => {
       customer.orders.forEach((order, orderIndex) => {
         if (
-          value.isUrgent &&
+          order.isUrgent &&
           (order.urgentCharge === '' ||
             !Number.isFinite(order.urgentCharge) ||
             Math.round(order.urgentCharge * 100) <= 0)
         ) {
           ctx.addIssue({
             code: 'custom',
-            message: 'Enter an urgent charge greater than 0 for this order.',
+            message: 'Urgent pricing is unavailable for this order.',
             path: [
               'customers',
               customerIndex,
@@ -341,23 +341,19 @@ export const invoiceFormSchema = z
         }
       })
     })
-    if (value.isUrgent && !value.targetDate) {
+    const hasUrgentOrders = value.customers.some((customer) =>
+      customer.orders.some((order) => order.isUrgent),
+    )
+    if (hasUrgentOrders && !value.targetDate) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Pick a target date for urgent invoices.',
+        message: 'Pick a target date for urgent orders.',
         path: ['targetDate'],
       })
     }
     const hasOrders = value.customers.some(
       (customer) => customer.orders.length > 0,
     )
-    if (value.isUrgent && !hasOrders) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Add at least one tailoring order for an urgent invoice.',
-        path: ['customers'],
-      })
-    }
     if (!hasOrders && !value.products.length && !value.giftCards.length) {
       ctx.addIssue({
         code: 'custom',
@@ -414,7 +410,7 @@ export const invoiceFormSchema = z
       ),
       discount: value.discount === '' ? 0 : value.discount,
       discountUnit: value.discountUnit,
-      urgentCharge: value.isUrgent ? computeUrgentCharges(value.customers) : 0,
+      urgentCharge: computeUrgentCharges(value.customers),
       redeemed: value.redemptions.reduce(
         (sum, redemption) => sum + computeRedemptionTotal(redemption),
         0,

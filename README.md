@@ -177,6 +177,14 @@ VITE_API_BASE_URL=http://localhost:8000 pnpm run dev
 
 ## Garment pricing
 
+Urgency is selected separately for each tailoring order. The server applies a
+VAT-inclusive urgent charge after invoice discounts, and the form displays it
+read-only. Set `URGENT_ORDER_CHARGE` to a positive amount and
+`URGENT_ORDER_CHARGE_UNIT` to `amount` (fixed BHD per urgent order) or `percent`
+(percentage of that order's calculated garment price). No rate is assumed:
+urgent orders cannot be saved until pricing is configured. Regular orders have
+no urgent charge. An invoice containing any urgent order requires a target date.
+
 Materials have junior, normal, and large garment prices, entered when creating
 a material or through its Edit Material dialog. Design options have an optional
 additional cost (zero by default). Prices include VAT.

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            o.id AS order_id,\n            c.name AS customer_name,\n            c.mobile_no AS customer_mobile_no,\n            c.address AS customer_address,\n            CASE WHEN o.material_source = 'customer'\n                THEN 'Customer-provided material: ' || o.customer_material_description\n                ELSE mat.name END AS \"material_name!\",\n            COALESCE(mat.unit, 'meters') AS \"material_unit!\",\n            o.material_amount::float8 AS \"material_amount!\",\n            o.price::float8 AS \"price!\",\n            o.urgent_charge::float8 AS \"urgent_charge!\",\n            o.thobe_type,\n            o.f_pocket,\n            o.s_pocket,\n            o.collar,\n            o.sleeve,\n            o.patti,\n            o.emd,\n            o.more_details\n        FROM orders o\n        JOIN measurements m ON m.id = o.measurement_id\n        JOIN customers c ON c.id = m.customer_id\n        LEFT JOIN materials mat ON mat.id = o.material_id\n        WHERE o.invoice_id = $1\n        ORDER BY o.id\n        ",
+  "query": "\n        SELECT\n            o.id AS order_id,\n            c.name AS customer_name,\n            c.mobile_no AS customer_mobile_no,\n            c.address AS customer_address,\n            CASE WHEN o.material_source = 'customer'\n                THEN 'Customer-provided material: ' || o.customer_material_description\n                ELSE mat.name END AS \"material_name!\",\n            COALESCE(mat.unit, 'meters') AS \"material_unit!\",\n            o.material_amount::float8 AS \"material_amount!\",\n            o.price::float8 AS \"price!\",\n            o.is_urgent,\n            o.urgent_charge::float8 AS \"urgent_charge!\",\n            o.thobe_type,\n            o.f_pocket,\n            o.s_pocket,\n            o.collar,\n            o.sleeve,\n            o.patti,\n            o.emd,\n            o.more_details\n        FROM orders o\n        JOIN measurements m ON m.id = o.measurement_id\n        JOIN customers c ON c.id = m.customer_id\n        LEFT JOIN materials mat ON mat.id = o.material_id\n        WHERE o.invoice_id = $1\n        ORDER BY o.id\n        ",
   "describe": {
     "columns": [
       {
@@ -45,46 +45,51 @@
       },
       {
         "ordinal": 8,
+        "name": "is_urgent",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
         "name": "urgent_charge!",
         "type_info": "Float8"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "thobe_type",
         "type_info": "Text"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "f_pocket",
         "type_info": "Text"
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "s_pocket",
         "type_info": "Text"
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "collar",
         "type_info": "Text"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "sleeve",
         "type_info": "Text"
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "patti",
         "type_info": "Text"
       },
       {
-        "ordinal": 15,
+        "ordinal": 16,
         "name": "emd",
         "type_info": "Text"
       },
       {
-        "ordinal": 16,
+        "ordinal": 17,
         "name": "more_details",
         "type_info": "Text"
       }
@@ -103,6 +108,7 @@
       null,
       null,
       null,
+      false,
       null,
       true,
       true,
@@ -114,5 +120,5 @@
       true
     ]
   },
-  "hash": "700c33276ce352d26daaf82dc0742139aef27fda1e0a704b5709657c555a60bd"
+  "hash": "5bca75e4eaae37e1a7ef51f2126869ef271a9ff75adb83ea563a8fa62e0f2faa"
 }

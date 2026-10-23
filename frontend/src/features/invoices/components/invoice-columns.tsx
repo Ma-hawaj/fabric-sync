@@ -90,7 +90,6 @@ export const getInvoiceColumns = (
           >
             INV-{row.getValue<number>('invoiceNumber')}
           </Link>
-          {row.original.isUrgent && <Badge variant="destructive">Urgent</Badge>}
         </div>
       ),
       enableSorting: true,

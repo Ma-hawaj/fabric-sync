@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO invoices (\n            target_date, branch_id, discount, discount_unit,\n            total_price, customer_id, gift_card_redeemed,\n            is_urgent, urgent_charge, collection_method\n        )\n        VALUES (\n            $1, $2, $3::float8, $4, $5::float8, $6, $7::float8,\n            $8, $9::float8, $10\n        )\n        RETURNING id, invoice_date\n        ",
+  "query": "\n        INSERT INTO invoices (\n            target_date, branch_id, discount, discount_unit,\n            total_price, customer_id, gift_card_redeemed,\n            urgent_charge, collection_method\n        )\n        VALUES (\n            $1, $2, $3::float8, $4, $5::float8, $6, $7::float8,\n            $8::float8, $9\n        )\n        RETURNING id, invoice_date\n        ",
   "describe": {
     "columns": [
       {
@@ -23,7 +23,6 @@
         "Float8",
         "Uuid",
         "Float8",
-        "Bool",
         "Float8",
         "Text"
       ]
@@ -33,5 +32,5 @@
       false
     ]
   },
-  "hash": "0a4f0da8b74898301135917dbffe85f3a70ff78c94ce62c7c1e4157497e68cfb"
+  "hash": "0871b6c51e7debb0f7add50ba116e21c19616cdb446c494481f04546e40acb26"
 }

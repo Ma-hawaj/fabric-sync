@@ -27,6 +27,32 @@ pub struct InvoiceBranding {
     pub template_dir: Option<String>,
 }
 
+#[cfg(test)]
+mod urgent_pricing_tests {
+    use super::*;
+
+    #[test]
+    fn urgency_needs_an_explicit_positive_pricing_rule() {
+        let mut config = Config::from_env();
+        config.urgent_charge_amount = None;
+        assert!(config.urgent_charge_rule().unwrap().is_none());
+        config.urgent_charge_unit = "amount".into();
+        config.urgent_charge_amount = Some("5".into());
+        assert_eq!(config.urgent_charge_rule().unwrap().unwrap().amount, 5.0);
+        for amount in ["-1", "0", "0.001", "NaN", "invalid", "100000000"] {
+            config.urgent_charge_amount = Some(amount.into());
+            assert!(config.urgent_charge_rule().is_err(), "{amount}");
+        }
+        config.urgent_charge_unit = "percent".into();
+        config.urgent_charge_amount = Some("101".into());
+        assert!(config.urgent_charge_rule().is_err());
+        config.urgent_charge_amount = Some("10".into());
+        assert!(config.urgent_charge_rule().is_ok());
+        config.urgent_charge_unit = "invalid".into();
+        assert!(config.urgent_charge_rule().is_err());
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub notifications: crate::features::notifications::Config,
@@ -63,6 +89,8 @@ pub struct Config {
     /// API routes still work and every other path 404s until a build is
     /// dropped in (e.g. plain `cargo run` without building the frontend).
     pub static_dir: String,
+    pub urgent_charge_amount: Option<String>,
+    pub urgent_charge_unit: String,
 }
 
 impl InvoiceBranding {
@@ -94,6 +122,36 @@ impl InvoiceBranding {
 }
 
 impl Config {
+    pub fn urgent_charge_rule(
+        &self,
+    ) -> Result<Option<crate::features::pricing::types::UrgentChargeRule>, String> {
+        use crate::features::pricing::{
+            service::validate_amount,
+            types::{UrgentChargeRule, UrgentChargeUnit},
+        };
+        let Some(raw) = &self.urgent_charge_amount else {
+            return Ok(None);
+        };
+        let amount: f64 = raw
+            .parse()
+            .map_err(|_| "URGENT_ORDER_CHARGE must be a positive amount".to_string())?;
+        if validate_amount(amount).is_err() || amount <= 0.0 {
+            return Err(
+                "URGENT_ORDER_CHARGE must be positive with at most two decimal places".into(),
+            );
+        }
+        let unit = match self.urgent_charge_unit.as_str() {
+            "amount" => UrgentChargeUnit::Amount,
+            "percent" if amount <= 100.0 => UrgentChargeUnit::Percent,
+            _ => {
+                return Err(
+                    "URGENT_ORDER_CHARGE_UNIT must be amount or percent (at most 100%)".into(),
+                )
+            }
+        };
+        Ok(Some(UrgentChargeRule { amount, unit }))
+    }
+
     /// The zone printed documents write dates in. Checked once at startup —
     /// a misspelled TIMEZONE must refuse to boot rather than silently print
     /// UTC again.
@@ -149,6 +207,11 @@ impl Config {
 
         Self {
             port,
+            urgent_charge_amount: env::var("URGENT_ORDER_CHARGE")
+                .ok()
+                .filter(|value| !value.trim().is_empty()),
+            urgent_charge_unit: env::var("URGENT_ORDER_CHARGE_UNIT")
+                .unwrap_or_else(|_| "amount".into()),
             database_url,
             oauth_issuer_url,
             oauth_client_id,

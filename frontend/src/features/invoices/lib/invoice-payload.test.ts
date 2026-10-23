@@ -9,23 +9,26 @@ import {
 describe('invoice material payload', () => {
   it('saves customer addresses, collection, and urgency and clears a regular surcharge', () => {
     const values = createEmptyInvoiceForm()
-    values.isUrgent = true
+    values.customers[0].orders[0].isUrgent = true
     values.customers[0].orders[0].urgentCharge = 15
     values.collectionMethod = 'delivery'
     values.customers[0].mode = 'new'
     values.customers[0].address = '  Building 1, Road 2  '
     expect(invoicePayload(values)).toMatchObject({
-      isUrgent: true,
       collectionMethod: 'delivery',
       customers: [
         {
           newCustomer: { address: 'Building 1, Road 2' },
-          orders: [{ urgentCharge: 15 }],
+          orders: [{ isUrgent: true }],
         },
       ],
     })
-    values.isUrgent = false
-    expect(invoicePayload(values).customers[0].orders[0].urgentCharge).toBe(0)
+    values.customers[0].orders[0].isUrgent = false
+    expect(invoicePayload(values).customers[0].orders[0].isUrgent).toBe(false)
+    expect(invoicePayload(values).customers[0].orders[0]).not.toHaveProperty(
+      'urgentCharge',
+    )
+    expect(invoicePayload(values)).not.toHaveProperty('isUrgent')
     expect(invoicePayload(values)).not.toHaveProperty('urgentCharge')
   })
   it('sends only the details belonging to each material source', () => {

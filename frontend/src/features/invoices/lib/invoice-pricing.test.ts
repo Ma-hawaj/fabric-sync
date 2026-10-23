@@ -86,11 +86,15 @@ describe('computeInvoiceTotals', () => {
     const customers = [
       {
         ...createEmptyCustomer(),
-        orders: [{ ...createEmptyOrder(), urgentCharge: 0.006 }],
+        orders: [
+          { ...createEmptyOrder(), isUrgent: true, urgentCharge: 0.006 },
+        ],
       },
       {
         ...createEmptyCustomer(),
-        orders: [{ ...createEmptyOrder(), urgentCharge: 0.006 }],
+        orders: [
+          { ...createEmptyOrder(), isUrgent: true, urgentCharge: 0.006 },
+        ],
       },
     ]
     expect(computeUrgentCharges(customers)).toBe(0.02)

@@ -41,7 +41,6 @@ beforeEach(() => {
 const EDIT_FIXTURE: InvoiceEdit = {
   id: '0197fdd2-6a67-7000-8000-000000000001',
   invoiceNumber: 42,
-  isUrgent: false,
   collectionMethod: 'pickup',
   urgentCharge: 0,
   date: '2026-07-19',

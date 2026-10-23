@@ -46,6 +46,15 @@ impl AppState {
         &self.db
     }
 
+    pub fn urgent_charge_rule(
+        &self,
+    ) -> Result<Option<crate::features::pricing::types::UrgentChargeRule>, crate::error::AppError>
+    {
+        self.config
+            .urgent_charge_rule()
+            .map_err(crate::error::AppError::Config)
+    }
+
     pub fn invoice_branding(&self) -> &InvoiceBranding {
         &self.config.invoice_branding
     }

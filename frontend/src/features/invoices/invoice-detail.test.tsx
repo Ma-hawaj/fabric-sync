@@ -39,7 +39,6 @@ vi.mock('@tanstack/react-router', () => ({
 const DETAIL: InvoiceDetail = {
   id: 'inv-1',
   invoiceNumber: 42,
-  isUrgent: false,
   collectionMethod: 'pickup',
   date: '2026-07-28T09:30:00Z',
   targetDate: '2026-08-04',
@@ -55,6 +54,7 @@ const DETAIL: InvoiceDetail = {
   lines: [
     {
       kind: 'order',
+      isUrgent: false,
       urgentCharge: 0,
       orderId: 'order-1',
       description: 'Japanese Toray Cotton',
@@ -68,6 +68,7 @@ const DETAIL: InvoiceDetail = {
     },
     {
       kind: 'gift_card',
+      isUrgent: false,
       urgentCharge: 0,
       orderId: null,
       description: 'Gift card GC-2026-A1',
@@ -123,8 +124,10 @@ describe('InvoiceDetailPage', () => {
   it('shows delivery, priority, addresses, and the urgent charge on saved invoices', () => {
     renderPage({
       ...DETAIL,
-      isUrgent: true,
-      lines: [{ ...DETAIL.lines[0], urgentCharge: 10 }, DETAIL.lines[1]],
+      lines: [
+        { ...DETAIL.lines[0], isUrgent: true, urgentCharge: 10 },
+        DETAIL.lines[1],
+      ],
       collectionMethod: 'delivery',
       buyer: {
         name: 'Buyer',

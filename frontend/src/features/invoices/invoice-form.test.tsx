@@ -18,15 +18,19 @@ function renderPage() {
 }
 
 describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
-  it('shows a missing target date error for urgent invoices and clears it for regular invoices', async () => {
+  it('requires a target date for an urgent order and clears the error when that order becomes regular', async () => {
     renderPage()
-    fireEvent.click(screen.getByRole('radio', { name: 'Urgent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add Another Order' }))
+    const urgentOptions = screen.getAllByRole('radio', { name: 'Urgent' })
+    fireEvent.click(urgentOptions[0])
+    expect(urgentOptions[0].getAttribute('aria-checked')).toBe('true')
+    expect(urgentOptions[1].getAttribute('aria-checked')).toBe('false')
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     })
 
     expect(
-      await screen.findByText('Pick a target date for urgent invoices.'),
+      await screen.findByText('Pick a target date for urgent orders.'),
     ).toBeTruthy()
     expect(
       screen
@@ -34,13 +38,13 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
         .getAttribute('aria-invalid'),
     ).toBe('true')
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Regular' }))
+    fireEvent.click(screen.getAllByRole('radio', { name: 'Regular' })[0])
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     })
     await waitFor(() => {
       expect(
-        screen.queryByText('Pick a target date for urgent invoices.'),
+        screen.queryByText('Pick a target date for urgent orders.'),
       ).toBeNull()
     })
   })

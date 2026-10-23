@@ -47,6 +47,7 @@ const SPEC: ListSpec = ListSpec {
             o.material_id,
             o.material_amount::float8 AS material_amount,
             o.price::float8 AS price,
+            o.is_urgent,
             o.urgent_charge::float8 AS urgent_charge,
             o.status,
             o.collected_at,

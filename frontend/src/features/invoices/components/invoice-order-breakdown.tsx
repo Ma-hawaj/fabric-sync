@@ -113,6 +113,9 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
                       >
                         ORD-{order.orderNumber}
                       </Link>
+                      {order.isUrgent && (
+                        <Badge variant="destructive">Urgent</Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div>{order.material}</div>
