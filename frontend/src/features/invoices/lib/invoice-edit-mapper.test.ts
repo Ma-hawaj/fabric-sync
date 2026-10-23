@@ -4,7 +4,6 @@ import type { InvoiceEdit } from '../types/invoice-edit'
 
 function editFixture(): InvoiceEdit {
   return {
-    editBlockedReason: null,
     id: '0197fdd2-6a67-7000-8000-000000000001',
     invoiceNumber: 42,
     date: '2026-07-19',

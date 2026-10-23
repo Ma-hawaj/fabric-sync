@@ -271,8 +271,6 @@ pub struct InvoicePayment {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEdit {
-    /// Reason editing is unavailable; null means the invoice can be edited.
-    pub edit_blocked_reason: Option<String>,
     pub id: Uuid,
     /// Sequential and human-readable, unlike `id` — for the edit page title.
     pub invoice_number: i64,
@@ -497,8 +495,6 @@ pub struct InvoiceRecord {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceDetail {
-    /// Reason editing is unavailable; null means the invoice can be edited.
-    pub edit_blocked_reason: Option<String>,
     pub id: Uuid,
     /// Sequential and human-readable, unlike `id`. Formatted for display by
     /// the consumer, which is why it stays a number here.
@@ -532,9 +528,6 @@ pub struct InvoiceDetail {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceListItem {
-    /// Reason editing is unavailable; null means the invoice can be edited.
-    #[sqlx(skip)]
-    pub edit_blocked_reason: Option<String>,
     pub id: Uuid,
     #[sqlx(rename = "invoice_date")]
     pub date: DateTime<Utc>,

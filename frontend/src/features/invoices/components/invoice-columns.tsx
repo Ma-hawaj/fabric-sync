@@ -324,12 +324,8 @@ export const getInvoiceColumns = (
               onClick: () => onExportPdf(invoice),
             },
             {
-              // The same server policy guards list actions, details, and
-              // direct edit links. Advances alone do not block editing.
               label: 'Edit',
               icon: PencilIcon,
-              disabled: Boolean(invoice.editBlockedReason),
-              description: invoice.editBlockedReason ?? undefined,
               onClick: () => onEdit(invoice),
             },
             {

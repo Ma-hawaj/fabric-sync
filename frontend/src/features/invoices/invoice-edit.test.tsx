@@ -7,17 +7,9 @@ import type { InvoiceEdit } from './types/invoice-edit'
 // Hoisted by vitest above these imports at transform time.
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
-  Link: ({
-    children,
-    params,
-  }: {
-    children: React.ReactNode
-    params: { invoiceId: string }
-  }) => <a href={`/invoices/${params.invoiceId}`}>{children}</a>,
 }))
 
 const EDIT_FIXTURE: InvoiceEdit = {
-  editBlockedReason: null,
   id: '0197fdd2-6a67-7000-8000-000000000001',
   invoiceNumber: 42,
   date: '2026-07-19',
@@ -54,19 +46,6 @@ describe('InvoiceEditPage', () => {
     // The gift card sale reopened as a line with its code visible.
     expect(await screen.findByDisplayValue('GC-1')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy()
-  })
-
-  it.each([
-    'Some orders have been collected.',
-    'Production has started on this invoice.',
-    'A gift card sold on this invoice has already been used.',
-  ])('blocks direct edit links with the server reason: %s', (reason) => {
-    renderPage({ ...EDIT_FIXTURE, editBlockedReason: reason })
-    expect(screen.getByRole('alert').textContent).toContain(reason)
-    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
-    expect(
-      screen.getByRole('link', { name: 'View invoice' }).getAttribute('href'),
-    ).toBe(`/invoices/${EDIT_FIXTURE.id}`)
   })
 
   it('waits for the invoice rather than rendering an empty form', () => {

@@ -1018,7 +1018,6 @@ pub async fn fetch_invoice_edit(
     let payments = list_payments(state, invoice_id).await?;
 
     Ok(Some(InvoiceEdit {
-        edit_blocked_reason: None,
         id: invoice_id,
         invoice_number: header.invoice_number,
         date: header.invoice_date,
@@ -1060,49 +1059,51 @@ pub async fn fetch_invoice_edit(
     }))
 }
 
-pub struct InvoiceEditStatus {
-    pub id: Uuid,
-    pub reason: Option<String>,
+/// True once any order on the invoice has been collected.
+pub async fn invoice_has_received_orders(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM orders
+            WHERE invoice_id = $1 AND status = 'received'
+        ) AS "exists!"
+        "#,
+        invoice_id,
+    )
+    .fetch_one(&mut **tx)
+    .await?)
 }
 
-/// Batched to avoid a query per invoice on the list. Updates run this after
-/// locking the invoice; gift cards are checked again under their own locks.
-pub async fn invoice_edit_status<'e, E>(
-    executor: E,
-    invoice_ids: &[Uuid],
-) -> Result<Vec<InvoiceEditStatus>, sqlx::Error>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    sqlx::query_as!(
-        InvoiceEditStatus,
+/// True once production has touched any order on the invoice: a recorded
+/// stage, an assignee, or a repair. Editing lines under that would rewrite
+/// history the shop floor already acted on.
+pub async fn invoice_has_production_activity(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query_scalar!(
         r#"
-        SELECT i.id, CASE
-            WHEN EXISTS (
-                SELECT 1 FROM orders o WHERE o.invoice_id = i.id AND o.status = 'received'
-            ) THEN 'Some orders have been collected.'
-            WHEN EXISTS (
-                SELECT 1 FROM order_stage_progress p JOIN orders o ON o.id = p.order_id
-                WHERE o.invoice_id = i.id
-            ) OR EXISTS (
-                SELECT 1 FROM order_stage_assignments a JOIN orders o ON o.id = a.order_id
-                WHERE o.invoice_id = i.id
-            ) OR EXISTS (
-                SELECT 1 FROM order_repairs r JOIN orders o ON o.id = r.order_id
-                WHERE o.invoice_id = i.id
-            ) THEN 'Production has started on this invoice.'
-            WHEN EXISTS (
-                SELECT 1 FROM invoice_items ii JOIN gift_card_redemptions r ON r.gift_card_id = ii.gift_card_id
-                WHERE ii.invoice_id = i.id AND ii.kind = 'gift_card'
-            ) THEN 'A gift card sold on this invoice has already been used.'
-            ELSE NULL
-        END AS "reason?"
-        FROM invoices i WHERE i.id = ANY($1)
+        SELECT EXISTS(
+            SELECT 1 FROM order_stage_progress p
+            JOIN orders o ON o.id = p.order_id
+            WHERE o.invoice_id = $1
+        ) OR EXISTS(
+            SELECT 1 FROM order_stage_assignments a
+            JOIN orders o ON o.id = a.order_id
+            WHERE o.invoice_id = $1
+        ) OR EXISTS(
+            SELECT 1 FROM order_repairs r
+            JOIN orders o ON o.id = r.order_id
+            WHERE o.invoice_id = $1
+        ) AS "exists!"
         "#,
-        invoice_ids,
+        invoice_id,
     )
-    .fetch_all(executor)
-    .await
+    .fetch_one(&mut **tx)
+    .await?)
 }
 
 pub async fn old_order_lines(

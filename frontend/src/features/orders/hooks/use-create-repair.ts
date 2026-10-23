@@ -27,7 +27,6 @@ export function useCreateRepair() {
     mutationFn: createRepair,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['orders'] })
-      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
     },
   })
 }

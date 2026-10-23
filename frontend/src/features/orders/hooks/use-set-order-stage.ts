@@ -32,7 +32,6 @@ export function useSetOrderStage() {
       // One stage change moves the derived current stage, so the whole row is
       // refetched rather than patched.
       void queryClient.invalidateQueries({ queryKey: ['orders'] })
-      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
     },
   })
 }

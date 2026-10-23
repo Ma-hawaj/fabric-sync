@@ -113,7 +113,6 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           <ExportPdfButton invoiceId={invoice.id} />
           <Button
             variant="outline"
-            disabled={Boolean(detail.editBlockedReason)}
             onClick={() =>
               void navigate({
                 to: '/invoices/$invoiceId/edit',
@@ -128,12 +127,6 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           <RecordPaymentButton invoice={invoice} />
         </div>
       </div>
-
-      {detail.editBlockedReason && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Editing unavailable: {detail.editBlockedReason}
-        </p>
-      )}
 
       <div>
         <SectionHeading icon={<Users className="h-3.5 w-3.5" />}>
@@ -416,7 +409,6 @@ function toInvoice(detail: InvoiceDetail): Invoice {
     paymentMethod: detail.paymentMethod,
     giftCardRedeemed: detail.totals.giftCardRedeemed,
     received: detail.received,
-    editBlockedReason: detail.editBlockedReason,
     lastReceivedAt: detail.lastReceivedAt,
     receivingLocation: detail.branchName,
     // The detail endpoint carries no production locations (lines carry no

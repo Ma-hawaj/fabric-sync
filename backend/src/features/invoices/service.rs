@@ -34,17 +34,7 @@ pub async fn list_invoices(
     state: &AppState,
     params: &ListParams,
 ) -> Result<list::Page<InvoiceListItem>, AppError> {
-    let mut page = repository::list_invoices(state, params).await?;
-    let ids: Vec<Uuid> = page.data.iter().map(|invoice| invoice.id).collect();
-    let reasons: HashMap<Uuid, Option<String>> = repository::invoice_edit_status(state.db(), &ids)
-        .await?
-        .into_iter()
-        .map(|status| (status.id, status.reason))
-        .collect();
-    for invoice in &mut page.data {
-        invoice.edit_blocked_reason = reasons.get(&invoice.id).cloned().flatten();
-    }
-    Ok(page)
+    repository::list_invoices(state, params).await
 }
 
 /// Reads one invoice with its lines and the arithmetic behind its total.
@@ -85,13 +75,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
 
     let payments = repository::list_payments(state, invoice_id).await?;
 
-    let edit_blocked_reason = repository::invoice_edit_status(state.db(), &[invoice_id])
-        .await?
-        .into_iter()
-        .next()
-        .and_then(|status| status.reason);
     Ok(InvoiceDetail {
-        edit_blocked_reason,
         id: invoice.id,
         invoice_number: invoice.invoice_number,
         date: invoice.date,
@@ -1353,15 +1337,9 @@ pub async fn get_invoice_for_edit(
     state: &AppState,
     invoice_id: Uuid,
 ) -> Result<InvoiceEdit, AppError> {
-    let mut edit = repository::fetch_invoice_edit(state, invoice_id)
+    repository::fetch_invoice_edit(state, invoice_id)
         .await?
-        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
-    edit.edit_blocked_reason = repository::invoice_edit_status(state.db(), &[invoice_id])
-        .await?
-        .into_iter()
-        .next()
-        .and_then(|status| status.reason);
-    Ok(edit)
+        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))
 }
 
 /// Rebuilds an invoice from a fresh copy of the create input: the old lines
@@ -1406,15 +1384,16 @@ pub async fn update_invoice(
     let kept = repository::sum_payments(&mut tx, invoice_id).await?;
     validate_kept_payments(kept, totals.total, totals.redeemed)?;
 
-    if let Some(reason) = repository::invoice_edit_status(&mut *tx, &[invoice_id])
-        .await?
-        .into_iter()
-        .next()
-        .and_then(|status| status.reason)
-    {
-        return Err(AppError::BadRequest(format!(
-            "This invoice cannot be edited: {reason}"
-        )));
+    if repository::invoice_has_received_orders(&mut tx, invoice_id).await? {
+        return Err(AppError::BadRequest(
+            "this invoice has received orders and cannot be edited".to_string(),
+        ));
+    }
+
+    if repository::invoice_has_production_activity(&mut tx, invoice_id).await? {
+        return Err(AppError::BadRequest(
+            "this invoice has production activity and cannot be edited".to_string(),
+        ));
     }
 
     // Everything the rebuild is about to tear down.
