@@ -178,13 +178,39 @@ describe('InvoiceDetailPage', () => {
     ).toBe(false)
   })
 
-  it('marks a collected invoice collected and disables editing', () => {
-    renderPage({ ...DETAIL, collected: true })
+  it('marks a collected invoice collected and leaves edit validation to saving', () => {
+    renderPage({
+      ...DETAIL,
+      collected: true,
+    })
 
     expect(screen.queryByText('Collected')).toBeTruthy()
     expect(
       screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
-    ).toBe(true)
+    ).toBe(false)
+  })
+
+  it('allows editing a retail-only invoice', () => {
+    renderPage({
+      ...DETAIL,
+      collected: true,
+      lines: [DETAIL.lines[1]],
+    })
+    expect(
+      screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
+    ).toBe(false)
+  })
+
+  it('keeps family members sharing a phone visible in the customer summary', () => {
+    const first = DETAIL.lines[0]
+    const second = {
+      ...first,
+      orderId: 'order-2',
+      customer: { name: 'Omar', mobileNo: first.customer!.mobileNo },
+    }
+    renderPage({ ...DETAIL, lines: [first, second] })
+    expect(screen.getAllByText('Omar')).toHaveLength(2)
+    expect(screen.getAllByText('Ahmed Al-Mansoori')).toHaveLength(2)
   })
 
   it('waits for the line items rather than rendering an empty invoice', () => {

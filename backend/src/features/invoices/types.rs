@@ -143,8 +143,8 @@ pub struct InvoiceCustomerInput {
     pub existing_customer_id: Option<Uuid>,
     #[serde(default)]
     pub new_customer: Option<NewCustomerInput>,
-    // Saving an invoice always records a fresh measurement snapshot (orders
-    // reference it), even when every field was left blank.
+    // Orders reference an immutable measurement snapshot. Unchanged values
+    // may reuse an existing record; changed values append a new one.
     pub measurement: CreateMeasurementInput,
     pub orders: Vec<CreateOrderInput>,
 }
@@ -235,8 +235,8 @@ pub struct InvoiceEditOrder {
 }
 
 /// One customer block as it was entered: the measurement snapshot behind the
-/// block plus the orders cut to it. `measurement_id` is the row an edit
-/// rewrites in place (see service::update_invoice).
+/// block plus the orders cut to it. `measurement_id` identifies the immutable
+/// snapshot; editing measurements creates another record.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEditCustomer {

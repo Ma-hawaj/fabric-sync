@@ -472,13 +472,8 @@ export const getInvoiceColumns = (
                 onClick: () => onExportPdf(invoice),
               },
               {
-                // Collected garments can't be re-specified: the backend refuses
-                // to rebuild an invoice with collected orders, so the action is
-                // disabled rather than failing on save. Advances don't block —
-                // the ledger survives a rebuild untouched.
                 label: 'Edit',
                 icon: PencilIcon,
-                disabled: invoice.collected || invoice.collectedOrderCount > 0,
                 onClick: () => onEdit(invoice),
               },
               {

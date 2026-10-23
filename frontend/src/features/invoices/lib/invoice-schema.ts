@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { customerIdentitySchema } from '@/features/customers/lib/customer-schema'
+import { measurementPayload } from '@/features/customers/hooks/use-create-customer'
 import { isMoney } from '@/lib/money'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 import {
@@ -131,20 +133,15 @@ const customerDraftSchema = z
         })
       }
     } else {
-      if (!customer.name.trim()) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'Enter a full name.',
-          path: ['name'],
-        })
-      }
-
-      if (!customer.mobileNo.trim()) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'Enter a phone number.',
-          path: ['mobileNo'],
-        })
+      const identity = customerIdentitySchema.safeParse(customer)
+      if (!identity.success) {
+        identity.error.issues.forEach((issue) =>
+          ctx.addIssue({
+            code: 'custom',
+            path: issue.path,
+            message: issue.message,
+          }),
+        )
       }
     }
 
@@ -324,6 +321,40 @@ export const invoiceFormSchema = z
         path: ['customers'],
       })
     }
+
+    const newCustomers = new Map<string, number>()
+    const existingCustomers = new Map<string, number>()
+    value.customers.forEach((customer, index) => {
+      let key: string
+      let seen: Map<string, number>
+      let field: string
+      if (customer.mode === 'new') {
+        if (!customer.name.trim() || !customer.mobileNo.trim()) return
+        key = JSON.stringify([customer.name.trim(), customer.mobileNo.trim()])
+        seen = newCustomers
+        field = 'name'
+      } else {
+        if (!customer.existingCustomerId) return
+        // Dates do not distinguish measurements on the server either.
+        const measurement = measurementPayload(customer.measurement)
+        key = JSON.stringify([
+          customer.existingCustomerId,
+          { ...measurement, date: null },
+        ])
+        seen = existingCustomers
+        field = 'existingCustomerId'
+      }
+      const first = seen.get(key)
+      if (first === undefined) {
+        seen.set(key, index)
+      } else {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Already entered as Customer ${first + 1}. Add their orders there instead.`,
+          path: ['customers', index, field],
+        })
+      }
+    })
 
     // Product stock is held per location, so a sale has to name one.
     if (value.products.length && !value.productBranch) {

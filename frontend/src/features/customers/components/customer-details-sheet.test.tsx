@@ -163,6 +163,18 @@ describe('CustomerDetailsSheet', () => {
     const link = screen.getByRole('link', { name: 'INV-42' })
     expect(link.getAttribute('href')).toBe('/invoices/inv-1')
     expect(screen.queryByText('BHD 300.00')).toBeTruthy()
+    expect(
+      screen.getByRole('columnheader', { name: 'Invoice total' }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole('columnheader', { name: 'Shared invoice balance' }),
+    ).toBeTruthy()
+    expect(screen.getByText('BHD 180.00')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Totals and balances cover the whole invoice, including orders for family or friends.',
+      ),
+    ).toBeTruthy()
     expect(screen.queryByText('partial')).toBeTruthy()
   })
 
