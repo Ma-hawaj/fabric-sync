@@ -1,4 +1,4 @@
-import { BanIcon, RotateCcwIcon } from 'lucide-react'
+import { BanIcon, RotateCcwIcon, SendIcon, PencilIcon } from 'lucide-react'
 import { defineColumns } from '@/lib/define-columns'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
@@ -16,6 +16,8 @@ export const getGiftCardColumns = (
   onToggleActive: (card: GiftCard) => void,
   isToggling: boolean,
   today: string,
+  onEditRecipient: (card: GiftCard) => void,
+  onSend: (card: GiftCard) => void,
 ) =>
   defineColumns<GiftCard>()([
     {
@@ -38,7 +40,7 @@ export const getGiftCardColumns = (
       accessorKey: 'initialAmount',
       meta: { label: 'Initial Amount' },
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} label="Issued For" />
+        <DataTableColumnHeader column={column} label="Value" />
       ),
       cell: ({ row }) => (
         <div className="text-muted-foreground">
@@ -88,6 +90,51 @@ export const getGiftCardColumns = (
         placeholder: 'Filter customer...',
         variant: 'text',
       },
+    },
+    {
+      accessorKey: 'boughtFor',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Bought For" />
+      ),
+      cell: ({ row }) => row.original.boughtFor || '—',
+      enableColumnFilter: true,
+      meta: {
+        label: 'Bought For',
+        placeholder: 'Filter recipient…',
+        variant: 'text',
+      },
+    },
+    {
+      accessorKey: 'recipientPhone',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Recipient Phone" />
+      ),
+      cell: ({ row }) => row.original.recipientPhone || '—',
+      enableColumnFilter: true,
+      meta: {
+        label: 'Recipient Phone',
+        placeholder: 'Filter phone…',
+        variant: 'text',
+      },
+    },
+    {
+      accessorKey: 'deliveryStatus',
+      header: 'WhatsApp',
+      cell: ({ row }) => (
+        <div
+          title={row.original.deliveryError ?? undefined}
+          className="capitalize"
+        >
+          {row.original.deliveryStatus ?? 'Not sent'}
+          {row.original.deliveryError && (
+            <p className="max-w-64 text-xs normal-case text-destructive">
+              {row.original.deliveryError}
+            </p>
+          )}
+        </div>
+      ),
+      enableSorting: false,
+      meta: { label: 'WhatsApp' },
     },
     {
       accessorKey: 'expiresOn',
@@ -147,6 +194,20 @@ export const getGiftCardColumns = (
         return (
           <RowActions
             items={[
+              {
+                label: 'Edit recipient',
+                icon: PencilIcon,
+                onClick: () => onEditRecipient(card),
+              },
+              {
+                label: 'Send via WhatsApp',
+                icon: SendIcon,
+                disabled:
+                  !card.recipientPhone ||
+                  giftCardStatus(card, today) !== 'Active' ||
+                  ['queued', 'sending'].includes(card.deliveryStatus ?? ''),
+                onClick: () => onSend(card),
+              },
               {
                 label: card.isActive ? 'Void' : 'Restore',
                 icon: card.isActive ? BanIcon : RotateCcwIcon,

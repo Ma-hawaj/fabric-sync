@@ -20,6 +20,7 @@ interface UseListQueryOptions<T, TResult = T> {
   searchParams: URLSearchParams
   /** Applied to each row, for the few lists that reshape a field. */
   select?: (row: T) => TResult
+  refetchInterval?: number
 }
 
 const EMPTY: never[] = []
@@ -34,6 +35,7 @@ export function useListQuery<T, TResult = T>({
   queryKey,
   searchParams,
   select,
+  refetchInterval,
 }: UseListQueryOptions<T, TResult>) {
   const search = searchParams.toString()
 
@@ -52,6 +54,7 @@ export function useListQuery<T, TResult = T>({
     // and the table flashes empty between requests.
     placeholderData: keepPreviousData,
     staleTime: 1000 * 60 * 5, // 5 minutes
+    refetchInterval,
   })
 
   const rows = query.data?.data

@@ -699,7 +699,6 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
     }
 
     for card in &input.gift_cards {
-        gift_cards_service::normalize_code(&card.code)?;
         gift_cards_service::validate_amount(card.amount)?;
     }
 
@@ -1845,9 +1844,16 @@ async fn write_gift_card_sales(
     invoice_id: Uuid,
     customer_id: Option<Uuid>,
     gift_cards: &[CreateGiftCardLineInput],
+    region: &str,
 ) -> Result<(), AppError> {
     for card in gift_cards {
-        let code = gift_cards_service::normalize_code(&card.code)?;
+        let code = if card.code.trim().is_empty() {
+            gift_cards_service::generate_code()
+        } else {
+            // Existing invoice lines retain their issued code when rebuilt.
+            gift_cards_service::normalize_code(&card.code)?
+        };
+        let phone = gift_cards_service::recipient_phone(&card.recipient_phone, region)?;
 
         let gift_card_id = gift_cards_repository::insert_gift_card(
             tx,
@@ -1857,6 +1863,8 @@ async fn write_gift_card_sales(
             // sale names someone at all.
             customer_id,
             card.expires_on,
+            card.bought_for.as_deref(),
+            Some(&phone),
         )
         .await?;
 
@@ -1894,6 +1902,9 @@ pub async fn create_invoice(
     state: &AppState,
     mut input: CreateInvoiceInput,
 ) -> Result<CreatedInvoice, AppError> {
+    for card in &mut input.gift_cards {
+        card.code.clear();
+    }
     let mut tx = state.db().begin().await?;
     resolve_order_prices(
         &mut tx,
@@ -1938,7 +1949,14 @@ pub async fn create_invoice(
 
     write_product_lines(&mut tx, invoice_id, &input.products).await?;
 
-    write_gift_card_sales(&mut tx, invoice_id, input.customer_id, &input.gift_cards).await?;
+    write_gift_card_sales(
+        &mut tx,
+        invoice_id,
+        input.customer_id,
+        &input.gift_cards,
+        &state.notifications().default_region,
+    )
+    .await?;
 
     write_redemptions(
         &mut tx,
@@ -2059,6 +2077,13 @@ pub async fn update_invoice(
         repository::lock_gift_cards(&mut tx, &card_ids).await?;
     }
     for sale in &gift_sales {
+        let sent = repository::sold_card_has_deliveries(&mut tx, sale.gift_card_id).await?;
+        if sent {
+            return Err(AppError::BadRequest(format!(
+                "gift card {} has been approved for delivery and the invoice cannot be rebuilt",
+                sale.code
+            )));
+        }
         if repository::sold_card_was_used(&mut tx, sale.gift_card_id).await? {
             return Err(AppError::BadRequest(format!(
                 "gift card {} has already been used and the invoice cannot be edited",
@@ -2119,7 +2144,20 @@ pub async fn update_invoice(
 
     write_product_lines(&mut tx, invoice_id, &input.products).await?;
 
-    write_gift_card_sales(&mut tx, invoice_id, input.customer_id, &input.gift_cards).await?;
+    // Only this invoice's previously issued codes can survive an edit.
+    for card in &mut input.gift_cards {
+        if !gift_sales.iter().any(|sale| sale.code == card.code) {
+            card.code.clear();
+        }
+    }
+    write_gift_card_sales(
+        &mut tx,
+        invoice_id,
+        input.customer_id,
+        &input.gift_cards,
+        &state.notifications().default_region,
+    )
+    .await?;
 
     write_redemptions(
         &mut tx,

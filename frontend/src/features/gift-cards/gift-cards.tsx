@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -10,9 +11,13 @@ import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-adv
 import { getGiftCardColumns } from './components/gift-card-columns'
 import { useGiftCards } from './hooks/use-gift-cards'
 import { useUpdateGiftCard } from './hooks/use-update-gift-card'
+import { GiftCardRecipientDialog } from './components/gift-card-recipient-dialog'
+import { SendGiftCardDialog } from './components/send-gift-card-dialog'
 import type { GiftCard } from './types/gift-card'
 
 export function GiftCardsPage() {
+  const [editing, setEditing] = useState<GiftCard | null>(null)
+  const [sending, setSending] = useState<GiftCard | null>(null)
   const updateGiftCard = useUpdateGiftCard()
   const today = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
 
@@ -37,7 +42,14 @@ export function GiftCardsPage() {
   )
 
   const columns = React.useMemo(
-    () => getGiftCardColumns(toggleActive, updateGiftCard.isPending, today),
+    () =>
+      getGiftCardColumns(
+        toggleActive,
+        updateGiftCard.isPending,
+        today,
+        setEditing,
+        setSending,
+      ),
     [toggleActive, updateGiftCard.isPending, today],
   )
 
@@ -88,6 +100,20 @@ export function GiftCardsPage() {
           quickFilter={{ columnId: 'status', allLabel: 'All statuses' }}
         />
       </DataTable>
+      {editing && (
+        <GiftCardRecipientDialog
+          key={editing.id}
+          card={editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
+      {sending && (
+        <SendGiftCardDialog
+          key={sending.id}
+          card={sending}
+          onClose={() => setSending(null)}
+        />
+      )}
     </div>
   )
 }

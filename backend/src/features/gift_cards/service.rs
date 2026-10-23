@@ -14,8 +14,7 @@ use super::{
 
 /// Codes are matched exactly on redemption, so they are uppercased on the way
 /// in — staff read them off a physical card and the case they type is not
-/// meaningful. `pub` because invoices normalizes the same way before selling or
-/// redeeming a card.
+/// meaningful. Invoices uses this for redemption and retaining issued codes.
 pub fn normalize_code(code: &str) -> Result<String, AppError> {
     let code = code.trim();
 
@@ -29,13 +28,22 @@ pub fn normalize_code(code: &str) -> Result<String, AppError> {
 }
 
 pub fn validate_amount(amount: f64) -> Result<(), AppError> {
-    if amount <= 0.0 {
+    if !amount.is_finite() || amount <= 0.0 {
         return Err(AppError::BadRequest(
             "a gift card amount must be greater than zero".to_string(),
         ));
     }
 
     Ok(())
+}
+
+pub fn generate_code() -> String {
+    format!("GC-{}", Uuid::new_v4().simple().to_string().to_uppercase())
+}
+
+pub fn recipient_phone(raw: &str, region: &str) -> Result<String, AppError> {
+    crate::features::notifications::phone::normalize(raw, region)
+        .ok_or_else(|| AppError::BadRequest("Enter a valid recipient phone number.".into()))
 }
 
 /// The redemption policy, kept separate from the SQL so it can be tested
@@ -88,8 +96,12 @@ pub async fn create_gift_card(
     state: &AppState,
     input: CreateGiftCardInput,
 ) -> Result<GiftCard, AppError> {
-    let code = normalize_code(&input.code)?;
+    let code = generate_code();
     validate_amount(input.amount)?;
+    let phone = recipient_phone(
+        &input.recipient_phone,
+        &state.notifications().default_region,
+    )?;
 
     let mut tx = state.db().begin().await?;
 
@@ -99,6 +111,8 @@ pub async fn create_gift_card(
         input.amount,
         input.customer_id,
         input.expires_on,
+        input.bought_for.as_deref(),
+        Some(&phone),
     )
     .await?;
 
@@ -106,7 +120,6 @@ pub async fn create_gift_card(
 
     tracing::info!(
         gift_card_id = %gift_card_id,
-        code = %code,
         amount = input.amount,
         "gift card created"
     );
@@ -121,9 +134,20 @@ pub async fn update_gift_card(
     gift_card_id: Uuid,
     input: UpdateGiftCardInput,
 ) -> Result<GiftCard, AppError> {
-    repository::update_gift_card(state, gift_card_id, input.is_active)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("gift card {gift_card_id} not found")))?;
+    let phone = input
+        .recipient_phone
+        .as_deref()
+        .map(|raw| recipient_phone(raw, &state.notifications().default_region))
+        .transpose()?;
+    repository::update_gift_card(
+        state,
+        gift_card_id,
+        input.is_active,
+        input.bought_for.as_deref(),
+        phone.as_deref(),
+    )
+    .await?
+    .ok_or_else(|| AppError::NotFound(format!("gift card {gift_card_id} not found")))?;
 
     tracing::info!(
         gift_card_id = %gift_card_id,
@@ -192,7 +216,7 @@ mod tests {
     #[test]
     fn validate_amount_rejects_zero_and_negative_amounts() {
         assert!(validate_amount(100.0).is_ok());
-        for amount in [0.0, -50.0] {
+        for amount in [0.0, -50.0, f64::NAN, f64::INFINITY] {
             let error = validate_amount(amount).unwrap_err();
             assert!(matches!(error, AppError::BadRequest(_)), "{amount}");
         }

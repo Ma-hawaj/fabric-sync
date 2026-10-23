@@ -68,6 +68,8 @@ export interface InvoiceProductDraft {
 export interface InvoiceGiftCardDraft {
   key: string
   code: string
+  boughtFor: string
+  recipientPhone: string
   amount: NumberInput
   // ISO date, or blank for a card that never expires.
   expiresOn: string
@@ -211,6 +213,8 @@ export function createEmptyGiftCardLine(): InvoiceGiftCardDraft {
   return {
     key: crypto.randomUUID(),
     code: '',
+    boughtFor: '',
+    recipientPhone: '',
     amount: '',
     expiresOn: '',
   }

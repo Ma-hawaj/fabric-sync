@@ -11,11 +11,11 @@ use super::{
 use crate::{error::AppError, state::AppState};
 
 #[derive(Debug)]
-struct Failure {
-    message: String,
-    retry: bool,
-    uncertain: bool,
-    retry_after: i64,
+pub(crate) struct Failure {
+    pub message: String,
+    pub retry: bool,
+    pub uncertain: bool,
+    pub retry_after: i64,
 }
 
 pub fn start(state: AppState) {
@@ -24,6 +24,9 @@ pub fn start(state: AppState) {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(3));
         loop {
             interval.tick().await;
+            if let Err(error) = crate::features::gift_cards::delivery::tick(&state).await {
+                tracing::error!(error=?error, "gift card delivery worker failed");
+            }
             if tokio::time::Instant::now() >= maintenance {
                 if let Err(error) = repository::cleanup(state.db(), state.notifications()).await {
                     tracing::warn!(error=?error, "notification cleanup failed");
@@ -226,6 +229,43 @@ fn failure(message: &str, retry: bool, uncertain: bool) -> Failure {
     }
 }
 
+pub(crate) async fn send_template(
+    state: &AppState,
+    mobile: &str,
+    template: &str,
+    language: &str,
+    parameters: &[String],
+) -> Result<String, Failure> {
+    let config = state.notifications();
+    let client = service::http_client()
+        .map_err(|_| failure("Could not initialize the sender", true, false))?;
+    let root = format!(
+        "https://graph.facebook.com/{}/{}",
+        config.api_version,
+        config.phone_number_id.as_deref().unwrap_or_default()
+    );
+    #[cfg(test)]
+    let root = config.test_graph_url.clone().unwrap_or(root);
+    let response = client.post(format!("{root}/messages"))
+        .bearer_auth(config.access_token.as_deref().unwrap_or_default())
+        .json(&json!({"messaging_product":"whatsapp","to":mobile.trim_start_matches('+'),"type":"template",
+            "template":{"name":template,"language":{"code":language},"components":[{"type":"body",
+                "parameters":parameters.iter().map(|text|json!({"type":"text","text":text})).collect::<Vec<_>>()}]}}))
+        .send().await.map_err(|_|failure("The send result is unknown. Check delivery before resending.",false,true))?;
+    let value = graph_response(response, true).await?;
+    value["messages"][0]["id"]
+        .as_str()
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            failure(
+                "WhatsApp returned no message ID. Check delivery before resending.",
+                false,
+                true,
+            )
+        })
+}
+
 async fn graph_response(
     response: reqwest::Response,
     message_request: bool,
@@ -327,7 +367,13 @@ async fn process_webhooks(db: &PgPool) -> Result<(), AppError> {
                                 .await?;
                         }
                     } else {
-                        matched = false;
+                        if !crate::features::gift_cards::delivery::webhook(
+                            &mut tx, message_id, incoming, status,
+                        )
+                        .await?
+                        {
+                            matched = false;
+                        }
                     }
                     tx.commit().await?;
                 }

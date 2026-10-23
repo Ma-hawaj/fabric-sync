@@ -79,6 +79,8 @@ function giftCardPayload(line: InvoiceGiftCardDraft) {
   return {
     code: line.code,
     amount: numberOrZero(line.amount),
+    boughtFor: blankToNull(line.boughtFor.trim()),
+    recipientPhone: line.recipientPhone,
     expiresOn: blankToNull(line.expiresOn),
   }
 }

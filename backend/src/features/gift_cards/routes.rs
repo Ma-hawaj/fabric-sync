@@ -1,5 +1,5 @@
 use axum::{
-    routing::{get, patch},
+    routing::{get, patch, post},
     Router,
 };
 
@@ -14,6 +14,8 @@ pub fn router() -> Router<AppState> {
             get(handlers::list_gift_cards).post(handlers::create_gift_card),
         )
         .route("/gift-cards/:id", patch(handlers::update_gift_card))
+        .route("/gift-cards/:id/preview", get(handlers::preview_delivery))
+        .route("/gift-cards/:id/send", post(handlers::send_gift_card))
         // Three segments, so it can't collide with `/gift-cards/:id` above.
         .route(
             "/gift-cards/by-code/:code",

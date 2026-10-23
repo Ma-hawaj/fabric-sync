@@ -1,6 +1,6 @@
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { NumberField, TextField } from '@/components/form/fields'
+import { NumberField, PhoneField, TextField } from '@/components/form/fields'
 import { CURRENCY } from '@/lib/currency'
 import type { InvoiceFormApi } from '../../types/invoice-form'
 
@@ -19,24 +19,46 @@ export function GiftCardBlock({
 
   return (
     <div className="flex items-start gap-3">
-      <div className="flex-1">
-        <TextField form={form} name={`${base}.code`} label="Code" />
-      </div>
-
-      <div className="w-36">
-        <NumberField
-          form={form}
-          name={`${base}.amount`}
-          label={`Amount (${CURRENCY})`}
-        />
-      </div>
-
-      <div className="w-40">
+      <div className="grid flex-1 gap-3 sm:grid-cols-2">
         <TextField
           form={form}
-          name={`${base}.expiresOn`}
-          label="Expires (optional)"
+          name={`${base}.boughtFor`}
+          label="Bought for (optional)"
         />
+        <PhoneField
+          form={form}
+          name={`${base}.recipientPhone`}
+          label="Recipient phone"
+          defaultCountry="BH"
+        />
+
+        <div>
+          <NumberField
+            form={form}
+            name={`${base}.amount`}
+            label={`Amount (${CURRENCY})`}
+          />
+        </div>
+
+        <div>
+          <TextField
+            form={form}
+            name={`${base}.expiresOn`}
+            label="Expires (optional)"
+          />
+        </div>
+        <form.Subscribe
+          selector={(state) => state.values.giftCards[lineIndex].code}
+        >
+          {(code) => (
+            <p className="text-xs text-muted-foreground sm:col-span-2">
+              {code
+                ? `Code: ${code}`
+                : 'A unique code is generated automatically when you save.'}{' '}
+              Send from Gift Cards after saving.
+            </p>
+          )}
+        </form.Subscribe>
       </div>
 
       <Button

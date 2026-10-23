@@ -12,9 +12,27 @@ use crate::{
 };
 
 use super::{
-    service,
+    delivery, service,
     types::{CreateGiftCardInput, GiftCard, UpdateGiftCardInput},
 };
+
+pub async fn preview_delivery(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<delivery::Preview>, AppError> {
+    Ok(Json(delivery::preview(&state, id).await?))
+}
+
+pub async fn send_gift_card(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(id): Path<Uuid>,
+    Json(input): Json<delivery::SendInput>,
+) -> Result<Json<delivery::DeliveryResult>, AppError> {
+    Ok(Json(
+        delivery::approve(&state, id, input, user.subject().unwrap_or("staff")).await?,
+    ))
+}
 
 pub async fn list_gift_cards(
     State(state): State<AppState>,
