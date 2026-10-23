@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO design_options (category, slug, label, sort_order, image, image_mime)\n        VALUES ($1, $2, $3, $4, $5, $6)\n        RETURNING id, category, slug, label, sort_order, is_active,\n            (image IS NOT NULL) AS \"has_image!\",\n            ('/design-options/' || id::text || '/image?v=' || image_version::text) AS \"image_url!\"\n        ",
+  "query": "\n        INSERT INTO design_options (category, slug, label, sort_order, image, image_mime, cost)\n        VALUES ($1, $2, $3, $4, $5, $6, $7::float8)\n        RETURNING id, category, slug, label, sort_order, is_active, cost::float8 AS \"cost!\",\n            (image IS NOT NULL) AS \"has_image!\",\n            ('/design-options/' || id::text || '/image?v=' || image_version::text) AS \"image_url!\"\n        ",
   "describe": {
     "columns": [
       {
@@ -35,11 +35,16 @@
       },
       {
         "ordinal": 6,
+        "name": "cost!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
         "name": "has_image!",
         "type_info": "Bool"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "image_url!",
         "type_info": "Text"
       }
@@ -51,7 +56,8 @@
         "Text",
         "Int4",
         "Bytea",
-        "Text"
+        "Text",
+        "Float8"
       ]
     },
     "nullable": [
@@ -62,8 +68,9 @@
       false,
       false,
       null,
+      null,
       null
     ]
   },
-  "hash": "c82191dccf1eed2d064a4f5ec86e5190130f5ad26bc0f2456caf32fe92aa3218"
+  "hash": "78cfdcf775b10b5e8064ba4f58f9663df451d7ecc03debb4874e021eb709c5a6"
 }

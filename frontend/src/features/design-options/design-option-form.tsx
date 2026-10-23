@@ -82,6 +82,7 @@ function DesignOptionForm({ existing }: { existing?: DesignOption }) {
         ? updateOption.mutateAsync({
             id: existing.id,
             label: value.label,
+            cost: Number(value.cost),
             sortOrder: Number(value.sortOrder),
             isActive: value.isActive,
             ...(value.imageDataUrl !== null
@@ -187,6 +188,11 @@ function DesignOptionForm({ existing }: { existing?: DesignOption }) {
 
           <TextField form={form} name="label" label="Display Label" />
           <NumberField form={form} name="sortOrder" label="Position" />
+          <NumberField
+            form={form}
+            name="cost"
+            label="Additional cost incl. VAT"
+          />
 
           <form.Field name="imageDataUrl">
             {(field) => {

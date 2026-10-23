@@ -63,6 +63,7 @@ function editFixture(): InvoiceEdit {
             productionLocationId: '0197fdd2-6a67-7000-8000-000000000005',
             productionLocationName: 'Main Branch',
             stockQuantity: 10,
+            basePrice: 100,
             price: 100,
             thobeType: 'saudi-classic',
             fPocket: null,
@@ -193,6 +194,7 @@ describe('mapInvoiceEditToForm', () => {
     const fixture = editFixture()
     const line = fixture.customers[0].orders[0]
     line.materialSource = 'customer'
+    line.basePrice = 15
     line.materialId = null
     line.materialName = 'White linen'
     line.customerMaterialDescription = 'White linen'
@@ -200,6 +202,7 @@ describe('mapInvoiceEditToForm', () => {
     const { values, seeds } = mapInvoiceEditToForm(fixture)
     expect(values.customers[0].orders[0]).toMatchObject({
       materialSource: 'customer',
+      customerBasePrice: 15,
       materialId: '',
       customerMaterialDescription: 'White linen',
       materialAmount: 2,

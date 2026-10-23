@@ -4,6 +4,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
+import { CURRENCY } from '@/lib/currency'
 import { apiBaseUrl } from '@/lib/api'
 import { designCategoryLabel } from '../lib/design-option-categories'
 import type { DesignOption } from '../types/design-option'
@@ -73,6 +74,13 @@ export const getDesignOptionColumns = (
         { label: 'EMD', value: 'EMD' },
       ],
     },
+  },
+  {
+    accessorKey: 'cost',
+    header: 'Additional cost',
+    cell: ({ row }) => `${CURRENCY} ${row.original.cost.toFixed(2)}`,
+    enableSorting: false,
+    enableColumnFilter: false,
   },
   {
     accessorKey: 'label',

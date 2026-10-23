@@ -19,6 +19,7 @@ const SPEC: ListSpec = ListSpec {
             category,
             slug,
             label,
+            cost::float8 AS cost,
             sort_order,
             is_active,
             (image IS NOT NULL) AS has_image,
@@ -57,13 +58,14 @@ pub async fn create_option(
     sort_order: i32,
     image: Option<&[u8]>,
     image_mime: &str,
+    cost: f64,
 ) -> Result<DesignOption, sqlx::Error> {
     sqlx::query_as!(
         DesignOption,
         r#"
-        INSERT INTO design_options (category, slug, label, sort_order, image, image_mime)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, category, slug, label, sort_order, is_active,
+        INSERT INTO design_options (category, slug, label, sort_order, image, image_mime, cost)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::float8)
+        RETURNING id, category, slug, label, sort_order, is_active, cost::float8 AS "cost!",
             (image IS NOT NULL) AS "has_image!",
             ('/design-options/' || id::text || '/image?v=' || image_version::text) AS "image_url!"
         "#,
@@ -73,6 +75,7 @@ pub async fn create_option(
         sort_order,
         image,
         image_mime,
+        cost,
     )
     .fetch_one(state.db())
     .await
@@ -92,6 +95,7 @@ pub async fn update_option(
     touch_image: bool,
     image: Option<&[u8]>,
     image_mime: Option<&str>,
+    cost: Option<f64>,
 ) -> Result<Option<DesignOption>, sqlx::Error> {
     sqlx::query_as!(
         DesignOption,
@@ -102,9 +106,10 @@ pub async fn update_option(
             is_active = COALESCE($4, is_active),
             image = CASE WHEN $5 THEN $6 ELSE image END,
             image_mime = CASE WHEN $5 THEN COALESCE($7, image_mime) ELSE image_mime END,
-            image_version = CASE WHEN $5 THEN image_version + 1 ELSE image_version END
+            image_version = CASE WHEN $5 THEN image_version + 1 ELSE image_version END,
+            cost = COALESCE($8::float8, cost)
         WHERE id = $1
-        RETURNING id, category, slug, label, sort_order, is_active,
+        RETURNING id, category, slug, label, sort_order, is_active, cost::float8 AS "cost!",
             (image IS NOT NULL) AS "has_image!",
             ('/design-options/' || id::text || '/image?v=' || image_version::text) AS "image_url!"
         "#,
@@ -115,6 +120,7 @@ pub async fn update_option(
         touch_image,
         image,
         image_mime,
+        cost,
     )
     .fetch_optional(state.db())
     .await

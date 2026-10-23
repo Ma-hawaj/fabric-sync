@@ -19,6 +19,8 @@ describe('invoice material payload', () => {
             materialId: 'stale-id',
             customerMaterialDescription: '  White linen  ',
             materialAmount: 3,
+            customerBasePrice: 15,
+            price: 9999,
           },
           {
             ...createEmptyOrder(),
@@ -35,6 +37,7 @@ describe('invoice material payload', () => {
         materialId: null,
         customerMaterialDescription: 'White linen',
         materialAmount: 3,
+        customerBasePrice: 15,
       }),
       expect.objectContaining({
         materialSource: 'shop',
@@ -43,5 +46,8 @@ describe('invoice material payload', () => {
         materialAmount: 2,
       }),
     ])
+    const orders = invoicePayload(values).customers[0].orders
+    expect(orders[0]).not.toHaveProperty('price')
+    expect(orders[1].customerBasePrice).toBeNull()
   })
 })

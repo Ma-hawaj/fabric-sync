@@ -11,6 +11,7 @@ import type { DesignOption } from '../types/design-option'
 export interface UpdateDesignOptionInput {
   id: string
   label?: string
+  cost?: number
   sortOrder?: number
   isActive?: boolean
   imageDataUrl?: string | null

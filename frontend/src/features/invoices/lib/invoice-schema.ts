@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isMoney } from '@/lib/money'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 import {
   MEASUREMENT_FITS,
@@ -42,6 +43,7 @@ const orderDraftSchema = z
     materialId: z.string(),
     materialAmount: numberInputSchema,
     productionLocationId: z.string(),
+    customerBasePrice: numberInputSchema,
     price: numberInputSchema,
   })
   .superRefine((order, ctx) => {
@@ -67,13 +69,24 @@ const orderDraftSchema = z
     }
     if (
       order.materialAmount === '' ||
-      !Number.isFinite(order.materialAmount) ||
+      !isMoney(order.materialAmount) ||
       order.materialAmount < 0.01
     ) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Enter a quantity of at least 0.01.',
+        message:
+          'Enter a quantity of at least 0.01 with at most two decimal places.',
         path: ['materialAmount'],
+      })
+    }
+    if (
+      order.materialSource === 'customer' &&
+      !isMoney(order.customerBasePrice)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter a tailoring base price.',
+        path: ['customerBasePrice'],
       })
     }
     // Material stock is held per location, and comes off automatically when
@@ -92,7 +105,7 @@ const orderDraftSchema = z
     ) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Enter a price.',
+        message: 'Complete the material and design pricing.',
         path: ['price'],
       })
     }
