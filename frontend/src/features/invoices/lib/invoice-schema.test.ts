@@ -127,6 +127,7 @@ describe('invoiceFormSchema', () => {
         {
           ...validOrder(),
           materialSource: 'customer' as const,
+          customerBasePrice: 15,
           materialId: '',
           customerMaterialDescription: 'White linen',
         },
@@ -351,7 +352,7 @@ describe('invoiceFormSchema', () => {
       ],
     }
     const error = firstError([customer])
-    expect(error?.message).toMatch(/enter a price/i)
+    expect(error?.message).toMatch(/complete the material and design pricing/i)
     expect(error?.path).toEqual(['customers', 0, 'orders', 0, 'price'])
   })
 

@@ -118,6 +118,10 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
           name: line.materialName,
           sku: null,
           unit: line.materialUnit,
+          family: null,
+          juniorPrice: null,
+          normalPrice: null,
+          largePrice: null,
           locations:
             line.productionLocationId == null
               ? []
@@ -154,6 +158,8 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
         materialId: line.materialId ?? '',
         materialAmount: line.materialAmount,
         productionLocationId: line.productionLocationId ?? '',
+        customerBasePrice:
+          line.materialSource === 'customer' ? line.basePrice : '',
         price: line.price,
         urgentCharge: line.urgentCharge === 0 ? '' : line.urgentCharge,
       }

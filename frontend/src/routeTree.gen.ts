@@ -21,6 +21,7 @@ import { Route as AuthenticatedInventoryRouteRouteImport } from './routes/_authe
 import { Route as AuthenticatedGiftCardsRouteRouteImport } from './routes/_authenticated/gift-cards/route'
 import { Route as AuthenticatedDesignOptionsRouteRouteImport } from './routes/_authenticated/design-options/route'
 import { Route as AuthenticatedCustomersRouteRouteImport } from './routes/_authenticated/customers/route'
+import { Route as AuthenticatedRepairsIndexRouteImport } from './routes/_authenticated/repairs/index'
 import { Route as AuthenticatedProductsIndexRouteImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedOrdersIndexRouteImport } from './routes/_authenticated/orders/index'
 import { Route as AuthenticatedOrderStagesIndexRouteImport } from './routes/_authenticated/order-stages/index'
@@ -114,6 +115,12 @@ const AuthenticatedCustomersRouteRoute =
   AuthenticatedCustomersRouteRouteImport.update({
     id: '/customers',
     path: '/customers',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedRepairsIndexRoute =
+  AuthenticatedRepairsIndexRouteImport.update({
+    id: '/repairs/',
+    path: '/repairs/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedProductsIndexRoute =
@@ -304,6 +311,7 @@ export interface FileRoutesByFullPath {
   '/order-stages/': typeof AuthenticatedOrderStagesIndexRoute
   '/orders/': typeof AuthenticatedOrdersIndexRoute
   '/products/': typeof AuthenticatedProductsIndexRoute
+  '/repairs/': typeof AuthenticatedRepairsIndexRoute
   '/customers/$customerId/edit': typeof AuthenticatedCustomersCustomerIdEditRoute
   '/design-options/$designOptionId/edit': typeof AuthenticatedDesignOptionsDesignOptionIdEditRoute
   '/invoices/$invoiceId/edit': typeof AuthenticatedInvoicesInvoiceIdEditRoute
@@ -333,6 +341,7 @@ export interface FileRoutesByTo {
   '/order-stages': typeof AuthenticatedOrderStagesIndexRoute
   '/orders': typeof AuthenticatedOrdersIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
+  '/repairs': typeof AuthenticatedRepairsIndexRoute
   '/customers/$customerId/edit': typeof AuthenticatedCustomersCustomerIdEditRoute
   '/design-options/$designOptionId/edit': typeof AuthenticatedDesignOptionsDesignOptionIdEditRoute
   '/invoices/$invoiceId/edit': typeof AuthenticatedInvoicesInvoiceIdEditRoute
@@ -374,6 +383,7 @@ export interface FileRoutesById {
   '/_authenticated/order-stages/': typeof AuthenticatedOrderStagesIndexRoute
   '/_authenticated/orders/': typeof AuthenticatedOrdersIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
+  '/_authenticated/repairs/': typeof AuthenticatedRepairsIndexRoute
   '/_authenticated/customers/$customerId/edit': typeof AuthenticatedCustomersCustomerIdEditRoute
   '/_authenticated/design-options/$designOptionId/edit': typeof AuthenticatedDesignOptionsDesignOptionIdEditRoute
   '/_authenticated/invoices/$invoiceId/edit': typeof AuthenticatedInvoicesInvoiceIdEditRoute
@@ -415,6 +425,7 @@ export interface FileRouteTypes {
     | '/order-stages/'
     | '/orders/'
     | '/products/'
+    | '/repairs/'
     | '/customers/$customerId/edit'
     | '/design-options/$designOptionId/edit'
     | '/invoices/$invoiceId/edit'
@@ -444,6 +455,7 @@ export interface FileRouteTypes {
     | '/order-stages'
     | '/orders'
     | '/products'
+    | '/repairs'
     | '/customers/$customerId/edit'
     | '/design-options/$designOptionId/edit'
     | '/invoices/$invoiceId/edit'
@@ -484,6 +496,7 @@ export interface FileRouteTypes {
     | '/_authenticated/order-stages/'
     | '/_authenticated/orders/'
     | '/_authenticated/products/'
+    | '/_authenticated/repairs/'
     | '/_authenticated/customers/$customerId/edit'
     | '/_authenticated/design-options/$designOptionId/edit'
     | '/_authenticated/invoices/$invoiceId/edit'
@@ -582,6 +595,13 @@ declare module '@tanstack/react-router' {
       path: '/customers'
       fullPath: '/customers'
       preLoaderRoute: typeof AuthenticatedCustomersRouteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/repairs/': {
+      id: '/_authenticated/repairs/'
+      path: '/repairs'
+      fullPath: '/repairs/'
+      preLoaderRoute: typeof AuthenticatedRepairsIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/products/': {
@@ -960,6 +980,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedOrdersRouteRoute: typeof AuthenticatedOrdersRouteRouteWithChildren
   AuthenticatedProductsRouteRoute: typeof AuthenticatedProductsRouteRouteWithChildren
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
+  AuthenticatedRepairsIndexRoute: typeof AuthenticatedRepairsIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -979,6 +1000,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedOrdersRouteRoute: AuthenticatedOrdersRouteRouteWithChildren,
   AuthenticatedProductsRouteRoute: AuthenticatedProductsRouteRouteWithChildren,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
+  AuthenticatedRepairsIndexRoute: AuthenticatedRepairsIndexRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

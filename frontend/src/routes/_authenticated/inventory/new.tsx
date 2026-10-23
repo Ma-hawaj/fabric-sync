@@ -1,7 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { InventoryFormPage } from '@/features/inventory/inventory-form'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
+// Existing bookmarks land on the inventory page, where stock is now added in a dialog.
 export const Route = createFileRoute('/_authenticated/inventory/new')({
-  staticData: { title: 'Add Stock' },
-  component: InventoryFormPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/inventory' })
+  },
 })

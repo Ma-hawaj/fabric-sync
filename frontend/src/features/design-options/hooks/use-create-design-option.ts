@@ -10,6 +10,7 @@ async function createDesignOption(
     category: values.category,
     slug: values.slug,
     label: values.label,
+    cost: values.cost,
     sortOrder: values.sortOrder === '' ? undefined : Number(values.sortOrder),
     imageDataUrl: values.imageDataUrl ?? undefined,
   })

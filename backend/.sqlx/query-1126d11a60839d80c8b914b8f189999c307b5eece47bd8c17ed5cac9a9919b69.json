@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO materials (name, sku, unit, family, junior_price, normal_price, large_price)\n        VALUES ($1, $2, $3, $4, $5::float8, $6::float8, $7::float8)\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Float8",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1126d11a60839d80c8b914b8f189999c307b5eece47bd8c17ed5cac9a9919b69"
+}

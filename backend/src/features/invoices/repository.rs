@@ -740,9 +740,9 @@ pub async fn insert_order(
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
             thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd, more_details,
-            production_branch_id, material_source, customer_material_description, urgent_charge
+            production_branch_id, material_source, customer_material_description, base_price, urgent_charge
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8, $18::float8)
         "#,
         measurement_id,
         order.material_id,
@@ -763,6 +763,7 @@ pub async fn insert_order(
             .customer_material_description
             .as_deref()
             .map(str::trim),
+        order.base_price,
         urgent_charge,
     )
     .execute(&mut **tx)
@@ -942,6 +943,7 @@ pub async fn fetch_invoice_edit(
             b.name AS "production_location_name?",
             ms.quantity::float8 AS stock_quantity,
             o.price::float8 AS "price!",
+            o.base_price::float8 AS "base_price!",
             o.urgent_charge::float8 AS "urgent_charge!",
             o.thobe_type,
             o.f_pocket,
@@ -1004,6 +1006,7 @@ pub async fn fetch_invoice_edit(
             mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
         };
         let order = InvoiceEditOrder {
+            base_price: row.base_price,
             material_id: row.material_id,
             material_source: row.material_source,
             customer_material_description: row.customer_material_description,

@@ -46,6 +46,7 @@ export interface InvoiceEditOrder {
   productionLocationName: string | null
   /** Live stock at the production location — seeds the "Made At" picker. */
   stockQuantity: number | null
+  basePrice: number
   price: number
   urgentCharge: number
   thobeType: string | null

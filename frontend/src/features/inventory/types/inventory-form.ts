@@ -25,6 +25,9 @@ export interface InventoryFormValues {
   // ungrouped, matching the backend's NULL.
   family: string
 
+  juniorPrice: NumberInput
+  normalPrice: NumberInput
+  largePrice: NumberInput
   entries: StockEntryDraft[]
 }
 
@@ -62,6 +65,9 @@ export function createEmptyInventoryForm(): InventoryFormValues {
     sku: '',
     unit: 'meters',
     family: '',
+    juniorPrice: '',
+    normalPrice: '',
+    largePrice: '',
     entries: [createEmptyStockEntry()],
   }
 }

@@ -1,9 +1,16 @@
 import { useForm } from '@tanstack/react-form'
-import { useNavigate } from '@tanstack/react-router'
 import * as React from 'react'
 import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import {
   Select,
@@ -12,31 +19,71 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { TextField } from '@/components/form/fields'
+import { NumberField, TextField } from '@/components/form/fields'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import { SegmentedOptions } from '@/components/form/segmented-options'
-import { StockEntryRow } from './components/stock-entry-row'
+import { StockEntryRow } from './stock-entry-row'
 import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
-import { UNITS } from './data/inventory-options'
-import { useAddStock } from './hooks/use-add-stock'
-import { inventoryFormSchema } from './lib/inventory-schema'
+import { UNITS } from '../data/inventory-options'
+import { useAddStock } from '../hooks/use-add-stock'
+import { inventoryFormSchema } from '../lib/inventory-schema'
 import {
   createEmptyInventoryForm,
   createEmptyStockEntry,
-} from './types/inventory-form'
-import type { StockEntryMode } from './types/inventory-form'
-import type { Material } from './types/inventory'
+} from '../types/inventory-form'
+import type { StockEntryMode } from '../types/inventory-form'
+import type { Material } from '../types/inventory'
 
 function materialOptionLabel(material: Material) {
   return material.sku ? `${material.name} (${material.sku})` : material.name
 }
 
-export function InventoryFormPage() {
-  const navigate = useNavigate()
+export function AddStockDialog({
+  open,
+  onOpenChange,
+  material,
+}: {
+  open: boolean
+  material?: Material | null
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Add Stock</DialogTitle>
+          <DialogDescription>
+            {material
+              ? `Add stock for ${materialOptionLabel(material)} across one or more locations.`
+              : 'Add stock to an existing material or register a new material, across one or more locations at once.'}
+          </DialogDescription>
+        </DialogHeader>
+        {open && (
+          <AddStockForm
+            key={material?.id ?? 'new-stock'}
+            material={material}
+            onClose={() => onOpenChange(false)}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function AddStockForm({
+  onClose,
+  material,
+}: {
+  onClose: () => void
+  material?: Material | null
+}) {
   const addStock = useAddStock()
 
   const form = useForm({
-    defaultValues: createEmptyInventoryForm(),
+    defaultValues: {
+      ...createEmptyInventoryForm(),
+      materialId: material?.id ?? '',
+    },
     validators: { onSubmit: inventoryFormSchema },
     onSubmit: async ({ value }) => {
       const pending = addStock.mutateAsync(value)
@@ -47,8 +94,12 @@ export function InventoryFormPage() {
         error: 'Could not save this stock. Please try again.',
       })
 
-      await pending
-      await navigate({ to: '/inventory' })
+      try {
+        await pending
+      } catch {
+        return
+      }
+      onClose()
     },
   })
 
@@ -67,24 +118,16 @@ export function InventoryFormPage() {
   }, [stockDefault, form])
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Add Stock</h1>
-        <p className="text-muted-foreground">
-          Add stock to an existing material or register a new material, across
-          one or more locations at once.
-        </p>
-      </div>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          void form.handleSubmit()
-        }}
-        className="max-w-xl space-y-6"
-      >
-        <div className="space-y-4 rounded-xl border border-border/60 bg-card p-5">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        void form.handleSubmit()
+      }}
+      className="space-y-4"
+    >
+      <div className="space-y-4">
+        {!material && (
           <form.Field name="mode">
             {(modeField) => (
               <SegmentedOptions
@@ -105,7 +148,9 @@ export function InventoryFormPage() {
               />
             )}
           </form.Field>
+        )}
 
+        {!material && (
           <form.Subscribe selector={(state) => state.values.mode}>
             {(mode) =>
               mode === 'existing' ? (
@@ -120,9 +165,9 @@ export function InventoryFormPage() {
                         searchField={['name', 'sku']}
                         placeholder="Search material by name or SKU..."
                         emptyMessage="No materials found."
-                        toOption={(material) => ({
-                          value: material.id,
-                          label: materialOptionLabel(material),
+                        toOption={(option) => ({
+                          value: option.id,
+                          label: materialOptionLabel(option),
                         })}
                         value={field.state.value || null}
                         onValueChange={(materialId) =>
@@ -171,65 +216,81 @@ export function InventoryFormPage() {
               )
             }
           </form.Subscribe>
+        )}
 
-          <form.Field name="entries">
-            {(entriesField) => (
-              <div className="space-y-3">
-                <FieldLabel>Locations</FieldLabel>
-                {entriesField.state.value.map((entry, index) => (
-                  <StockEntryRow
-                    key={entry.key}
-                    form={form as never}
-                    entryIndex={index}
-                    removable={entriesField.state.value.length > 1}
-                    onRemove={() => entriesField.removeValue(index)}
-                  />
-                ))}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={() =>
-                    entriesField.pushValue(createEmptyStockEntry())
-                  }
-                  className="w-full border-dashed"
-                >
-                  <PlusIcon className="h-3.5 w-3.5" />
-                  Add Another Location
-                </Button>
+        <form.Subscribe selector={(state) => state.values.mode}>
+          {(mode) =>
+            mode === 'new' && (
+              <div className="grid gap-4 sm:grid-cols-3">
+                <NumberField
+                  form={form}
+                  name="juniorPrice"
+                  label="Junior price incl. VAT"
+                />
+                <NumberField
+                  form={form}
+                  name="normalPrice"
+                  label="Normal price incl. VAT"
+                />
+                <NumberField
+                  form={form}
+                  name="largePrice"
+                  label="Large price incl. VAT"
+                />
               </div>
-            )}
-          </form.Field>
-        </div>
-
-        <form.Subscribe
-          selector={(state) =>
-            [state.submissionAttempts, state.isValid] as const
-          }
-        >
-          {([submissionAttempts, isValid]) =>
-            submissionAttempts > 0 &&
-            !isValid && (
-              <p className="text-sm font-medium text-destructive">
-                Please fix the highlighted fields before saving.
-              </p>
             )
           }
         </form.Subscribe>
 
-        <div className="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => navigate({ to: '/inventory' })}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" disabled={addStock.isPending}>
-            Save
-          </Button>
-        </div>
-      </form>
-    </div>
+        <form.Field name="entries">
+          {(entriesField) => (
+            <div className="space-y-3">
+              <FieldLabel>Locations</FieldLabel>
+              {entriesField.state.value.map((entry, index) => (
+                <StockEntryRow
+                  key={entry.key}
+                  form={form as never}
+                  entryIndex={index}
+                  removable={entriesField.state.value.length > 1}
+                  onRemove={() => entriesField.removeValue(index)}
+                />
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={() => entriesField.pushValue(createEmptyStockEntry())}
+                className="w-full border-dashed"
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add Another Location
+              </Button>
+            </div>
+          )}
+        </form.Field>
+      </div>
+
+      <form.Subscribe
+        selector={(state) => [state.submissionAttempts, state.isValid] as const}
+      >
+        {([submissionAttempts, isValid]) =>
+          submissionAttempts > 0 &&
+          !isValid && (
+            <p className="text-sm font-medium text-destructive">
+              Please fix the highlighted fields before saving.
+            </p>
+          )
+        }
+      </form.Subscribe>
+
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={addStock.isPending}>
+          Save
+        </Button>
+      </DialogFooter>
+    </form>
   )
 }

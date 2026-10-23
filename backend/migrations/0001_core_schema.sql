@@ -29,7 +29,12 @@ CREATE TABLE materials (
     -- Fabric family grouping a fabric's colour variants ("Zabrjad 1" and
     -- "Zabrjad 2" are both family "Zabrjad"), so the inventory table can
     -- cluster them behind one filter. NULL on rows that need no grouping.
-    family TEXT
+    family TEXT,
+    junior_price NUMERIC(10, 2) CHECK (junior_price >= 0),
+    normal_price NUMERIC(10, 2) CHECK (normal_price >= 0),
+    large_price NUMERIC(10, 2) CHECK (large_price >= 0),
+    CHECK ((junior_price IS NULL AND normal_price IS NULL AND large_price IS NULL)
+        OR (junior_price IS NOT NULL AND normal_price IS NOT NULL AND large_price IS NOT NULL))
 );
 
 -- A material can be stocked at more than one location (branch), so stock is
@@ -136,6 +141,7 @@ CREATE TABLE orders (
     ),
     invoice_id UUID NOT NULL REFERENCES invoices(id),
     price NUMERIC(10, 2) NOT NULL,
+    base_price NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (base_price >= 0),
     thobe_type TEXT,
     f_pocket TEXT,
     s_pocket TEXT,
@@ -194,10 +200,15 @@ CREATE TABLE order_stages (
 );
 
 -- A finished order brought back for modification or repair. Each return is its
--- own record with its own pass through the stage checklist, so an order
--- repaired twice keeps both histories. `charge` is recorded for the books;
--- billing a repair through an invoice is out of scope for now, which is why
--- there is no invoice_id here.
+-- own record with its own status, so an order repaired twice keeps both
+-- histories. `charge` is recorded for the books; billing a repair through an
+-- invoice is out of scope for now, which is why there is no invoice_id here.
+-- A repair is received back by the customer after completion (`received`), at
+-- which point an optional payment for the repair work can be recorded on the
+-- repair row itself (`received_amount`/`received_payment_type`) — the invoice
+-- ledger is untouched. `fixed_measurement_id` points at the new measurement
+-- row a repair's measurement fix created (if any), so the fix stays on record
+-- for future orders; the order's own `measurement_id` snapshot never moves.
 CREATE TABLE order_repairs (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     order_id UUID NOT NULL REFERENCES orders(id),
@@ -205,8 +216,12 @@ CREATE TABLE order_repairs (
     reported_on DATE NOT NULL DEFAULT CURRENT_DATE,
     charge NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (charge >= 0),
     status TEXT NOT NULL DEFAULT 'open'
-        CHECK (status IN ('open', 'in_progress', 'completed', 'cancelled')),
+        CHECK (status IN ('open', 'in_progress', 'completed', 'cancelled', 'received')),
     completed_at TIMESTAMPTZ,
+    received_at TIMESTAMPTZ,
+    received_amount NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (received_amount >= 0),
+    received_payment_type TEXT,
+    fixed_measurement_id UUID REFERENCES measurements(id) ON DELETE SET NULL,
     notes TEXT
 );
 
@@ -357,6 +372,7 @@ CREATE TABLE design_options (
         ('thob_type', 'neck', 'sleeve', 'front_pocket', 'side_pocket', 'patti', 'emd')),
     slug TEXT NOT NULL,
     label TEXT NOT NULL,
+    cost NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (cost >= 0),
     image BYTEA,
     image_mime TEXT NOT NULL DEFAULT 'image/webp',
     image_version BIGINT NOT NULL DEFAULT 1,

@@ -17,6 +17,7 @@ pub struct DesignOption {
     pub category: String,
     pub slug: String,
     pub label: String,
+    pub cost: f64,
     /// Position inside its category picker. Gaps are fine; only the relative
     /// order matters.
     pub sort_order: i32,
@@ -37,6 +38,8 @@ pub struct CreateDesignOptionInput {
     pub slug: String,
     pub label: String,
     #[serde(default)]
+    pub cost: f64,
+    #[serde(default)]
     pub sort_order: Option<i32>,
     /// An optional `data:image/<svg|webp|png|jpeg>;base64,...` URL. Sent as JSON
     /// rather than multipart so no extra extractor is needed.
@@ -53,6 +56,7 @@ pub struct CreateDesignOptionInput {
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateDesignOptionInput {
+    pub cost: Option<f64>,
     pub label: Option<String>,
     pub sort_order: Option<i32>,
     pub is_active: Option<bool>,

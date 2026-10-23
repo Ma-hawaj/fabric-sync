@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mapInvoiceEditToForm } from './invoice-edit-mapper'
+import { invoicePayload } from './invoice-payload'
 import type { InvoiceEdit } from '../types/invoice-edit'
 
 function editFixture(): InvoiceEdit {
@@ -66,6 +67,7 @@ function editFixture(): InvoiceEdit {
             productionLocationId: '0197fdd2-6a67-7000-8000-000000000005',
             productionLocationName: 'Main Branch',
             stockQuantity: 10,
+            basePrice: 100,
             price: 100,
             urgentCharge: 0,
             thobeType: 'saudi-classic',
@@ -209,10 +211,14 @@ describe('mapInvoiceEditToForm', () => {
     expect(seeds.soldFromBranchName).toBe('Main Branch')
   })
 
-  it('round-trips customer fabric and its production label without fabricating inventory', () => {
+  it('round-trips a customer tailoring base and urgent charge separately from its calculated price', () => {
     const fixture = editFixture()
+    fixture.isUrgent = true
     const line = fixture.customers[0].orders[0]
     line.materialSource = 'customer'
+    line.basePrice = 15
+    line.price = 17.5
+    line.urgentCharge = 7
     line.materialId = null
     line.materialName = 'White linen'
     line.customerMaterialDescription = 'White linen'
@@ -220,6 +226,9 @@ describe('mapInvoiceEditToForm', () => {
     const { values, seeds } = mapInvoiceEditToForm(fixture)
     expect(values.customers[0].orders[0]).toMatchObject({
       materialSource: 'customer',
+      customerBasePrice: 15,
+      price: 17.5,
+      urgentCharge: 7,
       materialId: '',
       customerMaterialDescription: 'White linen',
       materialAmount: 2,
@@ -229,6 +238,14 @@ describe('mapInvoiceEditToForm', () => {
     expect(seeds.locationLabels.get(line.productionLocationId!)).toBe(
       'Main Branch',
     )
+    const payload = invoicePayload(values)
+    expect(payload.customers[0].orders[0]).toMatchObject({
+      customerBasePrice: 15,
+      urgentCharge: 7,
+    })
+    expect(payload.customers[0].orders[0]).not.toHaveProperty('price')
+    expect(payload.customers[0].orders[0]).not.toHaveProperty('basePrice')
+    expect(payload).not.toHaveProperty('urgentCharge')
   })
 
   it('leaves the product branch blank when there are no product lines', () => {

@@ -42,6 +42,14 @@ INSERT INTO materials (id, name, sku, unit) VALUES
     ('019a0000-0003-7000-8000-000000000005', 'Korean Polyester',   'KP-500', 'meters'),
     ('019a0000-0003-7000-8000-000000000006', 'Premium Wool Blend', 'WB-600', 'meters');
 
+-- Example garment prices; quantity selects a tier rather than multiplying it.
+UPDATE materials SET junior_price = 20, normal_price = 30, large_price = 40
+WHERE id IN (
+    '019a0000-0003-7000-8000-000000000001', '019a0000-0003-7000-8000-000000000002',
+    '019a0000-0003-7000-8000-000000000003', '019a0000-0003-7000-8000-000000000004',
+    '019a0000-0003-7000-8000-000000000005', '019a0000-0003-7000-8000-000000000006'
+);
+
 -- Some materials sit at more than one location, which is the case the
 -- per-material/location stock table exists for.
 INSERT INTO material_stock (id, material_id, branch_id, quantity) VALUES

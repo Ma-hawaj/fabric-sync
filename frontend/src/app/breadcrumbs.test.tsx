@@ -97,13 +97,24 @@ describe('route breadcrumbs', () => {
     expect(breadcrumbLabels()).toEqual([label])
   })
 
+  it('redirects the old Add Stock URL to inventory with one current breadcrumb', async () => {
+    const router = await renderBreadcrumbs('/inventory/new')
+    expect(router.state.location.pathname).toBe('/inventory')
+    expect(breadcrumbLabels()).toEqual(['Inventory'])
+    expect(document.querySelectorAll('[aria-current=page]')).toHaveLength(1)
+    expect(
+      screen
+        .getByRole('link', { name: 'Inventory' })
+        .getAttribute('aria-current'),
+    ).toBe('page')
+  })
+
   it.each([
     ['/customers/new', 'Customers', 'New'],
     ['/products/new', 'Products', 'New'],
     ['/locations/new', 'Locations', 'New'],
     ['/order-stages/new', 'Order Stages', 'New'],
     ['/design-options/new', 'Design Options', 'New'],
-    ['/inventory/new', 'Inventory', 'Add Stock'],
     ['/gift-cards/new', 'Gift Cards', 'Issue Gift Card'],
     ['/customers/example/edit', 'Customers', 'Edit'],
     ['/products/example/edit', 'Products', 'Edit'],

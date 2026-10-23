@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE design_options\n        SET label = COALESCE($2, label),\n            sort_order = COALESCE($3, sort_order),\n            is_active = COALESCE($4, is_active),\n            image = CASE WHEN $5 THEN $6 ELSE image END,\n            image_mime = CASE WHEN $5 THEN COALESCE($7, image_mime) ELSE image_mime END,\n            image_version = CASE WHEN $5 THEN image_version + 1 ELSE image_version END\n        WHERE id = $1\n        RETURNING id, category, slug, label, sort_order, is_active,\n            (image IS NOT NULL) AS \"has_image!\",\n            ('/design-options/' || id::text || '/image?v=' || image_version::text) AS \"image_url!\"\n        ",
+  "query": "\n        UPDATE design_options\n        SET label = COALESCE($2, label),\n            sort_order = COALESCE($3, sort_order),\n            is_active = COALESCE($4, is_active),\n            image = CASE WHEN $5 THEN $6 ELSE image END,\n            image_mime = CASE WHEN $5 THEN COALESCE($7, image_mime) ELSE image_mime END,\n            image_version = CASE WHEN $5 THEN image_version + 1 ELSE image_version END,\n            cost = COALESCE($8::float8, cost)\n        WHERE id = $1\n        RETURNING id, category, slug, label, sort_order, is_active, cost::float8 AS \"cost!\",\n            (image IS NOT NULL) AS \"has_image!\",\n            ('/design-options/' || id::text || '/image?v=' || image_version::text) AS \"image_url!\"\n        ",
   "describe": {
     "columns": [
       {
@@ -35,11 +35,16 @@
       },
       {
         "ordinal": 6,
+        "name": "cost!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
         "name": "has_image!",
         "type_info": "Bool"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "image_url!",
         "type_info": "Text"
       }
@@ -52,7 +57,8 @@
         "Bool",
         "Bool",
         "Bytea",
-        "Text"
+        "Text",
+        "Float8"
       ]
     },
     "nullable": [
@@ -63,8 +69,9 @@
       false,
       false,
       null,
+      null,
       null
     ]
   },
-  "hash": "ff49fa654136be25a62b4eae3a92c0177a6276516f6800a13a53ad9edf8f7052"
+  "hash": "270f9aba7a401cac9e0d44869e8d020b80a3e3a35233a5fad5e236cade753b90"
 }

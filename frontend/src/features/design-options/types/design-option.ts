@@ -17,6 +17,7 @@ export interface DesignOption {
   /** The stored identity written onto an order. Immutable once created. */
   slug: string
   label: string
+  cost: number
   /** Position inside its category picker. Gaps are fine. */
   sortOrder: number
   isActive: boolean
