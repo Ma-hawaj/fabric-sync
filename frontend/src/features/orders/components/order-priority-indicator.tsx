@@ -8,7 +8,7 @@ export function OrderPriorityIndicator({ isUrgent }: { isUrgent: boolean }) {
       role="img"
       aria-label="Urgent order"
       title="Urgent order"
-      className="inline-flex shrink-0 text-warning"
+      className="inline-flex shrink-0 text-destructive"
     >
       <FlagIcon className="size-3.5" aria-hidden="true" />
     </span>
