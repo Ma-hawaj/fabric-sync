@@ -4,6 +4,27 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 
+/// Shared by standalone customers and customers created with an invoice.
+pub fn normalize_customer_identity(
+    name: &str,
+    mobile_no: &str,
+) -> Result<(String, String), AppError> {
+    Ok((
+        normalized_field(name, "customer name")?,
+        normalized_field(mobile_no, "phone number")?,
+    ))
+}
+
+pub(super) fn normalized_field(value: &str, label: &str) -> Result<String, AppError> {
+    let trimmed = value.trim();
+
+    if trimmed.is_empty() {
+        return Err(AppError::BadRequest(format!("{label} cannot be empty")));
+    }
+
+    Ok(trimmed.to_string())
+}
+
 // What a measurement snapshot describes: the customer's body as measured, an
 // existing thobe copied stitch-for-stitch, or a sample kept on file. How the
 // garment should be cut: loose, fitted, or somewhere in between.

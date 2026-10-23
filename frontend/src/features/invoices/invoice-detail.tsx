@@ -145,7 +145,6 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 
           <Button
             variant="outline"
-            disabled={detail.collected}
             onClick={() =>
               void navigate({
                 to: '/invoices/$invoiceId/edit',
@@ -172,7 +171,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           ) : (
             <div className="flex flex-wrap gap-x-6 gap-y-2">
               {invoice.customers.map((customer) => (
-                <div key={customer.mobileNo}>
+                <div key={JSON.stringify([customer.name, customer.mobileNo])}>
                   <div className="text-sm font-semibold">{customer.name}</div>
                   <div className="text-xs text-muted-foreground">
                     {customer.mobileNo}
@@ -480,7 +479,7 @@ function toInvoice(detail: InvoiceDetail): Invoice {
 function deduplicate(customers: InvoiceCustomer[]): InvoiceCustomer[] {
   const seen = new Map<string, InvoiceCustomer>()
   for (const customer of customers) {
-    seen.set(customer.mobileNo, customer)
+    seen.set(JSON.stringify([customer.name, customer.mobileNo]), customer)
   }
   return [...seen.values()]
 }

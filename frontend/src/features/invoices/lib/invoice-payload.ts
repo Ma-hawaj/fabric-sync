@@ -54,8 +54,8 @@ function customerPayload(customer: InvoiceCustomerDraft) {
     newCustomer:
       customer.mode === 'new'
         ? {
-            name: customer.name,
-            mobileNo: customer.mobileNo,
+            name: customer.name.trim(),
+            mobileNo: customer.mobileNo.trim(),
             address: customer.address.trim(),
           }
         : null,

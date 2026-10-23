@@ -57,9 +57,9 @@ const EDIT_FIXTURE: InvoiceEdit = {
   giftCardRedemptions: [],
 }
 
-function renderPage() {
+function renderPage(edit: InvoiceEdit = EDIT_FIXTURE) {
   const client = new QueryClient()
-  client.setQueryData(['invoices', EDIT_FIXTURE.id, 'edit'], EDIT_FIXTURE)
+  client.setQueryData(['invoices', EDIT_FIXTURE.id, 'edit'], edit)
   return render(
     <QueryClientProvider client={client}>
       <InvoiceEditPage invoiceId={EDIT_FIXTURE.id} />

@@ -13,12 +13,18 @@ describe('invoice material payload', () => {
     values.customers[0].orders[0].urgentCharge = 15
     values.collectionMethod = 'delivery'
     values.customers[0].mode = 'new'
+    values.customers[0].name = '  Ahmed  '
+    values.customers[0].mobileNo = '  33112233  '
     values.customers[0].address = '  Building 1, Road 2  '
     expect(invoicePayload(values)).toMatchObject({
       collectionMethod: 'delivery',
       customers: [
         {
-          newCustomer: { address: 'Building 1, Road 2' },
+          newCustomer: {
+            name: 'Ahmed',
+            mobileNo: '33112233',
+            address: 'Building 1, Road 2',
+          },
           orders: [{ isUrgent: true }],
         },
       ],

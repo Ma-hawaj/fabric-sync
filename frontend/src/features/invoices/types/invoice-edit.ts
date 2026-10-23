@@ -65,7 +65,7 @@ export interface InvoiceEditCustomer {
   customerName: string
   customerMobileNo: string
   customerAddress?: string | null
-  /** The row an edit rewrites in place. */
+  /** The immutable snapshot currently referenced by the orders. */
   measurementId: string | null
   measurement: InvoiceEditMeasurement
   orders: InvoiceEditOrder[]
@@ -107,7 +107,7 @@ export interface InvoiceEdit {
   branchName: string | null
   discount: number
   discountUnit: DiscountUnit
-  /** Non-empty exactly when the invoice cannot be edited (it has payments). */
+  /** Payments already taken; retained during edits and do not block editing. */
   payments: InvoicePayment[]
   customerId: string | null
   customers: InvoiceEditCustomer[]
