@@ -46,10 +46,10 @@ vi.mock('@/lib/api', () => ({
   ApiError: class ApiError extends Error {},
 }))
 
-function renderDialog() {
+function renderDialog(material?: Material) {
   const onOpenChange = vi.fn()
   apiPost.mockReset().mockResolvedValue({ data: MATERIALS[0] })
-  apiGet.mockImplementation(
+  apiGet.mockClear().mockImplementation(
     apiGetMock({
       '/materials': MATERIALS,
       '/locations': [
@@ -64,9 +64,21 @@ function renderDialog() {
     }),
   )
   const client = new QueryClient()
+  if (material) {
+    client.setQueryData(['default-location'], {
+      defaultLocationId: 'loc-1',
+      defaultLocation: {
+        id: 'loc-1',
+        name: 'Main Warehouse',
+        isActive: true,
+        holdsStock: true,
+        receivesOrders: false,
+      },
+    })
+  }
   render(
     <QueryClientProvider client={client}>
-      <AddStockDialog open onOpenChange={onOpenChange} />
+      <AddStockDialog open material={material} onOpenChange={onOpenChange} />
     </QueryClientProvider>,
   )
   return { onOpenChange }
@@ -95,6 +107,10 @@ describe('AddStockDialog', () => {
         name: 'Cotton Poplin — White (FB-CTN-WHT-01)',
       }),
     )
+    await fillLocationAndQuantity()
+  }
+
+  async function fillLocationAndQuantity() {
     const location = screen.getByPlaceholderText('Search location...')
     fireEvent.pointerDown(location)
     fireEvent.mouseDown(location)
@@ -106,6 +122,44 @@ describe('AddStockDialog', () => {
       target: { value: '5.25' },
     })
   }
+
+  it.each(MATERIALS)(
+    'adds stock directly to $name without searching, including materials with no stock',
+    async (material) => {
+      const { onOpenChange } = renderDialog(material)
+      expect(
+        screen.getByText(
+          `Add stock for ${material.sku ? `${material.name} (${material.sku})` : material.name} across one or more locations.`,
+        ),
+      ).toBeTruthy()
+      expect(
+        screen.queryByPlaceholderText('Search material by name or SKU...'),
+      ).toBeNull()
+      expect(screen.queryByRole('radio', { name: 'New Material' })).toBeNull()
+      await waitFor(() =>
+        expect(
+          screen.getByPlaceholderText<HTMLInputElement>('Search location...')
+            .value,
+        ).toBe('Main Warehouse'),
+      )
+      fireEvent.change(screen.getByLabelText('Quantity'), {
+        target: { value: '5.25' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }))
+      await waitFor(() =>
+        expect(apiPost).toHaveBeenCalledWith(
+          `/materials/${material.id}/stock`,
+          {
+            entries: [{ locationId: 'loc-1', quantity: 5.25 }],
+          },
+        ),
+      )
+      await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+      expect(apiGet.mock.calls.some(([path]) => path === '/materials')).toBe(
+        false,
+      )
+    },
+  )
 
   it('saves existing stock and closes the dialog without navigating away', async () => {
     const { onOpenChange } = renderDialog()

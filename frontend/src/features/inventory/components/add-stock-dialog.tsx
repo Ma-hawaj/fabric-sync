@@ -41,8 +41,10 @@ function materialOptionLabel(material: Material) {
 export function AddStockDialog({
   open,
   onOpenChange,
+  material,
 }: {
   open: boolean
+  material?: Material | null
   onOpenChange: (open: boolean) => void
 }) {
   return (
@@ -51,21 +53,37 @@ export function AddStockDialog({
         <DialogHeader>
           <DialogTitle>Add Stock</DialogTitle>
           <DialogDescription>
-            Add stock to an existing material or register a new material, across
-            one or more locations at once.
+            {material
+              ? `Add stock for ${materialOptionLabel(material)} across one or more locations.`
+              : 'Add stock to an existing material or register a new material, across one or more locations at once.'}
           </DialogDescription>
         </DialogHeader>
-        {open && <AddStockForm onClose={() => onOpenChange(false)} />}
+        {open && (
+          <AddStockForm
+            key={material?.id ?? 'new-stock'}
+            material={material}
+            onClose={() => onOpenChange(false)}
+          />
+        )}
       </DialogContent>
     </Dialog>
   )
 }
 
-function AddStockForm({ onClose }: { onClose: () => void }) {
+function AddStockForm({
+  onClose,
+  material,
+}: {
+  onClose: () => void
+  material?: Material | null
+}) {
   const addStock = useAddStock()
 
   const form = useForm({
-    defaultValues: createEmptyInventoryForm(),
+    defaultValues: {
+      ...createEmptyInventoryForm(),
+      materialId: material?.id ?? '',
+    },
     validators: { onSubmit: inventoryFormSchema },
     onSubmit: async ({ value }) => {
       const pending = addStock.mutateAsync(value)
@@ -109,92 +127,96 @@ function AddStockForm({ onClose }: { onClose: () => void }) {
       className="space-y-4"
     >
       <div className="space-y-4">
-        <form.Field name="mode">
-          {(modeField) => (
-            <SegmentedOptions
-              options={['Add to Existing Material', 'New Material']}
-              value={
-                modeField.state.value === 'existing'
-                  ? 'Add to Existing Material'
-                  : 'New Material'
-              }
-              onChange={(label) =>
-                modeField.handleChange(
-                  (label === 'Add to Existing Material'
-                    ? 'existing'
-                    : 'new') satisfies StockEntryMode,
-                )
-              }
-              columns={2}
-            />
-          )}
-        </form.Field>
+        {!material && (
+          <form.Field name="mode">
+            {(modeField) => (
+              <SegmentedOptions
+                options={['Add to Existing Material', 'New Material']}
+                value={
+                  modeField.state.value === 'existing'
+                    ? 'Add to Existing Material'
+                    : 'New Material'
+                }
+                onChange={(label) =>
+                  modeField.handleChange(
+                    (label === 'Add to Existing Material'
+                      ? 'existing'
+                      : 'new') satisfies StockEntryMode,
+                  )
+                }
+                columns={2}
+              />
+            )}
+          </form.Field>
+        )}
 
-        <form.Subscribe selector={(state) => state.values.mode}>
-          {(mode) =>
-            mode === 'existing' ? (
-              <form.Field name="materialId">
-                {(field) => (
-                  <Field data-invalid={field.state.meta.errors.length > 0}>
-                    <FieldLabel htmlFor={field.name}>Material</FieldLabel>
-                    <AsyncCombobox<Material>
-                      id={field.name}
-                      endpoint="/materials"
-                      queryKey="inventory-material-picker"
-                      searchField={['name', 'sku']}
-                      placeholder="Search material by name or SKU..."
-                      emptyMessage="No materials found."
-                      toOption={(material) => ({
-                        value: material.id,
-                        label: materialOptionLabel(material),
-                      })}
-                      value={field.state.value || null}
-                      onValueChange={(materialId) =>
-                        field.handleChange(materialId ?? '')
-                      }
-                    />
-                    <FieldError errors={field.state.meta.errors} />
-                  </Field>
-                )}
-              </form.Field>
-            ) : (
-              <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <TextField form={form} name="name" label="Name" />
-                  <TextField form={form} name="sku" label="SKU" />
-                </div>
-
-                <TextField form={form} name="family" label="Family" />
-
-                <form.Field name="unit">
+        {!material && (
+          <form.Subscribe selector={(state) => state.values.mode}>
+            {(mode) =>
+              mode === 'existing' ? (
+                <form.Field name="materialId">
                   {(field) => (
                     <Field data-invalid={field.state.meta.errors.length > 0}>
-                      <FieldLabel htmlFor={field.name}>Unit</FieldLabel>
-                      <Select
-                        value={field.state.value}
-                        onValueChange={(value: string | null) =>
-                          field.handleChange(value ?? '')
+                      <FieldLabel htmlFor={field.name}>Material</FieldLabel>
+                      <AsyncCombobox<Material>
+                        id={field.name}
+                        endpoint="/materials"
+                        queryKey="inventory-material-picker"
+                        searchField={['name', 'sku']}
+                        placeholder="Search material by name or SKU..."
+                        emptyMessage="No materials found."
+                        toOption={(option) => ({
+                          value: option.id,
+                          label: materialOptionLabel(option),
+                        })}
+                        value={field.state.value || null}
+                        onValueChange={(materialId) =>
+                          field.handleChange(materialId ?? '')
                         }
-                      >
-                        <SelectTrigger id={field.name} className="w-full">
-                          <SelectValue placeholder="Select unit..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {UNITS.map((unit) => (
-                            <SelectItem key={unit} value={unit}>
-                              {unit}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      />
                       <FieldError errors={field.state.meta.errors} />
                     </Field>
                   )}
                 </form.Field>
-              </div>
-            )
-          }
-        </form.Subscribe>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <TextField form={form} name="name" label="Name" />
+                    <TextField form={form} name="sku" label="SKU" />
+                  </div>
+
+                  <TextField form={form} name="family" label="Family" />
+
+                  <form.Field name="unit">
+                    {(field) => (
+                      <Field data-invalid={field.state.meta.errors.length > 0}>
+                        <FieldLabel htmlFor={field.name}>Unit</FieldLabel>
+                        <Select
+                          value={field.state.value}
+                          onValueChange={(value: string | null) =>
+                            field.handleChange(value ?? '')
+                          }
+                        >
+                          <SelectTrigger id={field.name} className="w-full">
+                            <SelectValue placeholder="Select unit..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {UNITS.map((unit) => (
+                              <SelectItem key={unit} value={unit}>
+                                {unit}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FieldError errors={field.state.meta.errors} />
+                      </Field>
+                    )}
+                  </form.Field>
+                </div>
+              )
+            }
+          </form.Subscribe>
+        )}
 
         <form.Subscribe selector={(state) => state.values.mode}>
           {(mode) =>

@@ -1,6 +1,7 @@
 import { defineColumns } from '@/lib/define-columns'
 import {
   EyeIcon,
+  PlusIcon,
   MinusIcon,
   PencilIcon,
   ArrowRightLeftIcon,
@@ -21,6 +22,7 @@ export const getInventoryColumns = (
   onRemoveStock: (material: Material) => void,
   onEdit: (material: Material) => void,
   onTransfer: (material: Material) => void,
+  onAddStock: (material: Material) => void,
 ) =>
   defineColumns<Material>()([
     {
@@ -146,6 +148,11 @@ export const getInventoryColumns = (
               label: 'Edit Material',
               icon: PencilIcon,
               onClick: () => onEdit(row.original),
+            },
+            {
+              label: 'Add Stock',
+              icon: PlusIcon,
+              onClick: () => onAddStock(row.original),
             },
             {
               label: 'Move Stock',

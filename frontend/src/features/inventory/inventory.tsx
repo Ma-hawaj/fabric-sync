@@ -1,4 +1,4 @@
-import * as React from 'react'
+import { useMemo, useState } from 'react'
 import { PlusIcon } from 'lucide-react'
 import { useDataTable } from '@/hooks/use-data-table'
 import { Button } from '@/components/ui/button'
@@ -19,18 +19,21 @@ export function InventoryPage() {
   // Unfiltered on purpose: this facet lists where stock already sits, so a
   // since-deactivated location should stay selectable here.
   const { data: locations } = useAllLocations()
-  const [addStockOpen, setAddStockOpen] = React.useState(false)
-  const [selectedMaterial, setSelectedMaterial] =
-    React.useState<Material | null>(null)
-  const [removeMaterial, setRemoveMaterial] = React.useState<Material | null>(
+  const [addStockOpen, setAddStockOpen] = useState(false)
+  const [addStockMaterial, setAddStockMaterial] = useState<Material | null>(
+    null,
+  )
+  const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(
+    null,
+  )
+  const [removeMaterial, setRemoveMaterial] = useState<Material | null>(null)
+
+  const [editMaterial, setEditMaterial] = useState<Material | null>(null)
+  const [transferMaterial, setTransferMaterial] = useState<Material | null>(
     null,
   )
 
-  const [editMaterial, setEditMaterial] = React.useState<Material | null>(null)
-  const [transferMaterial, setTransferMaterial] =
-    React.useState<Material | null>(null)
-
-  const columns = React.useMemo(
+  const columns = useMemo(
     () =>
       getInventoryColumns(
         setSelectedMaterial,
@@ -38,6 +41,10 @@ export function InventoryPage() {
         setRemoveMaterial,
         setEditMaterial,
         setTransferMaterial,
+        (material) => {
+          setAddStockMaterial(material)
+          setAddStockOpen(true)
+        },
       ),
     [locations],
   )
@@ -76,7 +83,12 @@ export function InventoryPage() {
             Material availability across all locations.
           </p>
         </div>
-        <Button onClick={() => setAddStockOpen(true)}>
+        <Button
+          onClick={() => {
+            setAddStockMaterial(null)
+            setAddStockOpen(true)
+          }}
+        >
           <PlusIcon className="h-4 w-4" />
           Add Stock
         </Button>
@@ -86,7 +98,11 @@ export function InventoryPage() {
         <DataTableAdvancedToolbar table={table} defaultSearchColumnId="name" />
       </DataTable>
 
-      <AddStockDialog open={addStockOpen} onOpenChange={setAddStockOpen} />
+      <AddStockDialog
+        open={addStockOpen}
+        onOpenChange={setAddStockOpen}
+        material={addStockMaterial}
+      />
 
       <InventoryDetailsSheet
         material={selectedMaterial}
