@@ -6,7 +6,8 @@ export type PaymentType = 'benefit' | 'cash' | 'card'
 
 /** `pending` is the absence of a recorded action, not a stored value. */
 export type OrderStageStatus = 'pending' | 'done' | 'skipped'
-export type RepairStatus = 'open' | 'in_progress' | 'completed' | 'cancelled'
+export type RepairStatus =
+  'open' | 'in_progress' | 'completed' | 'cancelled' | 'received'
 
 // One entry of an assembled checklist. The backend derives these by overlaying
 // what has been recorded onto the live stage catalog, so a stage added or
@@ -43,7 +44,11 @@ export interface OrderStageEntry {
 
 // A return for rework. An order can accumulate several over its life. A
 // repair is tracked by its own record and status, not a second pass through
-// the order's stage checklist.
+// the order's stage checklist. Once completed it is handed back via the
+// receive step (`received`), optionally with money taken at handover (stored
+// on the repair itself — the invoice ledger is untouched). A measurement fix
+// is a new customer measurement row referenced by `fixedMeasurementId`; the
+// order's own snapshot never moves.
 export interface OrderRepair {
   id: string
   reason: string
@@ -51,6 +56,33 @@ export interface OrderRepair {
   charge: number
   status: RepairStatus
   completedAt: string | null
+  receivedAt: string | null
+  receivedAmount: number
+  receivedPaymentType: PaymentType | null
+  fixedMeasurementId: string | null
+  notes: string | null
+}
+
+// One repair with its order context, as GET /repairs returns it — the shape
+// the global Repairs page filters and sorts without joining client-side.
+export interface RepairListItem {
+  id: string
+  orderId: string
+  orderNumber: number
+  invoiceId: string
+  invoiceNumber: number
+  customerName: string
+  customerMobile: string
+  material: string
+  reason: string
+  reportedOn: string
+  charge: number
+  status: RepairStatus
+  completedAt: string | null
+  receivedAt: string | null
+  receivedAmount: number
+  receivedPaymentType: PaymentType | null
+  fixedMeasurementId: string | null
   notes: string | null
 }
 

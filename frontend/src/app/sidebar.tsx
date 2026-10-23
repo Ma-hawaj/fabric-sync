@@ -40,11 +40,13 @@ import {
   LogOutIcon,
   PaletteIcon,
   SunIcon,
+  WrenchIcon,
 } from 'lucide-react'
 
 const navItems = [
   { to: '/invoices', label: 'Invoices', icon: ReceiptText },
   { to: '/orders', label: 'Orders', icon: ShoppingCart },
+  { to: '/repairs', label: 'Repairs', icon: WrenchIcon },
   { to: '/customers', label: 'Customers', icon: ContactIcon },
   { to: '/inventory', label: 'Inventory', icon: PackageIcon },
   { to: '/products', label: 'Products', icon: ShoppingBagIcon },

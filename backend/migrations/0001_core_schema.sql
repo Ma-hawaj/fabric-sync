@@ -194,10 +194,15 @@ CREATE TABLE order_stages (
 );
 
 -- A finished order brought back for modification or repair. Each return is its
--- own record with its own pass through the stage checklist, so an order
--- repaired twice keeps both histories. `charge` is recorded for the books;
--- billing a repair through an invoice is out of scope for now, which is why
--- there is no invoice_id here.
+-- own record with its own status, so an order repaired twice keeps both
+-- histories. `charge` is recorded for the books; billing a repair through an
+-- invoice is out of scope for now, which is why there is no invoice_id here.
+-- A repair is received back by the customer after completion (`received`), at
+-- which point an optional payment for the repair work can be recorded on the
+-- repair row itself (`received_amount`/`received_payment_type`) — the invoice
+-- ledger is untouched. `fixed_measurement_id` points at the new measurement
+-- row a repair's measurement fix created (if any), so the fix stays on record
+-- for future orders; the order's own `measurement_id` snapshot never moves.
 CREATE TABLE order_repairs (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     order_id UUID NOT NULL REFERENCES orders(id),
@@ -205,8 +210,12 @@ CREATE TABLE order_repairs (
     reported_on DATE NOT NULL DEFAULT CURRENT_DATE,
     charge NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (charge >= 0),
     status TEXT NOT NULL DEFAULT 'open'
-        CHECK (status IN ('open', 'in_progress', 'completed', 'cancelled')),
+        CHECK (status IN ('open', 'in_progress', 'completed', 'cancelled', 'received')),
     completed_at TIMESTAMPTZ,
+    received_at TIMESTAMPTZ,
+    received_amount NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (received_amount >= 0),
+    received_payment_type TEXT,
+    fixed_measurement_id UUID REFERENCES measurements(id) ON DELETE SET NULL,
     notes TEXT
 );
 

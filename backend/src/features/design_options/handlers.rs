@@ -74,7 +74,7 @@ pub async fn get_image(
     Ok((
         [
             (header::CONTENT_TYPE, content_type),
-            (header::CACHE_CONTROL, "public, max-age=86400"),
+            (header::CACHE_CONTROL, "public, no-cache"),
             (
                 header::CONTENT_SECURITY_POLICY,
                 "sandbox; default-src 'none'; script-src 'none'; object-src 'none'; base-uri 'none'; img-src 'self' data:; style-src 'unsafe-inline'",

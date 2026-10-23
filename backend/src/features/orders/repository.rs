@@ -391,6 +391,10 @@ pub async fn list_repairs(
             charge::float8 AS "charge!",
             status,
             completed_at,
+            received_at,
+            received_amount::float8 AS "received_amount!",
+            received_payment_type,
+            fixed_measurement_id,
             notes
         FROM order_repairs
         WHERE order_id = ANY($1)
@@ -400,6 +404,178 @@ pub async fn list_repairs(
     )
     .fetch_all(state.db())
     .await
+}
+
+/// Repair rows use the same server-side list contract as orders and invoices.
+const REPAIR_SPEC: ListSpec = ListSpec {
+    base_sql: r#"
+        SELECT
+            r.id,
+            r.order_id,
+            o.order_number,
+            o.invoice_id,
+            i.invoice_number,
+            c.name AS customer_name,
+            c.mobile_no AS customer_mobile,
+            COALESCE(mat.name, o.customer_material_description) AS material,
+            r.reason,
+            r.reported_on,
+            r.charge::float8 AS charge,
+            r.status,
+            r.completed_at,
+            r.received_at,
+            r.received_amount::float8 AS received_amount,
+            r.received_payment_type,
+            r.fixed_measurement_id,
+            r.notes
+        FROM order_repairs r
+        JOIN orders o ON o.id = r.order_id
+        JOIN invoices i ON i.id = o.invoice_id
+        JOIN measurements m ON m.id = o.measurement_id
+        JOIN customers c ON c.id = m.customer_id
+        LEFT JOIN materials mat ON mat.id = o.material_id
+    "#,
+    columns: &[
+        (
+            "orderNumber",
+            ColumnDef::new("order_number", ColumnKind::Number),
+        ),
+        (
+            "customerName",
+            ColumnDef::new("customer_name", ColumnKind::Text),
+        ),
+        ("reason", ColumnDef::new("reason", ColumnKind::Text)),
+        (
+            "reportedOn",
+            ColumnDef::new("reported_on", ColumnKind::Date),
+        ),
+        ("status", ColumnDef::new("status", ColumnKind::Text)),
+        ("charge", ColumnDef::new("charge", ColumnKind::Number)),
+    ],
+    default_order: "reported_on DESC, id DESC",
+};
+
+pub async fn list_all_repairs(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<super::types::RepairListItem>, AppError> {
+    list::fetch_page(state.db(), &REPAIR_SPEC, params).await
+}
+
+/// The repair row locked. The service refuses a receive on a repair that is
+/// not completed through this: a retry would otherwise record the handover
+/// payment twice.
+pub struct LockedRepair {
+    pub status: String,
+}
+
+pub async fn lock_repair(
+    tx: &mut sqlx::PgTransaction<'_>,
+    repair_id: Uuid,
+) -> Result<Option<LockedRepair>, sqlx::Error> {
+    // Match the invoice-before-repair lock order used by other order writes.
+    let invoice_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT o.invoice_id FROM orders o JOIN order_repairs r ON r.order_id=o.id WHERE r.id=$1",
+    )
+    .bind(repair_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if let Some(invoice_id) = invoice_id {
+        sqlx::query("SELECT id FROM invoices WHERE id=$1 FOR UPDATE")
+            .bind(invoice_id)
+            .execute(&mut **tx)
+            .await?;
+    }
+    let row = sqlx::query!(
+        r#"
+        SELECT status
+        FROM order_repairs
+        WHERE id = $1
+        FOR UPDATE
+        "#,
+        repair_id,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    Ok(row.map(|row| LockedRepair { status: row.status }))
+}
+
+/// Marks the repair received and records the money taken at handover. The
+/// caller holds the row locked (see `lock_repair`) and has refused anything
+/// that is not `completed`.
+pub async fn mark_repair_received(
+    tx: &mut sqlx::PgTransaction<'_>,
+    repair_id: Uuid,
+    received_at: DateTime<Utc>,
+    amount: f64,
+    payment_type: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE order_repairs
+        SET status = 'received',
+            received_at = $2,
+            received_amount = $3::float8,
+            received_payment_type = $4
+        WHERE id = $1
+        "#,
+        repair_id,
+        received_at,
+        amount,
+        payment_type,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn set_repair_fixed_measurement(
+    tx: &mut sqlx::PgTransaction<'_>,
+    repair_id: Uuid,
+    measurement_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE order_repairs
+        SET fixed_measurement_id = $2
+        WHERE id = $1
+        "#,
+        repair_id,
+        measurement_id,
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+/// The customer behind a repair's order. The order's own measurement snapshot
+/// never moves — the fix inserts a new row instead.
+pub struct RepairOrderContext {
+    pub customer_id: Uuid,
+}
+
+pub async fn repair_order_context(
+    state: &AppState,
+    order_id: Uuid,
+) -> Result<Option<RepairOrderContext>, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        SELECT m.customer_id
+        FROM orders o
+        JOIN measurements m ON m.id = o.measurement_id
+        WHERE o.id = $1
+        "#,
+        order_id,
+    )
+    .fetch_optional(state.db())
+    .await?;
+
+    Ok(row.map(|row| RepairOrderContext {
+        customer_id: row.customer_id,
+    }))
 }
 
 /// The order's invoice with the row locked. The service refuses a pickup on
@@ -564,15 +740,6 @@ pub async fn clear_stage(
     Ok(())
 }
 
-pub async fn order_exists(state: &AppState, order_id: Uuid) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar!(
-        r#"SELECT EXISTS (SELECT 1 FROM orders WHERE id = $1) AS "exists!""#,
-        order_id,
-    )
-    .fetch_one(state.db())
-    .await
-}
-
 /// Guards the repair endpoints: a repair belonging to another order must not be
 /// addressable through this order's URL.
 pub async fn repair_belongs_to_order(
@@ -594,24 +761,23 @@ pub async fn repair_belongs_to_order(
 }
 
 pub async fn create_repair(
-    state: &AppState,
+    tx: &mut sqlx::PgTransaction<'_>,
     order_id: Uuid,
     reason: &str,
     charge: f64,
     notes: Option<&str>,
 ) -> Result<Uuid, sqlx::Error> {
-    let mut tx = state.db().begin().await?;
     let invoice_id: Option<Uuid> = sqlx::query_scalar("SELECT invoice_id FROM orders WHERE id=$1")
         .bind(order_id)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut **tx)
         .await?;
     if let Some(invoice_id) = invoice_id {
         sqlx::query("SELECT id FROM invoices WHERE id=$1 FOR UPDATE")
             .bind(invoice_id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
     }
-    let result = sqlx::query_scalar!(
+    sqlx::query_scalar!(
         r#"
         INSERT INTO order_repairs (order_id, reason, charge, notes)
         VALUES ($1, $2, $3::float8, $4)
@@ -622,10 +788,8 @@ pub async fn create_repair(
         charge,
         notes,
     )
-    .fetch_one(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(result)
+    .fetch_one(&mut **tx)
+    .await
 }
 
 /// `completed_at` is written explicitly rather than COALESCEd, because moving a
@@ -633,7 +797,7 @@ pub async fn create_repair(
 /// never describe a repair that is open again. It is only touched when the
 /// request actually changes the status.
 pub async fn update_repair(
-    state: &AppState,
+    tx: &mut sqlx::PgTransaction<'_>,
     repair_id: Uuid,
     reason: Option<&str>,
     charge: Option<f64>,
@@ -641,20 +805,7 @@ pub async fn update_repair(
     notes: Option<&str>,
     completed_at: Option<DateTime<Utc>>,
 ) -> Result<Option<Uuid>, sqlx::Error> {
-    let mut tx = state.db().begin().await?;
-    let invoice_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT o.invoice_id FROM orders o JOIN order_repairs r ON r.order_id=o.id WHERE r.id=$1",
-    )
-    .bind(repair_id)
-    .fetch_optional(&mut *tx)
-    .await?;
-    if let Some(invoice_id) = invoice_id {
-        sqlx::query("SELECT id FROM invoices WHERE id=$1 FOR UPDATE")
-            .bind(invoice_id)
-            .execute(&mut *tx)
-            .await?;
-    }
-    let result = sqlx::query_scalar!(
+    sqlx::query_scalar!(
         r#"
         UPDATE order_repairs
         SET reason = COALESCE($2, reason),
@@ -672,8 +823,6 @@ pub async fn update_repair(
         notes,
         completed_at,
     )
-    .fetch_optional(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(result)
+    .fetch_optional(&mut **tx)
+    .await
 }
