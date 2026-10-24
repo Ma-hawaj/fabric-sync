@@ -475,6 +475,10 @@
             </div>
           {% endif %}
           <div class="row">
+            <dt>الاستلام<span class="en">Collection</span></dt>
+            <dd>{% if invoice.collectionMethod == 'delivery' %}توصيل <span class="en">Delivery</span>{% else %}استلام <span class="en">Pickup</span>{% endif %}</dd>
+          </div>
+          <div class="row">
             <dt>الحالة<span class="en">Status</span></dt>
             <dd>
               {%- set status = status_labels[invoice.paymentStatus] -%}
@@ -515,6 +519,12 @@
               <dt>{{ customer.name }}</dt>
               <dd dir="ltr">{{ customer.mobileNo }}</dd>
             </div>
+            {% if customer.address %}
+            <div class="row">
+              <dt>العنوان<span class="en">Address</span></dt>
+              <dd style="white-space: pre-line">{{ customer.address }}</dd>
+            </div>
+            {% endif %}
           {% else %}
             <div class="row">
               <dt>عميل نقدي<span class="en">Walk-in customer</span></dt>
@@ -573,6 +583,12 @@
                     {% endfor %}
                   </div>
                 </div>
+              {% endif %}
+              {% if line.isUrgent %}
+                <span class="line-note">عاجل · Urgent order</span>
+              {% endif %}
+              {% if line.urgentCharge > 0 %}
+                <span class="line-note">رسوم الاستعجال لهذا الطلب · Urgent charge for this order (incl. VAT): {{ currency }} {{ amounts["line" ~ loop.index0 ~ "UrgentCharge"] }}</span>
               {% endif %}
               {% if line_notes[loop.index0] %}
                 <span class="line-note">{{ line_notes[loop.index0] }}</span>
@@ -635,6 +651,12 @@
             </td>
             <td class="num">{{ currency }} {{ amounts.vat }}</td>
           </tr>
+          {% if invoice.totals.urgentCharge > 0 %}
+            <tr>
+              <td class="label">رسوم الاستعجال <span class="en">Urgent charges (incl. VAT)</span></td>
+              <td class="num">{{ currency }} {{ amounts.urgentCharge }}</td>
+            </tr>
+          {% endif %}
           {% if invoice.totals.giftCardSales > 0 %}
             <tr>
               <td class="label">

@@ -1,16 +1,21 @@
+import type { ReadinessFields } from '@/features/notifications/readiness-controls'
+
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
 export type PaymentType = 'benefit' | 'cash' | 'card'
 
 export interface InvoiceCustomer {
   name: string
   mobileNo: string
+  address?: string | null
 }
 
 // Shape of GET /invoices — one row per invoice, with its customers and
 // material names aggregated. An invoice is settled through any number of
 // payments (the ledger); `amountPaid` is their sum and `paymentMethod` the
 // most recent one's method.
-export interface Invoice {
+export interface Invoice extends ReadinessFields {
+  urgentCharge: number
+  collectionMethod: 'delivery' | 'pickup'
   id: string
   invoiceNumber: number
   /** Server-set creation moment, as an ISO datetime with the time of day. */
@@ -27,16 +32,16 @@ export interface Invoice {
   paymentMethod: PaymentType | null
   giftCardRedeemed: number
   /** Goods receipt, separate from money: every order collected. */
-  received: boolean
+  collected: boolean
   /** Tailoring garments only, excluding retail products and gift cards. */
   orderCount: number
   collectedOrderCount: number
   /**
    * Latest collection across the invoice's tailoring lines, as an ISO
-   * datetime. Null until the first order is received (and on retail-only
+   * datetime. Null until the first order is collected (and on retail-only
    * invoices, which have no orders).
    */
-  lastReceivedAt: string | null
+  lastCollectedAt: string | null
   /** Where the customer collects, taken from the invoice's branch. */
   receivingLocation: string | null
   /** Distinct production locations across the invoice's tailoring lines. */

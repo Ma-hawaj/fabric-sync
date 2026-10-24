@@ -13,5 +13,8 @@ export interface Material {
   // Fabric family shared by a fabric's colour variants ("Zabrjad 1" and
   // "Zabrjad 2" are both family "Zabrjad"); null on pre-existing rows.
   family: string | null
+  juniorPrice: number | null
+  normalPrice: number | null
+  largePrice: number | null
   locations: MaterialLocationStock[]
 }

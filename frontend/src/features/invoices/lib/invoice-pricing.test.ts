@@ -3,12 +3,14 @@ import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
   computeOrderLineTotal,
+  computeUrgentCharges,
   computeProductLineTotal,
   extractNet,
   extractVat,
 } from './invoice-pricing'
 import {
   createEmptyGiftCardLine,
+  createEmptyCustomer,
   createEmptyOrder,
   createEmptyProductLine,
 } from '../types/invoice-form'
@@ -80,6 +82,23 @@ describe('extractNet / extractVat', () => {
 })
 
 describe('computeInvoiceTotals', () => {
+  it('rounds each order charge before summing across customers', () => {
+    const customers = [
+      {
+        ...createEmptyCustomer(),
+        orders: [
+          { ...createEmptyOrder(), isUrgent: true, urgentCharge: 0.006 },
+        ],
+      },
+      {
+        ...createEmptyCustomer(),
+        orders: [
+          { ...createEmptyOrder(), isUrgent: true, urgentCharge: 0.006 },
+        ],
+      },
+    ]
+    expect(computeUrgentCharges(customers)).toBe(0.02)
+  })
   const base = {
     orderTotal: 100,
     productTotal: 100,
@@ -95,6 +114,25 @@ describe('computeInvoiceTotals', () => {
     expect(totals.total).toBe(200)
     expect(totals.taxable).toBe(181.82)
     expect(totals.vat).toBe(18.18)
+  })
+
+  it('adds urgency after discounts and includes it in VAT and the balance', () => {
+    const totals = computeInvoiceTotals({
+      ...base,
+      orderTotal: 100,
+      productTotal: 0,
+      discount: 10,
+      discountUnit: 'percent',
+      urgentCharge: 20,
+      giftCardSales: 50,
+      redeemed: 10,
+      paid: 30,
+    })
+    expect(totals.discountAmount).toBe(10)
+    expect(totals.taxable).toBe(100)
+    expect(totals.vat).toBe(10)
+    expect(totals.total).toBe(160)
+    expect(totals.balanceDue).toBe(120)
   })
 
   it('takes the discount off the gross before extracting VAT', () => {

@@ -248,9 +248,15 @@ pub async fn render_invoice_document(
     invoice_id: uuid::Uuid,
 ) -> Result<String, AppError> {
     let detail = service::get_invoice(state, invoice_id).await?;
+    render_snapshot(state, &detail).await
+}
+
+pub(crate) async fn render_snapshot(
+    state: &AppState,
+    detail: &InvoiceDetail,
+) -> Result<String, AppError> {
     let branding = state.invoice_branding();
     let timezone = state.timezone()?;
-
     let env = environment(branding)?;
     let template = env.get_template(TEMPLATE_NAME)?;
 
@@ -320,12 +326,13 @@ fn billed_customers(detail: &InvoiceDetail) -> Vec<&InvoiceParty> {
         return vec![buyer];
     }
 
+    // Family members may share a phone; the name is part of their identity.
     let mut seen = std::collections::HashSet::new();
     detail
         .lines
         .iter()
         .filter_map(|line| line.customer.as_ref())
-        .filter(|customer| seen.insert(customer.mobile_no.as_str()))
+        .filter(|customer| seen.insert((customer.name.as_str(), customer.mobile_no.as_str())))
         .collect()
 }
 
@@ -337,6 +344,7 @@ fn formatted_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<Strin
 
     for (key, value) in [
         ("subtotal", totals.subtotal),
+        ("urgentCharge", totals.urgent_charge),
         ("discountAmount", totals.discount_amount),
         ("taxable", totals.taxable),
         ("vat", totals.vat),
@@ -361,6 +369,10 @@ fn formatted_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<Strin
         );
         amounts.insert(format!("line{index}Total"), format_amount(line.line_total));
         amounts.insert(
+            format!("line{index}UrgentCharge"),
+            format_amount(line.urgent_charge),
+        );
+        amounts.insert(
             format!("line{index}Quantity"),
             format_quantity(line.quantity),
         );
@@ -380,6 +392,71 @@ fn formatted_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<Strin
 mod tests {
     use super::*;
     use crate::features::invoices::types::OrderDesignValues;
+
+    fn customer_line(name: &str, mobile_no: &str) -> super::super::types::InvoiceDetailLine {
+        use super::super::types::{InvoiceDetailLine, InvoiceLineKind, InvoiceParty};
+        InvoiceDetailLine {
+            kind: InvoiceLineKind::Order,
+            order_id: Some(uuid::Uuid::nil()),
+            description: "Cotton".to_string(),
+            detail: None,
+            customer: Some(InvoiceParty {
+                name: name.to_string(),
+                mobile_no: mobile_no.to_string(),
+                address: None,
+            }),
+            is_urgent: false,
+            urgent_charge: 0.0,
+            quantity: 3.0,
+            unit: Some("m".to_string()),
+            unit_price: 20.0,
+            line_total: 20.0,
+            taxable: true,
+            design_values: None,
+        }
+    }
+
+    #[test]
+    fn billed_customers_preserve_family_members_sharing_a_phone() {
+        let mut detail = super::tests_support::detail();
+        detail.lines = vec![
+            customer_line("Ahmed", "33112233"),
+            customer_line("Omar", "33112233"),
+            customer_line("Ahmed", "33112233"),
+            customer_line("Ahmed", "33445566"),
+        ];
+        let customers = billed_customers(&detail);
+        assert_eq!(
+            customers
+                .iter()
+                .map(|customer| (customer.name.as_str(), customer.mobile_no.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Ahmed", "33112233"),
+                ("Omar", "33112233"),
+                ("Ahmed", "33445566"),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_explicit_buyer_remains_the_billed_contact() {
+        let mut detail = super::tests_support::detail();
+        detail.buyer = Some(super::super::types::InvoiceParty {
+            name: "Family contact".to_string(),
+            mobile_no: "33112233".to_string(),
+            address: None,
+        });
+        detail.lines = vec![customer_line("Omar", "33112233")];
+        let customers = billed_customers(&detail);
+        assert_eq!(customers.len(), 1);
+        assert_eq!(customers[0].name, "Family contact");
+    }
+
+    #[test]
+    fn a_walk_in_invoice_has_no_billed_customers() {
+        assert!(billed_customers(&super::tests_support::detail()).is_empty());
+    }
 
     /// An empty catalog, so the lookup falls back to the compiled-in one —
     /// what the documents behaved like before the database catalog existed.
@@ -456,6 +533,41 @@ mod tests {
     fn the_default_template_compiles() {
         let env = environment(&branding()).unwrap();
         assert!(env.get_template(TEMPLATE_NAME).is_ok());
+    }
+
+    #[test]
+    fn the_document_prints_collection_urgency_and_customer_address() {
+        let mut detail = tests_support::detail();
+        detail.collection_method = "delivery".to_string();
+        detail.totals.urgent_charge = 10.0;
+        detail.buyer = Some(InvoiceParty {
+            name: "Buyer".to_string(),
+            mobile_no: "12345".to_string(),
+            address: Some("Building 1 <Road 2>".to_string()),
+        });
+        let env = environment(&branding()).unwrap();
+        let template = env.get_template(TEMPLATE_NAME).unwrap();
+        let render = |detail: &InvoiceDetail| {
+            template
+                .render(context! {
+                    invoice => minijinja::Value::from_serialize(detail),
+                    customers => minijinja::Value::from_serialize(billed_customers(detail)),
+                    company => minijinja::Value::from_serialize(branding()),
+                    currency => CURRENCY,
+                    amounts => minijinja::Value::from_serialize(formatted_amounts(detail)),
+                })
+                .unwrap()
+        };
+        let html = render(&detail);
+        assert!(html.contains("Delivery"));
+        assert!(html.contains("Urgent charges (incl. VAT)"));
+        assert!(html.contains("10.000"));
+        assert!(html.contains("Building 1 &lt;Road 2&gt;"));
+        detail.totals.urgent_charge = 0.0;
+        detail.collection_method = "pickup".to_string();
+        let html = render(&detail);
+        assert!(html.contains("Pickup"));
+        assert!(!html.contains("Urgent"));
     }
 
     #[test]
@@ -710,23 +822,26 @@ mod tests_support {
 
     pub fn detail() -> InvoiceDetail {
         InvoiceDetail {
+            readiness: Default::default(),
             id: uuid::Uuid::nil(),
             invoice_number: 1,
             date: Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),
             target_date: Some(NaiveDate::from_ymd_opt(2026, 8, 6).unwrap()),
             created_at: Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),
             branch_name: None,
+            collection_method: "pickup".to_string(),
             buyer: None,
             payment_status: "paid".to_string(),
             payment_method: None,
-            received: true,
+            collected: true,
             order_count: 0,
             collected_order_count: 0,
-            last_received_at: None,
+            last_collected_at: None,
             lines: Vec::new(),
             redemptions: Vec::new(),
             payments: Vec::new(),
             totals: InvoiceTotalsBreakdown {
+                urgent_charge: 0.0,
                 subtotal: 100.0,
                 discount: 0.0,
                 discount_unit: "amount".to_string(),

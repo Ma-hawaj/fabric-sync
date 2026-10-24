@@ -90,6 +90,14 @@ If a valid access token gets a 401 from the backend unexpectedly, check the `aud
 
 ## Backend
 
+Invoice creation and editing offer a WhatsApp preview before sending. Orders
+have an explicit **Ready for pickup** confirmation, with invoice readiness
+calculated from the remaining uncollected orders. All invoice customers are
+selected by default and destinations are deduplicated by normalized mobile.
+Invoice PDF exports and notification attachments share stored, server-rendered
+Chromium PDFs. See [notification setup and verification](docs/whatsapp-notifications.md)
+for sender templates, renderer configuration, delivery history, and retries.
+
 The backend reads configuration from environment variables (`backend/.env`
 via `dotenvy` when running locally — copy `backend/.env.example` there
 first).
@@ -159,6 +167,7 @@ Copy `frontend/.env.example` to `frontend/.env` and set the OIDC vars for your i
 - `VITE_OIDC_CLIENT_ID` — the frontend SPA client's ID (see "Local Infrastructure" above)
 - `VITE_OIDC_REDIRECT_URI` / `VITE_OIDC_POST_LOGOUT_REDIRECT_URI`, default `http://localhost:3000/`
 - `VITE_OIDC_SCOPE`, default `openid profile email`
+- `VITE_ACCOUNT_URL` — optional override for the user menu's Account settings link. Root issuers default to Zitadel's `/ui/console/users/me`; legacy Authentik issuers use `/if/user/`. Other issuer layouts require an explicit account URL. For Docker builds, set this as a build argument or repository Actions variable and rebuild the image.
 
 API calls are same-origin in dev: `VITE_API_BASE_URL=/api` sends them through the Vite dev-server proxy (`/api` → the backend as-is, since the backend serves the API nested under `/api` — see `BACKEND_URL` in `frontend/vite.config.ts`), so frontend and backend share one URL with no CORS involved. The IdP is hit directly. To bypass the proxy and hit the backend directly instead:
 
@@ -166,3 +175,45 @@ API calls are same-origin in dev: `VITE_API_BASE_URL=/api` sends them through th
 cd frontend
 VITE_API_BASE_URL=http://localhost:8000 pnpm run dev
 ```
+
+## Garment pricing
+
+Urgency is selected separately for each tailoring order. The server applies a
+VAT-inclusive urgent charge after invoice discounts, and the form displays it
+read-only. Set `URGENT_ORDER_CHARGE` to a positive amount and
+`URGENT_ORDER_CHARGE_UNIT` to `amount` (fixed BHD per urgent order) or `percent`
+(percentage of that order's calculated garment price). No rate is assumed:
+urgent orders cannot be saved until pricing is configured. Regular orders have
+no urgent charge. An invoice containing any urgent order requires a target date.
+
+Materials have junior, normal, and large garment prices, entered when creating
+a material or through its Edit Material dialog. Design options have an optional
+additional cost (zero by default). Prices include VAT.
+
+Quantity in metres selects the garment price; it does not multiply it. The shared
+range constants are `JUNIOR_BELOW_METRES` and `LARGE_ABOVE_METRES` in
+`frontend/src/features/invoices/lib/garment-pricing.ts`, mirrored by `JUNIOR_BELOW`
+and `LARGE_ABOVE` in `backend/src/features/pricing/service.rs`. Change both pairs
+together; a test checks that they agree. Defaults are junior below 3 m, normal
+3–4 m inclusive, and large above 4 m.
+
+The server calculates final prices from the catalog plus selected design costs.
+Customer-supplied fabric uses the fixed VAT-inclusive tailoring base configured
+by `CUSTOMER_MATERIAL_BASE_PRICE`, plus design costs. This is one price per order,
+independent of metres used. The form displays the price read-only; client-supplied
+price overrides are ignored. No amount is assumed, so customer-material orders
+cannot be saved until the fixed price is configured. Editing an invoice
+recalculates prices using the current pricing configuration and catalog; viewing
+or printing keeps the saved prices. Imported materials without tier prices must
+be configured before creating garment lines.
+
+Each material’s Actions menu includes Add Stock with that material already selected,
+so only locations and quantities need entering.
+Add Stock also opens a dialog from the inventory page, supporting existing materials,
+new materials with tier prices, and stock at multiple locations.
+
+Material details are read-only. Use the inventory row actions to edit a material
+(name, SKU, family, unit, and tier prices), remove stock, or move stock. Move Stock
+transfers a quantity from one location to another in one transaction; it refuses
+insufficient source stock and inactive or non-stock-holding destinations. Moves
+keep total material stock unchanged and can create a destination stock row.

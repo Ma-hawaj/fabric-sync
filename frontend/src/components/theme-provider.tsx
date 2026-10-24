@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 
 type Theme = 'dark' | 'light' | 'system'
 
@@ -40,8 +41,8 @@ export function ThemeProvider({
   defaultTheme = 'system',
   storageKey = DEFAULT_STORAGE_KEY,
 }: ThemeProviderProps) {
-  const [theme, setThemeState] = React.useState<Theme>(defaultTheme)
-  const [mounted, setMounted] = React.useState(false)
+  const [theme, setThemeState] = useState<Theme>(defaultTheme)
+  const [mounted, setMounted] = useState(false)
 
   React.useEffect(() => {
     const stored = localStorage.getItem(storageKey)

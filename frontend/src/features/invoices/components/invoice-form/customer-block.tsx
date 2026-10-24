@@ -1,9 +1,9 @@
-import * as React from 'react'
+import { useState } from 'react'
 import { PlusIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FieldError } from '@/components/ui/field'
 import { AsyncCombobox } from '@/components/form/async-combobox'
-import { PhoneField, TextField } from '@/components/form/fields'
+import { PhoneField, TextField, TextareaField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import {
   measurementFromSnapshot,
@@ -61,7 +61,7 @@ export function CustomerBlock({
       customers?: { existingCustomerId?: string }[]
     }
   ).customers?.[customerIndex]?.existingCustomerId
-  const [picked, setPicked] = React.useState<Customer | null>(() =>
+  const [picked, setPicked] = useState<Customer | null>(() =>
     storedId ? (initialCustomerForId?.(storedId) ?? null) : null,
   )
 
@@ -151,6 +151,11 @@ export function CustomerBlock({
                             <p className="text-xs text-muted-foreground">
                               {picked.mobileNo}
                             </p>
+                            {picked.address && (
+                              <p className="text-xs whitespace-pre-line text-muted-foreground">
+                                {picked.address}
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -168,6 +173,13 @@ export function CustomerBlock({
                       form={form}
                       name={`${base}.mobileNo`}
                       label="Phone"
+                      defaultCountry="BH"
+                    />
+
+                    <TextareaField
+                      form={form}
+                      name={`${base}.address`}
+                      label="Address (optional)"
                     />
 
                     <p className="text-xs text-muted-foreground">

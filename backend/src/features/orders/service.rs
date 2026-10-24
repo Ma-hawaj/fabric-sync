@@ -15,8 +15,9 @@ use super::{
     repository,
     types::{
         AssignStageInput, AssignmentRow, CreateRepairInput, OrderDetail, OrderListItem,
-        OrderRepair, OrderRow, OrderStageEntry, PaymentType, ProgressRow, RepairRow, RepairStatus,
-        SetStageInput, StageRow, StageStatus, UpdateOrderInput, UpdateRepairInput,
+        OrderRepair, OrderRow, OrderStageEntry, PaymentType, ProgressRow, RepairListItem,
+        RepairRow, RepairStatus, SetStageInput, StageRow, StageStatus, UpdateOrderInput,
+        UpdateRepairInput,
     },
 };
 
@@ -172,12 +173,36 @@ fn current_stage_name(stages: &[OrderStageEntry]) -> Option<String> {
 }
 
 // Stamped when a repair is completed and cleared when it moves anywhere else,
-// so the timestamp can never describe a repair that is open again.
+// so the timestamp can never describe a repair that is open again. Receiving
+// is separate (see `repair_received_time`): a completed repair keeps its
+// `completed_at` once received, since that is when the work finished as
+// opposed to when the customer collected it.
 fn repair_completion_time(status: RepairStatus, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
     match status {
         RepairStatus::Completed => Some(now),
         _ => None,
     }
+}
+
+fn repair_received_time(status: RepairStatus, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    match status {
+        RepairStatus::Received => Some(now),
+        _ => None,
+    }
+}
+
+fn validate_receive_amount(amount: f64, payment_type: Option<PaymentType>) -> Result<(), AppError> {
+    if amount < 0.0 {
+        return Err(AppError::BadRequest(
+            "a repair handover payment cannot be negative".to_string(),
+        ));
+    }
+    if amount > 0.0 && payment_type.is_none() {
+        return Err(AppError::BadRequest(
+            "a repair handover payment needs a paymentType".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn normalized_reason(reason: &str) -> Result<String, AppError> {
@@ -348,6 +373,10 @@ fn assemble_order(
             charge: repair.charge,
             status: repair.status.clone(),
             completed_at: repair.completed_at,
+            received_at: repair.received_at,
+            received_amount: repair.received_amount,
+            received_payment_type: repair.received_payment_type.clone(),
+            fixed_measurement_id: repair.fixed_measurement_id,
             notes: repair.notes.clone(),
         })
         .collect();
@@ -366,8 +395,12 @@ fn assemble_order(
         material_sku: row.material_sku,
         material_amount: row.material_amount,
         price: row.price,
+        is_urgent: row.is_urgent,
+        urgent_charge: row.urgent_charge,
         status: row.status,
-        received_at: row.received_at,
+        collected_at: row.collected_at,
+        ready_at: row.ready_at,
+        ready_by: row.ready_by,
         thobe_type: row.thobe_type,
         f_pocket: row.f_pocket,
         s_pocket: row.s_pocket,
@@ -493,15 +526,15 @@ pub(crate) async fn get_order(state: &AppState, order_id: Uuid) -> Result<OrderD
     })
 }
 
-/// Marks an order received and records the payment taken at that pickup.
+/// Marks an order collected and records the payment taken at that pickup.
 /// The invoice's money state is derived from the ledger, so nothing is
 /// settled here explicitly: it simply becomes paid once every order on it is
-/// received *and* the payments cover the balance.
+/// collected *and* the payments cover the balance.
 ///
 /// Deliberately not gated on the production checklist: staff hand a garment
 /// over when it is ready, so the current stage is shown alongside rather than
 /// blocking the counter.
-pub async fn receive_order(
+pub async fn collect_order(
     state: &AppState,
     order_id: Uuid,
     amount: f64,
@@ -533,14 +566,14 @@ pub async fn receive_order(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
 
-    if locked.status == "received" {
+    if locked.status == "collected" {
         return Err(AppError::BadRequest(
-            "this order is already received".to_string(),
+            "this order is already collected".to_string(),
         ));
     }
 
     let invoice_id = locked.invoice_id;
-    repository::mark_received(&mut tx, order_id).await?;
+    repository::mark_collected(&mut tx, order_id).await?;
 
     if amount > 0.0 {
         let payment_type = payment_type.expect("validated: payment type is set");
@@ -561,7 +594,7 @@ pub async fn receive_order(
         .await?;
     }
 
-    let invoice_settled = repository::invoice_fully_received(&mut tx, invoice_id).await?;
+    let invoice_settled = repository::invoice_fully_collected(&mut tx, invoice_id).await?;
 
     tx.commit().await?;
 
@@ -570,7 +603,7 @@ pub async fn receive_order(
         invoice_id = %invoice_id,
         amount,
         invoice_settled,
-        "order received"
+        "order collected"
     );
 
     load_order(state, order_id).await
@@ -621,28 +654,31 @@ pub async fn set_stage(
         &single_location_materials,
     );
 
+    let mut tx = state.db().begin().await?;
+    super::readiness_repository::lock_invoice(&mut tx, order.invoice_id).await?;
+    let (current_production, current_receiving) =
+        super::readiness_repository::locations(&mut tx, order_id).await?;
+    let effective_production_id = current_production.or(effective_production_id);
     validate_delivery_location(
         stage.requires_delivery,
         stage_applies(
             stage.requires_delivery,
             effective_production_id,
-            order.receiving_location_id,
+            current_receiving,
         ),
         input.status,
         input.location_id,
     )?;
 
-    let progress = repository::list_progress(state, std::slice::from_ref(&order_id)).await?;
+    let progress = super::readiness_repository::progress(&mut tx, order_id).await?;
     validate_stage_sequence(
         &catalog,
         &progress,
         effective_production_id,
-        order.receiving_location_id,
+        current_receiving,
         stage_id,
         input.status,
     )?;
-
-    let mut tx = state.db().begin().await?;
 
     if input.status == StageStatus::Pending {
         repository::clear_stage(&mut tx, order_id, stage_id).await?;
@@ -730,21 +766,29 @@ pub async fn create_repair(
     order_id: Uuid,
     input: CreateRepairInput,
 ) -> Result<OrderListItem, AppError> {
-    if !repository::order_exists(state, order_id).await? {
-        return Err(AppError::NotFound(format!("order {order_id} not found")));
+    let context = repository::repair_order_context(state, order_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
+    if let Some(measurement) = &input.measurement {
+        crate::features::customers::types::validate_measurement(measurement)?;
     }
 
     let reason = normalized_reason(&input.reason)?;
     validate_charge(input.charge)?;
 
-    repository::create_repair(
-        state,
+    let mut tx = state.db().begin().await?;
+    let repair_id = repository::create_repair(
+        &mut tx,
         order_id,
         &reason,
         input.charge,
         input.notes.as_deref(),
     )
     .await?;
+    if let Some(measurement) = &input.measurement {
+        save_repair_measurement(&mut tx, context.customer_id, repair_id, measurement).await?;
+    }
+    tx.commit().await?;
 
     tracing::info!(
         order_id = %order_id,
@@ -774,12 +818,28 @@ pub async fn update_repair(
         validate_charge(charge)?;
     }
 
+    if input.status == Some(RepairStatus::Received) {
+        return Err(AppError::BadRequest(
+            "mark a ready repair as collected through its dedicated endpoint".to_string(),
+        ));
+    }
+
     let completed_at = input
         .status
         .and_then(|status| repair_completion_time(status, Utc::now()));
 
+    let mut tx = state.db().begin().await?;
+    let locked = repository::lock_repair(&mut tx, repair_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("repair {repair_id} not found")))?;
+    if input.status.is_some() && locked.status == RepairStatus::Received.as_str() {
+        return Err(AppError::BadRequest(
+            "a collected repair cannot change status".to_string(),
+        ));
+    }
+
     repository::update_repair(
-        state,
+        &mut tx,
         repair_id,
         reason.as_deref(),
         input.charge,
@@ -790,6 +850,8 @@ pub async fn update_repair(
     .await?
     .ok_or_else(|| AppError::NotFound(format!("repair {repair_id} not found")))?;
 
+    tx.commit().await?;
+
     tracing::info!(
         order_id = %order_id,
         repair_id = %repair_id,
@@ -798,6 +860,137 @@ pub async fn update_repair(
     );
 
     load_order(state, order_id).await
+}
+
+/// Hands a completed repair back to the customer. Only `completed` repairs can
+/// be received; anything else is a 400, and an already-`received` repair is
+/// refused so a retry cannot record the handover payment twice. The money is
+/// stored on the repair row itself — the invoice ledger is untouched, matching
+/// how `charge` was always bookkeeping-only.
+pub async fn receive_repair(
+    state: &AppState,
+    order_id: Uuid,
+    repair_id: Uuid,
+    amount: f64,
+    payment_type: Option<PaymentType>,
+) -> Result<OrderListItem, AppError> {
+    validate_receive_amount(amount, payment_type)?;
+
+    if !repository::repair_belongs_to_order(state, repair_id, order_id).await? {
+        return Err(AppError::NotFound(format!(
+            "repair {repair_id} not found on order {order_id}"
+        )));
+    }
+
+    let mut tx = state.db().begin().await?;
+    let locked = repository::lock_repair(&mut tx, repair_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("repair {repair_id} not found")))?;
+
+    if locked.status == RepairStatus::Received.as_str() {
+        return Err(AppError::BadRequest(
+            "this repair is already collected".to_string(),
+        ));
+    }
+    if locked.status != RepairStatus::Completed.as_str() {
+        return Err(AppError::BadRequest(
+            "only a ready repair can be marked as collected".to_string(),
+        ));
+    }
+
+    let received_at = repair_received_time(RepairStatus::Received, Utc::now())
+        .expect("received status always stamps a time");
+    repository::mark_repair_received(
+        &mut tx,
+        repair_id,
+        received_at,
+        amount,
+        payment_type.map(|payment| payment.as_str()),
+    )
+    .await?;
+    tx.commit().await?;
+
+    tracing::info!(
+        order_id = %order_id,
+        repair_id = %repair_id,
+        amount,
+        "order repair received"
+    );
+
+    load_order(state, order_id).await
+}
+
+/// Records the measurement fix a repair needed, for future orders. Mirrors the
+/// invoice create rule: reuse the customer's latest row when the values match,
+/// else insert a fresh one — never rewrites the order's own snapshot. The new
+/// row's id is stored on the repair, so the receipt and later orders can read
+/// what changed.
+pub async fn set_repair_measurement(
+    state: &AppState,
+    order_id: Uuid,
+    repair_id: Uuid,
+    measurement: crate::features::customers::types::CreateMeasurementInput,
+) -> Result<OrderListItem, AppError> {
+    if !repository::repair_belongs_to_order(state, repair_id, order_id).await? {
+        return Err(AppError::NotFound(format!(
+            "repair {repair_id} not found on order {order_id}"
+        )));
+    }
+
+    let context = repository::repair_order_context(state, order_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
+
+    let mut tx = state.db().begin().await?;
+    let measurement_id =
+        save_repair_measurement(&mut tx, context.customer_id, repair_id, &measurement).await?;
+    tx.commit().await?;
+
+    tracing::info!(
+        order_id = %order_id,
+        repair_id = %repair_id,
+        measurement_id = %measurement_id,
+        "order repair measurement fix recorded"
+    );
+
+    load_order(state, order_id).await
+}
+
+async fn save_repair_measurement(
+    tx: &mut sqlx::PgTransaction<'_>,
+    customer_id: Uuid,
+    repair_id: Uuid,
+    measurement: &crate::features::customers::types::CreateMeasurementInput,
+) -> Result<Uuid, AppError> {
+    crate::features::customers::types::validate_measurement(measurement)?;
+    let measurement_id =
+        match crate::features::customers::repository::latest_measurement(tx, customer_id).await? {
+            Some((id, ref values))
+                if crate::features::customers::types::measurement_values_equal(
+                    values,
+                    measurement,
+                ) =>
+            {
+                id
+            }
+            _ => {
+                crate::features::customers::repository::insert_measurement(
+                    tx,
+                    customer_id,
+                    measurement,
+                )
+                .await?
+            }
+        };
+    repository::set_repair_fixed_measurement(tx, repair_id, measurement_id).await?;
+    Ok(measurement_id)
+}
+
+pub async fn list_all_repairs(
+    state: &AppState,
+    params: &ListParams,
+) -> Result<list::Page<RepairListItem>, AppError> {
+    repository::list_all_repairs(state, params).await
 }
 
 #[cfg(test)]
@@ -983,9 +1176,39 @@ mod tests {
             RepairStatus::Open,
             RepairStatus::InProgress,
             RepairStatus::Cancelled,
+            RepairStatus::Received,
         ] {
             assert_eq!(repair_completion_time(status, now), None, "{status:?}");
         }
+    }
+
+    #[test]
+    fn a_received_repair_is_stamped_and_any_other_status_clears_it() {
+        let now = Utc::now();
+
+        assert_eq!(repair_received_time(RepairStatus::Received, now), Some(now));
+        for status in [
+            RepairStatus::Open,
+            RepairStatus::InProgress,
+            RepairStatus::Completed,
+            RepairStatus::Cancelled,
+        ] {
+            assert_eq!(repair_received_time(status, now), None, "{status:?}");
+        }
+    }
+
+    #[test]
+    fn a_repair_handover_accepts_zero_or_a_paid_amount_with_a_method() {
+        use crate::features::invoices::types::PaymentType;
+
+        assert!(validate_receive_amount(0.0, None).is_ok());
+        assert!(validate_receive_amount(12.5, Some(PaymentType::Cash)).is_ok());
+
+        let missing_method = validate_receive_amount(12.5, None).unwrap_err();
+        assert!(matches!(missing_method, AppError::BadRequest(_)));
+
+        let negative = validate_receive_amount(-1.0, None).unwrap_err();
+        assert!(matches!(negative, AppError::BadRequest(_)));
     }
 
     #[test]
@@ -1399,5 +1622,54 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(error, AppError::NotFound(_)));
+    }
+}
+
+#[cfg(test)]
+mod repair_collection_tests {
+    use super::*;
+    use crate::test_support;
+    use sqlx::PgPool;
+
+    #[sqlx::test]
+    async fn collected_repairs_keep_their_status_and_original_payment(db: PgPool) {
+        let (_, orders, _, _) = test_support::invoice(&db, 1, false).await;
+        let order_id = orders[0];
+        let repair_id: Uuid = sqlx::query_scalar("INSERT INTO order_repairs(order_id, reason, status, completed_at, received_at, received_amount, received_payment_type) VALUES ($1, 'Fit adjustment', 'received', now(), now(), 3.5, 'cash') RETURNING id")
+            .bind(order_id).fetch_one(&db).await.unwrap();
+        let original: (DateTime<Utc>, DateTime<Utc>, f64, String) = sqlx::query_as("SELECT completed_at, received_at, received_amount::float8, received_payment_type FROM order_repairs WHERE id=$1")
+            .bind(repair_id).fetch_one(&db).await.unwrap();
+        let state = test_support::state(db.clone(), None, None).await;
+        for status in [
+            RepairStatus::Open,
+            RepairStatus::InProgress,
+            RepairStatus::Completed,
+            RepairStatus::Cancelled,
+        ] {
+            let input = UpdateRepairInput {
+                status: Some(status),
+                ..Default::default()
+            };
+            assert!(matches!(
+                update_repair(&state, order_id, repair_id, input).await,
+                Err(AppError::BadRequest(_))
+            ));
+        }
+        let metadata = UpdateRepairInput {
+            notes: Some("Customer collected the garment".into()),
+            ..Default::default()
+        };
+        update_repair(&state, order_id, repair_id, metadata)
+            .await
+            .unwrap();
+        assert!(matches!(
+            receive_repair(&state, order_id, repair_id, 5.0, Some(PaymentType::Card)).await,
+            Err(AppError::BadRequest(_))
+        ));
+        let saved: (String, DateTime<Utc>, DateTime<Utc>, f64, String, String) = sqlx::query_as("SELECT status, completed_at, received_at, received_amount::float8, received_payment_type, notes FROM order_repairs WHERE id=$1")
+            .bind(repair_id).fetch_one(&db).await.unwrap();
+        assert_eq!(saved.0, "received");
+        assert_eq!((saved.1, saved.2, saved.3, saved.4), original);
+        assert_eq!(saved.5, "Customer collected the garment");
     }
 }

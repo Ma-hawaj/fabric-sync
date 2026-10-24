@@ -37,29 +37,6 @@ export const oidcUserManager = new UserManager({
   userStore: new WebStorageStateStore({ store: window.sessionStorage }),
 })
 
-/**
- * Where the "Account settings" menu item points. There is no local user
- * table — profile edits and password changes happen in the IdP's own
- * self-service page, not in this app.
- *
- * Explicit `VITE_ACCOUNT_URL` wins (any IdP with an account console, e.g.
- * Keycloak's `/realms/<realm>/account/`). Otherwise, when the authority
- * follows Authentik's `/application/o/<slug>/` layout, the account area is
- * derived as `{base}/if/user/` — profile fields, the password-change button
- * and MFA all live there, subject to the brand's user-settings flow. Null
- * when neither resolves, and the menu item is hidden instead of linking
- * nowhere.
- */
-export function accountSettingsUrl(): string | null {
-  const explicit: string | undefined = import.meta.env.VITE_ACCOUNT_URL
-  if (explicit?.trim()) {
-    return explicit.trim()
-  }
-  const authority: string | undefined = import.meta.env.VITE_OIDC_AUTHORITY
-  const base = authority?.match(/^(https?:\/\/[^/]+)\/application\/o\//)?.[1]
-  return base ? `${base}/if/user/` : null
-}
-
 export async function getAccessToken(): Promise<string | null> {
   const user = await oidcUserManager.getUser()
   if (!user || user.expired) {

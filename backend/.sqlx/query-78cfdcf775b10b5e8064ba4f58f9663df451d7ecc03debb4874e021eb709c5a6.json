@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO design_options (category, slug, label, sort_order, image, image_mime, cost)\n        VALUES ($1, $2, $3, $4, $5, $6, $7::float8)\n        RETURNING id, category, slug, label, sort_order, is_active, cost::float8 AS \"cost!\",\n            (image IS NOT NULL) AS \"has_image!\",\n            ('/design-options/' || id::text || '/image?v=' || image_version::text) AS \"image_url!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "category",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "slug",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "label",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "sort_order",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "is_active",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "cost!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "has_image!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "image_url!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Bytea",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "78cfdcf775b10b5e8064ba4f58f9663df451d7ecc03debb4874e021eb709c5a6"
+}

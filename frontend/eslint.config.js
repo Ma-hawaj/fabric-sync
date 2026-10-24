@@ -90,6 +90,10 @@ export default [
               allow: ['layout', 'typography', 'color'],
             },
             {
+              pattern: '^TableHead$',
+              allow: ['layout', 'typography'],
+            },
+            {
               pattern: '^TableRow$',
               allow: ['layout', 'color'],
             },
@@ -159,6 +163,20 @@ export default [
     },
   },
   {
+    // Keep the CLI's generated syntax intact; app code keeps the project rules.
+    name: 'shadcn/generated-style',
+    files: ['src/components/ui/**', 'src/lib/utils.ts'],
+    rules: {
+      'import/consistent-type-specifier-style': 'off',
+      'no-shadow': 'off',
+    },
+  },
+  {
+    // Upstream FieldError guards its computed error array with an optional chain.
+    files: ['src/components/ui/field.tsx'],
+    rules: { '@typescript-eslint/no-unnecessary-condition': 'off' },
+  },
+  {
     // Pinned-table and drag-and-drop geometry is computed at runtime (sticky
     // offsets and width from column state; transform/transition from drag
     // state), so the linter cannot verify those style objects statically.
@@ -168,6 +186,55 @@ export default [
     ],
     rules: {
       'shadcn/no-inline-styles': 'off',
+    },
+  },
+  {
+    name: 'react/named-state-hook',
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/components/ui/**', 'src/hooks/use-mobile.ts'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'React',
+          property: 'useState',
+          message:
+            'Import useState from react and call it directly. Keep generated shadcn files unchanged.',
+        },
+      ],
+    },
+  },
+  {
+    name: 'architecture/shared-boundaries',
+    files: [
+      'src/components/**/*.{ts,tsx}',
+      'src/hooks/**/*.{ts,tsx}',
+      'src/lib/**/*.{ts,tsx}',
+      'src/config/**/*.{ts,tsx}',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@/features',
+                '#/features',
+                '**/features/**',
+                '@/app',
+                '#/app',
+                '**/app/**',
+                '@/routes',
+                '#/routes',
+                '**/routes/**',
+              ],
+              message:
+                'Shared code must not depend on features, app composition, or routes. Pass configuration or move the component to its owner.',
+            },
+          ],
+        },
+      ],
     },
   },
   {

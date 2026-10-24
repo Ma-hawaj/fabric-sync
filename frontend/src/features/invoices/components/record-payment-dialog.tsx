@@ -176,7 +176,7 @@ function RecordPaymentForm({
 
       <p className="text-sm text-muted-foreground">
         Collects money without collecting any order — the garments stay pending
-        until they are received.
+        until they are collected.
       </p>
 
       <form.Subscribe

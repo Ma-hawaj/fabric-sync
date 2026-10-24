@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO orders (\n            measurement_id, material_id, material_amount, invoice_id, price,\n            thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd, more_details,\n            production_branch_id, material_source, customer_material_description, base_price, is_urgent, urgent_charge\n        )\n        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8, $18, $19::float8)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Float8",
+        "Uuid",
+        "Float8",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid",
+        "Text",
+        "Text",
+        "Float8",
+        "Bool",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d8843506c544cb0deac7449714dae1b006dc1547652427b8973afe690aeb46fb"
+}

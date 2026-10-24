@@ -40,9 +40,11 @@ export interface Measurement {
 }
 
 export interface Customer {
+  whatsappNotificationsEnabled?: boolean
   id: string
   name: string
   nameArabic?: string
+  address?: string | null
   mobileNo: string
   measurements: Measurement[]
   /** The customer's invoices, newest first — tailoring plus direct retail. */

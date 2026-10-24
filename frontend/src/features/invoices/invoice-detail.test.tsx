@@ -5,6 +5,20 @@ import { InvoiceDetailPage } from './invoice-detail'
 import type { InvoiceDetail } from './types/invoice-detail'
 
 const navigateMock = vi.fn()
+vi.mock('@/features/notifications/notification-dialog', () => ({
+  NotificationDialog: ({
+    invoiceId,
+    kind,
+  }: {
+    invoiceId: string | null
+    kind: string
+  }) =>
+    invoiceId ? (
+      <p>
+        Preview {kind} for {invoiceId}
+      </p>
+    ) : null,
+}))
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigateMock,
   Link: ({
@@ -25,6 +39,7 @@ vi.mock('@tanstack/react-router', () => ({
 const DETAIL: InvoiceDetail = {
   id: 'inv-1',
   invoiceNumber: 42,
+  collectionMethod: 'pickup',
   date: '2026-07-28T09:30:00Z',
   targetDate: '2026-08-04',
   createdAt: '2026-07-28T09:30:00Z',
@@ -32,13 +47,15 @@ const DETAIL: InvoiceDetail = {
   buyer: null,
   paymentStatus: 'partial',
   paymentMethod: 'benefit',
-  received: false,
+  collected: false,
   orderCount: 1,
   collectedOrderCount: 0,
-  lastReceivedAt: null,
+  lastCollectedAt: null,
   lines: [
     {
       kind: 'order',
+      isUrgent: false,
+      urgentCharge: 0,
       orderId: 'order-1',
       description: 'Japanese Toray Cotton',
       detail: 'Thobe: Saudi · Collar: Classic',
@@ -51,6 +68,8 @@ const DETAIL: InvoiceDetail = {
     },
     {
       kind: 'gift_card',
+      isUrgent: false,
+      urgentCharge: 0,
       orderId: null,
       description: 'Gift card GC-2026-A1',
       detail: null,
@@ -73,6 +92,7 @@ const DETAIL: InvoiceDetail = {
     },
   ],
   totals: {
+    urgentCharge: 0,
     subtotal: 100,
     discount: 0,
     discountUnit: 'amount',
@@ -101,8 +121,44 @@ function renderPage(detail: InvoiceDetail | null) {
 }
 
 describe('InvoiceDetailPage', () => {
+  it('shows delivery, priority, addresses, and the urgent charge on saved invoices', () => {
+    renderPage({
+      ...DETAIL,
+      lines: [
+        { ...DETAIL.lines[0], isUrgent: true, urgentCharge: 10 },
+        DETAIL.lines[1],
+      ],
+      collectionMethod: 'delivery',
+      buyer: {
+        name: 'Buyer',
+        mobileNo: '12345',
+        address: 'Building 1, Road 2',
+      },
+      totals: {
+        ...DETAIL.totals,
+        urgentCharge: 10,
+        total: 310,
+        balanceDue: 250,
+      },
+    })
+    expect(screen.getByRole('img', { name: 'Urgent order' })).toBeTruthy()
+    expect(screen.getByText('Delivery')).toBeTruthy()
+    expect(screen.getByText('Building 1, Road 2')).toBeTruthy()
+    expect(screen.getByText('Urgent charges (incl. VAT)')).toBeTruthy()
+    expect(screen.getByText(/Urgent charge for this order/)).toBeTruthy()
+  })
   beforeEach(() => {
     navigateMock.mockClear()
+  })
+
+  it('opens a separate resend preview without editing the invoice', () => {
+    renderPage(DETAIL)
+    expect(screen.queryByText('Preview manual_resend for inv-1')).toBeNull()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Resend invoice via WhatsApp' }),
+    )
+    expect(screen.getByText('Preview manual_resend for inv-1')).toBeTruthy()
+    expect(navigateMock).not.toHaveBeenCalled()
   })
 
   it('titles the page with the human-readable invoice number', () => {
@@ -145,7 +201,7 @@ describe('InvoiceDetailPage', () => {
   })
 
   it('shows collection separately from payment and still allows editing with an advance taken', () => {
-    renderPage({ ...DETAIL, received: false })
+    renderPage({ ...DETAIL, collected: false })
 
     expect(screen.queryByText('Pending collection')).toBeTruthy()
     expect(screen.queryByText('Partially paid')).toBeTruthy()
@@ -154,13 +210,39 @@ describe('InvoiceDetailPage', () => {
     ).toBe(false)
   })
 
-  it('marks a collected invoice received and disables editing', () => {
-    renderPage({ ...DETAIL, received: true })
+  it('marks a collected invoice collected and leaves edit validation to saving', () => {
+    renderPage({
+      ...DETAIL,
+      collected: true,
+    })
 
-    expect(screen.queryByText('Received')).toBeTruthy()
+    expect(screen.queryByText('Collected')).toBeTruthy()
     expect(
       screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
-    ).toBe(true)
+    ).toBe(false)
+  })
+
+  it('allows editing a retail-only invoice', () => {
+    renderPage({
+      ...DETAIL,
+      collected: true,
+      lines: [DETAIL.lines[1]],
+    })
+    expect(
+      screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
+    ).toBe(false)
+  })
+
+  it('keeps family members sharing a phone visible in the customer summary', () => {
+    const first = DETAIL.lines[0]
+    const second = {
+      ...first,
+      orderId: 'order-2',
+      customer: { name: 'Omar', mobileNo: first.customer!.mobileNo },
+    }
+    renderPage({ ...DETAIL, lines: [first, second] })
+    expect(screen.getAllByText('Omar')).toHaveLength(2)
+    expect(screen.getAllByText('Ahmed Al-Mansoori')).toHaveLength(2)
   })
 
   it('waits for the line items rather than rendering an empty invoice', () => {

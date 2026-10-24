@@ -1,10 +1,11 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useDataTable } from '@/hooks/use-data-table'
 import { DataTable } from '@/components/data-table/data-table'
-import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
+import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-advanced-toolbar'
 import { getOrderColumns } from './components/order-columns'
-import { ReceiveOrderDialog } from './components/receive-order-dialog'
+import { CollectOrderDialog } from './components/collect-order-dialog'
 import { useAllInventory } from '@/features/inventory/hooks/use-inventory'
 import { useOrderStages } from '@/features/order-stages/hooks/use-order-stages'
 import { useAllLocations } from '@/features/locations/hooks/use-locations'
@@ -17,7 +18,7 @@ import { useOrders } from './hooks/use-orders'
 import type { Order } from './types/orders'
 
 export function OrdersPage() {
-  const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(null)
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const navigate = useNavigate()
 
   // The material and stage filters come from their own whole-list queries.
@@ -66,28 +67,46 @@ export function OrdersPage() {
     columns,
     pageCount,
     rowCount: total,
+    enableAdvancedFilter: true,
+    initialState: {
+      columnVisibility: {
+        customerMobile: false,
+        invoiceDate: false,
+        collectedAt: false,
+        invoicePaymentStatus: false,
+        paymentMethod: false,
+        price: false,
+      },
+      columnPinning: { left: ['orderNumber'], right: ['actions'] },
+    },
   })
 
   return (
-    <div className="space-y-4">
+    <div
+      data-slot="list-page"
+      className="flex h-full min-h-0 min-w-0 flex-col gap-3 [&>:first-child]:shrink-0"
+    >
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
-        <p className="text-muted-foreground">
-          Manage and view all fabric orders and their details.
+        <h1 className="text-xl font-semibold tracking-tight">
+          Orders{' '}
+          <span className="ms-2 align-middle text-xs font-normal text-muted-foreground tabular-nums">
+            {isLoading ? '…' : total.toLocaleString()} records
+          </span>
+        </h1>
+        <p className="mt-0.5 hidden text-xs leading-relaxed text-muted-foreground sm:block">
+          Production, collection and payment status at a glance.
         </p>
       </div>
 
-      {isLoading ? (
-        <div className="text-center text-sm text-muted-foreground">
-          Loading orders...
-        </div>
-      ) : (
-        <DataTable table={table}>
-          <DataTableToolbar table={table} />
-        </DataTable>
-      )}
+      <DataTable isLoading={isLoading} table={table}>
+        <DataTableAdvancedToolbar
+          table={table}
+          defaultSearchColumnId="customerMobile"
+          quickFilter={{ columnId: 'status', allLabel: 'All statuses' }}
+        />
+      </DataTable>
 
-      <ReceiveOrderDialog
+      <CollectOrderDialog
         order={selectedOrder}
         onOpenChange={(open) => !open && setSelectedOrder(null)}
       />

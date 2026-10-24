@@ -5,9 +5,10 @@ import type { OrderDetail } from '../types/orders'
 
 interface OrderDetailDto extends Omit<
   OrderDetail,
-  'invoiceDate' | 'measurement'
+  'invoiceDate' | 'measurement' | 'urgentCharge'
 > {
   invoiceDate: string
+  urgentCharge?: number
   measurement: Omit<Measurement, 'date'> & { date: string }
 }
 
@@ -15,6 +16,7 @@ async function fetchOrder(orderId: string): Promise<OrderDetail> {
   const { data } = await apiClient.get<OrderDetailDto>(`/orders/${orderId}`)
   return {
     ...data,
+    urgentCharge: data.urgentCharge ?? 0,
     // Dates arrive as ISO strings off the wire; the rest of the app expects
     // real Dates (the list hook parses invoiceDate the same way).
     invoiceDate: new Date(data.invoiceDate),

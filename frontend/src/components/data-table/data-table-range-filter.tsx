@@ -4,6 +4,7 @@ import type { Column } from '@tanstack/react-table'
 import * as React from 'react'
 
 import { Input } from '@/components/ui/input'
+import { useDebouncedInput } from '@/hooks/use-debounced-input'
 import { cn } from '@/lib/utils'
 import type { ExtendedColumnFilter } from '@/types/data-table'
 
@@ -27,58 +28,33 @@ export function DataTableRangeFilter<TData>({
 }: DataTableRangeFilterProps<TData>) {
   const meta = column.columnDef.meta
 
-  const [min, max] = React.useMemo(() => {
-    const range = column.columnDef.meta?.range
-    if (range) return range
-
-    const values = column.getFacetedMinMaxValues()
-    if (!values) return [0, 100]
-
-    return [values[0], values[1]]
-  }, [column])
-
-  const formatValue = React.useCallback(
-    (value: string | number | undefined) => {
-      if (value === undefined || value === '') return ''
-      const numValue = Number(value)
-      return Number.isNaN(numValue)
-        ? ''
-        : numValue.toLocaleString(undefined, {
-            maximumFractionDigits: 0,
-          })
-    },
-    [],
+  // Loaded rows are only one page of a server-filtered dataset, not its bounds.
+  const [min, max] = meta?.range ?? []
+  const value = React.useMemo<[string, string]>(
+    () =>
+      Array.isArray(filter.value)
+        ? [filter.value[0] ?? '', filter.value[1] ?? '']
+        : [filter.value, ''],
+    [filter.value],
+  )
+  const { draft, change, flush } = useDebouncedInput(value, (next) =>
+    onFilterUpdate(filter.filterId, { value: next }),
   )
 
-  const value = React.useMemo(() => {
-    if (Array.isArray(filter.value)) return filter.value.map(formatValue)
-    return [formatValue(filter.value), '']
-  }, [filter.value, formatValue])
+  const onRangeValueChange = (inputValue: string, isMin?: boolean) => {
+    const numValue = Number(inputValue)
 
-  const onRangeValueChange = React.useCallback(
-    (inputValue: string, isMin?: boolean) => {
-      const numValue = Number(inputValue)
-      const currentValues = Array.isArray(filter.value)
-        ? filter.value
-        : ['', '']
-      const otherValue = isMin
-        ? (currentValues[1] ?? '')
-        : (currentValues[0] ?? '')
-
-      if (
-        inputValue === '' ||
-        (!Number.isNaN(numValue) &&
-          (isMin
-            ? numValue >= min && numValue <= (Number(otherValue) || max)
-            : numValue <= max && numValue >= (Number(otherValue) || min)))
-      ) {
-        onFilterUpdate(filter.filterId, {
-          value: isMin ? [inputValue, otherValue] : [otherValue, inputValue],
-        })
-      }
-    },
-    [filter.filterId, filter.value, min, max, onFilterUpdate],
-  )
+    if (
+      inputValue === '' ||
+      (Number.isFinite(numValue) &&
+        (min === undefined || numValue >= min) &&
+        (max === undefined || numValue <= max))
+    ) {
+      change((previous) =>
+        isMin ? [inputValue, previous[1]] : [previous[0], inputValue],
+      )
+    }
+  }
 
   return (
     <div
@@ -89,33 +65,37 @@ export function DataTableRangeFilter<TData>({
       <Input
         id={`${inputId}-min`}
         type="number"
+        step="any"
         aria-label={`${meta?.label} minimum value`}
         aria-valuemin={min}
         aria-valuemax={max}
         data-slot="range-min"
         inputMode="numeric"
-        placeholder={min.toString()}
+        placeholder={min?.toString() ?? 'Min'}
         min={min}
         max={max}
         className="h-8 w-full rounded"
-        defaultValue={value[0]}
+        value={draft[0]}
         onChange={(event) => onRangeValueChange(event.target.value, true)}
+        onBlur={flush}
       />
       <span className="sr-only shrink-0 text-muted-foreground">to</span>
       <Input
         id={`${inputId}-max`}
         type="number"
+        step="any"
         aria-label={`${meta?.label} maximum value`}
         aria-valuemin={min}
         aria-valuemax={max}
         data-slot="range-max"
         inputMode="numeric"
-        placeholder={max.toString()}
+        placeholder={max?.toString() ?? 'Max'}
         min={min}
         max={max}
         className="h-8 w-full rounded"
-        defaultValue={value[1]}
+        value={draft[1]}
         onChange={(event) => onRangeValueChange(event.target.value)}
+        onBlur={flush}
       />
     </div>
   )

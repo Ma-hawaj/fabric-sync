@@ -62,6 +62,53 @@ function firstError(customers: InvoiceCustomerDraft[]) {
 }
 
 describe('invoiceFormSchema', () => {
+  it('requires a target date when any order is urgent', () => {
+    const input = values({
+      customers: [
+        {
+          ...createEmptyCustomer(),
+          existingCustomerId: 'cust-1',
+          measurement: validMeasurement(),
+          orders: [{ ...validOrder(), urgentCharge: 10 }],
+        },
+      ],
+    })
+    const targetDate = input.targetDate
+    input.targetDate = ''
+    expect(firstErrorFor(input)).toBeNull()
+    input.customers[0].orders[0].isUrgent = true
+    const issue = firstErrorFor(input)
+    expect(issue?.path).toEqual(['targetDate'])
+    expect(issue?.message).toMatch(/target date.*urgent/i)
+    input.targetDate = targetDate
+    expect(firstErrorFor(input)).toBeNull()
+  })
+  it('requires resolved pricing for urgent orders and includes it in payment validation', () => {
+    const input = values({
+      customers: [
+        {
+          ...createEmptyCustomer(),
+          existingCustomerId: 'cust-1',
+          measurement: validMeasurement(),
+          orders: [
+            { ...validOrder(), price: 20, isUrgent: true, urgentCharge: 5 },
+            { ...validOrder(), price: 20, isUrgent: true, urgentCharge: 5 },
+          ],
+        },
+      ],
+      payments: [{ ...createEmptyPayment(), amount: 50, paymentType: 'cash' }],
+    })
+    expect(firstErrorFor(input)).toBeNull()
+    for (const urgentCharge of ['', 0, -1, 0.004] as const) {
+      input.customers[0].orders[1].urgentCharge = urgentCharge
+      const issue = firstErrorFor(input)
+      expect(issue?.path).toEqual(['customers', 0, 'orders', 1, 'urgentCharge'])
+      expect(issue?.message).toMatch(/urgent pricing/i)
+    }
+    input.customers[0].orders[1].urgentCharge = 5
+    input.payments[0].amount = 51
+    expect(firstErrorFor(input)?.path).toEqual(['payments'])
+  })
   it('accepts customer fabric without an inventory material and requires its description', () => {
     const customer = {
       ...createEmptyCustomer(),
@@ -295,7 +342,7 @@ describe('invoiceFormSchema', () => {
       ],
     }
     const error = firstError([customer])
-    expect(error?.message).toMatch(/enter a price/i)
+    expect(error?.message).toMatch(/complete the material and design pricing/i)
     expect(error?.path).toEqual(['customers', 0, 'orders', 0, 'price'])
   })
 
@@ -544,5 +591,75 @@ describe('invoiceFormSchema', () => {
       'measurement',
       'fit',
     ])
+  })
+})
+
+describe('invoice customer identity and duplicates', () => {
+  const existing = (): InvoiceCustomerDraft => ({
+    ...createEmptyCustomer(),
+    mode: 'existing',
+    existingCustomerId: 'cust-1',
+    measurement: validMeasurement(),
+    orders: [validOrder()],
+  })
+  const person = (
+    name = 'Ahmed',
+    mobileNo = '33112233',
+  ): InvoiceCustomerDraft => ({
+    ...existing(),
+    mode: 'new',
+    existingCustomerId: '',
+    name,
+    mobileNo,
+  })
+  function errors(customers: InvoiceCustomerDraft[]) {
+    const result = invoiceFormSchema.safeParse(baseValues(customers))
+    return result.success ? [] : result.error.issues
+  }
+  it.each([
+    ['   ', '33112233', 'name'],
+    ['Ahmed', '\t', 'mobileNo'],
+  ])('rejects blank new-customer identity fields', (name, phone, field) => {
+    expect(errors([person(name, phone)])[0].path).toEqual([
+      'customers',
+      0,
+      field,
+    ])
+  })
+  it('reports duplicate new customers on the later block after trimming', () => {
+    const error = errors([person(), person(' Ahmed ', ' 33112233 ')])[0]
+    expect(error.path).toEqual(['customers', 1, 'name'])
+    expect(error.message).toContain('Customer 1')
+    expect(error.message).toContain('Add their orders there')
+  })
+  it('allows different family members sharing a phone', () => {
+    expect(errors([person(), person('Omar')])).toEqual([])
+  })
+  it('allows identical names with different phones', () => {
+    expect(errors([person(), person('Ahmed', '33445566')])).toEqual([])
+  })
+  it('rejects repeated existing customers with identical measurements regardless of date', () => {
+    const first = existing()
+    const second = {
+      ...existing(),
+      measurement: { ...validMeasurement(), date: '2026-07-20' },
+    }
+    expect(errors([first, second])[0].path).toEqual([
+      'customers',
+      1,
+      'existingCustomerId',
+    ])
+  })
+  it('preserves separate measurement sets for an existing customer', () => {
+    const second = {
+      ...existing(),
+      measurement: { ...validMeasurement(), fit: 'loose' },
+    }
+    expect(errors([existing(), second])).toEqual([])
+  })
+  it('allows different existing customers with the same measurements', () => {
+    expect(
+      errors([existing(), { ...existing(), existingCustomerId: 'cust-2' }]),
+    ).toEqual([])
   })
 })

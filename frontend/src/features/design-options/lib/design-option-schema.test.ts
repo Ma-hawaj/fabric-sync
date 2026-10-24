@@ -15,6 +15,18 @@ function firstError(input: DesignOptionFormValues) {
 }
 
 describe('designOptionFormSchema', () => {
+  it('accepts zero or positive design costs and rejects invalid money', () => {
+    const input = values({ slug: 'china', label: 'China', sortOrder: 1 })
+    for (const cost of [0, 2.5])
+      expect(designOptionFormSchema.safeParse({ ...input, cost }).success).toBe(
+        true,
+      )
+    for (const cost of ['', -1, 0.001, Number.NaN, Number.POSITIVE_INFINITY])
+      expect(designOptionFormSchema.safeParse({ ...input, cost }).success).toBe(
+        false,
+      )
+  })
+
   it('accepts an ordinary option with and without an illustration', () => {
     expect(
       firstError(

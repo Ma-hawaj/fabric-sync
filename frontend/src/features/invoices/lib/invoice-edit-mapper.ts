@@ -102,6 +102,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
       id: block.existingCustomerId,
       name: block.customerName,
       mobileNo: block.customerMobileNo,
+      address: block.customerAddress ?? null,
       measurements: [],
       invoices: [],
     })
@@ -117,6 +118,10 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
           name: line.materialName,
           sku: null,
           unit: line.materialUnit,
+          family: null,
+          juniorPrice: null,
+          normalPrice: null,
+          largePrice: null,
           locations:
             line.productionLocationId == null
               ? []
@@ -154,6 +159,8 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
         materialAmount: line.materialAmount,
         productionLocationId: line.productionLocationId ?? '',
         price: line.price,
+        isUrgent: line.isUrgent,
+        urgentCharge: line.urgentCharge,
       }
     })
 
@@ -163,6 +170,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
       existingCustomerId: block.existingCustomerId,
       name: '',
       mobileNo: '',
+      address: '',
       measurement: measurementToDraft(block.measurement, block.measurementId),
       orders,
     }
@@ -236,6 +244,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
 
   const values: InvoiceFormValues = {
     targetDate: edit.targetDate ?? '',
+    collectionMethod: edit.collectionMethod,
     receivingBranch: edit.branchId ?? '',
     customerId: edit.customerId ?? '',
     productBranch,

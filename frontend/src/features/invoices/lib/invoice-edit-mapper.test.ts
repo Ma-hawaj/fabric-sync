@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { mapInvoiceEditToForm } from './invoice-edit-mapper'
+import { invoicePayload } from './invoice-payload'
 import type { InvoiceEdit } from '../types/invoice-edit'
 
 function editFixture(): InvoiceEdit {
   return {
     id: '0197fdd2-6a67-7000-8000-000000000001',
     invoiceNumber: 42,
+    collectionMethod: 'pickup',
+    urgentCharge: 0,
     date: '2026-07-19',
     targetDate: '2026-07-26',
     branchId: '0197fdd2-6a67-7000-8000-000000000005',
@@ -63,7 +66,10 @@ function editFixture(): InvoiceEdit {
             productionLocationId: '0197fdd2-6a67-7000-8000-000000000005',
             productionLocationName: 'Main Branch',
             stockQuantity: 10,
+            basePrice: 100,
             price: 100,
+            isUrgent: false,
+            urgentCharge: 0,
             thobeType: 'saudi-classic',
             fPocket: null,
             sPocket: 'type-2',
@@ -93,6 +99,22 @@ function editFixture(): InvoiceEdit {
 }
 
 describe('mapInvoiceEditToForm', () => {
+  it('restores urgency, collection method, and customer addresses when editing', () => {
+    const edit = editFixture()
+    edit.customers[0].orders[0].isUrgent = true
+    edit.customers[0].orders[0].urgentCharge = 12.5
+    edit.collectionMethod = 'delivery'
+    edit.customers[0].customerAddress = 'Building 1, Road 2'
+    const { values, seeds } = mapInvoiceEditToForm(edit)
+    expect(values).toMatchObject({
+      collectionMethod: 'delivery',
+    })
+    expect(values.customers[0].orders[0].isUrgent).toBe(true)
+    expect(values.customers[0].orders[0].urgentCharge).toBe(12.5)
+    expect(
+      seeds.customers.get(edit.customers[0].existingCustomerId)?.address,
+    ).toBe('Building 1, Road 2')
+  })
   it('maps the header back onto the form fields', () => {
     const { values } = mapInvoiceEditToForm(editFixture())
 
@@ -189,10 +211,14 @@ describe('mapInvoiceEditToForm', () => {
     expect(seeds.soldFromBranchName).toBe('Main Branch')
   })
 
-  it('round-trips customer fabric and its production label without fabricating inventory', () => {
+  it('restores saved customer-material prices and urgency without submitting editable prices', () => {
     const fixture = editFixture()
+    fixture.customers[0].orders[0].isUrgent = true
     const line = fixture.customers[0].orders[0]
     line.materialSource = 'customer'
+    line.basePrice = 15
+    line.price = 17.5
+    line.urgentCharge = 7
     line.materialId = null
     line.materialName = 'White linen'
     line.customerMaterialDescription = 'White linen'
@@ -200,6 +226,8 @@ describe('mapInvoiceEditToForm', () => {
     const { values, seeds } = mapInvoiceEditToForm(fixture)
     expect(values.customers[0].orders[0]).toMatchObject({
       materialSource: 'customer',
+      price: 17.5,
+      urgentCharge: 7,
       materialId: '',
       customerMaterialDescription: 'White linen',
       materialAmount: 2,
@@ -209,6 +237,16 @@ describe('mapInvoiceEditToForm', () => {
     expect(seeds.locationLabels.get(line.productionLocationId!)).toBe(
       'Main Branch',
     )
+    const payload = invoicePayload(values)
+    expect(payload.customers[0].orders[0]).toMatchObject({
+      isUrgent: true,
+    })
+    expect(payload.customers[0].orders[0]).not.toHaveProperty('price')
+    expect(payload.customers[0].orders[0]).not.toHaveProperty('basePrice')
+    expect(payload.customers[0].orders[0]).not.toHaveProperty(
+      'customerBasePrice',
+    )
+    expect(payload).not.toHaveProperty('urgentCharge')
   })
 
   it('leaves the product branch blank when there are no product lines', () => {

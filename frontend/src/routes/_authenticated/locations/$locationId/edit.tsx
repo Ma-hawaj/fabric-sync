@@ -4,7 +4,7 @@ import { LocationFormPage } from '@/features/locations/location-form'
 export const Route = createFileRoute(
   '/_authenticated/locations/$locationId/edit',
 )({
-  staticData: { title: 'Edit Location' },
+  staticData: { title: 'Edit' },
   component: EditLocationRoute,
 })
 

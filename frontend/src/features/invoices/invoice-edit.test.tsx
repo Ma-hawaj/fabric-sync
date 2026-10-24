@@ -1,19 +1,50 @@
-import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { InvoiceEditPage } from './invoice-edit'
 import type { InvoiceEdit } from './types/invoice-edit'
 
 // Hoisted by vitest above these imports at transform time.
-vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => vi.fn(),
+const { save, navigate } = vi.hoisted(() => ({
+  save: vi.fn(),
+  navigate: vi.fn(),
 }))
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => navigate,
+}))
+vi.mock('./hooks/use-update-invoice', () => ({
+  useUpdateInvoice: () => ({ mutateAsync: save, isPending: false }),
+}))
+vi.mock('@/features/notifications/notification-dialog', () => ({
+  NotificationDialog: ({
+    invoiceId,
+    kind,
+    onClose,
+  }: {
+    invoiceId: string | null
+    kind: string
+    onClose: () => void
+  }) =>
+    invoiceId ? (
+      <div>
+        {kind}
+        <button onClick={onClose}>Not now</button>
+      </div>
+    ) : null,
+}))
+
+beforeEach(() => {
+  save.mockReset()
+  navigate.mockReset()
+})
 
 const EDIT_FIXTURE: InvoiceEdit = {
   id: '0197fdd2-6a67-7000-8000-000000000001',
   invoiceNumber: 42,
+  collectionMethod: 'pickup',
+  urgentCharge: 0,
   date: '2026-07-19',
-  targetDate: '2026-07-26',
+  targetDate: null,
   branchId: null,
   branchName: null,
   discount: 10,
@@ -26,9 +57,9 @@ const EDIT_FIXTURE: InvoiceEdit = {
   giftCardRedemptions: [],
 }
 
-function renderPage() {
+function renderPage(edit: InvoiceEdit = EDIT_FIXTURE) {
   const client = new QueryClient()
-  client.setQueryData(['invoices', EDIT_FIXTURE.id, 'edit'], EDIT_FIXTURE)
+  client.setQueryData(['invoices', EDIT_FIXTURE.id, 'edit'], edit)
   return render(
     <QueryClientProvider client={client}>
       <InvoiceEditPage invoiceId={EDIT_FIXTURE.id} />
@@ -37,6 +68,28 @@ function renderPage() {
 }
 
 describe('InvoiceEditPage', () => {
+  it('offers an updated-invoice preview after saving and keeps the edit when skipped', async () => {
+    save.mockResolvedValue({ id: EDIT_FIXTURE.id, totalPrice: 140 })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('invoice_updated')).toBeTruthy()
+    expect(save).toHaveBeenCalledOnce()
+    expect(navigate).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({ to: '/invoices' }),
+    )
+  })
+
+  it('keeps a failed edit open without offering to resend it', async () => {
+    save.mockRejectedValue(new Error('Save failed'))
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(save).toHaveBeenCalledOnce())
+    expect(screen.queryByText('invoice_updated')).toBeNull()
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
   it('renders the loaded invoice in the shared form', async () => {
     renderPage()
 

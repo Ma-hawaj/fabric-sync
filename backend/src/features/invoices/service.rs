@@ -22,13 +22,13 @@ use uuid::Uuid;
 use super::{
     repository,
     types::{
-        CreateGiftCardLineInput, CreateInvoiceInput, CreateOrderInput, CreateProductLineInput,
-        CreatedInvoice, DiscountUnit, GiftCardRedemptionInput, InvoiceCustomerInput, InvoiceDetail,
-        InvoiceEdit, InvoiceListItem, InvoiceTotalsBreakdown, MaterialSource, PaymentSummary,
-        PaymentType, ReceivedInvoice, RecordedPayment,
+        CollectedInvoice, CreateGiftCardLineInput, CreateInvoiceInput, CreateOrderInput,
+        CreateProductLineInput, CreatedInvoice, DiscountUnit, GiftCardRedemptionInput,
+        InvoiceCustomerInput, InvoiceDetail, InvoiceEdit, InvoiceListItem, InvoiceTotalsBreakdown,
+        MaterialSource, PaymentSummary, PaymentType, RecordedPayment,
     },
 };
-use crate::features::customers::types::CreateMeasurementInput;
+use crate::features::customers::types::{normalize_customer_identity, CreateMeasurementInput};
 
 pub async fn list_invoices(
     state: &AppState,
@@ -71,11 +71,14 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         gift_card_sales,
         invoice.discount,
         discount_unit,
+        invoice.urgent_charge,
     );
 
     let payments = repository::list_payments(state, invoice_id).await?;
 
     Ok(InvoiceDetail {
+        readiness: crate::features::orders::readiness::summary(state.db(), invoice_id).await?,
+        collection_method: invoice.collection_method,
         id: invoice.id,
         invoice_number: invoice.invoice_number,
         date: invoice.date,
@@ -85,14 +88,15 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         buyer: invoice.buyer,
         payment_status: invoice.payment_status,
         payment_method: invoice.payment_method,
-        received: invoice.received,
+        collected: invoice.collected,
         order_count: invoice.order_count,
         collected_order_count: invoice.collected_order_count,
-        last_received_at: invoice.last_received_at,
+        last_collected_at: invoice.last_collected_at,
         lines: rows.lines,
         redemptions: rows.redemptions,
         payments,
         totals: InvoiceTotalsBreakdown {
+            urgent_charge: invoice.urgent_charge,
             subtotal: totals.subtotal,
             discount: invoice.discount,
             discount_unit: invoice.discount_unit,
@@ -233,22 +237,22 @@ pub async fn record_payment(
     Ok(RecordedPayment { payment, summary })
 }
 
-/// Marks every order on the invoice received and settles the remaining
+/// Marks every order on the invoice collected and settles the remaining
 /// balance in one action — the whole-invoice counterpart to
-/// features::orders::receive_order, for when everything is collected (and
+/// features::orders::collect_order, for when everything is collected (and
 /// paid) at once. Takes no money when nothing is left to pay.
-pub async fn receive_invoice(
+pub async fn collect_invoice(
     state: &AppState,
     invoice_id: Uuid,
     payment_type: Option<PaymentType>,
-) -> Result<ReceivedInvoice, AppError> {
+) -> Result<CollectedInvoice, AppError> {
     let mut tx = state.db().begin().await?;
 
     let locked = repository::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
 
-    repository::mark_orders_received(&mut tx, invoice_id).await?;
+    repository::mark_orders_collected(&mut tx, invoice_id).await?;
 
     let paid = repository::sum_payments(&mut tx, invoice_id).await?;
     let summary = payment_summary(locked.total_price, locked.gift_card_redeemed, paid);
@@ -286,16 +290,16 @@ pub async fn receive_invoice(
     tracing::info!(
         invoice_id = %invoice_id,
         amount_paid = summary.amount_paid,
-        "invoice received"
+        "invoice collected"
     );
 
-    Ok(ReceivedInvoice {
+    Ok(CollectedInvoice {
         id: invoice_id,
         payment_status: summary.payment_status,
         amount_paid: summary.amount_paid,
         balance_due: summary.balance_due,
         payment_method,
-        received: true,
+        collected: true,
     })
 }
 
@@ -346,6 +350,7 @@ fn breakdown(
     gift_card_sales: f64,
     discount: f64,
     discount_unit: DiscountUnit,
+    urgent_charge: f64,
 ) -> Breakdown {
     let subtotal = round2(taxable_gross);
 
@@ -356,7 +361,8 @@ fn breakdown(
     // A discount bigger than the sale doesn't turn into a refund.
     .min(subtotal);
 
-    let gross = round2(subtotal - discount_amount);
+    // Urgency is an extra VAT-inclusive service charge, added after discounts.
+    let gross = round2(subtotal - discount_amount + round2(urgent_charge));
     let taxable = round2(gross / (1.0 + VAT_RATE));
     let vat = round2(gross - taxable);
     let gift_card_sales = round2(gift_card_sales);
@@ -378,9 +384,18 @@ fn breakdown(
 struct InvoiceTotals {
     total: f64,
     redeemed: f64,
+    urgent_charge: f64,
 }
 
 fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
+    let urgent_charge = round2(
+        input
+            .customers
+            .iter()
+            .flat_map(|customer| &customer.orders)
+            .map(|order| round2(order.urgent_charge))
+            .sum(),
+    );
     let order_subtotal: f64 = input
         .customers
         .iter()
@@ -400,10 +415,12 @@ fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
         gift_card_sales,
         input.discount,
         input.discount_unit,
+        urgent_charge,
     );
 
     InvoiceTotals {
         total: totals.total,
+        urgent_charge,
         redeemed: round2(
             input
                 .gift_card_redemptions
@@ -414,10 +431,144 @@ fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
     }
 }
 
+// One entry for each fixed design slot; identity always includes the category.
+fn selected_designs(order: &CreateOrderInput) -> [(&str, Option<&str>); 7] {
+    [
+        ("thob_type", order.thobe_type.as_deref()),
+        ("front_pocket", order.f_pocket.as_deref()),
+        ("side_pocket", order.s_pocket.as_deref()),
+        ("neck", order.collar.as_deref()),
+        ("sleeve", order.sleeve.as_deref()),
+        ("patti", order.patti.as_deref()),
+        ("emd", order.emd.as_deref()),
+    ]
+}
+
+fn price_order(
+    order: &mut CreateOrderInput,
+    materials: &HashMap<Uuid, Option<(f64, f64, f64)>>,
+    designs: &HashMap<(String, String), f64>,
+    customer_material_base_price: Option<f64>,
+) -> Result<(), AppError> {
+    use crate::features::pricing::service::{tier_price, validate_amount};
+    validate_order(order)?;
+    let base = match order.material_source {
+        MaterialSource::Shop => {
+            let id = order.material_id.expect("validated material id");
+            let prices = materials
+                .get(&id)
+                .ok_or_else(|| AppError::BadRequest(format!("no material with id {id}")))?;
+            let (junior, normal, large) = prices.ok_or_else(|| {
+                AppError::BadRequest(
+                    "configure all three prices for this material before invoicing it".into(),
+                )
+            })?;
+            tier_price(order.material_amount, junior, normal, large)
+        }
+        MaterialSource::Customer => customer_material_base_price.ok_or_else(|| {
+            AppError::BadRequest("customer-material tailoring price is not configured".into())
+        })?,
+    };
+    validate_amount(base)?;
+    let mut surcharge = 0.0;
+    for (category, slug) in selected_designs(order) {
+        if let Some(slug) = slug.filter(|slug| !slug.is_empty()) {
+            surcharge += designs
+                .get(&(category.to_string(), slug.to_string()))
+                .ok_or_else(|| {
+                    AppError::BadRequest(format!("unknown {category} design option: {slug}"))
+                })?;
+        }
+    }
+    order.base_price = base;
+    order.price = round2(base + surcharge);
+    validate_amount(order.price)?;
+    Ok(())
+}
+
+// Batch-load just the materials and category/slug pairs this invoice needs.
+// Final prices are resolved once, before totals, payment checks and writes.
+async fn resolve_order_prices(
+    tx: &mut sqlx::PgTransaction<'_>,
+    input: &mut CreateInvoiceInput,
+    urgent_rule: Option<crate::features::pricing::types::UrgentChargeRule>,
+    customer_material_base_price: Option<f64>,
+) -> Result<(), AppError> {
+    let orders: Vec<&CreateOrderInput> = input
+        .customers
+        .iter()
+        .flat_map(|customer| &customer.orders)
+        .collect();
+    if orders.is_empty() {
+        return Ok(());
+    }
+    let ids: Vec<Uuid> = orders
+        .iter()
+        .filter_map(|order| order.material_id)
+        .collect();
+    let material_rows = sqlx::query!(
+        r#"SELECT id, junior_price::float8 AS junior_price,
+            normal_price::float8 AS normal_price, large_price::float8 AS large_price
+        FROM materials WHERE id = ANY($1)"#,
+        &ids,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    let materials: HashMap<_, _> = material_rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.id,
+                row.junior_price
+                    .zip(row.normal_price)
+                    .zip(row.large_price)
+                    .map(|((j, n), l)| (j, n, l)),
+            )
+        })
+        .collect();
+    let pairs: HashSet<_> = orders
+        .iter()
+        .flat_map(|order| selected_designs(order))
+        .filter_map(|(category, slug)| {
+            slug.filter(|s| !s.is_empty())
+                .map(|s| (category.to_string(), s.to_string()))
+        })
+        .collect();
+    let categories: Vec<String> = pairs.iter().map(|(c, _)| c.clone()).collect();
+    let slugs: Vec<String> = pairs.iter().map(|(_, s)| s.clone()).collect();
+    let design_rows = sqlx::query!(
+        r#"SELECT category, slug, cost::float8 AS "cost!" FROM design_options
+        WHERE (category, slug) IN (SELECT * FROM UNNEST($1::text[], $2::text[]))"#,
+        &categories,
+        &slugs,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    let designs: HashMap<_, _> = design_rows
+        .into_iter()
+        .map(|row| ((row.category, row.slug), row.cost))
+        .collect();
+    for order in input
+        .customers
+        .iter_mut()
+        .flat_map(|customer| &mut customer.orders)
+    {
+        price_order(order, &materials, &designs, customer_material_base_price)?;
+        order.urgent_charge = crate::features::pricing::service::urgent_charge(
+            order.price,
+            order.is_urgent,
+            urgent_rule,
+        )?;
+    }
+    Ok(())
+}
+
 fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
-    if !order.material_amount.is_finite() || order.material_amount < 0.01 {
+    if order.material_amount < 0.01
+        || crate::features::pricing::service::validate_amount(order.material_amount).is_err()
+    {
         return Err(AppError::BadRequest(
-            "material quantity must be at least 0.01".into(),
+            "material quantity must be at least 0.01 with at most two decimal places".into(),
         ));
     }
     if !order.price.is_finite() || order.price < 0.0 {
@@ -448,6 +599,16 @@ fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
 }
 
 fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
+    let has_urgent_orders = input
+        .customers
+        .iter()
+        .flat_map(|customer| &customer.orders)
+        .any(|order| order.is_urgent);
+    if has_urgent_orders && input.target_date.is_none() {
+        return Err(AppError::BadRequest(
+            "urgent orders need a target date".to_string(),
+        ));
+    }
     let has_orders = input
         .customers
         .iter()
@@ -467,7 +628,11 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
         }
     }
 
-    for customer in &input.customers {
+    let mut new_customers = HashMap::new();
+    let mut existing_customers: HashMap<Uuid, Vec<(usize, &CreateMeasurementInput)>> =
+        HashMap::new();
+    for (index, customer) in input.customers.iter().enumerate() {
+        let number = index + 1;
         match (&customer.existing_customer_id, &customer.new_customer) {
             (Some(_), Some(_)) | (None, None) => {
                 return Err(AppError::BadRequest(
@@ -475,7 +640,26 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
                         .to_string(),
                 ));
             }
-            _ => {}
+            (None, Some(new_customer)) => {
+                let identity =
+                    normalize_customer_identity(&new_customer.name, &new_customer.mobile_no)?;
+                if let Some(first) = new_customers.insert(identity, number) {
+                    return Err(AppError::BadRequest(format!(
+                        "customer {number} repeats customer {first}; add their orders to customer {first} instead"
+                    )));
+                }
+            }
+            (Some(id), None) => {
+                let measurements = existing_customers.entry(*id).or_default();
+                if let Some((first, _)) = measurements.iter().find(|(_, measurement)| {
+                    measurement_values_equal(measurement, &customer.measurement)
+                }) {
+                    return Err(AppError::BadRequest(format!(
+                        "customer {number} repeats customer {first} with the same measurements; add their orders to customer {first} instead"
+                    )));
+                }
+                measurements.push((number, &customer.measurement));
+            }
         }
 
         // A customer block exists to carry orders and a measurement snapshot;
@@ -488,6 +672,14 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
 
         validate_measurement(&customer.measurement)?;
         for order in &customer.orders {
+            if !order.urgent_charge.is_finite()
+                || (order.is_urgent && round2(order.urgent_charge) <= 0.0)
+                || (!order.is_urgent && order.urgent_charge != 0.0)
+            {
+                return Err(AppError::BadRequest(
+                    "each urgent order needs a positive extra charge; regular orders cannot have one".into(),
+                ));
+            }
             validate_order(order)?;
         }
     }
@@ -550,12 +742,28 @@ async fn resolve_customer_id(
 ) -> Result<uuid::Uuid, AppError> {
     match (&customer.existing_customer_id, &customer.new_customer) {
         (Some(id), None) => Ok(*id),
-        (None, Some(new_customer)) => Ok(customers_repository::insert_customer(
-            tx,
-            &new_customer.name,
-            &new_customer.mobile_no,
-        )
-        .await?),
+        (None, Some(new_customer)) => {
+            let (name, mobile_no) =
+                normalize_customer_identity(&new_customer.name, &new_customer.mobile_no)?;
+            customers_repository::insert_customer(
+                tx,
+                &name,
+                &mobile_no,
+                true,
+                new_customer.address.as_deref(),
+            )
+                .await
+                .map_err(|error| match &error {
+                    sqlx::Error::Database(db_error)
+                        if db_error.code().as_deref() == Some("23505") =>
+                    {
+                        AppError::Conflict(format!(
+                            "customer {name} with this phone number already exists; select Existing Customer instead"
+                        ))
+                    }
+                    _ => error.into(),
+                })
+        }
         // Already rejected by validate().
         _ => unreachable!("validated: exactly one of existing/new customer is set"),
     }
@@ -566,7 +774,23 @@ mod tests {
     use super::*;
 
     fn input(json: serde_json::Value) -> CreateInvoiceInput {
-        serde_json::from_value(json).unwrap()
+        let mut resolved: CreateInvoiceInput = serde_json::from_value(json.clone()).unwrap();
+        // Totals tests work with already-resolved internal prices. HTTP input
+        // deliberately ignores these fields; price_order is tested separately.
+        for (customer, raw) in resolved
+            .customers
+            .iter_mut()
+            .zip(json["customers"].as_array().into_iter().flatten())
+        {
+            for (order, raw_order) in customer
+                .orders
+                .iter_mut()
+                .zip(raw["orders"].as_array().into_iter().flatten())
+            {
+                order.price = raw_order["price"].as_f64().unwrap_or(0.0);
+            }
+        }
+        resolved
     }
 
     fn order(price: f64) -> serde_json::Value {
@@ -575,7 +799,87 @@ mod tests {
             "materialAmount": 2.0,
             "productionLocationId": "0197fdd2-6a67-7000-8000-000000000005",
             "price": price,
+            "customerBasePrice": price,
         })
+    }
+
+    #[test]
+    fn automatic_prices_ignore_client_totals_and_add_designs_once() {
+        let mut raw = order(9999.0);
+        raw["basePrice"] = serde_json::json!(9999);
+        raw["collar"] = serde_json::json!("same");
+        raw["sleeve"] = serde_json::json!("same");
+        let mut garment: CreateOrderInput = serde_json::from_value(raw).unwrap();
+        assert_eq!(garment.price, 0.0);
+        assert_eq!(garment.base_price, 0.0);
+        garment.material_amount = 4.01;
+        let materials = HashMap::from([(garment.material_id.unwrap(), Some((10.0, 20.0, 30.0)))]);
+        let designs = HashMap::from([
+            (("neck".into(), "same".into()), 2.25),
+            (("sleeve".into(), "same".into()), 3.5),
+        ]);
+        price_order(&mut garment, &materials, &designs, None).unwrap();
+        assert_eq!(garment.base_price, 30.0);
+        assert_eq!(garment.price, 35.75);
+        price_order(&mut garment, &materials, &designs, None).unwrap();
+        assert_eq!(garment.price, 35.75);
+    }
+
+    #[test]
+    fn customer_fabric_uses_the_fixed_base_and_ignores_client_prices() {
+        let mut raw = order(9999.0);
+        raw["materialSource"] = serde_json::json!("customer");
+        raw["materialId"] = serde_json::Value::Null;
+        raw["customerMaterialDescription"] = serde_json::json!("White linen");
+        raw["customerBasePrice"] = serde_json::json!(9999.0);
+        raw["emd"] = serde_json::json!("6");
+        let mut garment = serde_json::from_value(raw.clone()).unwrap();
+        let designs = HashMap::from([(("emd".into(), "6".into()), 2.5)]);
+        price_order(&mut garment, &HashMap::new(), &designs, Some(15.0)).unwrap();
+        assert_eq!(garment.base_price, 15.0);
+        assert_eq!(garment.price, 17.5);
+        garment.material_amount = 5.0;
+        price_order(&mut garment, &HashMap::new(), &designs, Some(15.0)).unwrap();
+        assert_eq!(garment.price, 17.5);
+        raw["customerBasePrice"] = serde_json::Value::Null;
+        assert!(price_order(
+            &mut serde_json::from_value(raw).unwrap(),
+            &HashMap::new(),
+            &designs,
+            None
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn missing_prices_and_unknown_designs_cannot_become_free() {
+        let mut garment: CreateOrderInput = serde_json::from_value(order(100.0)).unwrap();
+        let id = garment.material_id.unwrap();
+        assert!(price_order(&mut garment, &HashMap::new(), &HashMap::new(), None).is_err());
+        assert!(price_order(
+            &mut garment,
+            &HashMap::from([(id, None)]),
+            &HashMap::new(),
+            None
+        )
+        .is_err());
+        garment.collar = Some("unknown".into());
+        assert!(price_order(
+            &mut garment,
+            &HashMap::from([(id, Some((0.0, 0.0, 0.0)))]),
+            &HashMap::new(),
+            None
+        )
+        .is_err());
+        garment.collar = None;
+        price_order(
+            &mut garment,
+            &HashMap::from([(id, Some((0.0, 0.0, 0.0)))]),
+            &HashMap::new(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(garment.price, 0.0);
     }
 
     #[test]
@@ -608,7 +912,7 @@ mod tests {
 
     #[test]
     fn order_quantity_cannot_increase_stock_through_a_negative_decrement() {
-        for quantity in [-2.0, 0.0, 0.001, f64::INFINITY, f64::NAN] {
+        for quantity in [-2.0, 0.0, 0.001, 2.999, f64::INFINITY, f64::NAN] {
             let mut input: CreateOrderInput = serde_json::from_value(order(100.0)).unwrap();
             input.material_amount = quantity;
             assert!(validate_order(&input).is_err());
@@ -665,6 +969,362 @@ mod tests {
         }
 
         input(base)
+    }
+
+    fn new_customer(name: &str, mobile_no: &str) -> serde_json::Value {
+        let mut block = customer(vec![order(20.0)]);
+        block.as_object_mut().unwrap().remove("existingCustomerId");
+        block["newCustomer"] = serde_json::json!({"name": name, "mobileNo": mobile_no});
+        block
+    }
+
+    #[test]
+    fn invoice_customers_use_the_standalone_identity_validation() {
+        for (name, phone) in [(" ", "33112233"), ("Ahmed", "\t"), ("", "")] {
+            let error = validate(&invoice(0.0, "amount", vec![new_customer(name, phone)]));
+            assert!(matches!(error, Err(AppError::BadRequest(_))));
+        }
+        assert!(validate(&invoice(
+            0.0,
+            "amount",
+            vec![new_customer(" Ahmed ", " 33112233 ")]
+        ))
+        .is_ok());
+    }
+
+    #[test]
+    fn duplicate_new_customer_blocks_are_rejected_after_trimming() {
+        let error = validate(&invoice(
+            0.0,
+            "amount",
+            vec![
+                new_customer("Ahmed", "33112233"),
+                new_customer(" Ahmed ", " 33112233 "),
+            ],
+        ))
+        .unwrap_err();
+        assert!(
+            matches!(error, AppError::BadRequest(message) if message.contains("customer 2 repeats customer 1"))
+        );
+    }
+
+    #[test]
+    fn different_family_members_can_share_a_phone_number() {
+        assert!(validate(&invoice(
+            0.0,
+            "amount",
+            vec![
+                new_customer("Ahmed", "33112233"),
+                new_customer("Omar", "33112233"),
+            ]
+        ))
+        .is_ok());
+    }
+
+    #[test]
+    fn same_name_with_different_phones_is_not_a_duplicate() {
+        assert!(validate(&invoice(
+            0.0,
+            "amount",
+            vec![
+                new_customer("Ahmed", "33112233"),
+                new_customer("Ahmed", "33445566"),
+            ]
+        ))
+        .is_ok());
+    }
+
+    #[test]
+    fn duplicate_existing_customer_measurements_are_rejected_even_on_different_dates() {
+        let first = customer(vec![order(20.0)]);
+        let mut second = first.clone();
+        second["measurement"]["date"] = serde_json::json!("2026-07-20");
+        let error = validate(&invoice(0.0, "amount", vec![first, second])).unwrap_err();
+        assert!(
+            matches!(error, AppError::BadRequest(message) if message.contains("same measurements"))
+        );
+    }
+
+    #[test]
+    fn one_customer_can_have_distinct_measurement_sets() {
+        let first = customer(vec![order(20.0)]);
+        let mut second = first.clone();
+        second["measurement"]["fit"] = serde_json::json!("loose");
+        assert!(validate(&invoice(0.0, "amount", vec![first, second])).is_ok());
+    }
+
+    #[test]
+    fn different_existing_customers_can_have_identical_measurements() {
+        let first = customer(vec![order(20.0)]);
+        let mut second = first.clone();
+        second["existingCustomerId"] = serde_json::json!("0197fdd2-6a67-7000-8000-000000000008");
+        assert!(validate(&invoice(0.0, "amount", vec![first, second])).is_ok());
+    }
+
+    #[test]
+    fn urgency_adds_a_taxable_charge_after_the_discount() {
+        let mut invoice = invoice(10.0, "percent", vec![customer(vec![order(100.0)])]);
+        invoice.customers[0].orders[0].is_urgent = true;
+        invoice.customers[0].orders[0].urgent_charge = 20.0;
+        assert!(validate(&invoice).is_ok());
+        assert_eq!(compute_totals(&invoice).total, 110.0);
+        let totals = breakdown(100.0, 50.0, 10.0, DiscountUnit::Percent, 20.0);
+        assert_eq!(totals.taxable, 100.0);
+        assert_eq!(totals.vat, 10.0);
+        assert_eq!(totals.total, 160.0);
+    }
+
+    #[sqlx::test]
+    async fn automatic_pricing_keeps_urgent_fees_separate_through_edits(db: sqlx::PgPool) {
+        let (_, _, production, _) = crate::test_support::invoice(&db, 0, false).await;
+        let material_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO materials(name,junior_price,normal_price,large_price) VALUES('Priced cotton',10,20,30) RETURNING id",
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO material_stock(material_id,branch_id,quantity) VALUES($1,$2,100)")
+            .bind(material_id)
+            .bind(production)
+            .execute(&db)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO design_options(category,slug,label,cost) VALUES('emd','urgent-compat','Embroidery',2.5),('neck','urgent-compat','Collar',3.5)")
+            .execute(&db)
+            .await
+            .unwrap();
+        let mut shop = order(9999.0);
+        shop["materialId"] = serde_json::json!(material_id);
+        shop["materialAmount"] = serde_json::json!(2.99);
+        shop["productionLocationId"] = serde_json::json!(production);
+        shop["emd"] = serde_json::json!("urgent-compat");
+        shop["isUrgent"] = serde_json::json!(true);
+        shop["urgentCharge"] = serde_json::json!(9999.0);
+        let mut customer_fabric = order(9999.0);
+        customer_fabric["materialSource"] = serde_json::json!("customer");
+        customer_fabric["materialId"] = serde_json::Value::Null;
+        customer_fabric["customerMaterialDescription"] = serde_json::json!("Customer linen");
+        customer_fabric["productionLocationId"] = serde_json::json!(production);
+        customer_fabric["customerBasePrice"] = serde_json::json!(9999.0);
+        customer_fabric["collar"] = serde_json::json!("urgent-compat");
+        customer_fabric["isUrgent"] = serde_json::json!(false);
+        customer_fabric["urgentCharge"] = serde_json::json!(777.0);
+        // Deserialize the HTTP shape directly: submitted prices cannot override the catalog.
+        let mut input: CreateInvoiceInput = serde_json::from_value(serde_json::json!({
+            "targetDate": "2026-11-01",
+            "discount": 10.0,
+            "discountUnit": "percent",
+            "customers": [{
+                "newCustomer": {
+                    "name": "  Family customer  ",
+                    "mobileNo": "  33112233  ",
+                    "address": "\n\t Building 1\nRoad 2 \t\n",
+                },
+                "measurement": { "date": "2026-10-23", "type": "body", "fit": "medium" },
+                "orders": [shop, customer_fabric],
+            }],
+        }))
+        .unwrap();
+        let state = crate::test_support::state(db.clone(), None, None).await;
+        let mut overpaid = input.clone();
+        overpaid.payments = vec![serde_json::from_value(serde_json::json!({
+            "amount": 40.0, "paymentType": "cash"
+        }))
+        .unwrap()];
+        assert!(matches!(
+            create_invoice(&state, overpaid).await,
+            Err(AppError::BadRequest(_))
+        ));
+
+        // Only the first order is urgent. Client-submitted charges are ignored.
+        // (10 + 2.5 + 15 + 3.5) * 90% + 5 = 32.90.
+        let created = create_invoice(&state, input.clone()).await.unwrap();
+        assert_eq!(created.total_price, 32.9);
+        let editing = get_invoice_for_edit(&state, created.id).await.unwrap();
+        let customer = &editing.customers[0];
+        assert_eq!(customer.customer_name, "Family customer");
+        assert_eq!(customer.customer_mobile_no, "33112233");
+        assert_eq!(
+            customer.customer_address.as_deref(),
+            Some("Building 1\nRoad 2")
+        );
+        let original_measurement_id = customer.measurement_id.unwrap();
+        input.customers[0].existing_customer_id = Some(customer.existing_customer_id);
+        input.customers[0].new_customer = None;
+        let orders = &editing.customers[0].orders;
+        assert_eq!(
+            (
+                orders[0].base_price,
+                orders[0].price,
+                orders[0].urgent_charge
+            ),
+            (10.0, 12.5, 5.0)
+        );
+        assert_eq!(
+            (
+                orders[1].base_price,
+                orders[1].price,
+                orders[1].urgent_charge
+            ),
+            (15.0, 18.5, 0.0)
+        );
+
+        // A higher material tier changes the garment price, keeping both fees intact.
+        input.customers[0].orders[0].material_amount = 4.01;
+        input.customers[0].measurement.chest = Some(100.0);
+        let updated = update_invoice(&state, created.id, input.clone())
+            .await
+            .unwrap();
+        assert_eq!(updated.total_price, 50.9);
+        sqlx::query(
+            "UPDATE design_options SET cost=4.5 WHERE category='emd' AND slug='urgent-compat'",
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let updated = update_invoice(&state, created.id, input.clone())
+            .await
+            .unwrap();
+        assert_eq!(updated.total_price, 52.7);
+        let editing = get_invoice_for_edit(&state, created.id).await.unwrap();
+        assert_eq!(editing.customers[0].orders[0].price, 34.5);
+        assert_eq!(editing.customers[0].orders[0].base_price, 30.0);
+        assert_eq!(editing.customers[0].orders[0].urgent_charge, 5.0);
+        assert_eq!(editing.customers[0].orders[1].urgent_charge, 0.0);
+        assert!(editing.customers[0].orders[0].is_urgent);
+        assert!(!editing.customers[0].orders[1].is_urgent);
+        assert_ne!(
+            editing.customers[0].measurement_id,
+            Some(original_measurement_id)
+        );
+        let history = customers_repository::get_customer(&state, customer.existing_customer_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(history.measurements.len(), 2);
+        let original = history
+            .measurements
+            .iter()
+            .find(|measurement| measurement.id == original_measurement_id)
+            .unwrap();
+        assert_eq!(original.chest, None);
+        assert_eq!(editing.customers[0].measurement.chest, Some(100.0));
+        let detail = get_invoice(&state, created.id).await.unwrap();
+        assert_eq!(detail.totals.subtotal, 53.0);
+        assert_eq!(detail.totals.discount_amount, 5.3);
+        assert_eq!(detail.totals.urgent_charge, 5.0);
+        assert_eq!(detail.totals.total, updated.total_price);
+        let stock: f64 = sqlx::query_scalar(
+            "SELECT quantity::float8 FROM material_stock WHERE material_id=$1 AND branch_id=$2",
+        )
+        .bind(material_id)
+        .bind(production)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(stock, 95.99);
+        let html = super::super::document::render_invoice_document(&state, created.id)
+            .await
+            .unwrap();
+        assert_eq!(html.matches("Urgent charge for this order").count(), 1);
+        assert!(html.contains("5.000") && html.contains("52.700"));
+
+        input.customers[0].orders[1].is_urgent = true;
+        assert_eq!(
+            update_invoice(&state, created.id, input.clone())
+                .await
+                .unwrap()
+                .total_price,
+            57.7
+        );
+        input.customers[0].orders[0].is_urgent = false;
+        let mixed = update_invoice(&state, created.id, input.clone())
+            .await
+            .unwrap();
+        assert_eq!(mixed.total_price, 52.7);
+        let mixed_edit = get_invoice_for_edit(&state, created.id).await.unwrap();
+        assert!(!mixed_edit.customers[0].orders[0].is_urgent);
+        assert!(mixed_edit.customers[0].orders[1].is_urgent);
+        assert_eq!(mixed_edit.customers[0].orders[0].urgent_charge, 0.0);
+        assert_eq!(mixed_edit.customers[0].orders[1].urgent_charge, 5.0);
+
+        input.target_date = None;
+        for order in &mut input.customers[0].orders {
+            order.is_urgent = false;
+            order.urgent_charge = 0.0;
+        }
+        assert_eq!(
+            update_invoice(&state, created.id, input)
+                .await
+                .unwrap()
+                .total_price,
+            47.7
+        );
+    }
+
+    #[test]
+    fn urgency_sums_each_order_across_customers_without_charging_retail_lines() {
+        let mut invoice = invoice(
+            10.0,
+            "percent",
+            vec![customer(vec![order(100.0)]), customer(vec![order(100.0)])],
+        );
+        invoice.customers[1].existing_customer_id = Some(Uuid::from_u128(8));
+        invoice.customers[0].orders[0].is_urgent = true;
+        invoice.customers[0].orders[0].urgent_charge = 10.01;
+        invoice.customers[1].orders[0].is_urgent = true;
+        invoice.customers[1].orders[0].urgent_charge = 20.02;
+        invoice.products = vec![serde_json::from_value(product(1.0, 50.0)).unwrap()];
+        invoice.gift_cards = vec![serde_json::from_value(gift_card(25.0)).unwrap()];
+        assert!(validate(&invoice).is_ok());
+        let totals = compute_totals(&invoice);
+        assert_eq!(totals.urgent_charge, 30.03);
+        assert_eq!(totals.total, 280.03);
+        invoice.customers[1].orders[0].urgent_charge = 0.0;
+        assert!(validate(&invoice).is_err());
+    }
+
+    #[test]
+    fn urgency_requires_a_positive_charge_and_regular_invoices_have_none() {
+        let mut invoice = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
+        assert!(!invoice.customers[0].orders[0].is_urgent);
+        assert_eq!(invoice.collection_method.as_str(), "pickup");
+        invoice.customers[0].orders[0].is_urgent = true;
+        for charge in [0.0, -1.0, 0.004, f64::NAN, f64::INFINITY] {
+            invoice.customers[0].orders[0].urgent_charge = charge;
+            assert!(validate(&invoice).is_err(), "{charge}");
+        }
+        invoice.customers[0].orders[0].urgent_charge = 0.01;
+        assert!(validate(&invoice).is_ok());
+        invoice.customers[0].orders[0].is_urgent = false;
+        assert!(validate(&invoice).is_err());
+    }
+
+    #[test]
+    fn urgency_requires_a_target_date_but_regular_invoices_can_omit_it() {
+        let mut invoice = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
+        let target_date = invoice.target_date;
+        invoice.target_date = None;
+        assert!(validate(&invoice).is_ok());
+
+        invoice.customers[0].orders[0].is_urgent = true;
+        invoice.customers[0].orders[0].urgent_charge = 10.0;
+        let error = validate(&invoice).unwrap_err();
+        assert!(matches!(error, AppError::BadRequest(message) if message.contains("target date")));
+
+        invoice.target_date = target_date;
+        assert!(validate(&invoice).is_ok());
+    }
+
+    #[test]
+    fn collection_method_accepts_only_delivery_or_pickup() {
+        use super::super::types::CollectionMethod;
+        for method in ["delivery", "pickup"] {
+            let parsed: CollectionMethod =
+                serde_json::from_value(serde_json::json!(method)).unwrap();
+            assert_eq!(parsed.as_str(), method);
+        }
+        assert!(serde_json::from_value::<CollectionMethod>(serde_json::json!("courier")).is_err());
     }
 
     #[test]
@@ -761,7 +1421,7 @@ mod tests {
     // the extracted VAT always sum back to the discounted gross.
     #[test]
     fn the_breakdown_splits_the_discounted_gross_into_net_and_vat() {
-        let totals = breakdown(133.33, 0.0, 7.5, DiscountUnit::Percent);
+        let totals = breakdown(133.33, 0.0, 7.5, DiscountUnit::Percent, 0.0);
         assert_eq!(totals.subtotal, 133.33);
         assert_eq!(totals.discount_amount, 10.0);
         // 123.33 gross deflates to a 112.12 net with 11.21 of VAT inside it.
@@ -779,7 +1439,7 @@ mod tests {
     fn the_breakdown_reports_the_discount_it_actually_applied() {
         // Asking for 500 off a 100 sale discounts 100, not 500 — otherwise the
         // document would print a discount line that overshoots the subtotal.
-        let totals = breakdown(100.0, 0.0, 500.0, DiscountUnit::Amount);
+        let totals = breakdown(100.0, 0.0, 500.0, DiscountUnit::Amount, 0.0);
         assert_eq!(totals.discount_amount, 100.0);
         assert_eq!(totals.taxable, 0.0);
         assert_eq!(totals.vat, 0.0);
@@ -788,7 +1448,7 @@ mod tests {
 
     #[test]
     fn gift_card_sales_stay_out_of_the_vat_base_but_inside_the_total() {
-        let totals = breakdown(100.0, 200.0, 0.0, DiscountUnit::Amount);
+        let totals = breakdown(100.0, 200.0, 0.0, DiscountUnit::Amount, 0.0);
         // 100 gross holds 90.91 of net and 9.09 of VAT; the card joins
         // the total untaxed.
         assert_eq!(totals.taxable, 90.91);
@@ -847,6 +1507,7 @@ mod tests {
         invoice.customers[0].new_customer = Some(super::super::types::NewCustomerInput {
             name: "Ahmed".to_string(),
             mobile_no: "0500000000".to_string(),
+            address: None,
         });
         assert!(validate(&invoice).is_err());
     }
@@ -987,51 +1648,63 @@ mod tests {
         .unwrap();
         assert!(validate(&input).is_ok());
     }
-
-    fn measurement_id(n: u128) -> Uuid {
-        Uuid::from_u128(n)
+    fn snapshot(chest: f64) -> CreateMeasurementInput {
+        serde_json::from_value(serde_json::json!({
+            "date": "2026-10-17", "type": "body", "fit": "medium", "chest": chest,
+        }))
+        .unwrap()
     }
 
     #[test]
-    fn measurement_reuse_picks_the_first_exclusive_row() {
-        let old = vec![measurement_id(1), measurement_id(2)];
-        let exclusive: HashSet<Uuid> = [measurement_id(1), measurement_id(2)].into();
+    fn unchanged_edits_keep_the_original_snapshot_after_a_later_visit() {
+        let old = Uuid::from_u128(1);
+        let later = Uuid::from_u128(2);
+        let candidates = vec![(later, snapshot(110.0)), (old, snapshot(100.0))];
         assert_eq!(
-            plan_measurement_reuse(&old, &exclusive, &HashSet::new()),
-            Some(measurement_id(1))
+            reusable_measurement(&candidates, &[old], &snapshot(100.0)),
+            Some(old)
         );
     }
 
     #[test]
-    fn measurement_reuse_leaves_shared_rows_alone() {
-        // Every old row is also referenced by another invoice: nothing may be
-        // rewritten, so the block falls back to the create rule instead.
-        let old = vec![measurement_id(1)];
+    fn changed_measurements_do_not_reuse_a_different_snapshot() {
+        let old = Uuid::from_u128(1);
         assert_eq!(
-            plan_measurement_reuse(&old, &HashSet::new(), &HashSet::new()),
+            reusable_measurement(&[(old, snapshot(100.0))], &[old], &snapshot(120.0)),
             None
         );
     }
 
     #[test]
-    fn measurement_reuse_skips_rows_claimed_by_an_earlier_block() {
-        // Two edited blocks for the same customer must not rewrite the same
-        // row twice.
-        let old = vec![measurement_id(1), measurement_id(2)];
-        let exclusive: HashSet<Uuid> = [measurement_id(1), measurement_id(2)].into();
-        let reused: HashSet<Uuid> = [measurement_id(1)].into();
+    fn unchanged_latest_measurements_can_be_reused_for_a_new_invoice() {
+        let id = Uuid::from_u128(1);
         assert_eq!(
-            plan_measurement_reuse(&old, &exclusive, &reused),
-            Some(measurement_id(2))
+            reusable_measurement(&[(id, snapshot(100.0))], &[], &snapshot(100.0)),
+            Some(id)
         );
     }
 
     #[test]
-    fn measurement_reuse_finds_nothing_when_everything_is_taken() {
-        let old = vec![measurement_id(1)];
-        let exclusive: HashSet<Uuid> = [measurement_id(1)].into();
-        let reused: HashSet<Uuid> = [measurement_id(1)].into();
-        assert_eq!(plan_measurement_reuse(&old, &exclusive, &reused), None);
+    fn an_old_match_is_not_reused_for_a_new_invoice_after_measurements_change() {
+        let candidates = vec![
+            (Uuid::from_u128(2), snapshot(110.0)),
+            (Uuid::from_u128(1), snapshot(100.0)),
+        ];
+        assert_eq!(
+            reusable_measurement(&candidates, &[], &snapshot(100.0)),
+            None
+        );
+    }
+
+    #[test]
+    fn invoice_snapshots_are_reused_without_rewriting_their_original_date() {
+        let id = Uuid::from_u128(1);
+        let recorded = snapshot(100.0);
+        let mut edited = recorded.clone();
+        edited.date = chrono::NaiveDate::from_ymd_opt(2026, 10, 18).unwrap();
+        let candidates = vec![(id, recorded.clone())];
+        assert_eq!(reusable_measurement(&candidates, &[id], &edited), Some(id));
+        assert_eq!(candidates[0].1, recorded);
     }
 }
 
@@ -1040,15 +1713,39 @@ mod tests {
 ///
 /// An unknown existing_customer_id surfaces as a foreign-key violation on the
 /// insert, which the AppError conversion maps to a 400.
-async fn resolve_measurement_for_create(
+fn reusable_measurement(
+    candidates: &[(Uuid, CreateMeasurementInput)],
+    invoice_measurement_ids: &[Uuid],
+    measurement: &CreateMeasurementInput,
+) -> Option<Uuid> {
+    // Prefer the invoice's own unchanged snapshot, even if a later visit has
+    // recorded different measurements. Otherwise retain the create rule:
+    // reuse the latest record only when its values match.
+    candidates
+        .iter()
+        .find(|(id, values)| {
+            invoice_measurement_ids.contains(id) && measurement_values_equal(values, measurement)
+        })
+        .or_else(|| {
+            candidates
+                .first()
+                .filter(|(_, values)| measurement_values_equal(values, measurement))
+        })
+        .map(|(id, _)| *id)
+}
+
+async fn resolve_measurement(
     tx: &mut sqlx::PgTransaction<'_>,
     customer_id: Uuid,
     measurement: &CreateMeasurementInput,
+    invoice_measurement_ids: &[Uuid],
 ) -> Result<Uuid, AppError> {
-    let latest = customers_repository::latest_measurement(tx, customer_id).await?;
-    match latest {
-        Some((id, ref values)) if measurement_values_equal(values, measurement) => Ok(id),
-        _ => Ok(customers_repository::insert_measurement(tx, customer_id, measurement).await?),
+    let candidates =
+        customers_repository::measurement_candidates(tx, customer_id, invoice_measurement_ids)
+            .await?;
+    match reusable_measurement(&candidates, invoice_measurement_ids, measurement) {
+        Some(id) => Ok(id),
+        None => Ok(customers_repository::insert_measurement(tx, customer_id, measurement).await?),
     }
 }
 
@@ -1088,7 +1785,14 @@ async fn write_customer_orders(
             }
         }
 
-        repository::insert_order(tx, invoice_id, measurement_id, order).await?;
+        repository::insert_order(
+            tx,
+            invoice_id,
+            measurement_id,
+            order,
+            round2(order.urgent_charge),
+        )
+        .await?;
     }
 
     Ok(())
@@ -1188,19 +1892,31 @@ async fn write_redemptions(
 
 pub async fn create_invoice(
     state: &AppState,
-    input: CreateInvoiceInput,
+    mut input: CreateInvoiceInput,
 ) -> Result<CreatedInvoice, AppError> {
+    let mut tx = state.db().begin().await?;
+    resolve_order_prices(
+        &mut tx,
+        &mut input,
+        state.urgent_charge_rule()?,
+        state.customer_material_base_price()?,
+    )
+    .await?;
     validate(&input)?;
 
     let totals = compute_totals(&input);
 
-    let mut tx = state.db().begin().await?;
-
     // invoice_date is server-set (DEFAULT now()) — the only date staff enter
     // is the promised target_date. Its actual value comes back here so gift
     // card expiry is checked against the creation date.
-    let (invoice_id, invoice_date) =
-        repository::insert_invoice(&mut tx, &input, totals.total, totals.redeemed).await?;
+    let (invoice_id, invoice_date) = repository::insert_invoice(
+        &mut tx,
+        &input,
+        totals.total,
+        totals.redeemed,
+        totals.urgent_charge,
+    )
+    .await?;
 
     for payment in &input.payments {
         repository::insert_payment(
@@ -1216,7 +1932,7 @@ pub async fn create_invoice(
     for customer in &input.customers {
         let customer_id = resolve_customer_id(&mut tx, customer).await?;
         let measurement_id =
-            resolve_measurement_for_create(&mut tx, customer_id, &customer.measurement).await?;
+            resolve_measurement(&mut tx, customer_id, &customer.measurement, &[]).await?;
         write_customer_orders(&mut tx, invoice_id, measurement_id, &customer.orders).await?;
     }
 
@@ -1263,22 +1979,6 @@ pub async fn get_invoice_for_edit(
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))
 }
 
-/// Picks the old measurement row an edited customer block rewrites in place:
-/// the first of its rows that belongs to this invoice alone and hasn't already
-/// been claimed by an earlier block. A block whose rows are all shared (or
-/// that has no rows yet) gets `None` and falls back to the create rule, so a
-/// shared row is never mutated. Pure, so it can be tested without a database.
-fn plan_measurement_reuse(
-    old_ids: &[Uuid],
-    exclusive: &HashSet<Uuid>,
-    reused: &HashSet<Uuid>,
-) -> Option<Uuid> {
-    old_ids
-        .iter()
-        .find(|id| exclusive.contains(id) && !reused.contains(id))
-        .copied()
-}
-
 /// Rebuilds an invoice from a fresh copy of the create input: the old lines
 /// are torn down (stock restored, tender paid back, sold cards deleted) and
 /// the new lines go through the same writers as creation.
@@ -1296,16 +1996,22 @@ pub async fn update_invoice(
     mut input: CreateInvoiceInput,
 ) -> Result<CreatedInvoice, AppError> {
     // Anything the form sends back for the ledger is ignored: payments are
-    // taken through the receive and payments endpoints, never smuggled in
+    // taken through the collect and payments endpoints, never smuggled in
     // through an edit. Clearing before validate() also keeps the up-front
     // overpay check — meant for creation — from firing on money that is
     // already legitimately held.
     input.payments = Vec::new();
+    let mut tx = state.db().begin().await?;
+    resolve_order_prices(
+        &mut tx,
+        &mut input,
+        state.urgent_charge_rule()?,
+        state.customer_material_base_price()?,
+    )
+    .await?;
     validate(&input)?;
 
     let totals = compute_totals(&input);
-
-    let mut tx = state.db().begin().await?;
 
     // invoice_date stays immutable — only target_date (inside input) is
     // rewritten by update_invoice_header. Expiry is re-checked against the
@@ -1321,9 +2027,9 @@ pub async fn update_invoice(
     let kept = repository::sum_payments(&mut tx, invoice_id).await?;
     validate_kept_payments(kept, totals.total, totals.redeemed)?;
 
-    if repository::invoice_has_received_orders(&mut tx, invoice_id).await? {
+    if repository::invoice_has_collected_orders(&mut tx, invoice_id).await? {
         return Err(AppError::BadRequest(
-            "this invoice has received orders and cannot be edited".to_string(),
+            "this invoice has collected orders and cannot be edited".to_string(),
         ));
     }
 
@@ -1386,9 +2092,8 @@ pub async fn update_invoice(
         }
     }
 
-    // Tear down the old lines. Orders go before measurements (the FK points
-    // from orders at measurements), and the sold gift cards go once the
-    // spent-check above has cleared them.
+    // Rebuild order and retail lines, retaining all measurement history.
+    // Sold gift cards go once the spent-check above has cleared them.
     repository::delete_redemptions(&mut tx, invoice_id).await?;
     repository::delete_orders(&mut tx, invoice_id).await?;
     repository::delete_items(&mut tx, invoice_id).await?;
@@ -1397,60 +2102,19 @@ pub async fn update_invoice(
         repository::delete_gift_cards(&mut tx, &sold_ids).await?;
     }
 
-    // Which measurement rows belong to this invoice alone. The old rows are
-    // grouped per customer the way the form's blocks were entered.
-    let mut old_by_customer: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
-    for reference in &measurement_refs {
-        old_by_customer
-            .entry(reference.customer_id)
-            .or_default()
-            .push(reference.measurement_id);
-    }
-    let mut exclusive = HashSet::new();
-    for reference in &measurement_refs {
-        if repository::measurement_is_exclusive(&mut tx, reference.measurement_id, invoice_id)
-            .await?
-        {
-            exclusive.insert(reference.measurement_id);
-        }
-    }
-
-    let mut reused: HashSet<Uuid> = HashSet::new();
+    // Measurements are customer history, including records created before
+    // this invoice. Reuse unchanged snapshots, append changed values, and
+    // retain records even when their customer block has been removed.
     for customer in &input.customers {
         let customer_id = resolve_customer_id(&mut tx, customer).await?;
-        let old_ids = old_by_customer
-            .get(&customer_id)
-            .cloned()
-            .unwrap_or_default();
-
-        let measurement_id = match plan_measurement_reuse(&old_ids, &exclusive, &reused) {
-            Some(id) => {
-                repository::update_measurement(&mut tx, id, &customer.measurement).await?;
-                reused.insert(id);
-                id
-            }
-            // No exclusive row to rewrite: shared rows stay untouched, and a
-            // block without history falls back to the create rule.
-            None => {
-                resolve_measurement_for_create(&mut tx, customer_id, &customer.measurement).await?
-            }
-        };
-
+        let old_ids: Vec<Uuid> = measurement_refs
+            .iter()
+            .filter(|reference| reference.customer_id == customer_id)
+            .map(|reference| reference.measurement_id)
+            .collect();
+        let measurement_id =
+            resolve_measurement(&mut tx, customer_id, &customer.measurement, &old_ids).await?;
         write_customer_orders(&mut tx, invoice_id, measurement_id, &customer.orders).await?;
-    }
-
-    // Old rows this invoice owned alone that no edited block rewrote — removed
-    // blocks, or superseded extras — are deleted rather than left orphaned.
-    // Shared rows are never touched: some other invoice still points at them.
-    let mut orphaned: Vec<Uuid> = measurement_refs
-        .iter()
-        .map(|reference| reference.measurement_id)
-        .filter(|id| exclusive.contains(id) && !reused.contains(id))
-        .collect();
-    orphaned.sort();
-    orphaned.dedup();
-    if !orphaned.is_empty() {
-        repository::delete_measurements(&mut tx, &orphaned).await?;
     }
 
     write_product_lines(&mut tx, invoice_id, &input.products).await?;
@@ -1465,8 +2129,15 @@ pub async fn update_invoice(
     )
     .await?;
 
-    repository::update_invoice_header(&mut tx, invoice_id, &input, totals.total, totals.redeemed)
-        .await?;
+    repository::update_invoice_header(
+        &mut tx,
+        invoice_id,
+        &input,
+        totals.total,
+        totals.redeemed,
+        totals.urgent_charge,
+    )
+    .await?;
 
     tx.commit().await?;
 

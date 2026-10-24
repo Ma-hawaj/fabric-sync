@@ -2,7 +2,8 @@ import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { TextField, PhoneField } from '@/components/form/fields'
+import { Checkbox } from '@/components/ui/checkbox'
+import { TextField, PhoneField, TextareaField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { MeasurementFields } from './components/measurement-fields'
 import { useCustomer } from './hooks/use-customer'
@@ -57,6 +58,8 @@ function CustomerForm({ existing }: { existing?: Customer }) {
             id: existing.id,
             name: value.name,
             mobileNo: value.mobileNo,
+            whatsappNotificationsEnabled: value.whatsappNotificationsEnabled,
+            address: value.address,
           })
         : createCustomer.mutateAsync(value)
       toast.promise(pending, {
@@ -88,7 +91,7 @@ function CustomerForm({ existing }: { existing?: Customer }) {
         </h1>
         <p className="text-muted-foreground">
           {existing
-            ? 'Update this customer’s name and phone number. Measurements are kept as they are.'
+            ? 'Update this customer’s details and WhatsApp preference. Measurements are kept as they are.'
             : 'Register a new customer so they can be selected on invoices and orders.'}
         </p>
       </div>
@@ -103,7 +106,31 @@ function CustomerForm({ existing }: { existing?: Customer }) {
       >
         <div className="max-w-3xl space-y-4 rounded-xl border border-border/60 bg-card p-5">
           <TextField form={form} name="name" label="Full Name" />
-          <PhoneField form={form} name="mobileNo" label="Phone" />
+          <PhoneField
+            form={form}
+            name="mobileNo"
+            label="Phone"
+            defaultCountry="BH"
+          />
+          <TextareaField
+            form={form}
+            name="address"
+            label="Address (optional)"
+          />
+          <form.Field name="whatsappNotificationsEnabled">
+            {(field) => (
+              <label className="flex items-start gap-2 text-sm">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={field.state.value}
+                  disabled={mutation.isPending}
+                  onCheckedChange={field.handleChange}
+                  onBlur={field.handleBlur}
+                />
+                Receive invoice and pickup updates via WhatsApp
+              </label>
+            )}
+          </form.Field>
         </div>
 
         {!existing && (

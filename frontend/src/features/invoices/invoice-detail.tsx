@@ -1,4 +1,11 @@
-import * as React from 'react'
+import { NotificationDialog } from '@/features/notifications/notification-dialog'
+import { NotificationHistory } from '@/features/notifications/notification-history'
+import {
+  ReadinessBadge,
+  ReadinessControls,
+} from '@/features/notifications/readiness-controls'
+import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,6 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { CURRENCY } from '@/lib/currency'
+import { OrderPriorityIndicator } from '@/features/orders/components/order-priority-indicator'
 import {
   ArrowLeftIcon,
   FileDownIcon,
@@ -19,10 +27,10 @@ import {
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { ReceiveInvoiceDialog } from './components/receive-invoice-dialog'
+import { CollectInvoiceDialog } from './components/collect-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
 import { useInvoice } from './hooks/use-invoice'
-import { printInvoiceDocument } from './lib/print-invoice'
+import { downloadInvoicePdf } from './lib/print-invoice'
 import type { Invoice, InvoiceCustomer } from './types/invoices'
 import type { InvoiceDetail, InvoiceLine } from './types/invoice-detail'
 
@@ -40,8 +48,9 @@ const LINE_KIND_LABELS: Record<InvoiceLine['kind'], string> = {
 export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
   const { data: detail, isLoading, isError } = useInvoice(invoiceId)
   const navigate = useNavigate()
+  const [resendOpen, setResendOpen] = useState(false)
 
-  // The receive dialog was built around the list row's `Invoice`, so the
+  // The collect dialog was built around the list row's `Invoice`, so the
   // detail is narrowed into that shape for it — the arithmetic it shows comes
   // from `totals` here, never re-derived.
   const invoice: Invoice | null = detail ? toInvoice(detail) : null
@@ -64,6 +73,11 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 
   return (
     <div className="space-y-6">
+      <NotificationDialog
+        invoiceId={resendOpen ? invoiceId : null}
+        kind="manual_resend"
+        onClose={() => setResendOpen(false)}
+      />
       <div>
         <Link
           to="/invoices"
@@ -93,7 +107,11 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <ReadinessBadge {...detail} />
+          <Badge variant="outline">
+            {detail.collectionMethod === 'delivery' ? 'Delivery' : 'Pickup'}
+          </Badge>
           <Badge
             variant={invoice.paymentStatus === 'paid' ? 'default' : 'outline'}
             className="capitalize"
@@ -104,16 +122,30 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                 ? 'Paid'
                 : 'Unpaid'}
           </Badge>
-          <Badge variant={invoice.received ? 'default' : 'secondary'}>
-            {invoice.received ? 'Received' : 'Pending collection'}
+          <Badge variant={invoice.collected ? 'default' : 'secondary'}>
+            {invoice.collected ? 'Collected' : 'Pending collection'}
           </Badge>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ExportPdfButton invoiceId={invoice.id} />
+          <Button variant="outline" onClick={() => setResendOpen(true)}>
+            Resend invoice via WhatsApp
+          </Button>
+          {detail.orderCount > 0 && (
+            <ReadinessControls
+              id={invoiceId}
+              invoiceId={invoiceId}
+              scope="invoices"
+              status={
+                detail.readinessStatus ??
+                (detail.collected ? 'collected' : 'in_progress')
+              }
+            />
+          )}
+
           <Button
             variant="outline"
-            disabled={detail.received}
             onClick={() =>
               void navigate({
                 to: '/invoices/$invoiceId/edit',
@@ -124,11 +156,12 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
             <PencilIcon className="h-4 w-4" />
             Edit
           </Button>
-          <ReceiveInvoiceButton invoice={invoice} />
+          <CollectInvoiceButton invoice={invoice} />
           <RecordPaymentButton invoice={invoice} />
         </div>
       </div>
 
+      <NotificationHistory invoiceId={invoiceId} />
       <div>
         <SectionHeading icon={<Users className="h-3.5 w-3.5" />}>
           Customers
@@ -139,11 +172,16 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           ) : (
             <div className="flex flex-wrap gap-x-6 gap-y-2">
               {invoice.customers.map((customer) => (
-                <div key={customer.mobileNo}>
+                <div key={JSON.stringify([customer.name, customer.mobileNo])}>
                   <div className="text-sm font-semibold">{customer.name}</div>
                   <div className="text-xs text-muted-foreground">
                     {customer.mobileNo}
                   </div>
+                  {customer.address && (
+                    <div className="text-xs whitespace-pre-line text-muted-foreground">
+                      {customer.address}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -183,10 +221,19 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                     }
                   >
                     <TableCell>
-                      <div className="font-medium">{line.description}</div>
+                      <div className="flex items-center gap-1.5 font-medium">
+                        <span>{line.description}</span>
+                        <OrderPriorityIndicator isUrgent={line.isUrgent} />
+                      </div>
                       {line.customer && (
                         <div className="text-xs text-muted-foreground">
                           {line.customer.name}
+                        </div>
+                      )}
+                      {line.urgentCharge > 0 && (
+                        <div className="text-xs text-muted-foreground">
+                          Urgent charge for this order (incl. VAT):{' '}
+                          {currencyFormatter.format(line.urgentCharge)}
                         </div>
                       )}
                       {line.detail && (
@@ -239,6 +286,12 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
             <TotalRow
               label="Gift cards sold"
               value={detail.totals.giftCardSales}
+            />
+          )}
+          {detail.totals.urgentCharge > 0 && (
+            <TotalRow
+              label="Urgent charges (incl. VAT)"
+              value={detail.totals.urgentCharge}
             />
           )}
           <TotalRow label="Total" value={detail.totals.total} emphasis />
@@ -312,10 +365,10 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
   )
 }
 
-// The receive dialog needs its trigger; keep it self-contained here rather
+// The collect dialog needs its trigger; keep it self-contained here rather
 // than a separate dialog state in this page.
-function ReceiveInvoiceButton({ invoice }: { invoice: Invoice }) {
-  const [open, setOpen] = React.useState(false)
+function CollectInvoiceButton({ invoice }: { invoice: Invoice }) {
+  const [open, setOpen] = useState(false)
 
   return (
     <>
@@ -324,9 +377,9 @@ function ReceiveInvoiceButton({ invoice }: { invoice: Invoice }) {
         className="text-info hover:text-info/80 hover:bg-info/5 dark:hover:bg-info/10"
         onClick={() => setOpen(true)}
       >
-        Mark Received
+        Mark Collected
       </Button>
-      <ReceiveInvoiceDialog
+      <CollectInvoiceDialog
         invoice={open ? invoice : null}
         onOpenChange={(isOpen) => !isOpen && setOpen(false)}
       />
@@ -337,7 +390,7 @@ function ReceiveInvoiceButton({ invoice }: { invoice: Invoice }) {
 // Money without collecting anything — an advance now, or the remainder after
 // everything was already collected. Disabled once nothing is left to pay.
 function RecordPaymentButton({ invoice }: { invoice: Invoice }) {
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = useState(false)
 
   return (
     <>
@@ -357,7 +410,7 @@ function RecordPaymentButton({ invoice }: { invoice: Invoice }) {
 }
 
 function ExportPdfButton({ invoiceId }: { invoiceId: string }) {
-  const [isPrinting, setIsPrinting] = React.useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
 
   return (
     <Button
@@ -365,12 +418,12 @@ function ExportPdfButton({ invoiceId }: { invoiceId: string }) {
       disabled={isPrinting}
       onClick={() => {
         setIsPrinting(true)
-        const pending = printInvoiceDocument(invoiceId).finally(() =>
+        const pending = downloadInvoicePdf(invoiceId).finally(() =>
           setIsPrinting(false),
         )
         toast.promise(pending, {
           loading: 'Preparing the invoice...',
-          success: 'Invoice ready — choose "Save as PDF" to download it.',
+          success: 'Invoice PDF downloaded.',
           error: 'Could not prepare this invoice. Please try again.',
         })
       }}
@@ -405,15 +458,17 @@ function toInvoice(detail: InvoiceDetail): Invoice {
       ),
     ],
     totalPrice: detail.totals.total,
+    urgentCharge: detail.totals.urgentCharge,
+    collectionMethod: detail.collectionMethod,
     paymentStatus: detail.paymentStatus,
     amountPaid: detail.totals.amountPaid,
     balanceDue: detail.totals.balanceDue,
     paymentMethod: detail.paymentMethod,
     giftCardRedeemed: detail.totals.giftCardRedeemed,
-    received: detail.received,
+    collected: detail.collected,
     orderCount: detail.orderCount,
     collectedOrderCount: detail.collectedOrderCount,
-    lastReceivedAt: detail.lastReceivedAt,
+    lastCollectedAt: detail.lastCollectedAt,
     receivingLocation: detail.branchName,
     // The detail endpoint carries no production locations (lines carry no
     // location), so the list's production filter has nothing to reuse here —
@@ -425,7 +480,7 @@ function toInvoice(detail: InvoiceDetail): Invoice {
 function deduplicate(customers: InvoiceCustomer[]): InvoiceCustomer[] {
   const seen = new Map<string, InvoiceCustomer>()
   for (const customer of customers) {
-    seen.set(customer.mobileNo, customer)
+    seen.set(JSON.stringify([customer.name, customer.mobileNo]), customer)
   }
   return [...seen.values()]
 }
@@ -434,8 +489,8 @@ function SectionHeading({
   icon,
   children,
 }: {
-  icon: React.ReactNode
-  children: React.ReactNode
+  icon: ReactNode
+  children: ReactNode
 }) {
   return (
     <h2 className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">

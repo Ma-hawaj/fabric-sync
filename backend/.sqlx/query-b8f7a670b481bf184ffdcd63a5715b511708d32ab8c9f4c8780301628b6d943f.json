@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE order_repairs\n        SET status = 'received',\n            received_at = $2,\n            received_amount = $3::float8,\n            received_payment_type = $4\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Float8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b8f7a670b481bf184ffdcd63a5715b511708d32ab8c9f4c8780301628b6d943f"
+}
