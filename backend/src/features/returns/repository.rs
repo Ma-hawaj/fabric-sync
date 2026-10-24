@@ -148,13 +148,13 @@ pub async fn previous_request(
     invoice_id: Uuid,
     request_id: Uuid,
     is_return: bool,
-) -> Result<Option<(Uuid, serde_json::Value)>, sqlx::Error> {
+) -> Result<Option<(Uuid, Vec<u8>)>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT id AS "id!", request_payload AS "request_payload!" FROM invoice_returns
+        SELECT id AS "id!", request_hash AS "request_hash!" FROM invoice_returns
         WHERE invoice_id = $1 AND request_id = $2 AND $3
         UNION ALL
-        SELECT id, request_payload FROM invoice_refunds
+        SELECT id, request_hash FROM invoice_refunds
         WHERE invoice_id = $1 AND request_id = $2 AND NOT $3
         "#,
         invoice_id,
@@ -163,25 +163,25 @@ pub async fn previous_request(
     )
     .fetch_optional(&mut **tx)
     .await?;
-    Ok(row.map(|row| (row.id, row.request_payload)))
+    Ok(row.map(|row| (row.id, row.request_hash)))
 }
 
 pub async fn insert_return(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
     input: &CreateReturnInput,
-    payload: serde_json::Value,
+    hash: &[u8],
     amount: f64,
     actor: &str,
 ) -> Result<Uuid, sqlx::Error> {
     sqlx::query_scalar!(
         r#"
-        INSERT INTO invoice_returns (invoice_id, request_id, request_payload, reason, amount, created_by)
+        INSERT INTO invoice_returns (invoice_id, request_id, request_hash, reason, amount, created_by)
         VALUES ($1, $2, $3, $4, $5::float8, $6) RETURNING id
         "#,
         invoice_id,
         input.request_id,
-        payload,
+        hash,
         input.reason.trim(),
         amount,
         actor,
@@ -221,18 +221,18 @@ pub async fn insert_refund(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
     input: &CreateRefundInput,
-    payload: serde_json::Value,
+    hash: &[u8],
     actor: &str,
     adjustment_id: Option<Uuid>,
 ) -> Result<Uuid, sqlx::Error> {
     sqlx::query_scalar!(
         r#"
-        INSERT INTO invoice_refunds (invoice_id, request_id, request_payload, reason, amount, payment_type, gift_card_id, created_by, adjustment_id)
+        INSERT INTO invoice_refunds (invoice_id, request_id, request_hash, reason, amount, payment_type, gift_card_id, created_by, adjustment_id)
         VALUES ($1, $2, $3, $4, $5::float8, $6, $7, $8, $9) RETURNING id
         "#,
         invoice_id,
         input.request_id,
-        payload,
+        hash,
         input.reason.trim(),
         input.amount,
         input.payment_type.as_str(),
@@ -316,14 +316,14 @@ pub async fn insert_cancellation(
     tx: &mut sqlx::PgTransaction<'_>,
     details: &CancellationDetails,
     input: &CreateCancellationInput,
-    payload: serde_json::Value,
+    hash: &[u8],
     amount: f64,
     actor: &str,
 ) -> Result<Uuid, sqlx::Error> {
     let id = sqlx::query_scalar!(r#"
-        INSERT INTO invoice_returns (invoice_id, request_id, request_payload, reason, amount, created_by, kind)
+        INSERT INTO invoice_returns (invoice_id, request_id, request_hash, reason, amount, created_by, kind)
         VALUES ($1, $2, $3, $4, $5::float8, $6, 'cancellation') RETURNING id
-        "#, details.invoice_id, input.request_id, payload, input.reason.trim(), amount, actor)
+        "#, details.invoice_id, input.request_id, hash, input.reason.trim(), amount, actor)
         .fetch_one(&mut **tx).await?;
     let stock_branch_id = (input.restored_material_quantity > 0.0)
         .then_some(details.stock_branch_id)

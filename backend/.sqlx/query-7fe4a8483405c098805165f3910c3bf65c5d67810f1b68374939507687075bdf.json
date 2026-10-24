@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO invoice_returns (invoice_id, request_id, request_payload, reason, amount, created_by, kind)\n        VALUES ($1, $2, $3, $4, $5::float8, $6, 'cancellation') RETURNING id\n        ",
+  "query": "\n        INSERT INTO invoice_returns (invoice_id, request_id, request_hash, reason, amount, created_by, kind)\n        VALUES ($1, $2, $3, $4, $5::float8, $6, 'cancellation') RETURNING id\n        ",
   "describe": {
     "columns": [
       {
@@ -13,7 +13,7 @@
       "Left": [
         "Uuid",
         "Uuid",
-        "Jsonb",
+        "Bytea",
         "Text",
         "Float8",
         "Text"
@@ -23,5 +23,5 @@
       false
     ]
   },
-  "hash": "910e7822f0dd0658856ade1fdd8f061aaa6baaf89415bca3bba2ae969a736041"
+  "hash": "7fe4a8483405c098805165f3910c3bf65c5d67810f1b68374939507687075bdf"
 }

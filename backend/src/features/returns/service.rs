@@ -14,6 +14,7 @@ use crate::{
 };
 
 use super::{repository, types::*};
+use crate::idempotency::{request_hash, verify_request_hash};
 
 fn bad_request(message: &str) -> AppError {
     AppError::BadRequest(message.to_string())
@@ -138,14 +139,14 @@ fn validate_refund(amount: f64, due: f64, tender_available: f64) -> Result<(), A
 }
 
 fn replay(
-    previous: Option<(Uuid, serde_json::Value)>,
-    payload: &serde_json::Value,
+    previous: Option<(Uuid, Vec<u8>)>,
+    hash: &[u8],
 ) -> Result<Option<RecordedAdjustment>, AppError> {
     match previous {
-        Some((id, original)) if original == *payload => Ok(Some(RecordedAdjustment { id })),
-        Some(_) => Err(AppError::Conflict(
-            "this requestId was already used with different values".to_string(),
-        )),
+        Some((id, original)) => {
+            verify_request_hash(&original, hash)?;
+            Ok(Some(RecordedAdjustment { id }))
+        }
         None => Ok(None),
     }
 }
@@ -195,14 +196,14 @@ pub async fn create_return(
     if input.lines.is_empty() || input.lines.len() > 200 {
         return Err(bad_request("select between 1 and 200 lines to return"));
     }
-    let payload = serde_json::to_value(&input).expect("serializable return input");
+    let hash = request_hash("invoice.return.v1", invoice_id, &input);
     let mut tx = state.db().begin().await?;
     invoices::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
     if let Some(result) = replay(
         repository::previous_request(&mut tx, invoice_id, input.request_id, true).await?,
-        &payload,
+        &hash,
     )? {
         return Ok(result);
     }
@@ -227,7 +228,7 @@ pub async fn create_return(
         .map(|(_, _, amount)| cents(*amount))
         .sum::<i64>() as f64
         / 100.0;
-    let id = repository::insert_return(&mut tx, invoice_id, &input, payload, total, actor).await?;
+    let id = repository::insert_return(&mut tx, invoice_id, &input, &hash, total, actor).await?;
     for (line, item, amount) in planned {
         repository::insert_line(&mut tx, id, line, item, amount).await?;
         if item.restock {
@@ -262,14 +263,14 @@ pub async fn create_refund(
             "select an original redeemed gift card only for a gift card refund",
         ));
     }
-    let payload = serde_json::to_value(&input).expect("serializable refund input");
+    let hash = request_hash("invoice.refund.v1", invoice_id, &input);
     let mut tx = state.db().begin().await?;
     invoices::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
     if let Some(result) = replay(
         repository::previous_request(&mut tx, invoice_id, input.request_id, false).await?,
-        &payload,
+        &hash,
     )? {
         return Ok(result);
     }
@@ -285,7 +286,7 @@ pub async fn create_refund(
         balance.net_amount_paid
     };
     validate_refund(input.amount, balance.refund_due, available)?;
-    let id = repository::insert_refund(&mut tx, invoice_id, &input, payload, actor, None).await?;
+    let id = repository::insert_refund(&mut tx, invoice_id, &input, &hash, actor, None).await?;
     if let Some(card_id) = input.gift_card_id {
         // Atomic increment locks the card, so concurrent spending/returns on
         // other invoices cannot lose a restored balance.
@@ -337,8 +338,8 @@ async fn apply_refund_plan(
             payment_type: tender.payment_type.clone(),
             gift_card_id: tender.gift_card_id,
         };
-        let payload = serde_json::to_value(&input).expect("serializable tender");
-        repository::insert_refund(tx, invoice_id, &input, payload, actor, Some(adjustment_id))
+        let hash = request_hash("invoice.refund.v1", invoice_id, &input);
+        repository::insert_refund(tx, invoice_id, &input, &hash, actor, Some(adjustment_id))
             .await?;
         if let Some(card_id) = tender.gift_card_id {
             invoices::refund_gift_card(tx, card_id, tender.amount).await?;
@@ -439,14 +440,14 @@ pub async fn cancel_order(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
     let invoice_id = original.invoice_id;
-    let payload = serde_json::json!({"orderId": order_id, "input": &input});
+    let hash = request_hash("order.cancel.v1", order_id, &input);
     let mut tx = state.db().begin().await?;
     invoices::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
     if let Some(result) = replay(
         repository::previous_request(&mut tx, invoice_id, input.request_id, true).await?,
-        &payload,
+        &hash,
     )? {
         return Ok(result);
     }
@@ -461,7 +462,7 @@ pub async fn cancel_order(
     let credit = cancellation_credit(&details, line.credit_limit, &input)?;
     let was_ready = repository::readiness_status(&mut tx, invoice_id).await?;
     let id =
-        repository::insert_cancellation(&mut tx, &details, &input, payload, credit, actor).await?;
+        repository::insert_cancellation(&mut tx, &details, &input, &hash, credit, actor).await?;
     repository::insert_line(
         &mut tx,
         id,
@@ -717,16 +718,17 @@ mod tests {
     }
 
     #[test]
-    fn idempotency_replays_only_the_original_payload() {
+    fn idempotency_replays_only_the_original_hash() {
         let id = Uuid::new_v4();
-        let payload = json!({"amount":10});
+        let hash = request_hash("refund.v1", id, &json!({"amount":10}));
         assert_eq!(
-            replay(Some((id, payload.clone())), &payload)
+            replay(Some((id, hash.to_vec())), &hash)
                 .unwrap()
                 .unwrap()
                 .id,
             id
         );
-        assert!(replay(Some((id, payload)), &json!({"amount":20})).is_err());
+        assert!(replay(Some((id, hash.to_vec())), &[0; 32]).is_err());
+        assert!(replay(None, &hash).unwrap().is_none());
     }
 }

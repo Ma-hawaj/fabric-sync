@@ -20,6 +20,8 @@ SQLx applies the files in version order:
 
 The core schema also defines return credits and lines, refund payouts,
 cancellation details, original fabric stock locations, and balance/outcome views.
+Adjustment retry checks store a 32-byte SHA-256 hash, not the request JSON;
+structured credit, stock and refund records retain the audit details.
 
 Reference data, the design catalog, and optional demo data live in `backend/seeds/`
 and are loaded separately. Future deployed schema changes should be added as new

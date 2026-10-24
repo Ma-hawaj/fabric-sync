@@ -4,6 +4,237 @@ use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+#[test]
+fn typed_request_hashes_apply_defaults_and_detect_changed_financial_intent() {
+    use crate::idempotency::request_hash;
+    let target = Uuid::new_v4();
+    let minimal = json!({"requestId":Uuid::new_v4(), "reason":"Changed plans"});
+    let input: CreateCancellationInput = serde_json::from_value(minimal.clone()).unwrap();
+    let hash = request_hash("order.cancel.v1", target, &input);
+    let mut explicit = serde_json::to_value(&input).unwrap();
+    explicit["retainedCharge"] = json!(-0.0);
+    explicit["requestId"] = json!(Uuid::new_v4());
+    let equivalent: CreateCancellationInput = serde_json::from_value(explicit.clone()).unwrap();
+    assert_eq!(hash, request_hash("order.cancel.v1", target, &equivalent));
+    for (field, value) in [
+        ("reason", json!("Another reason")),
+        ("retainedCharge", json!(10)),
+        ("restoredMaterialQuantity", json!(1)),
+        ("workChargeConfirmed", json!(true)),
+        ("unusedMaterialConfirmed", json!(true)),
+        ("refund", json!({"timing":"later"})),
+    ] {
+        let mut changed = explicit.clone();
+        changed[field] = value;
+        let changed: CreateCancellationInput = serde_json::from_value(changed).unwrap();
+        assert_ne!(
+            hash,
+            request_hash("order.cancel.v1", target, &changed),
+            "{field}"
+        );
+    }
+    let original = json!({"requestId":Uuid::new_v4(),"reason":"Wrong size",
+        "lines":[{"lineId":Uuid::new_v4(),"quantity":1,"restock":false}],
+        "refund":{"timing":"now","payments":[{"amount":10,"paymentType":"cash","giftCardId":null}]}});
+    let input: CreateReturnInput = serde_json::from_value(original.clone()).unwrap();
+    let hash = request_hash("invoice.return.v1", target, &input);
+    for (path, value) in [
+        ("/lines/0/quantity", json!(2)),
+        ("/lines/0/restock", json!(true)),
+        ("/refund/payments/0/amount", json!(20)),
+        ("/refund/payments/0/paymentType", json!("card")),
+        ("/refund/payments/0/giftCardId", json!(Uuid::new_v4())),
+    ] {
+        let mut changed = original.clone();
+        *changed
+            .pointer_mut(path)
+            .unwrap_or_else(|| panic!("missing {path}")) = value;
+        let changed: CreateReturnInput = serde_json::from_value(changed).unwrap();
+        assert_ne!(
+            hash,
+            request_hash("invoice.return.v1", target, &changed),
+            "{path}"
+        );
+    }
+}
+
+#[sqlx::test]
+async fn cancellation_hash_replays_once_and_binds_the_order(pool: PgPool) {
+    let (invoice, orders, _, _) = test_support::invoice(&pool, 2, false).await;
+    let state = test_support::state(pool.clone(), None, None).await;
+    let payload = json!({"requestId":Uuid::new_v4(),"reason":"Changed plans"});
+    let first = service::cancel_order(
+        &state,
+        orders[0],
+        serde_json::from_value(payload.clone()).unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
+    let revision: i64 =
+        sqlx::query_scalar("SELECT notification_revision FROM invoices WHERE id=$1")
+            .bind(invoice)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let replay = service::cancel_order(
+        &state,
+        orders[0],
+        serde_json::from_value(payload.clone()).unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
+    assert_eq!(first.id, replay.id);
+    let after: i64 = sqlx::query_scalar("SELECT notification_revision FROM invoices WHERE id=$1")
+        .bind(invoice)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(revision, after);
+    assert!(matches!(
+        service::cancel_order(
+            &state,
+            orders[1],
+            serde_json::from_value(payload.clone()).unwrap(),
+            "staff"
+        )
+        .await,
+        Err(crate::error::AppError::Conflict(_))
+    ));
+    let stored: Vec<u8> =
+        sqlx::query_scalar("SELECT request_hash FROM invoice_returns WHERE id=$1")
+            .bind(first.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let input: CreateCancellationInput = serde_json::from_value(payload).unwrap();
+    assert_eq!(
+        stored,
+        crate::idempotency::request_hash("order.cancel.v1", orders[0], &input)
+    );
+    assert_eq!(
+        service::context(&state, invoice)
+            .await
+            .unwrap()
+            .returns
+            .len(),
+        1
+    );
+}
+
+#[sqlx::test]
+async fn concurrent_return_replay_restores_the_original_card_only_once(pool: PgPool) {
+    let (invoice, orders, _, _) = test_support::invoice(&pool, 1, false).await;
+    sqlx::query("UPDATE invoices SET gift_card_redeemed=100 WHERE id=$1")
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE orders SET status='collected',collected_at=now() WHERE id=$1")
+        .bind(orders[0])
+        .execute(&pool)
+        .await
+        .unwrap();
+    let card: Uuid = sqlx::query_scalar("INSERT INTO gift_cards(code,initial_amount,balance) VALUES('HASH-RETURN',100,0) RETURNING id").fetch_one(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO gift_card_redemptions(gift_card_id,invoice_id,amount) VALUES($1,$2,100)",
+    )
+    .bind(card)
+    .bind(invoice)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let state = test_support::state(pool.clone(), None, None).await;
+    let payload = json!({"requestId":Uuid::new_v4(),"reason":"Wrong size",
+        "lines":[{"lineId":orders[0],"quantity":1,"restock":false}],
+        "refund":{"timing":"now","payments":[{"amount":100,"paymentType":"gift_card","giftCardId":card}]}});
+    let (first, second) = tokio::join!(
+        service::create_return(
+            &state,
+            invoice,
+            serde_json::from_value(payload.clone()).unwrap(),
+            "staff"
+        ),
+        service::create_return(
+            &state,
+            invoice,
+            serde_json::from_value(payload).unwrap(),
+            "staff"
+        )
+    );
+    assert_eq!(first.unwrap().id, second.unwrap().id);
+    let balance: f64 = sqlx::query_scalar("SELECT balance::float8 FROM gift_cards WHERE id=$1")
+        .bind(card)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(balance, 100.0);
+    let context = service::context(&state, invoice).await.unwrap();
+    assert_eq!(context.returns.len(), 1);
+    assert_eq!(context.refunds.len(), 1);
+    assert_eq!(context.settlement.refund_due, 0.0);
+}
+
+#[sqlx::test]
+async fn deferred_refund_hash_replays_and_allows_correction_after_rollback(pool: PgPool) {
+    let (invoice, orders, _, _) = test_support::invoice(&pool, 1, false).await;
+    sqlx::query(
+        "INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,100,'cash')",
+    )
+    .bind(invoice)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let state = test_support::state(pool.clone(), None, None).await;
+    let mut cancel = cancellation();
+    cancel.refund = RefundPlan::Later;
+    service::cancel_order(&state, orders[0], cancel, "staff")
+        .await
+        .unwrap();
+    let mut payload = json!({"requestId":Uuid::new_v4(),"reason":"Deferred payout","amount":101,"paymentType":"cash"});
+    assert!(service::create_refund(
+        &state,
+        invoice,
+        serde_json::from_value(payload.clone()).unwrap(),
+        "staff"
+    )
+    .await
+    .is_err());
+    payload["amount"] = json!(100);
+    let first = service::create_refund(
+        &state,
+        invoice,
+        serde_json::from_value(payload.clone()).unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
+    let second = service::create_refund(
+        &state,
+        invoice,
+        serde_json::from_value(payload.clone()).unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
+    assert_eq!(first.id, second.id);
+    payload["paymentType"] = json!("card");
+    assert!(matches!(
+        service::create_refund(
+            &state,
+            invoice,
+            serde_json::from_value(payload).unwrap(),
+            "staff"
+        )
+        .await,
+        Err(crate::error::AppError::Conflict(_))
+    ));
+    let context = service::context(&state, invoice).await.unwrap();
+    assert_eq!(context.refunds.len(), 1);
+    assert_eq!(context.settlement.refund_due, 0.0);
+}
+
 fn cancellation() -> CreateCancellationInput {
     serde_json::from_value(json!({
         "requestId": Uuid::new_v4(), "reason": "Customer changed plans"
