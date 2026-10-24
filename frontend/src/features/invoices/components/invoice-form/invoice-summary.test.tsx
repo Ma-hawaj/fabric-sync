@@ -252,6 +252,7 @@ describe('InvoiceSummary', () => {
       />,
     )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Add discount' }))
     fireEvent.change(screen.getByLabelText('Discount'), {
       target: { value: '20' },
     })

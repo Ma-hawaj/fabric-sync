@@ -73,12 +73,12 @@ export function RedemptionBlock({
   const unusable = Boolean(lookupCode) && !isFetching && status !== 'Active'
 
   return (
-    <div className="flex items-start gap-3">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
       <form.Field name={`${base}.code` as never}>
         {(field: any) => (
           <Field
             data-invalid={field.state.meta.errors.length > 0 || unusable}
-            className="flex-1"
+            className="min-w-0"
           >
             <FieldLabel htmlFor={field.name}>Gift Card Code</FieldLabel>
             <Input
@@ -109,7 +109,7 @@ export function RedemptionBlock({
         )}
       </form.Field>
 
-      <div className="w-36">
+      <div className="col-start-1 min-w-0">
         <NumberField
           form={form}
           name={`${base}.amount`}
@@ -122,7 +122,7 @@ export function RedemptionBlock({
         size="icon"
         type="button"
         onClick={onRemove}
-        className="mt-6"
+        className="col-start-2 row-start-1 mt-6"
         aria-label="Remove gift card"
       >
         <XIcon className="h-3.5 w-3.5" />

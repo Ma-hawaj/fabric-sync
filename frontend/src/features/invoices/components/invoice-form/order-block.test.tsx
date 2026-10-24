@@ -370,7 +370,9 @@ describe('OrderBlock', () => {
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
       ).toContain('20.00'),
     )
+    fireEvent.click(screen.getByRole('button', { name: 'Choose EMD' }))
     fireEvent.click(await screen.findByRole('radio', { name: /6 \(\+/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
     await waitFor(() =>
       expect(
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
@@ -384,7 +386,9 @@ describe('OrderBlock', () => {
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
       ).toContain('32.50'),
     )
+    fireEvent.click(screen.getByRole('button', { name: 'Choose EMD' }))
     fireEvent.click(screen.getByRole('radio', { name: 'None' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
     await waitFor(() =>
       expect(
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
@@ -415,7 +419,9 @@ describe('OrderBlock', () => {
     expect(
       screen.queryByLabelText(`Tailoring base incl. VAT (${CURRENCY})`),
     ).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Choose EMD' }))
     fireEvent.click(await screen.findByRole('radio', { name: /6 \(\+/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
     await waitFor(() =>
       expect(
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
@@ -432,7 +438,9 @@ describe('OrderBlock', () => {
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
       ).toContain('17.50'),
     )
+    fireEvent.click(screen.getByRole('button', { name: 'Choose EMD' }))
     fireEvent.click(screen.getByRole('radio', { name: 'None' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
     await waitFor(() =>
       expect(
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
@@ -443,12 +451,14 @@ describe('OrderBlock', () => {
   it('lets staff clear a stored EMD value', async () => {
     render(<Harness order={{ emd: '6' }} />)
 
+    fireEvent.click(screen.getByRole('button', { name: 'Choose EMD' }))
     const none = await screen.findByRole('radio', { name: 'None' })
     expect((none as HTMLButtonElement).getAttribute('aria-checked')).toBe(
       'false',
     )
 
     fireEvent.click(none)
+    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
 
     await waitFor(() => {
       const order = JSON.parse(screen.getByTestId('draft').textContent)

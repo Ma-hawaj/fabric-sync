@@ -62,7 +62,7 @@ export function ProductBlock({
   )
 
   return (
-    <div className="flex items-start gap-3">
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-3 sm:grid-cols-[minmax(0,1fr)_6rem_8rem_auto]">
       <form.Field name={`${base}.productId` as never}>
         {(field: any) => {
           const available = picked ? productStockAt(picked, branchId) : null
@@ -70,7 +70,7 @@ export function ProductBlock({
           return (
             <Field
               data-invalid={field.state.meta.errors.length > 0}
-              className="flex-1"
+              className="col-span-2 min-w-0 sm:col-span-1"
             >
               <FieldLabel htmlFor={field.name}>Product</FieldLabel>
               <AsyncCombobox<Product>
@@ -110,11 +110,11 @@ export function ProductBlock({
         }}
       </form.Field>
 
-      <div className="w-28">
+      <div className="row-start-2 min-w-0 sm:row-start-1">
         <NumberField form={form} name={`${base}.quantity`} label="Qty" />
       </div>
 
-      <div className="w-36">
+      <div className="row-start-2 min-w-0 sm:row-start-1">
         <NumberField
           form={form}
           name={`${base}.unitPrice`}
@@ -145,7 +145,7 @@ export function ProductBlock({
         size="icon"
         type="button"
         onClick={onRemove}
-        className="mt-6"
+        className="col-start-3 row-start-1 mt-6 sm:col-start-4"
         aria-label="Remove product"
       >
         <XIcon className="h-3.5 w-3.5" />

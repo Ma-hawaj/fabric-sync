@@ -1,7 +1,12 @@
-import * as React from 'react'
+import { useEffect, useState } from 'react'
+import type { MutableRefObject, ReactNode } from 'react'
+import { useStore } from '@tanstack/react-form'
+import { PlusIcon, XIcon } from 'lucide-react'
 import { DateField, NumberField } from '@/components/form/fields'
+import { SegmentedOptions } from '@/components/form/segmented-options'
 import { AsyncCombobox } from '@/components/form/async-combobox'
-import { Field, FieldLabel } from '@/components/ui/field'
+import { Button } from '@/components/ui/button'
+import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import {
   Select,
   SelectContent,
@@ -9,16 +14,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Separator } from '@/components/ui/separator'
-import { SegmentedOptions } from '@/components/form/segmented-options'
 import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
 import { ORDER_RECEIVING_FILTERS } from '@/features/locations/lib/location-filters'
 import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
 import type { Product } from '@/features/products/types/product'
 import { CURRENCY } from '@/lib/currency'
-import { PlusIcon, XIcon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
@@ -30,16 +31,17 @@ import {
   VAT_RATE,
 } from '../../lib/invoice-pricing'
 import type {
-  DiscountUnit,
-  GiftCardRedemptionDraft,
-  InvoiceCustomerDraft,
   InvoiceFormApi,
-  InvoiceGiftCardDraft,
-  InvoiceProductDraft,
+  InvoiceFormValues,
   PaymentDraft,
   PaymentType,
 } from '../../types/invoice-form'
-import { createEmptyPayment } from '../../types/invoice-form'
+import {
+  createEmptyPayment,
+  createEmptyRedemption,
+} from '../../types/invoice-form'
+import { RedemptionBlock } from './redemption-block'
+import { focusInvoiceField, useInvoiceWorkspace } from './invoice-workspace'
 
 const PAYMENT_TYPE_OPTIONS: { value: PaymentType; label: string }[] = [
   { value: 'benefit', label: 'Benefit' },
@@ -47,79 +49,49 @@ const PAYMENT_TYPE_OPTIONS: { value: PaymentType; label: string }[] = [
   { value: 'card', label: 'Card' },
 ]
 
-function customerDisplayName(
-  draft: InvoiceCustomerDraft,
-  customerNames: ReadonlyMap<string, Customer>,
-) {
-  if (draft.mode === 'existing') {
-    return (
-      customerNames.get(draft.existingCustomerId)?.name ?? 'Select a customer'
-    )
-  }
-  return draft.name || 'New Customer'
-}
-
-interface CustomerLineItems {
-  key: string
-  customerName: string
-  orders: { key: string; label: string; total: number; urgentCharge: number }[]
-}
-
-function buildLineItems(
-  customers: InvoiceCustomerDraft[],
-  customerNames: ReadonlyMap<string, Customer>,
-): CustomerLineItems[] {
-  return customers.map((customer) => ({
-    key: customer.key,
-    customerName: customerDisplayName(customer, customerNames),
-    orders: customer.orders.map((order, idx) => ({
-      key: order.key,
-      label: `Order ${idx + 1}`,
-      total: computeOrderLineTotal(order),
-      urgentCharge: computeOrderUrgentCharge(order),
-    })),
-  }))
-}
-
-interface SummaryRow {
-  key: string
-  label: string
-  total: number
-}
-
-function buildProductRows(
-  products: InvoiceProductDraft[],
-  productNames: ReadonlyMap<string, Product>,
-): SummaryRow[] {
-  return products.map((line, index) => ({
-    key: line.key,
-    label: productNames.get(line.productId)?.name ?? `Product ${index + 1}`,
-    total: computeProductLineTotal(line),
-  }))
-}
-
-function buildGiftCardRows(giftCards: InvoiceGiftCardDraft[]): SummaryRow[] {
-  return giftCards.map((line, index) => ({
-    key: line.key,
-    label: line.code ? `Gift card ${line.code}` : `Gift card ${index + 1}`,
-    total: computeGiftCardLineTotal(line),
-  }))
+function invoiceTotals(values: InvoiceFormValues) {
+  return computeInvoiceTotals({
+    orderTotal: values.customers.reduce(
+      (sum, customer) =>
+        sum +
+        customer.orders.reduce(
+          (total, order) => total + computeOrderLineTotal(order),
+          0,
+        ),
+      0,
+    ),
+    productTotal: values.products.reduce(
+      (sum, line) => sum + computeProductLineTotal(line),
+      0,
+    ),
+    giftCardSales: values.giftCards.reduce(
+      (sum, line) => sum + computeGiftCardLineTotal(line),
+      0,
+    ),
+    discount: values.discount === '' ? 0 : values.discount,
+    discountUnit: values.discountUnit,
+    urgentCharge: computeUrgentCharges(values.customers),
+    redeemed: values.redemptions.reduce(
+      (sum, line) => sum + computeRedemptionTotal(line),
+      0,
+    ),
+    paid: values.payments.reduce(
+      (sum, payment) =>
+        sum + (payment.amount === '' ? 0 : Math.max(payment.amount, 0)),
+      0,
+    ),
+  })
 }
 
 interface InvoiceSummaryProps {
   form: InvoiceFormApi
-  /** Rows the pickers handed over, read at render time for the line labels. */
-  customerNames: React.MutableRefObject<Map<string, Customer>>
-  productNames: React.MutableRefObject<Map<string, Product>>
-  /** Labels for stored ids whose rows aren't loaded yet (edit forms). */
+  customerNames: MutableRefObject<Map<string, Customer>>
+  productNames: MutableRefObject<Map<string, Product>>
   locationLabelForId?: (id: string) => string | null
   customerLabelForId?: (id: string) => string | null
-  /**
-   * On edit, money is read-only: the ledger survives a rebuild untouched,
-   * so the editor is replaced by the payments already taken. An edit that
-   * shrinks the lines below them is refused by the backend.
-   */
   paymentsLocked?: boolean
+  redemptionDate?: string
+  children?: ReactNode
 }
 
 export function InvoiceSummary({
@@ -129,458 +101,488 @@ export function InvoiceSummary({
   locationLabelForId,
   customerLabelForId,
   paymentsLocked = false,
+  redemptionDate = new Date().toISOString().slice(0, 10),
+  children,
 }: InvoiceSummaryProps) {
-  // Labels a pre-selected default before its row has loaded onto any picker
-  // page — without this the input renders blank until the list is opened.
+  const values = useStore(form.store, (state) => state.values)
+  const totals = invoiceTotals(values)
+  const subtotal =
+    values.customers.reduce(
+      (sum, customer) =>
+        sum +
+        customer.orders.reduce(
+          (total, order) => total + computeOrderLineTotal(order),
+          0,
+        ),
+      0,
+    ) +
+    values.products.reduce(
+      (sum, line) => sum + computeProductLineTotal(line),
+      0,
+    )
   const receivingDefault = useApplicableDefaultLocation('receiving')
+  const workspace = useInvoiceWorkspace()
+  const [discountOpen, setDiscountOpen] = useState(values.discount !== '')
+  const [paymentsOpen, setPaymentsOpen] = useState(
+    values.payments.some(
+      (payment) => payment.amount !== '' || payment.paymentType !== '',
+    ),
+  )
+  useEffect(() => {
+    const path = workspace?.validationTarget?.path
+    if (path?.startsWith('discount')) setDiscountOpen(true)
+    if (path?.startsWith('payments')) setPaymentsOpen(true)
+  }, [workspace?.validationTarget])
+  const urgentCharge = computeUrgentCharges(values.customers)
+  const hasUrgentOrders = values.customers.some((customer) =>
+    customer.orders.some((order) => order.isUrgent),
+  )
+  const hasOrders = values.customers.some(
+    (customer) => customer.orders.length > 0,
+  )
 
   return (
-    <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
-      <h3 className="text-sm font-semibold">Invoice Summary</h3>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <form.Field name={'collectionMethod' as never}>
-          {(field: any) => (
-            <Field>
-              <FieldLabel id="collection-method-label">Collection</FieldLabel>
-              <SegmentedOptions
-                ariaLabel="Collection"
-                options={['Pickup', 'Delivery']}
-                value={field.state.value === 'delivery' ? 'Delivery' : 'Pickup'}
-                onChange={(value) => field.handleChange(value.toLowerCase())}
-                columns={2}
-              />
-            </Field>
-          )}
-        </form.Field>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <form.Subscribe
-          selector={(state: any) =>
-            state.values.customers.some((customer: InvoiceCustomerDraft) =>
-              customer.orders.some((order) => order.isUrgent),
-            )
-          }
-        >
-          {(isUrgent: boolean) => (
-            <DateField
-              form={form}
-              name="targetDate"
-              label={
-                isUrgent ? 'Target Date (required)' : 'Target Date (optional)'
-              }
-              placeholder="Pick a target date"
-            />
-          )}
-        </form.Subscribe>
-        <form.Field name={'receivingBranch' as never}>
-          {(field: any) => (
-            <div className="space-y-2">
-              <FieldLabel htmlFor={field.name}>Receiving Branch</FieldLabel>
-              <AsyncCombobox<Location>
-                id={field.name}
-                endpoint="/locations"
-                queryKey="invoice-receiving-branch"
-                searchField="name"
-                filters={ORDER_RECEIVING_FILTERS}
-                toOption={(location) => ({
-                  value: location.id,
-                  label: location.name,
-                })}
-                getValueLabel={(id) =>
-                  locationLabelForId?.(id) ??
-                  (id === receivingDefault?.id ? receivingDefault.name : null)
-                }
-                value={field.state.value || null}
-                onValueChange={(value) => field.handleChange(value ?? '')}
-                placeholder="Search branch..."
-                emptyMessage="No branches found."
-              />
-            </div>
-          )}
-        </form.Field>
-
-        {/* A tailoring invoice finds its customer through the orders, so this
-            only appears once there are no customer blocks left to do that. */}
-        <form.Subscribe selector={(state: any) => state.values.customers}>
-          {(customers: InvoiceCustomerDraft[]) =>
-            customers.length === 0 && (
-              <form.Field name={'customerId' as never}>
-                {(field: any) => (
-                  <div className="space-y-2">
-                    <FieldLabel htmlFor={field.name}>
-                      Customer (optional)
-                    </FieldLabel>
-                    <AsyncCombobox<Customer>
-                      id={field.name}
-                      endpoint="/customers"
-                      queryKey="invoice-summary-customer"
-                      searchField={['name', 'mobileNo']}
-                      toOption={(customer) => ({
-                        value: customer.id,
-                        label: `${customer.name} — ${customer.mobileNo}`,
-                      })}
-                      getValueLabel={customerLabelForId}
-                      value={field.state.value || null}
-                      onValueChange={(id) => field.handleChange(id ?? '')}
-                      placeholder="Search customer..."
-                      emptyMessage="No customers found."
-                    />
-                  </div>
-                )}
-              </form.Field>
-            )
-          }
-        </form.Subscribe>
-      </div>
-
-      <Separator />
-
-      <form.Subscribe
-        selector={(state: any) => [
-          state.values.customers,
-          state.values.products,
-          state.values.giftCards,
-        ]}
+    <div className="space-y-4">
+      <section
+        className="space-y-4 rounded-xl border border-border/60 bg-card p-4"
+        aria-labelledby="invoice-summary-title"
       >
-        {(subscribedLines: any) => {
-          const [customers, products, giftCards] = subscribedLines as [
-            InvoiceCustomerDraft[],
-            InvoiceProductDraft[],
-            InvoiceGiftCardDraft[],
-          ]
+        <h2
+          id="invoice-summary-title"
+          tabIndex={-1}
+          className="text-base font-semibold outline-none"
+        >
+          Invoice Summary
+        </h2>
+        <div className="max-h-52 space-y-2 overflow-y-auto text-sm">
+          {values.customers.flatMap((customer) =>
+            customer.orders.map((order, index) => (
+              <div
+                key={order.key}
+                className="flex justify-between gap-3 text-muted-foreground"
+              >
+                <span className="min-w-0 break-words">
+                  {customer.mode === 'new'
+                    ? customer.name || 'New Customer'
+                    : (customerNames.current.get(customer.existingCustomerId)
+                        ?.name ?? 'Select a customer')}{' '}
+                  — Order {index + 1}
+                </span>
+                <span className="shrink-0 tabular-nums">
+                  {order.price === ''
+                    ? '—'
+                    : `${CURRENCY} ${computeOrderLineTotal(order).toFixed(2)}`}
+                  {computeOrderUrgentCharge(order) > 0 && (
+                    <span className="block text-xs">
+                      + {CURRENCY} {computeOrderUrgentCharge(order).toFixed(2)}{' '}
+                      urgent charge
+                    </span>
+                  )}
+                </span>
+              </div>
+            )),
+          )}
+          {values.products.map((line, index) => (
+            <div
+              key={line.key}
+              className="flex justify-between gap-3 text-sm text-muted-foreground"
+            >
+              <span className="min-w-0 break-words">
+                {productNames.current.get(line.productId)?.name ??
+                  `Product ${index + 1}`}
+              </span>
+              <span className="shrink-0 tabular-nums">
+                {CURRENCY} {computeProductLineTotal(line).toFixed(2)}
+              </span>
+            </div>
+          ))}
+          {!hasOrders &&
+            !values.products.length &&
+            !values.giftCards.length && (
+              <p className="text-muted-foreground">
+                Add an order, product, or gift card to get started.
+              </p>
+            )}
+        </div>
+        <div className="flex justify-between gap-3 border-t pt-4 text-sm">
+          <span className="text-muted-foreground">Subtotal (incl. VAT)</span>
+          <span className="shrink-0 tabular-nums">
+            {CURRENCY} {subtotal.toFixed(2)}
+          </span>
+        </div>
+        {discountOpen ? (
+          <div className="grid grid-cols-[minmax(0,1fr)_5rem] items-end gap-3">
+            <NumberField form={form} name="discount" label="Discount" />
+            <form.Field name={'discountUnit' as never}>
+              {(field: any) => (
+                <Select
+                  value={field.state.value}
+                  onValueChange={(value: string) => field.handleChange(value)}
+                >
+                  <SelectTrigger aria-label="Discount unit" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="amount">{CURRENCY}</SelectItem>
+                    <SelectItem value="percent">%</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </form.Field>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="-ms-2"
+            onClick={() => setDiscountOpen(true)}
+          >
+            <PlusIcon />
+            Add discount
+          </Button>
+        )}
+        {urgentCharge > 0 && (
+          <div className="flex justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">
+              Urgent charges (incl. VAT)
+            </span>
+            <span className="shrink-0 tabular-nums">
+              {CURRENCY} {urgentCharge.toFixed(2)}
+            </span>
+          </div>
+        )}
+        <div className="flex justify-between gap-3 text-sm">
+          <span className="text-muted-foreground">
+            VAT ({Math.round(VAT_RATE * 100)}%, incl.)
+          </span>
+          <span className="shrink-0 tabular-nums">
+            {CURRENCY} {totals.vat.toFixed(2)}
+          </span>
+        </div>
+        {values.giftCards.map((line, index) => (
+          <div
+            key={line.key}
+            className="flex justify-between gap-3 text-sm text-muted-foreground"
+          >
+            <span className="min-w-0 break-words">
+              {line.code ? `Gift card ${line.code}` : `Gift card ${index + 1}`}{' '}
+              (not taxed)
+            </span>
+            <span className="shrink-0 tabular-nums">
+              {CURRENCY} {computeGiftCardLineTotal(line).toFixed(2)}
+            </span>
+          </div>
+        ))}
+        <div className="flex justify-between gap-3 rounded-lg bg-primary/5 p-3 font-semibold">
+          <span>Total</span>
+          <span className="shrink-0 tabular-nums">
+            {CURRENCY} {totals.total.toFixed(2)}
+          </span>
+        </div>
+      </section>
 
-          const urgentCharge = computeUrgentCharges(customers)
-          const lineItems = buildLineItems(customers, customerNames.current)
-          const productRows = buildProductRows(products, productNames.current)
-          const giftCardRows = buildGiftCardRows(giftCards)
+      {
+        <section
+          className="space-y-4 rounded-xl border border-border/60 bg-card p-4"
+          aria-label="Collection"
+        >
+          <h3 className="text-sm font-semibold">Collection</h3>
+          <form.Field name={'collectionMethod' as never}>
+            {(field: any) => (
+              <Field>
+                <FieldLabel>Collection method</FieldLabel>
+                <SegmentedOptions
+                  id={field.name}
+                  ariaLabel="Collection"
+                  options={['Pickup', 'Delivery']}
+                  value={
+                    field.state.value === 'delivery' ? 'Delivery' : 'Pickup'
+                  }
+                  onChange={(value) => field.handleChange(value.toLowerCase())}
+                  columns={2}
+                />
+              </Field>
+            )}
+          </form.Field>
+          <form.Field name={'receivingBranch' as never}>
+            {(field: any) => (
+              <Field data-invalid={field.state.meta.errors.length > 0}>
+                <FieldLabel htmlFor={field.name}>Receiving Branch</FieldLabel>
+                <AsyncCombobox<Location>
+                  id={field.name}
+                  endpoint="/locations"
+                  queryKey="invoice-receiving-branch"
+                  searchField="name"
+                  filters={ORDER_RECEIVING_FILTERS}
+                  toOption={(location) => ({
+                    value: location.id,
+                    label: location.name,
+                  })}
+                  getValueLabel={(id) =>
+                    locationLabelForId?.(id) ??
+                    (id === receivingDefault?.id ? receivingDefault.name : null)
+                  }
+                  value={field.state.value || null}
+                  onValueChange={(value) => field.handleChange(value ?? '')}
+                  placeholder="Search branch..."
+                  emptyMessage="No branches found."
+                />
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
+            )}
+          </form.Field>
+          <DateField
+            form={form}
+            name="targetDate"
+            label={
+              hasUrgentOrders
+                ? 'Target Date (required)'
+                : 'Target Date (optional)'
+            }
+            placeholder={
+              hasUrgentOrders
+                ? 'Pick a target date'
+                : 'No collection date promised'
+            }
+          />
+        </section>
+      }
 
-          // Orders and products are both goods, so they share one taxable
-          // subtotal. Gift card sales are deliberately not in it.
-          const subtotal =
-            lineItems.reduce(
-              (sum, item) => sum + item.orders.reduce((s, o) => s + o.total, 0),
-              0,
-            ) + productRows.reduce((sum, row) => sum + row.total, 0)
+      {values.customers.length === 0 && (
+        <section className="space-y-3 rounded-xl border border-border/60 bg-card p-4">
+          <form.Field name={'customerId' as never}>
+            {(field: any) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>
+                  Customer (optional)
+                </FieldLabel>
+                <AsyncCombobox<Customer>
+                  id={field.name}
+                  endpoint="/customers"
+                  queryKey="invoice-summary-customer"
+                  searchField={['name', 'mobileNo']}
+                  toOption={(customer) => ({
+                    value: customer.id,
+                    label: `${customer.name} — ${customer.mobileNo}`,
+                  })}
+                  getValueLabel={customerLabelForId}
+                  value={field.state.value || null}
+                  onValueChange={(id) => field.handleChange(id ?? '')}
+                  placeholder="Search customer..."
+                  emptyMessage="No customers found."
+                />
+              </Field>
+            )}
+          </form.Field>
+        </section>
+      )}
 
-          const giftCardSales = giftCardRows.reduce(
-            (sum, row) => sum + row.total,
-            0,
-          )
-
-          return (
-            <>
-              <div className="space-y-1.5 text-sm">
-                {lineItems.flatMap((item) =>
-                  item.orders.map((order) => (
+      <section
+        className="space-y-4 rounded-xl border border-border/60 bg-card p-4"
+        aria-label="Payment"
+      >
+        <h3 className="text-sm font-semibold">Payment</h3>
+        {totals.redeemed > 0 && (
+          <div className="flex justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">Gift Card Redeemed</span>
+            <span className="shrink-0 tabular-nums">
+              −{CURRENCY} {totals.redeemed.toFixed(2)}
+            </span>
+          </div>
+        )}
+        <form.Field name={'payments' as never} mode="array">
+          {(paymentsField: any) => (
+            <div id="payments" className="space-y-3">
+              {paymentsLocked ? (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    Already taken — an edit never changes money. Take further
+                    payments via Collect.
+                  </p>
+                  {paymentsField.state.value.map((payment: PaymentDraft) => (
                     <div
-                      key={order.key}
-                      className="flex justify-between text-muted-foreground"
+                      key={payment.key}
+                      className="flex justify-between text-sm"
                     >
-                      <span>
-                        {item.customerName} — {order.label}
+                      <span className="text-muted-foreground">
+                        {PAYMENT_TYPE_OPTIONS.find(
+                          (option) => option.value === payment.paymentType,
+                        )?.label ?? '—'}
                       </span>
-                      <span>
-                        {CURRENCY} {order.total.toFixed(2)}
-                        {order.urgentCharge > 0 && (
-                          <span className="block text-xs">
-                            + {CURRENCY} {order.urgentCharge.toFixed(2)} urgent
-                            charge
-                          </span>
+                      <span className="tabular-nums">
+                        {CURRENCY}{' '}
+                        {(payment.amount === '' ? 0 : payment.amount).toFixed(
+                          2,
                         )}
                       </span>
                     </div>
-                  )),
-                )}
-                {productRows.map((row) => (
-                  <div
-                    key={row.key}
-                    className="flex justify-between text-muted-foreground"
-                  >
-                    <span>{row.label}</span>
-                    <span>
-                      {CURRENCY} {row.total.toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <Separator />
-
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">
-                  Subtotal (incl. VAT)
-                </span>
-                <span>
-                  {CURRENCY} {subtotal.toFixed(2)}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 items-end">
-                <NumberField form={form} name="discount" label="Discount" />
-                <form.Field name={'discountUnit' as never}>
-                  {(field: any) => (
-                    <Select
-                      value={field.state.value}
-                      onValueChange={(value: string) =>
-                        field.handleChange(value)
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="amount">{CURRENCY}</SelectItem>
-                        <SelectItem value="percent">%</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  ))}
+                </>
+              ) : (
+                <>
+                  {!paymentsOpen && (
+                    <p className="text-xs text-muted-foreground">
+                      No payment recorded. You can collect it later.
+                    </p>
                   )}
-                </form.Field>
-              </div>
-
-              <form.Subscribe
-                selector={(state: any) => [
-                  state.values.discount,
-                  state.values.discountUnit,
-                  state.values.payments,
-                  state.values.redemptions,
-                ]}
-              >
-                {(subscribed: any) => {
-                  const [discount, discountUnit, payments, redemptions] =
-                    subscribed as [
-                      number | '',
-                      DiscountUnit,
-                      PaymentDraft[],
-                      GiftCardRedemptionDraft[],
-                    ]
-                  // Line prices are gross (VAT included): the discount comes
-                  // off the gross and VAT is extracted from it — the shared
-                  // computeInvoiceTotals keeps this in step with the backend's
-                  // breakdown.
-                  const totals = computeInvoiceTotals({
-                    orderTotal: subtotal,
-                    productTotal: 0,
-                    giftCardSales,
-                    discount: discount === '' ? 0 : discount,
-                    discountUnit,
-                    urgentCharge,
-                    redeemed: redemptions.reduce(
-                      (sum, redemption) =>
-                        sum + computeRedemptionTotal(redemption),
-                      0,
-                    ),
-                    paid: payments.reduce(
-                      (sum, payment) =>
-                        sum +
-                        (payment.amount === ''
-                          ? 0
-                          : Math.max(payment.amount, 0)),
-                      0,
-                    ),
-                  })
-
-                  return (
-                    <>
-                      {urgentCharge > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">
-                            Urgent charges (incl. VAT)
-                          </span>
-                          <span>
-                            {CURRENCY} {(urgentCharge || 0).toFixed(2)}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">
-                          VAT ({Math.round(VAT_RATE * 100)}%, incl.)
-                        </span>
-                        <span>
-                          {CURRENCY} {totals.vat.toFixed(2)}
-                        </span>
-                      </div>
-                      {giftCardRows.map((row) => (
+                  <div hidden={!paymentsOpen} className="space-y-3">
+                    {paymentsField.state.value.map(
+                      (payment: PaymentDraft, index: number) => (
                         <div
-                          key={row.key}
-                          className="flex justify-between text-sm text-muted-foreground"
+                          key={payment.key}
+                          className="space-y-2 rounded-lg border border-border/60 p-3"
                         >
-                          <span>{row.label} (not taxed)</span>
-                          <span>
-                            {CURRENCY} {row.total.toFixed(2)}
-                          </span>
-                        </div>
-                      ))}
-                      <Separator />
-                      <div className="flex justify-between font-semibold">
-                        <span>Total</span>
-                        <span>
-                          {CURRENCY} {totals.total.toFixed(2)}
-                        </span>
-                      </div>
-                      {totals.redeemed > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">
-                            Gift Card Redeemed
-                          </span>
-                          <span>
-                            −{CURRENCY} {totals.redeemed.toFixed(2)}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Payments taken up front with the invoice. Later ones
-                          go through the collect endpoints or a till payment,
-                          so this list is usually empty or a single advance. */}
-                      <form.Field name={'payments' as never}>
-                        {(paymentsField: any) => (
-                          <div className="space-y-2 pt-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium">
-                                Payments
-                              </span>
-                              {totals.paid > 0 && (
-                                <span className="text-sm text-muted-foreground">
-                                  {CURRENCY} {totals.paid.toFixed(2)} paid
-                                </span>
-                              )}
-                            </div>
-                            {paymentsLocked && (
-                              <p className="text-xs text-muted-foreground">
-                                Already taken — an edit never changes money.
-                                Take further payments via Collect.
-                              </p>
-                            )}
-                            {paymentsLocked &&
-                              paymentsField.state.value.map(
-                                (payment: PaymentDraft) => (
-                                  <div
-                                    key={payment.key}
-                                    className="flex justify-between text-sm"
-                                  >
-                                    <span className="text-muted-foreground">
-                                      {PAYMENT_TYPE_OPTIONS.find(
-                                        (o) => o.value === payment.paymentType,
-                                      )?.label ?? '—'}
-                                    </span>
-                                    <span>
-                                      {CURRENCY}{' '}
-                                      {(payment.amount === ''
-                                        ? 0
-                                        : payment.amount
-                                      ).toFixed(2)}
-                                    </span>
-                                  </div>
-                                ),
-                              )}
-                            {!paymentsLocked && (
-                              <>
-                                {paymentsField.state.value.map(
-                                  (payment: PaymentDraft, index: number) => (
-                                    <div
-                                      key={payment.key}
-                                      className="flex items-end gap-2"
-                                    >
-                                      <div className="flex-1">
-                                        <NumberField
-                                          form={form}
-                                          name={`payments[${index}].amount`}
-                                          label={index === 0 ? 'Amount' : ''}
-                                        />
-                                      </div>
-                                      <form.Field
-                                        name={
-                                          `payments[${index}].paymentType` as never
-                                        }
-                                      >
-                                        {(methodField: any) => (
-                                          <Field className="w-36">
-                                            {index === 0 && (
-                                              <FieldLabel
-                                                htmlFor={methodField.name}
-                                              >
-                                                Method
-                                              </FieldLabel>
-                                            )}
-                                            <Select
-                                              items={PAYMENT_TYPE_OPTIONS}
-                                              value={methodField.state.value}
-                                              onValueChange={(
-                                                value: PaymentType,
-                                              ) =>
-                                                methodField.handleChange(value)
-                                              }
-                                            >
-                                              <SelectTrigger
-                                                id={methodField.name}
-                                                className="w-full"
-                                              >
-                                                <SelectValue placeholder="Method..." />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                {PAYMENT_TYPE_OPTIONS.map(
-                                                  (option) => (
-                                                    <SelectItem
-                                                      key={option.value}
-                                                      value={option.value}
-                                                    >
-                                                      {option.label}
-                                                    </SelectItem>
-                                                  ),
-                                                )}
-                                              </SelectContent>
-                                            </Select>
-                                          </Field>
-                                        )}
-                                      </form.Field>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        type="button"
-                                        onClick={() =>
-                                          paymentsField.removeValue(index)
-                                        }
-                                        aria-label="Remove payment"
-                                      >
-                                        <XIcon className="h-3.5 w-3.5" />
-                                      </Button>
-                                    </div>
-                                  ),
-                                )}
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  type="button"
-                                  onClick={() =>
-                                    paymentsField.pushValue(
-                                      createEmptyPayment(),
-                                    )
-                                  }
-                                  className="w-full border-dashed"
-                                >
-                                  <PlusIcon className="h-3.5 w-3.5" />
-                                  Add Payment
-                                </Button>
-                              </>
-                            )}
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">
+                              Payment {index + 1}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              type="button"
+                              aria-label={`Remove payment ${index + 1}`}
+                              onClick={() => paymentsField.removeValue(index)}
+                            >
+                              <XIcon />
+                            </Button>
                           </div>
-                        )}
-                      </form.Field>
+                          <NumberField
+                            form={form}
+                            name={`payments[${index}].amount`}
+                            label={
+                              index === 0 ? 'Amount' : `Amount ${index + 1}`
+                            }
+                          />
+                          <form.Field
+                            name={`payments[${index}].paymentType` as never}
+                          >
+                            {(field: any) => (
+                              <Field
+                                data-invalid={
+                                  field.state.meta.errors.length > 0
+                                }
+                              >
+                                <FieldLabel htmlFor={field.name}>
+                                  {index === 0
+                                    ? 'Method'
+                                    : `Method ${index + 1}`}
+                                </FieldLabel>
+                                <Select
+                                  items={PAYMENT_TYPE_OPTIONS}
+                                  value={field.state.value}
+                                  onValueChange={(value: PaymentType) =>
+                                    field.handleChange(value)
+                                  }
+                                >
+                                  <SelectTrigger
+                                    id={field.name}
+                                    className="w-full"
+                                  >
+                                    <SelectValue placeholder="Method..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {PAYMENT_TYPE_OPTIONS.map((option) => (
+                                      <SelectItem
+                                        key={option.value}
+                                        value={option.value}
+                                      >
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <FieldError errors={field.state.meta.errors} />
+                              </Field>
+                            )}
+                          </form.Field>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      if (paymentsOpen || !paymentsField.state.value.length)
+                        paymentsField.pushValue(createEmptyPayment())
+                      setPaymentsOpen(true)
+                    }}
+                  >
+                    <PlusIcon />
+                    {paymentsOpen ? 'Add Payment' : 'Record payment'}
+                  </Button>
+                </>
+              )}
+              <FieldError errors={paymentsField.state.meta.errors} />
+            </div>
+          )}
+        </form.Field>
+        <form.Field name="redemptions" mode="array">
+          {(redemptionsField: any) => (
+            <div className="space-y-3">
+              {redemptionsField.state.value.map(
+                (line: { key: string }, index: number) => (
+                  <RedemptionBlock
+                    key={line.key}
+                    form={form}
+                    lineIndex={index}
+                    date={redemptionDate}
+                    onRemove={() => redemptionsField.removeValue(index)}
+                  />
+                ),
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="-ms-2"
+                onClick={() =>
+                  redemptionsField.pushValue(createEmptyRedemption())
+                }
+              >
+                <PlusIcon />
+                Redeem a Gift Card
+              </Button>
+            </div>
+          )}
+        </form.Field>
+        <div className="flex justify-between gap-3 border-t pt-4 font-semibold">
+          <span>Balance Due</span>
+          <span className="shrink-0 tabular-nums">
+            {CURRENCY} {totals.balanceDue.toFixed(2)}
+          </span>
+        </div>
+      </section>
+      {children}
+    </div>
+  )
+}
 
-                      <div className="flex justify-between font-semibold pt-1">
-                        <span>Balance Due</span>
-                        <span>
-                          {CURRENCY} {totals.balanceDue.toFixed(2)}
-                        </span>
-                      </div>
-                    </>
-                  )
-                }}
-              </form.Subscribe>
-            </>
-          )
+export function InvoiceMobileSummary({ form }: { form: InvoiceFormApi }) {
+  const values = useStore(form.store, (state) => state.values)
+  const totals = invoiceTotals(values)
+  return (
+    <div
+      className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-4 border-t bg-background/95 px-4 py-3 backdrop-blur-sm xl:hidden"
+      aria-label="Invoice total"
+    >
+      <div>
+        <p className="text-xs text-muted-foreground">Invoice total</p>
+        <p className="font-semibold tabular-nums">
+          {CURRENCY} {totals.total.toFixed(2)}
+        </p>
+      </div>
+      <Button
+        type="button"
+        onClick={() => {
+          focusInvoiceField('invoice-summary-title')
         }}
-      </form.Subscribe>
+      >
+        Review invoice
+      </Button>
     </div>
   )
 }
