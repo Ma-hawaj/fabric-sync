@@ -1,6 +1,10 @@
-use super::{service, types::PaymentType};
+use super::{
+    service,
+    types::{PaymentType, RecordPaymentInput},
+};
 use crate::test_support;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 #[sqlx::test]
 async fn record_payment_returns_exact_stored_cents(db: PgPool) {
@@ -12,10 +16,18 @@ async fn record_payment_returns_exact_stored_cents(db: PgPool) {
         (0.2, 0.2, 0.3, 99.7),
         (0.005, 0.01, 0.31, 99.69),
     ] {
-        let result =
-            service::record_payment(&state, invoice_id, submitted, PaymentType::Cash, None)
-                .await
-                .unwrap();
+        let result = service::record_payment(
+            &state,
+            invoice_id,
+            RecordPaymentInput {
+                request_id: Uuid::new_v4(),
+                amount: submitted,
+                payment_type: PaymentType::Cash,
+                order_id: None,
+            },
+        )
+        .await
+        .unwrap();
 
         let ledger_total: f64 = sqlx::query_scalar(
             "SELECT SUM(amount)::float8 FROM invoice_payments WHERE invoice_id=$1",
@@ -46,9 +58,18 @@ async fn collect_invoice_returns_exact_stored_cents(db: PgPool) {
         .await
         .unwrap();
     let state = test_support::state(db.clone(), None, None).await;
-    service::record_payment(&state, invoice_id, 0.1, PaymentType::Cash, None)
-        .await
-        .unwrap();
+    service::record_payment(
+        &state,
+        invoice_id,
+        RecordPaymentInput {
+            request_id: Uuid::new_v4(),
+            amount: 0.1,
+            payment_type: PaymentType::Cash,
+            order_id: None,
+        },
+    )
+    .await
+    .unwrap();
 
     let result = service::collect_invoice(&state, invoice_id, Some(PaymentType::Card))
         .await

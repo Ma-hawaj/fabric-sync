@@ -192,7 +192,13 @@ CREATE TABLE invoice_payments (
     -- Nullable: the app always records a method, but rows imported without a
     -- recorded method (see scripts/ingest_xlsm.py) keep NULL.
     payment_type TEXT CHECK (payment_type IN ('benefit', 'cash', 'card')),
-    paid_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    paid_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Required by the standalone payment API. Creation/collection/import
+    -- writes use their existing transaction guards and leave both NULL.
+    request_id UUID,
+    request_hash BYTEA CHECK (octet_length(request_hash) = 32),
+    CHECK ((request_id IS NULL) = (request_hash IS NULL)),
+    UNIQUE (invoice_id, request_id)
 );
 
 -- The stages a garment passes through in production. Staff edit this list, so

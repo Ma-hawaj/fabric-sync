@@ -1727,9 +1727,18 @@ mod repair_collection_tests {
             .await
             .unwrap();
 
-        invoices::service::record_payment(&state, invoice_id, 20.0, PaymentType::Cash, None)
-            .await
-            .unwrap();
+        invoices::service::record_payment(
+            &state,
+            invoice_id,
+            invoices::types::RecordPaymentInput {
+                request_id: Uuid::new_v4(),
+                amount: 20.0,
+                payment_type: PaymentType::Cash,
+                order_id: None,
+            },
+        )
+        .await
+        .unwrap();
         collect_order(&state, order_id, 0.0, None).await.unwrap();
         returns::service::create_return(
             &state,

@@ -102,14 +102,7 @@ pub async fn record_payment(
     Json(input): Json<RecordPaymentInput>,
 ) -> Result<Json<RecordedPayment>, AppError> {
     Ok(Json(
-        service::record_payment(
-            &state,
-            invoice_id,
-            input.amount,
-            input.payment_type,
-            input.order_id,
-        )
-        .await?,
+        service::record_payment(&state, invoice_id, input).await?,
     ))
 }
 

@@ -10,7 +10,7 @@ use super::types::{
     CreateInvoiceInput, CreateOrderInput, CreateProductLineInput, InvoiceDetailLine, InvoiceEdit,
     InvoiceEditCustomer, InvoiceEditGiftCardLine, InvoiceEditOrder, InvoiceEditProductLine,
     InvoiceEditRedemption, InvoiceLineKind, InvoiceListItem, InvoiceParty, InvoicePayment,
-    InvoiceRecord, InvoiceRedemptionLine, OrderDesignValues,
+    InvoiceRecord, InvoiceRedemptionLine, OrderDesignValues, RecordPaymentInput,
 };
 use crate::features::customers::types::CreateMeasurementInput;
 
@@ -636,6 +636,61 @@ pub async fn insert_payment(
         paid_at: row.paid_at,
         order_id: row.order_id,
     })
+}
+
+/// Read only after acquiring the parent invoice lock.
+pub async fn previous_payment_request(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    request_id: Uuid,
+) -> Result<Option<(InvoicePayment, Vec<u8>)>, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        SELECT id, amount::float8 AS "amount!", payment_type, paid_at, order_id,
+               request_hash AS "request_hash!"
+        FROM invoice_payments WHERE invoice_id = $1 AND request_id = $2
+        "#,
+        invoice_id,
+        request_id,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(row.map(|row| {
+        (
+            InvoicePayment {
+                id: row.id,
+                amount: row.amount,
+                payment_type: row.payment_type,
+                paid_at: row.paid_at,
+                order_id: row.order_id,
+            },
+            row.request_hash,
+        )
+    }))
+}
+
+pub async fn insert_requested_payment(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    input: &RecordPaymentInput,
+    hash: &[u8],
+) -> Result<InvoicePayment, sqlx::Error> {
+    sqlx::query_as!(
+        InvoicePayment,
+        r#"
+        INSERT INTO invoice_payments (invoice_id, order_id, amount, payment_type, request_id, request_hash)
+        VALUES ($1, $2, $3::float8, $4, $5, $6)
+        RETURNING id, amount::float8 AS "amount!", payment_type, paid_at, order_id
+        "#,
+        invoice_id,
+        input.order_id,
+        input.amount,
+        input.payment_type.as_str(),
+        input.request_id,
+        hash,
+    )
+    .fetch_one(&mut **tx)
+    .await
 }
 
 /// Every payment on the invoice, oldest first — the history the detail page

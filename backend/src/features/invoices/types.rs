@@ -44,7 +44,7 @@ impl DiscountUnit {
 // of payments — advances at creation, per-pickup payments as orders are
 // collected, till payments in between — each recording its own `PaymentType`
 // as a row in `invoice_payments`.
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PaymentType {
     Benefit,
@@ -386,9 +386,10 @@ pub struct CollectedInvoice {
 /// collecting anything: an extra advance, or the remainder paid after every
 /// order was already collected. `order_id` attributes it to a pickup when it
 /// was taken at one; it must belong to this invoice.
-#[derive(Clone, Copy, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RecordPaymentInput {
+    pub request_id: Uuid,
     pub amount: f64,
     pub payment_type: PaymentType,
     #[serde(default)]

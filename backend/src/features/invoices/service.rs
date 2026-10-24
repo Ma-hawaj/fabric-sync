@@ -26,7 +26,7 @@ use super::{
         CollectedInvoice, CreateGiftCardLineInput, CreateInvoiceInput, CreateOrderInput,
         CreateProductLineInput, CreatedInvoice, DiscountUnit, GiftCardRedemptionInput,
         InvoiceCustomerInput, InvoiceDetail, InvoiceEdit, InvoiceListItem, InvoiceTotalsBreakdown,
-        MaterialSource, PaymentSummary, PaymentType, RecordedPayment,
+        MaterialSource, PaymentSummary, PaymentType, RecordPaymentInput, RecordedPayment,
     },
 };
 use crate::features::customers::types::{normalize_customer_identity, CreateMeasurementInput};
@@ -201,61 +201,60 @@ fn validate_kept_payments(paid: f64, total: f64, redeemed: f64) -> Result<(), Ap
 pub async fn record_payment(
     state: &AppState,
     invoice_id: Uuid,
-    amount: f64,
-    payment_type: PaymentType,
-    order_id: Option<Uuid>,
+    input: RecordPaymentInput,
 ) -> Result<RecordedPayment, AppError> {
-    let mut tx = state.db().begin().await?;
+    use crate::idempotency::{request_hash, verify_request_hash};
 
+    let hash = request_hash("invoice.payment.v1", invoice_id, &input);
+    let mut tx = state.db().begin().await?;
     repository::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
 
-    if let Some(order_id) = order_id {
-        if !repository::order_belongs_to_invoice(&mut tx, order_id, invoice_id).await? {
-            return Err(AppError::NotFound(format!(
-                "order {order_id} not found on invoice {invoice_id}"
-            )));
+    // Replay before checking today's balance or order eligibility: the first
+    // attempt may have settled the invoice, or the order may now be closed.
+    let previous =
+        repository::previous_payment_request(&mut tx, invoice_id, input.request_id).await?;
+    let is_replay = previous.is_some();
+    let payment = if let Some((payment, stored)) = previous {
+        verify_request_hash(&stored, &hash)?;
+        payment
+    } else {
+        if let Some(order_id) = input.order_id {
+            if !repository::order_belongs_to_invoice(&mut tx, order_id, invoice_id).await? {
+                return Err(AppError::NotFound(format!(
+                    "order {order_id} not found on invoice {invoice_id}"
+                )));
+            }
+            crate::features::returns::service::ensure_order_active(&mut tx, order_id).await?;
         }
-        crate::features::returns::service::ensure_order_active(&mut tx, order_id).await?;
-    }
-
-    let balance = returns_repository::settlement(&mut tx, invoice_id).await?;
-    validate_payment_amount(
-        amount,
-        balance.net_total,
-        balance.net_gift_card_redeemed,
-        balance.net_amount_paid,
-    )?;
-
-    let payment = repository::insert_payment(
-        &mut tx,
-        invoice_id,
-        order_id,
-        amount,
-        Some(payment_type.as_str()),
-    )
-    .await?;
-
-    tx.commit().await?;
-
-    tracing::info!(
-        invoice_id = %invoice_id,
-        amount,
-        payment_type = payment_type.as_str(),
-        "payment recorded"
-    );
-
-    let summary = PaymentSummary {
-        payment_status: payment_summary(
+        let balance = returns_repository::settlement(&mut tx, invoice_id).await?;
+        validate_payment_amount(
+            input.amount,
             balance.net_total,
             balance.net_gift_card_redeemed,
-            balance.net_amount_paid + payment.amount,
-        )
-        .payment_status,
-        amount_paid: round2(balance.amount_paid + payment.amount),
-        balance_due: round2((balance.balance_due - payment.amount).max(0.0)),
+            balance.net_amount_paid,
+        )?;
+        repository::insert_requested_payment(&mut tx, invoice_id, &input, &hash).await?
     };
+
+    // Use persisted cents for both first writes and replays. The original
+    // payment is returned alongside the current, transaction-consistent balance.
+    let balance = returns_repository::settlement(&mut tx, invoice_id).await?;
+    let summary = PaymentSummary {
+        payment_status: balance.payment_status,
+        amount_paid: balance.amount_paid,
+        balance_due: balance.balance_due,
+    };
+    tx.commit().await?;
+    if !is_replay {
+        tracing::info!(
+            invoice_id = %invoice_id,
+            amount = payment.amount,
+            payment_type = input.payment_type.as_str(),
+            "payment recorded"
+        );
+    }
     Ok(RecordedPayment { payment, summary })
 }
 

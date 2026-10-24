@@ -25,6 +25,8 @@ destination exactly when stock was restored; the original sale location remains
 on the invoice item.
 Adjustment retry checks store a 32-byte SHA-256 hash, not the request JSON;
 structured credit, stock and refund records retain the audit details.
+Standalone payments also store paired request IDs/hashes with per-invoice
+uniqueness. Both columns remain null for creation, collection and import writes.
 
 Reference data, the design catalog, and optional demo data live in `backend/seeds/`
 and are loaded separately. Future deployed schema changes should be added as new
