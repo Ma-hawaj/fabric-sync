@@ -8,6 +8,10 @@ export interface GiftCard {
   balance: number
   customerId: string | null
   customerName: string | null
+  boughtFor: string | null
+  recipientPhone: string | null
+  deliveryStatus: string | null
+  deliveryError: string | null
   expiresOn: string | null
   isActive: boolean
 }

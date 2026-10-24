@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE gift_cards\n        SET is_active = COALESCE($2, is_active),\n            bought_for = CASE WHEN $3::text IS NULL THEN bought_for ELSE NULLIF(BTRIM($3), '') END,\n            recipient_phone = COALESCE($4, recipient_phone)\n        WHERE id = $1\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7c0c8ba3562f41f988cae135fb74ee1ca46f2bbf6ab648a8b4141648640d8da9"
+}

@@ -2,7 +2,8 @@
 export type NumberInput = number | ''
 
 export interface GiftCardFormValues {
-  code: string
+  boughtFor: string
+  recipientPhone: string
   amount: NumberInput
   customerId: string
   // ISO date, or blank for a card that never expires.
@@ -11,7 +12,8 @@ export interface GiftCardFormValues {
 
 export function createEmptyGiftCardForm(): GiftCardFormValues {
   return {
-    code: '',
+    boughtFor: '',
+    recipientPhone: '',
     amount: '',
     customerId: '',
     expiresOn: '',

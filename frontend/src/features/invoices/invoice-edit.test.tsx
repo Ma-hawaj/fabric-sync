@@ -53,7 +53,15 @@ const EDIT_FIXTURE: InvoiceEdit = {
   customerId: null,
   customers: [],
   products: [],
-  giftCards: [{ code: 'GC-1', amount: 150, expiresOn: null }],
+  giftCards: [
+    {
+      code: 'GC-1',
+      amount: 150,
+      expiresOn: null,
+      boughtFor: 'Recipient',
+      recipientPhone: '+97333112233',
+    },
+  ],
   giftCardRedemptions: [],
 }
 
@@ -96,8 +104,12 @@ describe('InvoiceEditPage', () => {
     expect(
       await screen.findByRole('heading', { name: 'Edit Invoice INV-42' }),
     ).toBeTruthy()
-    // The gift card sale reopened as a line with its code visible.
-    expect(await screen.findByDisplayValue('GC-1')).toBeTruthy()
+    // Issued codes stay read-only, and recipient details survive reopening.
+    expect(await screen.findByText(/Code: GC-1/)).toBeTruthy()
+    expect(screen.getByDisplayValue('Recipient')).toBeTruthy()
+    expect(
+      screen.getByRole('textbox', { name: 'Recipient phone' }),
+    ).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy()
   })
 

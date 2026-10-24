@@ -12,6 +12,7 @@ minijinja = { version = "2.21.0", features = ["loader"] }
 oauth2 = "5.0.0"
 openidconnect = "4.0.1"
 qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
+resvg = { version = "0.45", default-features = false, features = ["text", "raster-images"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
 hmac = "0.12"
 sha2 = "0.10"

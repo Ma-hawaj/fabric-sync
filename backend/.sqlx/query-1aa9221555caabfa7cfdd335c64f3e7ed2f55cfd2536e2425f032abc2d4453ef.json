@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            g.id,\n            g.code,\n            g.initial_amount::float8 AS \"initial_amount!\",\n            g.balance::float8 AS \"balance!\",\n            g.customer_id,\n            c.name AS \"customer_name?\",\n            g.bought_for,\n            g.recipient_phone,\n            delivery.state AS \"delivery_status?\",\n            delivery.last_error AS \"delivery_error?\",\n            g.expires_on,\n            g.is_active\n        FROM gift_cards g\n        LEFT JOIN customers c ON c.id = g.customer_id\n        LEFT JOIN LATERAL (\n            SELECT state, last_error FROM gift_card_deliveries\n            WHERE gift_card_id = g.id ORDER BY created_at DESC, id DESC LIMIT 1\n        ) delivery ON TRUE\n        WHERE g.code = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "initial_amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 3,
+        "name": "balance!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "customer_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "customer_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "bought_for",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "recipient_phone",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "delivery_status?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "delivery_error?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "expires_on",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 11,
+        "name": "is_active",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "1aa9221555caabfa7cfdd335c64f3e7ed2f55cfd2536e2425f032abc2d4453ef"
+}

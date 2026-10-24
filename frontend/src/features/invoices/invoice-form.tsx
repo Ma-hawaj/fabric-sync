@@ -1,4 +1,5 @@
 import { NotificationDialog } from '@/features/notifications/notification-dialog'
+import { SendGiftCardDialog } from '@/features/gift-cards/components/send-gift-card-dialog'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
@@ -103,9 +104,10 @@ export function InvoiceForm({
   // Which of the two submit buttons was pressed. A ref rather than state
   // because it is read once inside onSubmit and must not re-render the form.
   const exportAfterSave = useRef(false)
-  const [notificationInvoiceId, setNotificationInvoiceId] = useState<
-    string | null
-  >(null)
+  const [savedInvoice, setSavedInvoice] = useState<CreatedInvoice | null>(null)
+  const [giftCardIndex, setGiftCardIndex] = useState(0)
+  const giftCards = editing ? [] : (savedInvoice?.giftCards ?? [])
+  const giftCardToSend = giftCards.at(giftCardIndex)
 
   // The user's default location pre-fills the two branch pickers below —
   // receiving when it takes orders, sold-from when it holds stock. Only empty
@@ -120,6 +122,7 @@ export function InvoiceForm({
     defaultValues,
     validators: { onSubmit: invoiceFormSchema },
     onSubmit: async ({ value }) => {
+      if (savedInvoice) return
       const pending = mutation.mutateAsync(value)
       toast.promise(pending, {
         loading: `${saveVerb} invoice...`,
@@ -137,6 +140,8 @@ export function InvoiceForm({
       } catch {
         return
       }
+      setGiftCardIndex(0)
+      setSavedInvoice(saved)
 
       // The old Print button here printed the form itself — inputs, sidebar
       // and all — because before this there was no invoice document to print.
@@ -152,8 +157,6 @@ export function InvoiceForm({
           )
         }
       }
-
-      setNotificationInvoiceId(saved.id)
     },
   })
 
@@ -174,14 +177,24 @@ export function InvoiceForm({
 
   return (
     <div className="space-y-6">
-      <NotificationDialog
-        invoiceId={notificationInvoiceId}
-        kind={editing ? 'invoice_updated' : 'invoice_created'}
-        onClose={() => {
-          setNotificationInvoiceId(null)
-          void navigate({ to: '/invoices' })
-        }}
-      />
+      {giftCardToSend ? (
+        <SendGiftCardDialog
+          key={giftCardToSend.id}
+          card={giftCardToSend}
+          description={`Invoice saved. Gift card ${giftCardIndex + 1} of ${giftCards.length}. Check the recipient, image, and message before sending.`}
+          cancelLabel="Skip"
+          onClose={() => setGiftCardIndex((index) => index + 1)}
+        />
+      ) : (
+        <NotificationDialog
+          invoiceId={savedInvoice?.id ?? null}
+          kind={editing ? 'invoice_updated' : 'invoice_created'}
+          onClose={() => {
+            setSavedInvoice(null)
+            void navigate({ to: '/invoices' })
+          }}
+        />
+      )}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
         <p className="text-muted-foreground">{subtitle}</p>
@@ -337,6 +350,8 @@ export function InvoiceForm({
               Sell a card at face value, or spend one the customer already has.
               Selling stored value is not taxed — VAT is charged when the card
               is spent.
+              {!editing &&
+                ' After saving, you can preview and send each gift card image to its recipient via WhatsApp.'}
             </p>
           </div>
 
@@ -424,7 +439,7 @@ export function InvoiceForm({
           <Button
             type="submit"
             variant="outline"
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || savedInvoice !== null}
             onClick={() => {
               exportAfterSave.current = true
             }}
@@ -432,7 +447,10 @@ export function InvoiceForm({
             <FileDownIcon className="h-4 w-4" />
             Save & Export PDF
           </Button>
-          <Button type="submit" disabled={mutation.isPending}>
+          <Button
+            type="submit"
+            disabled={mutation.isPending || savedInvoice !== null}
+          >
             Save
           </Button>
         </div>

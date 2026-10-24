@@ -8,7 +8,7 @@ function values(
 ): GiftCardFormValues {
   return {
     ...createEmptyGiftCardForm(),
-    code: 'GC-ABC123',
+    recipientPhone: '+97333112233',
     amount: 200,
     ...overrides,
   }
@@ -24,16 +24,25 @@ describe('giftCardFormSchema', () => {
     expect(firstError(values())).toBeNull()
   })
 
-  it('requires a code', () => {
-    const error = firstError(values({ code: '   ' }))
-    expect(error?.message).toMatch(/enter a gift card code/i)
-    expect(error?.path).toEqual(['code'])
+  it('requires a recipient phone number', () => {
+    const error = firstError(values({ recipientPhone: '   ' }))
+    expect(error?.message).toMatch(/valid recipient phone/i)
+    expect(error?.path).toEqual(['recipientPhone'])
   })
 
   it('requires an amount', () => {
     const error = firstError(values({ amount: '' }))
     expect(error?.message).toMatch(/enter an amount/i)
     expect(error?.path).toEqual(['amount'])
+  })
+
+  it('rejects an invalid recipient number while allowing a number without a name', () => {
+    for (const recipientPhone of ['123', 'not a phone']) {
+      expect(firstError(values({ recipientPhone }))?.path).toEqual([
+        'recipientPhone',
+      ])
+    }
+    expect(firstError(values({ boughtFor: '' }))).toBeNull()
   })
 
   it('rejects a zero or negative amount', () => {

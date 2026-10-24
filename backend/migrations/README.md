@@ -10,9 +10,11 @@ SQLx applies the files in version order:
    notification preferences, invoice collection method, and per-order urgency
    and automatic charges. The invoice charge column stores the computed sum of its
    order charges. Numeric measurements use three decimal places to preserve
-   eighth-inch fractions.
+   eighth-inch fractions. Gift card recipient names and phone numbers are
+   declared here.
 2. `0002_notification_schema.sql` creates immutable PDF artifacts, notification
-   previews and approvals, recipients, delivery attempts, and webhook storage.
+   previews and approvals, recipients, delivery attempts, webhook storage, and
+   the staff-approved gift card delivery queue with its immutable PNG attachments.
 3. `0003_readiness_and_revisions.sql` creates the invoice-readiness view and the
    triggers that serialize related writes and invalidate outdated previews.
    Readiness excludes closed orders, and credits/refunds invalidate previews.

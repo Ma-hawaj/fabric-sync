@@ -26,7 +26,8 @@ use super::{
         CollectedInvoice, CreateGiftCardLineInput, CreateInvoiceInput, CreateOrderInput,
         CreateProductLineInput, CreatedInvoice, DiscountUnit, GiftCardRedemptionInput,
         InvoiceCustomerInput, InvoiceDetail, InvoiceEdit, InvoiceListItem, InvoiceTotalsBreakdown,
-        MaterialSource, PaymentSummary, PaymentType, RecordPaymentInput, RecordedPayment,
+        IssuedGiftCard, MaterialSource, PaymentSummary, PaymentType, RecordPaymentInput,
+        RecordedPayment,
     },
 };
 use crate::features::customers::types::{normalize_customer_identity, CreateMeasurementInput};
@@ -728,7 +729,6 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
     }
 
     for card in &input.gift_cards {
-        gift_cards_service::normalize_code(&card.code)?;
         gift_cards_service::validate_amount(card.amount)?;
     }
 
@@ -966,7 +966,7 @@ mod tests {
     }
 
     fn gift_card(amount: f64) -> serde_json::Value {
-        serde_json::json!({ "code": "GC-1", "amount": amount })
+        serde_json::json!({ "code": "GC-7KMP-4RWT-9DXH", "amount": amount })
     }
 
     fn invoice(
@@ -1440,7 +1440,7 @@ mod tests {
     fn redeeming_a_gift_card_does_not_change_the_invoice_total() {
         let input = retail_invoice(serde_json::json!({
             "products": [product(1.0, 100.0)],
-            "giftCardRedemptions": [{ "code": "GC-1", "amount": 50.0 }],
+            "giftCardRedemptions": [{ "code": "GC-7KMP-4RWT-9DXH", "amount": 50.0 }],
         }));
         let totals = compute_totals(&input);
         assert_eq!(totals.total, 100.0);
@@ -1613,19 +1613,21 @@ mod tests {
         let invoice = retail_invoice(serde_json::json!({
             "products": [product(1.0, 500.0)],
             "giftCardRedemptions": [
-                { "code": "GC-1", "amount": 50.0 },
-                { "code": " gc-1 ", "amount": 25.0 },
+                { "code": "GC-7KMP-4RWT-9DXH", "amount": 50.0 },
+                { "code": " 7kmp4rwt9dxh ", "amount": 25.0 },
             ],
         }));
         let error = validate(&invoice).unwrap_err();
-        assert!(matches!(error, AppError::BadRequest(_)));
+        assert!(
+            matches!(error, AppError::BadRequest(message) if message.contains("same gift card"))
+        );
     }
 
     #[test]
     fn rejects_redemptions_worth_more_than_the_invoice() {
         let invoice = retail_invoice(serde_json::json!({
             "products": [product(1.0, 100.0)],
-            "giftCardRedemptions": [{ "code": "GC-1", "amount": 200.0 }],
+            "giftCardRedemptions": [{ "code": "GC-7KMP-4RWT-9DXH", "amount": 200.0 }],
         }));
         let error = validate(&invoice).unwrap_err();
         assert!(matches!(error, AppError::BadRequest(_)));
@@ -1635,7 +1637,7 @@ mod tests {
     fn accepts_a_redemption_that_settles_the_invoice_exactly() {
         let invoice = retail_invoice(serde_json::json!({
             "products": [product(1.0, 100.0)],
-            "giftCardRedemptions": [{ "code": "GC-1", "amount": 100.0 }],
+            "giftCardRedemptions": [{ "code": "GC-7KMP-4RWT-9DXH", "amount": 100.0 }],
         }));
         assert!(validate(&invoice).is_ok());
     }
@@ -1876,20 +1878,35 @@ async fn write_gift_card_sales(
     invoice_id: Uuid,
     customer_id: Option<Uuid>,
     gift_cards: &[CreateGiftCardLineInput],
-) -> Result<(), AppError> {
+    region: &str,
+) -> Result<Vec<IssuedGiftCard>, AppError> {
+    let mut issued = Vec::with_capacity(gift_cards.len());
     for card in gift_cards {
-        let code = gift_cards_service::normalize_code(&card.code)?;
-
-        let gift_card_id = gift_cards_repository::insert_gift_card(
-            tx,
-            &code,
-            card.amount,
-            // The card belongs to whoever the invoice is billed to, when the
-            // sale names someone at all.
-            customer_id,
-            card.expires_on,
-        )
-        .await?;
+        let (gift_card_id, code) = if card.code.trim().is_empty() {
+            let input = crate::features::gift_cards::types::CreateGiftCardInput {
+                amount: card.amount,
+                customer_id,
+                expires_on: card.expires_on,
+                bought_for: card.bought_for.clone(),
+                recipient_phone: card.recipient_phone.clone(),
+            };
+            gift_cards_service::issue_gift_card(tx, &input, region).await?
+        } else {
+            // Existing invoice lines retain their issued code when rebuilt.
+            let code = gift_cards_service::normalize_code(&card.code)?;
+            let phone = gift_cards_service::recipient_phone(&card.recipient_phone, region)?;
+            let id = gift_cards_repository::insert_gift_card(
+                tx,
+                &code,
+                card.amount,
+                customer_id,
+                card.expires_on,
+                card.bought_for.as_deref(),
+                Some(&phone),
+            )
+            .await?;
+            (id, code)
+        };
 
         repository::insert_gift_card_item(
             tx,
@@ -1899,9 +1916,13 @@ async fn write_gift_card_sales(
             card.amount,
         )
         .await?;
+        issued.push(IssuedGiftCard {
+            id: gift_card_id,
+            code,
+        });
     }
 
-    Ok(())
+    Ok(issued)
 }
 
 async fn write_redemptions(
@@ -1926,6 +1947,9 @@ pub async fn create_invoice(
     mut input: CreateInvoiceInput,
     actor: &str,
 ) -> Result<CreatedInvoice, AppError> {
+    for card in &mut input.gift_cards {
+        card.code.clear();
+    }
     let mut tx = state.db().begin().await?;
     resolve_order_prices(
         &mut tx,
@@ -1972,7 +1996,14 @@ pub async fn create_invoice(
 
     write_product_lines(&mut tx, invoice_id, &input.products).await?;
 
-    write_gift_card_sales(&mut tx, invoice_id, input.customer_id, &input.gift_cards).await?;
+    let gift_cards = write_gift_card_sales(
+        &mut tx,
+        invoice_id,
+        input.customer_id,
+        &input.gift_cards,
+        &state.notifications().default_region,
+    )
+    .await?;
 
     write_redemptions(
         &mut tx,
@@ -2000,6 +2031,7 @@ pub async fn create_invoice(
         id: invoice_id,
         total_price: totals.total,
         gift_card_redeemed: totals.redeemed,
+        gift_cards,
     })
 }
 
@@ -2106,6 +2138,13 @@ pub async fn update_invoice(
         repository::lock_gift_cards(&mut tx, &card_ids).await?;
     }
     for sale in &gift_sales {
+        let sent = repository::sold_card_has_deliveries(&mut tx, sale.gift_card_id).await?;
+        if sent {
+            return Err(AppError::BadRequest(format!(
+                "gift card {} has been approved for delivery and the invoice cannot be rebuilt",
+                sale.code
+            )));
+        }
         if repository::sold_card_was_used(&mut tx, sale.gift_card_id).await? {
             return Err(AppError::BadRequest(format!(
                 "gift card {} has already been used and the invoice cannot be edited",
@@ -2166,7 +2205,22 @@ pub async fn update_invoice(
 
     write_product_lines(&mut tx, invoice_id, &input.products).await?;
 
-    write_gift_card_sales(&mut tx, invoice_id, input.customer_id, &input.gift_cards).await?;
+    // Only this invoice's previously issued codes can survive an edit.
+    for card in &mut input.gift_cards {
+        card.code = gift_cards_service::normalize_code(&card.code)
+            .ok()
+            .and_then(|code| gift_sales.iter().find(|sale| sale.code == code))
+            .map(|sale| sale.code.clone())
+            .unwrap_or_default();
+    }
+    let gift_cards = write_gift_card_sales(
+        &mut tx,
+        invoice_id,
+        input.customer_id,
+        &input.gift_cards,
+        &state.notifications().default_region,
+    )
+    .await?;
 
     write_redemptions(
         &mut tx,
@@ -2203,5 +2257,6 @@ pub async fn update_invoice(
         id: invoice_id,
         total_price: totals.total,
         gift_card_redeemed: totals.redeemed,
+        gift_cards,
     })
 }

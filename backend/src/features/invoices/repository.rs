@@ -1136,7 +1136,7 @@ pub async fn fetch_invoice_edit(
 
     let gift_rows = sqlx::query!(
         r#"
-        SELECT g.code, ii.line_total::float8 AS "amount!", g.expires_on
+        SELECT g.code, ii.line_total::float8 AS "amount!", g.expires_on, g.bought_for, g.recipient_phone
         FROM invoice_items ii
         JOIN gift_cards g ON g.id = ii.gift_card_id
         WHERE ii.invoice_id = $1 AND ii.kind = 'gift_card'
@@ -1196,6 +1196,8 @@ pub async fn fetch_invoice_edit(
             .map(|row| InvoiceEditGiftCardLine {
                 code: row.code,
                 amount: row.amount,
+                bought_for: row.bought_for,
+                recipient_phone: row.recipient_phone,
                 expires_on: row.expires_on,
             })
             .collect(),
@@ -1551,4 +1553,16 @@ pub async fn is_production_location(
         "SELECT EXISTS(SELECT 1 FROM branch WHERE id = $1 AND is_active AND holds_stock) AS \"usable!\"",
         location_id,
     ).fetch_one(&mut **tx).await?)
+}
+
+pub async fn sold_card_has_deliveries(
+    tx: &mut sqlx::PgTransaction<'_>,
+    id: Uuid,
+) -> Result<bool, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM gift_card_deliveries WHERE gift_card_id=$1)",
+    )
+    .bind(id)
+    .fetch_one(&mut **tx)
+    .await?)
 }
