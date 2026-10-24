@@ -132,8 +132,13 @@ pub struct CreateProductLineInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateGiftCardLineInput {
+    #[serde(default)]
     pub code: String,
     pub amount: f64,
+    #[serde(default)]
+    pub bought_for: Option<String>,
+    #[serde(default)]
+    pub recipient_phone: String,
     #[serde(default)]
     pub expires_on: Option<NaiveDate>,
 }
@@ -293,6 +298,8 @@ pub struct InvoiceEditProductLine {
 pub struct InvoiceEditGiftCardLine {
     pub code: String,
     pub amount: f64,
+    pub bought_for: Option<String>,
+    pub recipient_phone: Option<String>,
     pub expires_on: Option<NaiveDate>,
 }
 

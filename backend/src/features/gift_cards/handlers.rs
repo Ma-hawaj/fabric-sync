@@ -12,9 +12,48 @@ use crate::{
 };
 
 use super::{
-    service,
+    delivery, image, service,
     types::{CreateGiftCardInput, GiftCard, UpdateGiftCardInput},
 };
+
+pub async fn download_image(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl axum::response::IntoResponse, AppError> {
+    let image = image::get(&state, id).await?;
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, image::MIME.to_string()),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}\"", image.filename),
+            ),
+            (
+                axum::http::header::CACHE_CONTROL,
+                "private, no-store".into(),
+            ),
+        ],
+        image.png,
+    ))
+}
+
+pub async fn preview_delivery(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<delivery::Preview>, AppError> {
+    Ok(Json(delivery::preview(&state, id).await?))
+}
+
+pub async fn send_gift_card(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(id): Path<Uuid>,
+    Json(input): Json<delivery::SendInput>,
+) -> Result<Json<delivery::DeliveryResult>, AppError> {
+    Ok(Json(
+        delivery::approve(&state, id, input, user.subject().unwrap_or("staff")).await?,
+    ))
+}
 
 pub async fn list_gift_cards(
     State(state): State<AppState>,

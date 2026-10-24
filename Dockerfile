@@ -64,6 +64,7 @@ COPY backend/migrations ./backend/migrations
 COPY backend/.sqlx ./backend/.sqlx
 COPY backend/src ./backend/src
 COPY backend/templates ./backend/templates
+COPY backend/assets ./backend/assets
 COPY backend/seeds ./backend/seeds
 RUN cargo build --release --manifest-path backend/Cargo.toml
 
@@ -73,6 +74,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \
     && rm -rf /var/lib/apt/lists/
 COPY --from=backend /src/backend/target/release/fabric_sync /app/fabric-sync
+COPY --from=backend /src/backend/assets/fonts/LICENSE.txt /app/licenses/DejaVu-fonts.txt
 COPY --from=frontend /app/frontend/dist /app/static
 
 ENV PORT=8000 \
