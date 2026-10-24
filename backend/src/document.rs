@@ -28,6 +28,32 @@ pub(crate) fn format_quantity(value: f64) -> String {
     text.to_string()
 }
 
+/// Inch fractions on measurement sheets. Other decimals keep their precision.
+pub(crate) fn format_measurement(value: f64) -> String {
+    let magnitude = value.abs();
+    let whole = magnitude.trunc();
+    let fractions = [
+        (0.125, "⅛"),
+        (0.25, "¼"),
+        (0.375, "⅜"),
+        (0.5, "½"),
+        (0.625, "⅝"),
+        (0.75, "¾"),
+        (0.875, "⅞"),
+    ];
+    for (fraction, symbol) in fractions {
+        if (magnitude - whole - fraction).abs() < 1e-9 {
+            let sign = if value < 0.0 { "-" } else { "" };
+            return if whole == 0.0 {
+                format!("{sign}{symbol}")
+            } else {
+                format!("{sign}{whole} {symbol}")
+            };
+        }
+    }
+    value.to_string()
+}
+
 /// A timestamp as the printed documents write it: the calendar date in the
 /// shop's timezone plus the time of day, day-first, e.g. "30-07-2026 12:30".
 /// The zone itself is not printed — every document uses the one configured
@@ -77,6 +103,30 @@ pub(crate) fn template_environment(
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    #[test]
+    fn measurement_fractions_keep_symbols_and_other_decimals_keep_precision() {
+        for (value, expected) in [
+            (55.5, "55 ½"),
+            (17.25, "17 ¼"),
+            (17.75, "17 ¾"),
+            (17.125, "17 ⅛"),
+            (17.375, "17 ⅜"),
+            (17.625, "17 ⅝"),
+            (17.875, "17 ⅞"),
+            (0.5, "½"),
+            (0.125, "⅛"),
+            (-17.75, "-17 ¾"),
+            (-0.5, "-½"),
+            (0.0, "0"),
+            (42.0, "42"),
+            (17.13, "17.13"),
+            (17.123, "17.123"),
+            (17.999, "17.999"),
+        ] {
+            assert_eq!(format_measurement(value), expected);
+        }
+    }
 
     #[test]
     fn datetimes_print_day_first_in_the_shop_timezone() {

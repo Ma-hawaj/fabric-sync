@@ -9,7 +9,8 @@ SQLx applies the files in version order:
    order lifecycle (`pending`, `ready`, `collected`), customer addresses,
    notification preferences, invoice collection method, and per-order urgency
    and automatic charges. The invoice charge column stores the computed sum of its
-   order charges.
+   order charges. Numeric measurements use three decimal places to preserve
+   eighth-inch fractions.
 2. `0002_notification_schema.sql` creates immutable PDF artifacts, notification
    previews and approvals, recipients, delivery attempts, and webhook storage.
 3. `0003_readiness_and_revisions.sql` creates the invoice-readiness view and the

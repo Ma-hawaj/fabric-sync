@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use crate::{
     config::InvoiceBranding,
-    document::{format_amount, format_datetime, format_quantity, CURRENCY},
+    document::{format_amount, format_datetime, format_measurement, CURRENCY},
     error::AppError,
     features::customers::types::Measurement,
     state::AppState,
@@ -38,7 +38,7 @@ struct MeasurementChange {
 
 fn display_number(value: Option<f64>) -> String {
     match value {
-        Some(value) => format_quantity(value),
+        Some(value) => format_measurement(value),
         None => "—".to_string(),
     }
 }
@@ -52,7 +52,7 @@ fn display_text(value: &Option<String>) -> String {
 
 fn raw_number(value: Option<f64>) -> String {
     match value {
-        Some(value) => format!("{value:.2}"),
+        Some(value) => format!("{value:.3}"),
         None => String::new(),
     }
 }
@@ -321,6 +321,18 @@ mod tests {
         assert_eq!(changes[0].field, "chest");
         assert_eq!(changes[0].before, "108");
         assert_eq!(changes[0].after, "110");
+    }
+
+    #[test]
+    fn fraction_changes_preserve_the_third_decimal_place() {
+        let before = measurement(Some(42.125), Some(30.5));
+        let after = measurement(Some(42.13), Some(30.625));
+        let changes = measurement_changes(&before, Some(&after));
+        assert_eq!(changes.len(), 2);
+        assert_eq!(changes[0].before, "42 ⅛");
+        assert_eq!(changes[0].after, "42.13");
+        assert_eq!(changes[1].before, "30 ½");
+        assert_eq!(changes[1].after, "30 ⅝");
     }
 
     #[test]

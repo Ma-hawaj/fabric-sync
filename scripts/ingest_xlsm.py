@@ -76,8 +76,9 @@ Mapping decisions worth knowing:
  * No branch is named in the workbook. Every invoice uses one branch:
    ``--branch`` if given (created when missing), else the first active
    ``receives_orders`` branch, else a created 'Main Branch'.
- * Measurement values are text in the workbook ('55 ½', '17  ¾'). They are
-   parsed to NUMERIC where the schema has a numeric column; unparseable values
+ * Measurement values are text in the workbook ('55 ½', '17  ¾'). Halves,
+   quarters, and eighths (symbols or slash fractions) are parsed to NUMERIC
+   with three decimal places; unparseable values
    (ranges, 'CANCEL', 'SHIRT', ...) become NULL and are counted in the report.
     Every measurement column has a schema home; a column that ever loses
     its mapping lands in DROPPED_MEASUREMENT and is counted instead. Two
@@ -138,7 +139,12 @@ DEFAULT_MATERIAL = "General"
 PLACEHOLDER_DATE = dt.datetime(2026, 1, 1, 0, 0, 0)
 DEFAULT_BRANCH = "Main Branch"
 
-VULGAR = {"½": Decimal("0.5"), "¼": Decimal("0.25"), "¾": Decimal("0.75")}
+VULGAR = {
+    "⅛": Decimal("0.125"), "¼": Decimal("0.25"), "⅜": Decimal("0.375"),
+    "½": Decimal("0.5"), "⅝": Decimal("0.625"), "¾": Decimal("0.75"),
+    "⅞": Decimal("0.875"),
+}
+VULGAR_PATTERN = "[" + "".join(VULGAR) + "]"
 
 MEASUREMENT_NUMERIC = {
     "Length - FL": "front_height",
@@ -202,21 +208,25 @@ def parse_money(value: object) -> Decimal | None:
 
 
 def parse_measurement(value: object) -> tuple[Decimal | None, bool]:
-    """Parse '55 ½' / '17  ¾' / 32 / '¼' / '1 ¼.1'.
+    """Parse decimal, half/quarter/eighth symbols, and slash fractions.
+
+    Examples: '55 ½' / '17⅜' / '55 1/2' / 32 / '¼' / '1 ¼.1'.
 
     Returns (parsed, ok). ok=False when the cell held content that is not a
     single measurement (a range, 'CANCEL', 'SHIRT', ...) - that is reported.
     """
     if value is None:
         return None, True
-    if isinstance(value, (int, float)):
-        if float(value) != float(value):  # NaN
-            return None, False
-        return Decimal(str(value)), True
+    if isinstance(value, bool):
+        return None, False
+    if isinstance(value, (int, float, Decimal)):
+        parsed = Decimal(str(value))
+        return (parsed, True) if parsed.is_finite() else (None, False)
     s = re.sub(r"\s+", " ", str(value).strip())
     if not s:
         return None, True
-    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*(½|¼|¾)?", s)
+    s = s.replace("⁄", "/")
+    m = re.fullmatch(rf"(\d+(?:\.\d+)?)\s*({VULGAR_PATTERN})?", s)
     if m:
         total = Decimal(m.group(1))
         if m.group(2):
@@ -224,6 +234,12 @@ def parse_measurement(value: object) -> tuple[Decimal | None, bool]:
         return total, True
     if s in VULGAR:
         return VULGAR[s], True
+    m = re.fullmatch(r"(?:(\d+)\s+)?(\d+)\s*/\s*(\d+)", s)
+    if m:
+        whole, numerator, denominator = (int(part or 0) for part in m.groups())
+        if denominator in (2, 4, 8) and 0 < numerator < denominator:
+            return Decimal(whole) + Decimal(numerator) / Decimal(denominator), True
+        return None, False
     # decimal written with a comma or a stray space: '18,5' / '7. 75'
     m = re.fullmatch(r"(\d+)[,.]\s*(\d+)", s)
     if m:
@@ -235,10 +251,10 @@ def parse_measurement(value: object) -> tuple[Decimal | None, bool]:
         if ok and parsed is not None:
             return parsed, True
     # '24. ½' — decimal point used where the vulgar fraction belongs
-    m = re.fullmatch(r"(\d+)[.]\s*(½|¼|¾)", s)
+    m = re.fullmatch(rf"(\d+)[.]\s*({VULGAR_PATTERN})", s)
     if m:
         return Decimal(m.group(1)) + VULGAR[m.group(2)], True
-    m = re.fullmatch(r"(\d+(?:\.\d+)?\s*(?:½|¼|¾)?)\.\d", s)
+    m = re.fullmatch(rf"(\d+(?:\.\d+)?\s*(?:{VULGAR_PATTERN})?)\.\d", s)
     if m:
         return parse_measurement(m.group(1))[0], True
     return None, False
@@ -502,10 +518,10 @@ def read_workbook(path: Path, report: Report) -> dict:
             parsed, ok = parse_measurement(get(r, idx, src))
             if not ok:
                 report.anomaly(f"Measurments: unparseable {src}", get(r, idx, src))
-            # NUMERIC(6, 2) tops out below 10 000; a larger figure is a
+            # NUMERIC(7, 3) tops out below 10 000; a larger figure is a
             # data-entry slip (e.g. hips 45436), not a real measurement.
             if parsed is not None and abs(parsed) >= 10000:
-                report.anomaly(f"Measurments: out of NUMERIC(6,2) range {src}",
+                report.anomaly(f"Measurments: out of NUMERIC(7,3) range {src}",
                                get(r, idx, src))
                 parsed = None
             values[dst] = parsed
@@ -649,15 +665,15 @@ MEASUREMENT_TEXT_COLS = frozenset({
 def _canon_num(value: object) -> str:
     """Scale-insensitive numeric key for measurement signatures.
 
-    NUMERIC(6, 2) storage normalizes scale (Decimal('32') comes back as
-    Decimal('32.00')) and rounds past two decimals, so compare what Postgres
-    keeps: quantized to 2dp (half away from zero, as NUMERIC does), then
+    NUMERIC(7, 3) storage normalizes scale (Decimal('32') comes back as
+    Decimal('32.000')) and rounds past three decimals, so compare what Postgres
+    keeps: quantized to 3dp (half away from zero, as NUMERIC does), then
     scale-free.
     """
     if value is None:
         return "NULL"
     try:
-        d = Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        d = Decimal(str(value)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
     except Exception:
         return str(value)
     d = d.normalize()
