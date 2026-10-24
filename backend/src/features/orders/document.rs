@@ -14,7 +14,9 @@ use serde::Serialize;
 
 use crate::{
     config::InvoiceBranding,
-    document::{format_amount, format_date, format_datetime, format_quantity, CURRENCY},
+    document::{
+        format_amount, format_date, format_datetime, format_measurement, format_quantity, CURRENCY,
+    },
     error::AppError,
     features::design_options::{service as design_catalog, types::DesignAsset as CatalogAsset},
     state::AppState,
@@ -269,9 +271,7 @@ fn formatted_amounts(detail: &OrderDetail) -> BTreeMap<String, String> {
 
 fn push_number(values: &mut BTreeMap<String, String>, key: &str, value: Option<f64>) {
     if let Some(value) = value {
-        // Trims the trailing ".0" off a whole number: 120 inches reads "120",
-        // not "120.00".
-        values.insert(key.to_string(), format_quantity(value));
+        values.insert(key.to_string(), format_measurement(value));
     }
 }
 
@@ -726,16 +726,21 @@ mod tests {
 
     #[test]
     fn measurements_are_formatted_for_the_sheet_slots() {
+        let mut measurement = tests_support::measurement();
+        measurement.shoulder = Some(17.625);
+        measurement.neck_width = Some(7.123);
         let detail = OrderDetail {
             order: services_order(),
             invoice_number: 7,
-            measurement: tests_support::measurement(),
+            measurement,
         };
 
         let values = formatted_measurement(&detail);
         assert_eq!(values["frontHeight"], "120");
         assert_eq!(values["chest"], "50");
         assert_eq!(values["sleeveLength"], "60");
+        assert_eq!(values["shoulder"], "17 ⅝");
+        assert_eq!(values["neckWidth"], "7.123");
         // Everything the fixture didn't capture stays off the sheet.
         assert!(!values.contains_key("waist"));
         assert!(!values.contains_key("backHeight"));
@@ -821,7 +826,7 @@ mod tests {
         assert!(html.contains(">120</text>"));
         assert!(html.contains(">124</text>"));
         assert!(html.contains(">60</text>"));
-        assert!(html.contains(">38.5</text>"));
+        assert!(html.contains(">38 ½</text>"));
         assert!(html.contains("No 16x14"));
         // No units ride the slots.
         assert!(!html.contains("inch"));
