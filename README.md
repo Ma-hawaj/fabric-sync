@@ -167,6 +167,7 @@ Copy `frontend/.env.example` to `frontend/.env` and set the OIDC vars for your i
 - `VITE_OIDC_CLIENT_ID` — the frontend SPA client's ID (see "Local Infrastructure" above)
 - `VITE_OIDC_REDIRECT_URI` / `VITE_OIDC_POST_LOGOUT_REDIRECT_URI`, default `http://localhost:3000/`
 - `VITE_OIDC_SCOPE`, default `openid profile email`
+- `VITE_ACCOUNT_URL` — optional override for the user menu's Account settings link. Root issuers default to Zitadel's `/ui/console/users/me`; legacy Authentik issuers use `/if/user/`. Other issuer layouts require an explicit account URL. For Docker builds, set this as a build argument or repository Actions variable and rebuild the image.
 
 API calls are same-origin in dev: `VITE_API_BASE_URL=/api` sends them through the Vite dev-server proxy (`/api` → the backend as-is, since the backend serves the API nested under `/api` — see `BACKEND_URL` in `frontend/vite.config.ts`), so frontend and backend share one URL with no CORS involved. The IdP is hit directly. To bypass the proxy and hit the backend directly instead:
 

@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ThemeMenuItems } from '@/components/theme-menu-items'
 import { useAuth } from '@/lib/auth'
+import { accountSettingsUrl } from '@/lib/account-settings'
 import { usePreferences } from '@/features/locations/hooks/use-default-location'
 import { DefaultLocationMenu } from '@/features/locations/components/default-location-menu'
 import {
@@ -38,6 +39,7 @@ import {
   ChevronsUpDownIcon,
   LogInIcon,
   LogOutIcon,
+  SettingsIcon,
   PaletteIcon,
   SunIcon,
   WrenchIcon,
@@ -75,6 +77,10 @@ function getInitials(name: string) {
 function UserMenu() {
   const { isAuthenticated, user, signOut } = useAuth()
   const { data: preferences } = usePreferences()
+  // Identity lives in the IdP (no local user table), so account
+  // maintenance — profile, password, MFA — opens the IdP's self-service
+  // page in a new tab rather than living in this app.
+  const accountUrl = accountSettingsUrl()
 
   if (!isAuthenticated || !user) {
     return (
@@ -124,6 +130,16 @@ function UserMenu() {
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DefaultLocationMenu />
+        {accountUrl && (
+          <DropdownMenuItem
+            render={
+              <a href={accountUrl} target="_blank" rel="noopener noreferrer" />
+            }
+          >
+            <SettingsIcon />
+            Account settings
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={signOut}>
           <LogOutIcon />
