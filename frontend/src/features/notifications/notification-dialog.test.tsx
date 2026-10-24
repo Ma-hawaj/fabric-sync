@@ -20,7 +20,7 @@ function fixture(): NotificationDraft {
     canSend: true,
     snapshot: {
       invoiceNumber: 42,
-      body: 'Your invoice INV-42 is attached. Balance due: 40.000 BHD.',
+      body: 'Your invoice INV-42 is attached. Balance due: 40.000 BHD.\nفاتورتكم INV-42 مرفقة. المبلغ المتبقي: 40.000 BHD.',
       language: 'en_US',
       exclusions: [],
     },
@@ -99,6 +99,9 @@ describe('notification preview and approval', () => {
     await screen.findByTitle('Invoice PDF preview')
     expect(screen.getByText(/2 unique mobiles selected/)).toBeTruthy()
     expect(screen.getByText(/Ahmed, Ali/)).toBeTruthy()
+    expect(screen.getByText(/فاتورتكم INV-42/).textContent).toBe(
+      draft.snapshot.body,
+    )
     const checkboxes = screen.getAllByRole('checkbox')
     expect(checkboxes).toHaveLength(2)
     expect(

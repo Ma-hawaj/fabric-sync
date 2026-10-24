@@ -202,7 +202,7 @@ function Preview({
               <p className="mb-2 text-xs text-muted-foreground">
                 Message · {draft.snapshot.language}
               </p>
-              <p className="whitespace-pre-wrap text-sm">
+              <p dir="auto" className="whitespace-pre-wrap text-sm">
                 {draft.snapshot.body}
               </p>
             </div>
