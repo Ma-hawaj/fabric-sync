@@ -1,7 +1,5 @@
 # Cancellations, returns and refunds
 
-[UI screenshots](screenshots/returns-and-cancellations/README.md) show the combined forms and audit history using sample data.
-
 ## Staff workflow
 
 On an invoice, choose **Return & Refund**, select the merchandise, enter a reason, and confirm the refund in the same form. Retail products can optionally be restocked at their original sale location. Collected tailoring garments are returned once as whole garments; their consumed fabric is preserved.
@@ -95,6 +93,6 @@ A refund plan is either `{ "timing": "now", "payments": [...] }` or `{ "timing":
 
 All writes return `{ "id": "..." }`. Reasons contain 1–1000 nonblank characters. Monetary amounts and quantities use at most two decimal places, matching existing storage.
 
-Generate one UUID `requestId` per intended operation. Retrying unchanged values with the same ID returns the original result without another credit, stock movement, closure or payout. Reusing an ID with different values, including a different cancellation order, returns 409. Invalid eligibility, quantities or refund limits return 400. After an uncertain response, refresh the history and retry the original request. The frontend refreshes affected data and preserves the original form context and request ID for unchanged retries.
+Generate one UUID `requestId` per intended operation. Retrying unchanged values with the same ID returns the original result without another credit, stock movement, closure or payout. Reusing an ID with different values, including a different cancellation order, returns 409. Invalid eligibility, quantities or refund limits return 400. After an uncertain response, refresh the history and retry the original request. Each return, refund or cancellation dialog preserves one request ID for its entire lifetime, including edited retries. If the original attempt committed, an edited retry conflicts and directs staff to refresh the history. If the original attempt rolled back, corrected values can succeed with the same ID. Opening a new dialog starts a new intended operation.
 
 Migrations run on backend startup. The new migrations are `0005_invoice_returns.sql` and `0006_order_closures.sql`, following the consolidated core/notification baseline. Apply both before serving the updated code; regenerated SQLx metadata is included. Original invoices, payments and sale lines are preserved. The invoice page and printable invoice show original figures together with credits, money paid back and any refund still due.

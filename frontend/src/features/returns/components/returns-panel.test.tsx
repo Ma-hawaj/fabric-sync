@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiClient, ApiError } from '@/lib/api'
 import { CONTEXT, PRODUCT } from '../test-fixtures'
-import type { ReturnContext } from '../types/returns'
+import type { CreateReturnInput, ReturnContext } from '../types/returns'
 import { ReturnsPanel } from './returns-panel'
 
 function renderPanel(context: ReturnContext = CONTEXT) {
@@ -181,5 +181,45 @@ describe('ReturnsPanel', () => {
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2))
     expect(post.mock.calls[0][1]).toEqual(post.mock.calls[1][1])
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('warns staff to refresh history when an edited retry may already be recorded', async () => {
+    const post = vi
+      .spyOn(apiClient, 'post')
+      .mockRejectedValueOnce(new ApiError('Response lost', 503))
+      .mockRejectedValueOnce(
+        new ApiError('Request ID already used with different values', 409),
+      )
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Return & Refund' }))
+    fireEvent.change(screen.getByLabelText('Reason for return'), {
+      target: { value: 'Wrong size' },
+    })
+    fireEvent.change(screen.getByLabelText('Quantity to return — Buttons'), {
+      target: { value: '1' },
+    })
+    fireEvent.click(screen.getByLabelText('Refund later'))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Return' }))
+    await screen.findByText('Response lost')
+    fireEvent.change(screen.getByLabelText('Reason for return'), {
+      target: { value: 'Wrong size — corrected reason' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Return' }))
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain(
+        'This operation may already be recorded. Refresh the history before trying again.',
+      ),
+    )
+    const original = post.mock.calls[0][1] as CreateReturnInput & {
+      requestId: string
+    }
+    expect(post.mock.calls[1][1]).toEqual({
+      ...original,
+      reason: 'Wrong size — corrected reason',
+    })
+    expect(
+      screen.getByDisplayValue('Wrong size — corrected reason'),
+    ).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeTruthy()
   })
 })

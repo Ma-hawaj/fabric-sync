@@ -737,7 +737,7 @@ pub async fn set_stage(
 
 /// Assigns or clears a stage's assignee, independent of `set_stage` — a stage
 /// is assignable whether it's pending, done, or skipped. `assignee_name` is
-/// resolved here against the (currently mocked) user directory rather than
+/// resolved here against the configured user directory rather than
 /// trusted from the client, matching how a location's name is always looked
 /// up server-side instead of taken from the request.
 pub async fn set_assignee(
@@ -1665,6 +1665,118 @@ mod repair_collection_tests {
     use super::*;
     use crate::test_support;
     use sqlx::PgPool;
+
+    #[sqlx::test]
+    async fn order_mutations_and_adjustments_work_with_a_single_pool_connection(db: PgPool) {
+        use crate::features::{invoices, returns};
+        use serde_json::{from_value, json};
+
+        let (invoice_id, orders, production, _) = test_support::invoice(&db, 2, false).await;
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(std::time::Duration::from_secs(2))
+            .connect_with((*db.connect_options()).clone())
+            .await
+            .unwrap();
+        let state = test_support::state(pool.clone(), None, None).await;
+        let order_id = orders[0];
+        let stage_id = repository::list_stage_catalog(&state).await.unwrap()[0].id;
+
+        update_order(
+            &state,
+            order_id,
+            from_value(json!({"productionLocationId": production})).unwrap(),
+        )
+        .await
+        .unwrap();
+        set_stage(
+            &state,
+            order_id,
+            stage_id,
+            from_value(json!({"status": "done"})).unwrap(),
+        )
+        .await
+        .unwrap();
+        set_assignee(&state, order_id, stage_id, AssignStageInput::default())
+            .await
+            .unwrap();
+        let updated = create_repair(&state, order_id, from_value(json!({
+                "reason": "Fit adjustment", "measurement": {"date": "2026-10-24", "type": "body", "fit": "medium", "chest": 50}
+        })).unwrap()).await.unwrap();
+        let repair_id = updated.repairs[0].id;
+        update_repair(
+            &state,
+            order_id,
+            repair_id,
+            from_value(json!({"status": "completed"})).unwrap(),
+        )
+        .await
+        .unwrap();
+        set_repair_measurement(
+            &state,
+            order_id,
+            repair_id,
+            from_value(json!({
+                "date": "2026-10-24", "type": "body", "fit": "medium", "chest": 52
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+        receive_repair(&state, order_id, repair_id, 0.0, None)
+            .await
+            .unwrap();
+
+        invoices::service::record_payment(&state, invoice_id, 20.0, PaymentType::Cash, None)
+            .await
+            .unwrap();
+        collect_order(&state, order_id, 0.0, None).await.unwrap();
+        returns::service::create_return(
+            &state,
+            invoice_id,
+            from_value(json!({
+                "requestId": Uuid::new_v4(), "reason": "Return collected garment",
+                "lines": [{"lineId": order_id, "quantity": 1, "restock": false}]
+            }))
+            .unwrap(),
+            "staff",
+        )
+        .await
+        .unwrap();
+        returns::service::cancellation_context(&state, orders[1])
+            .await
+            .unwrap();
+        returns::service::cancel_order(
+            &state,
+            orders[1],
+            from_value(json!({
+                "requestId": Uuid::new_v4(), "reason": "Cancel remaining garment",
+                "refund": {"timing": "later"}
+            }))
+            .unwrap(),
+            "staff",
+        )
+        .await
+        .unwrap();
+        returns::service::create_refund(
+            &state,
+            invoice_id,
+            from_value(json!({
+                "requestId": Uuid::new_v4(), "reason": "Settle deferred refund", "amount": 20,
+                "paymentType": "cash"
+            }))
+            .unwrap(),
+            "staff",
+        )
+        .await
+        .unwrap();
+        let context = returns::service::context(&state, invoice_id).await.unwrap();
+        assert_eq!(context.settlement.amount_credited, 200.0);
+        assert_eq!(context.settlement.cash_refunded, 20.0);
+        assert_eq!(context.settlement.balance_due, 0.0);
+        assert_eq!(context.settlement.refund_due, 0.0);
+        pool.close().await;
+    }
 
     #[sqlx::test]
     async fn cancelled_orders_block_repair_collection_and_measurement_fixes(db: PgPool) {

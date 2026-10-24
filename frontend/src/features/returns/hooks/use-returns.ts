@@ -25,17 +25,15 @@ export function useReturns(invoiceId: string | null) {
 
 function useAdjustment<T>(path: string) {
   const client = useQueryClient()
-  // Retrying unchanged values after a lost response uses the same request ID.
-  // Each dialog mounts a fresh hook for the next intentional operation.
-  const requests = useRef(new Map<string, string>())
+  // Keep one ID for this dialog, including edits after an uncertain response.
+  // A changed retry must conflict if the first attempt already committed.
+  const requestId = useRef<string | null>(null)
   return useMutation({
     mutationFn: async (input: T) => {
-      const key = JSON.stringify(input)
-      const requestId = requests.current.get(key) ?? crypto.randomUUID()
-      requests.current.set(key, requestId)
+      requestId.current ??= crypto.randomUUID()
       const { data } = await apiClient.post<{ id: string }>(path, {
         ...input,
-        requestId,
+        requestId: requestId.current,
       })
       return data
     },
