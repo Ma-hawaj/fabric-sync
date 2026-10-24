@@ -319,6 +319,8 @@ CREATE TABLE gift_cards (
     initial_amount NUMERIC(10, 2) NOT NULL,
     balance NUMERIC(10, 2) NOT NULL,
     customer_id UUID REFERENCES customers(id),
+    bought_for TEXT,
+    recipient_phone TEXT,
     expires_on DATE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
