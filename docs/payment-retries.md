@@ -29,6 +29,19 @@ original stored payment, including its ID, timestamp and rounded amount;
 A replay remains valid after full payment or a later order cancellation/return.
 Original invoice totals stay unchanged.
 
+Every application payment records the authenticated staff subject in
+`invoice_payments.recorded_by`, including advances at invoice creation and
+payments taken during individual or whole-invoice collection. A replay keeps the
+original recorder even when another staff member retries it; the retrying actor
+is not part of the request hash. The client cannot choose the recorded staff ID.
+
+Invoices similarly record their authenticated creator in `invoices.created_by`.
+Editing an invoice preserves that original creator. Invoice lists/details and
+payment history resolve these subjects through the shared staff directory,
+showing staff names or email fallbacks. Imported invoices/payments with no known
+actor keep null values and display **Staff not recorded**. Directory failures
+and missing staff use the existing explicit fallback labels.
+
 The Record Payment dialog keeps one request ID and its opening balance throughout
 its lifetime. It preserves failed input, refreshes invoice/order history after
 success or failure, and permits an unchanged retry even if a lost response was

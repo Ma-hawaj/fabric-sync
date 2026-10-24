@@ -67,6 +67,7 @@ export interface InvoiceTotals {
 
 /** One row of the invoice's payments ledger, oldest first. */
 export interface InvoicePayment {
+  recordedBy: string | null
   id: string
   amount: number
   /** Null only on legacy rows imported without a recorded method. */
@@ -78,6 +79,7 @@ export interface InvoicePayment {
 
 /** Shape of GET /invoices/:id. */
 export interface InvoiceDetail extends ReadinessFields {
+  createdBy: string | null
   collectionMethod: 'delivery' | 'pickup'
   id: string
   invoiceNumber: number

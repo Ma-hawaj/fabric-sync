@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT id, amount::float8 AS \"amount!\", payment_type, paid_at, order_id,\n               request_hash AS \"request_hash!\"\n        FROM invoice_payments WHERE invoice_id = $1 AND request_id = $2\n        ",
+  "query": "\n        INSERT INTO invoice_payments (invoice_id, order_id, amount, payment_type, recorded_by)\n        VALUES ($1, $2, $3::float8, $4, $5)\n        RETURNING id, amount::float8 AS \"amount!\", payment_type, paid_at, order_id, recorded_by\n        ",
   "describe": {
     "columns": [
       {
@@ -30,14 +30,17 @@
       },
       {
         "ordinal": 5,
-        "name": "request_hash!",
-        "type_info": "Bytea"
+        "name": "recorded_by",
+        "type_info": "Text"
       }
     ],
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid"
+        "Uuid",
+        "Float8",
+        "Text",
+        "Text"
       ]
     },
     "nullable": [
@@ -49,5 +52,5 @@
       true
     ]
   },
-  "hash": "023e57d51e07042d064d43302a766b3c0b0154cbbcff838a8fbf6ada2b896ce4"
+  "hash": "0e9dfbc4ab242109953a86bae52eeb7f6ac11a2c20848d9ef2795f4b460b6ca0"
 }

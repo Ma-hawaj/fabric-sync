@@ -25,6 +25,7 @@ async fn record_payment_returns_exact_stored_cents(db: PgPool) {
                 payment_type: PaymentType::Cash,
                 order_id: None,
             },
+            "staff",
         )
         .await
         .unwrap();
@@ -67,11 +68,12 @@ async fn collect_invoice_returns_exact_stored_cents(db: PgPool) {
             payment_type: PaymentType::Cash,
             order_id: None,
         },
+        "staff",
     )
     .await
     .unwrap();
 
-    let result = service::collect_invoice(&state, invoice_id, Some(PaymentType::Card))
+    let result = service::collect_invoice(&state, invoice_id, Some(PaymentType::Card), "staff")
         .await
         .unwrap();
     let detail = service::get_invoice(&state, invoice_id).await.unwrap();

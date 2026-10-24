@@ -5,6 +5,7 @@ import { getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { DataTable } from '@/components/data-table/data-table'
 import { apiClient } from '@/lib/api'
 import { apiGetMock } from '@/lib/list-fixtures'
+import { STAFF_USER } from '@/features/users/test-fixtures'
 import type { Invoice } from '../types/invoices'
 import { getInvoiceColumns } from './invoice-columns'
 import { InvoiceOrderBreakdown } from './invoice-order-breakdown'
@@ -23,6 +24,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 const invoice: Invoice = {
+  createdBy: null,
   id: 'invoice-one',
   invoiceNumber: 42,
   collectionMethod: 'pickup',
@@ -135,6 +137,7 @@ function renderTable(data?: Invoice[]) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
+  client.setQueryData(['users'], [STAFF_USER])
   const view = render(
     <QueryClientProvider client={client}>
       <InvoiceTable data={data} />
@@ -144,6 +147,22 @@ function renderTable(data?: Invoice[]) {
 }
 
 describe('Invoice table', () => {
+  it('shows the invoice creator as a staff name without exposing the subject', () => {
+    renderTable([{ ...invoice, createdBy: STAFF_USER.id }])
+    expect(
+      screen.getByRole('columnheader', { name: /Created by/ }),
+    ).toBeTruthy()
+    expect(screen.getByRole('cell', { name: STAFF_USER.name })).toBeTruthy()
+    expect(screen.queryByText(STAFF_USER.id, { exact: true })).toBeNull()
+  })
+
+  it('labels an invoice with no creator as staff not recorded', () => {
+    renderTable()
+    expect(
+      screen.getByRole('cell', { name: 'Staff not recorded' }),
+    ).toBeTruthy()
+  })
+
   beforeEach(() => {
     vi.mocked(apiClient.get).mockReset()
     vi.mocked(apiClient.get).mockImplementation(

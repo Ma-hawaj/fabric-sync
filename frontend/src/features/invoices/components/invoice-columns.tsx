@@ -1,6 +1,7 @@
 import { ReadinessBadge } from '@/features/notifications/readiness-controls'
 import { defineColumns } from '@/lib/define-columns'
 import { Link } from '@tanstack/react-router'
+import { StaffName } from '@/features/users/components/staff-name'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -130,6 +131,15 @@ export const getInvoiceColumns = (
       },
       enableSorting: true,
       enableColumnFilter: true,
+    },
+    {
+      accessorKey: 'createdBy',
+      size: 160,
+      meta: { label: 'Created by' },
+      header: 'Created by',
+      cell: ({ row }) => <StaffName userId={row.original.createdBy} />,
+      enableSorting: false,
+      enableColumnFilter: false,
     },
     {
       id: 'targetDate',

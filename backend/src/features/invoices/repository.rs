@@ -70,6 +70,7 @@ pub async fn fetch_invoice_detail(
             i.urgent_charge::float8 AS "urgent_charge!",
             i.collection_method,
             i.created_at,
+            i.created_by,
             i.discount::float8 AS "discount!",
             i.discount_unit,
             -- Money state is derived from the ledger: the table stores only
@@ -283,6 +284,7 @@ pub async fn fetch_invoice_detail(
             urgent_charge: invoice.urgent_charge,
             collection_method: invoice.collection_method,
             created_at: invoice.created_at,
+            created_by: invoice.created_by,
             branch_name: invoice.branch_name,
             buyer: invoice
                 .buyer_name
@@ -340,6 +342,7 @@ const SPEC: ListSpec = ListSpec {
             i.id,
             i.invoice_number,
             i.invoice_date,
+            i.created_by,
             i.target_date,
             i.urgent_charge::float8 AS urgent_charge,
             i.collection_method,
@@ -525,6 +528,7 @@ pub async fn insert_invoice(
     total_price: f64,
     gift_card_redeemed: f64,
     urgent_charge: f64,
+    actor: &str,
 ) -> Result<(Uuid, chrono::DateTime<chrono::Utc>), sqlx::Error> {
     // invoice_date is server-set (DEFAULT now()) and never taken from
     // input — staff promise a target_date instead. Returned so gift card
@@ -534,11 +538,11 @@ pub async fn insert_invoice(
         INSERT INTO invoices (
             target_date, branch_id, discount, discount_unit,
             total_price, customer_id, gift_card_redeemed,
-            urgent_charge, collection_method
+            urgent_charge, collection_method, created_by
         )
         VALUES (
             $1, $2, $3::float8, $4, $5::float8, $6, $7::float8,
-            $8::float8, $9
+            $8::float8, $9, $10
         )
         RETURNING id, invoice_date
         "#,
@@ -551,6 +555,7 @@ pub async fn insert_invoice(
         gift_card_redeemed,
         urgent_charge,
         input.collection_method.as_str(),
+        actor,
     )
     .fetch_one(&mut **tx)
     .await
@@ -614,17 +619,19 @@ pub async fn insert_payment(
     order_id: Option<Uuid>,
     amount: f64,
     payment_type: Option<&str>,
+    actor: &str,
 ) -> Result<InvoicePayment, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        INSERT INTO invoice_payments (invoice_id, order_id, amount, payment_type)
-        VALUES ($1, $2, $3::float8, $4)
-        RETURNING id, amount::float8 AS "amount!", payment_type, paid_at, order_id
+        INSERT INTO invoice_payments (invoice_id, order_id, amount, payment_type, recorded_by)
+        VALUES ($1, $2, $3::float8, $4, $5)
+        RETURNING id, amount::float8 AS "amount!", payment_type, paid_at, order_id, recorded_by
         "#,
         invoice_id,
         order_id,
         amount,
         payment_type,
+        actor,
     )
     .fetch_one(&mut **tx)
     .await?;
@@ -635,6 +642,7 @@ pub async fn insert_payment(
         payment_type: row.payment_type,
         paid_at: row.paid_at,
         order_id: row.order_id,
+        recorded_by: row.recorded_by,
     })
 }
 
@@ -646,7 +654,7 @@ pub async fn previous_payment_request(
 ) -> Result<Option<(InvoicePayment, Vec<u8>)>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT id, amount::float8 AS "amount!", payment_type, paid_at, order_id,
+        SELECT id, amount::float8 AS "amount!", payment_type, paid_at, order_id, recorded_by,
                request_hash AS "request_hash!"
         FROM invoice_payments WHERE invoice_id = $1 AND request_id = $2
         "#,
@@ -663,6 +671,7 @@ pub async fn previous_payment_request(
                 payment_type: row.payment_type,
                 paid_at: row.paid_at,
                 order_id: row.order_id,
+                recorded_by: row.recorded_by,
             },
             row.request_hash,
         )
@@ -674,13 +683,14 @@ pub async fn insert_requested_payment(
     invoice_id: Uuid,
     input: &RecordPaymentInput,
     hash: &[u8],
+    actor: &str,
 ) -> Result<InvoicePayment, sqlx::Error> {
     sqlx::query_as!(
         InvoicePayment,
         r#"
-        INSERT INTO invoice_payments (invoice_id, order_id, amount, payment_type, request_id, request_hash)
-        VALUES ($1, $2, $3::float8, $4, $5, $6)
-        RETURNING id, amount::float8 AS "amount!", payment_type, paid_at, order_id
+        INSERT INTO invoice_payments (invoice_id, order_id, amount, payment_type, request_id, request_hash, recorded_by)
+        VALUES ($1, $2, $3::float8, $4, $5, $6, $7)
+        RETURNING id, amount::float8 AS "amount!", payment_type, paid_at, order_id, recorded_by
         "#,
         invoice_id,
         input.order_id,
@@ -688,6 +698,7 @@ pub async fn insert_requested_payment(
         input.payment_type.as_str(),
         input.request_id,
         hash,
+        actor,
     )
     .fetch_one(&mut **tx)
     .await
@@ -702,7 +713,7 @@ pub async fn list_payments(
     sqlx::query_as!(
         InvoicePayment,
         r#"
-        SELECT id, amount::float8 AS "amount!", payment_type, paid_at, order_id
+        SELECT id, amount::float8 AS "amount!", payment_type, paid_at, order_id, recorded_by
         FROM invoice_payments
         WHERE invoice_id = $1
         ORDER BY paid_at, id

@@ -27,6 +27,9 @@ Adjustment retry checks store a 32-byte SHA-256 hash, not the request JSON;
 structured credit, stock and refund records retain the audit details.
 Standalone payments also store paired request IDs/hashes with per-invoice
 uniqueness. Both columns remain null for creation, collection and import writes.
+The core baseline also stores `invoices.created_by` and
+`invoice_payments.recorded_by` as nullable authenticated staff subjects. Application
+writes populate them; imports without a known actor leave them null.
 
 Reference data, the design catalog, and optional demo data live in `backend/seeds/`
 and are loaded separately. Future deployed schema changes should be added as new

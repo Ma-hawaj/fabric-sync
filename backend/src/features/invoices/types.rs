@@ -313,6 +313,7 @@ pub struct InvoicePayment {
     pub payment_type: Option<String>,
     pub paid_at: DateTime<Utc>,
     pub order_id: Option<Uuid>,
+    pub recorded_by: Option<String>,
 }
 
 /// Shape of `GET /invoices/:id/edit`: the invoice as input values rather than
@@ -534,6 +535,7 @@ pub struct InvoiceTotalsBreakdown {
 /// the table no longer stores them.
 #[derive(Clone, Debug)]
 pub struct InvoiceRecord {
+    pub created_by: Option<String>,
     pub urgent_charge: f64,
     pub collection_method: String,
     pub id: Uuid,
@@ -579,6 +581,7 @@ pub struct InvoiceRecord {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceDetail {
+    pub created_by: Option<String>,
     #[serde(flatten)]
     pub readiness: crate::features::orders::readiness::Summary,
     pub collection_method: String,
@@ -619,6 +622,7 @@ pub struct InvoiceDetail {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceListItem {
+    pub created_by: Option<String>,
     #[sqlx(flatten)]
     #[serde(flatten)]
     pub readiness: crate::features::orders::readiness::Summary,

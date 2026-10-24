@@ -6,6 +6,7 @@ import type { Invoice } from '../types/invoices'
 import { RecordPaymentDialog } from './record-payment-dialog'
 
 const invoice: Invoice = {
+  createdBy: null,
   id: 'invoice-1',
   invoiceNumber: 42,
   collectionMethod: 'pickup',

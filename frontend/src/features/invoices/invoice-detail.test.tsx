@@ -40,6 +40,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 const DETAIL: InvoiceDetail = {
+  createdBy: null,
   id: 'inv-1',
   invoiceNumber: 42,
   collectionMethod: 'pickup',
@@ -91,6 +92,7 @@ const DETAIL: InvoiceDetail = {
       id: 'pay-1',
       amount: 60,
       paymentType: 'benefit',
+      recordedBy: null,
       paidAt: '2026-07-28T09:35:00Z',
       orderId: null,
     },
@@ -137,6 +139,33 @@ function renderPage(
 }
 
 describe('InvoiceDetailPage', () => {
+  it('resolves invoice creators and payment recorders to staff names', () => {
+    renderPage({
+      ...DETAIL,
+      createdBy: STAFF_USER.id,
+      payments: [{ ...DETAIL.payments[0], recordedBy: STAFF_USER.id }],
+    })
+    expect(screen.getByText('Created by:').textContent).toContain(
+      STAFF_USER.name,
+    )
+    const history = screen.getByRole('table', { name: 'Payments and refunds' })
+    expect(
+      within(history).getByRole('row', { name: /Payment/ }).textContent,
+    ).toContain(STAFF_USER.name)
+    expect(screen.queryByText(STAFF_USER.id, { exact: true })).toBeNull()
+  })
+
+  it('shows an explicit fallback for imported invoices and payments without staff', () => {
+    renderPage(DETAIL)
+    expect(screen.getByText('Created by:').textContent).toContain(
+      'Staff not recorded',
+    )
+    const history = screen.getByRole('table', { name: 'Payments and refunds' })
+    expect(
+      within(history).getByRole('row', { name: /Payment/ }).textContent,
+    ).toContain('Staff not recorded')
+  })
+
   it('shows delivery, priority, addresses, and the urgent charge on saved invoices', () => {
     renderPage({
       ...DETAIL,

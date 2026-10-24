@@ -85,6 +85,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         date: invoice.date,
         target_date: invoice.target_date,
         created_at: invoice.created_at,
+        created_by: invoice.created_by,
         branch_name: invoice.branch_name,
         buyer: invoice.buyer,
         payment_status: invoice.payment_status,
@@ -202,6 +203,7 @@ pub async fn record_payment(
     state: &AppState,
     invoice_id: Uuid,
     input: RecordPaymentInput,
+    actor: &str,
 ) -> Result<RecordedPayment, AppError> {
     use crate::idempotency::{request_hash, verify_request_hash};
 
@@ -235,7 +237,7 @@ pub async fn record_payment(
             balance.net_gift_card_redeemed,
             balance.net_amount_paid,
         )?;
-        repository::insert_requested_payment(&mut tx, invoice_id, &input, &hash).await?
+        repository::insert_requested_payment(&mut tx, invoice_id, &input, &hash, actor).await?
     };
 
     // Use persisted cents for both first writes and replays. The original
@@ -266,6 +268,7 @@ pub async fn collect_invoice(
     state: &AppState,
     invoice_id: Uuid,
     payment_type: Option<PaymentType>,
+    actor: &str,
 ) -> Result<CollectedInvoice, AppError> {
     let mut tx = state.db().begin().await?;
 
@@ -292,6 +295,7 @@ pub async fn collect_invoice(
             None,
             summary.balance_due,
             Some(payment_type.as_str()),
+            actor,
         )
         .await?;
         Some(payment_type.as_str().to_string())
@@ -1157,13 +1161,15 @@ mod tests {
         }))
         .unwrap()];
         assert!(matches!(
-            create_invoice(&state, overpaid).await,
+            create_invoice(&state, overpaid, "staff").await,
             Err(AppError::BadRequest(_))
         ));
 
         // Only the first order is urgent. Client-submitted charges are ignored.
         // (10 + 2.5 + 15 + 3.5) * 90% + 5 = 32.90.
-        let created = create_invoice(&state, input.clone()).await.unwrap();
+        let created = create_invoice(&state, input.clone(), "staff")
+            .await
+            .unwrap();
         assert_eq!(created.total_price, 32.9);
         let editing = get_invoice_for_edit(&state, created.id).await.unwrap();
         let customer = &editing.customers[0];
@@ -1918,6 +1924,7 @@ async fn write_redemptions(
 pub async fn create_invoice(
     state: &AppState,
     mut input: CreateInvoiceInput,
+    actor: &str,
 ) -> Result<CreatedInvoice, AppError> {
     let mut tx = state.db().begin().await?;
     resolve_order_prices(
@@ -1940,6 +1947,7 @@ pub async fn create_invoice(
         totals.total,
         totals.redeemed,
         totals.urgent_charge,
+        actor,
     )
     .await?;
 
@@ -1950,6 +1958,7 @@ pub async fn create_invoice(
             None,
             payment.amount,
             Some(payment.payment_type.as_str()),
+            actor,
         )
         .await?;
     }
