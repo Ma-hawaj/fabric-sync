@@ -2207,9 +2207,11 @@ pub async fn update_invoice(
 
     // Only this invoice's previously issued codes can survive an edit.
     for card in &mut input.gift_cards {
-        if !gift_sales.iter().any(|sale| sale.code == card.code) {
-            card.code.clear();
-        }
+        card.code = gift_cards_service::normalize_code(&card.code)
+            .ok()
+            .and_then(|code| gift_sales.iter().find(|sale| sale.code == code))
+            .map(|sale| sale.code.clone())
+            .unwrap_or_default();
     }
     let gift_cards = write_gift_card_sales(
         &mut tx,

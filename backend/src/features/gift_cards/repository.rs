@@ -85,11 +85,13 @@ pub async fn get_gift_card(
 pub(super) async fn get_gift_card_in_tx(
     tx: &mut sqlx::PgTransaction<'_>,
     id: Uuid,
-) -> Result<GiftCard, sqlx::Error> {
-    sqlx::query_as::<_, GiftCard>(&format!("{} WHERE g.id = $1", SPEC.base_sql))
-        .bind(id)
-        .fetch_one(&mut **tx)
-        .await
+) -> Result<GiftCard, AppError> {
+    Ok(
+        sqlx::query_as::<_, GiftCard>(&format!("{} WHERE g.id = $1", SPEC.base_sql))
+            .bind(id)
+            .fetch_one(&mut **tx)
+            .await?,
+    )
 }
 
 // Looked up by the code staff type in at redemption time. Deliberately the only
@@ -167,8 +169,8 @@ pub async fn try_insert_generated_gift_card(
     expires_on: Option<NaiveDate>,
     bought_for: Option<&str>,
     recipient_phone: &str,
-) -> Result<Option<Uuid>, sqlx::Error> {
-    sqlx::query_scalar!(
+) -> Result<Option<Uuid>, AppError> {
+    Ok(sqlx::query_scalar!(
         r#"
         INSERT INTO gift_cards (code, initial_amount, balance, customer_id, expires_on, bought_for, recipient_phone)
         VALUES ($1, $2::float8, $2::float8, $3, $4, NULLIF(BTRIM($5), ''), $6)
@@ -176,7 +178,7 @@ pub async fn try_insert_generated_gift_card(
         RETURNING id
         "#,
         code, amount, customer_id, expires_on, bought_for, recipient_phone,
-    ).fetch_optional(&mut **tx).await
+    ).fetch_optional(&mut **tx).await?)
 }
 
 pub async fn update_gift_card(

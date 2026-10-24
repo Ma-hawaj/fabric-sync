@@ -48,10 +48,12 @@ export function RedemptionBlock({
   const prefilledFor = React.useRef<string | null>(null)
   React.useEffect(() => {
     if (!card || status !== 'Active' || prefilledFor.current === card.id) return
+    const currentCode = form.getFieldValue(`${base}.code` as never) as string
+    if (normalizeCode(currentCode) !== lookupCode) return
     prefilledFor.current = card.id
     form.setFieldValue(`${base}.code` as never, card.code as never)
     form.setFieldValue(`${base}.amount` as never, card.balance as never)
-  }, [card, status, form, base])
+  }, [card, status, form, base, lookupCode])
 
   function hint() {
     if (!lookupCode)

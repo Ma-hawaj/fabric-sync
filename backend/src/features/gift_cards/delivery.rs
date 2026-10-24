@@ -173,7 +173,15 @@ pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
         return Ok(());
     };
     let card = repository::get_gift_card_in_tx(&mut tx, job.gift_card_id).await?;
-    let current = preview_card(state, &card).await?;
+    let current = match preview_card(state, &card).await {
+        Ok(current) => current,
+        Err(AppError::Unavailable(reason)) | Err(AppError::BadRequest(reason)) => {
+            store::status(&mut tx, id, "failed", Some(&reason)).await?;
+            tx.commit().await?;
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
     let valid = current.can_send && current.source_hash == job.source_hash;
     if !valid {
         store::cancel(&mut tx, id).await?;

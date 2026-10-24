@@ -1558,9 +1558,11 @@ pub async fn is_production_location(
 pub async fn sold_card_has_deliveries(
     tx: &mut sqlx::PgTransaction<'_>,
     id: Uuid,
-) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM gift_card_deliveries WHERE gift_card_id=$1)")
-        .bind(id)
-        .fetch_one(&mut **tx)
-        .await
+) -> Result<bool, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM gift_card_deliveries WHERE gift_card_id=$1)",
+    )
+    .bind(id)
+    .fetch_one(&mut **tx)
+    .await?)
 }

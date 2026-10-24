@@ -311,6 +311,70 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
 }
 
 #[sqlx::test]
+async fn invalid_queued_phone_does_not_block_later_deliveries(pool: PgPool) {
+    assert_invalid_preview_does_not_block_queue(pool, true).await;
+}
+
+#[sqlx::test]
+async fn unconfigured_queued_parameter_does_not_block_later_deliveries(pool: PgPool) {
+    assert_invalid_preview_does_not_block_queue(pool, false).await;
+}
+
+async fn assert_invalid_preview_does_not_block_queue(pool: PgPool, invalid_phone: bool) {
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), None, Some(url)).await;
+    let invalid = service::create_gift_card(&state, input()).await.unwrap();
+    let valid = service::create_gift_card(&state, input()).await.unwrap();
+    for card in [&invalid, &valid] {
+        let preview = delivery::preview(&state, card.id).await.unwrap();
+        delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff")
+            .await
+            .unwrap();
+    }
+    let (corrupt, expected_error) = if invalid_phone {
+        (
+            "UPDATE gift_cards SET recipient_phone='invalid' WHERE id=$1",
+            "Enter a valid recipient phone number.",
+        )
+    } else {
+        // A changed recipient value can leave an unresolved template token,
+        // just like a template configuration changed after approval.
+        (
+            "UPDATE gift_cards SET bought_for='{{6}}' WHERE id=$1",
+            "The gift card template contains an unconfigured parameter.",
+        )
+    };
+    sqlx::query(corrupt)
+        .bind(invalid.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE gift_card_deliveries SET available_at=now()-interval '1 minute' WHERE gift_card_id=$1")
+        .bind(invalid.id).execute(&pool).await.unwrap();
+
+    delivery::tick(&state).await.unwrap();
+    let failed = repository::get_gift_card(&state, invalid.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(failed.delivery_status.as_deref(), Some("failed"));
+    assert_eq!(failed.delivery_error.as_deref(), Some(expected_error));
+    assert!(mock.uploads.lock().unwrap().is_empty());
+    assert!(mock.messages.lock().unwrap().is_empty());
+
+    delivery::tick(&state).await.unwrap();
+    let delivered = repository::get_gift_card(&state, valid.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(delivered.delivery_status.as_deref(), Some("accepted"));
+    let messages = mock.messages.lock().unwrap();
+    assert_eq!(messages.len(), 1);
+    assert!(messages[0].to_string().contains(&valid.code));
+    assert_eq!(mock.uploads.lock().unwrap().len(), 1);
+}
+
+#[sqlx::test]
 async fn changed_recipient_invalidates_preview_and_cancels_queued_delivery(pool: PgPool) {
     let (url, mock) = mock_server().await;
     let state = test_support::state(pool.clone(), None, Some(url)).await;
@@ -575,18 +639,26 @@ async fn invoice_sales_generate_codes_and_keep_them_on_edit_until_delivery(pool:
         Some("+97333112233")
     );
     let mut changed = input.clone();
-    changed["giftCards"][0]["code"] = json!(code);
-    let updated = invoices::service::update_invoice(
-        &state,
-        invoice.id,
-        serde_json::from_value(changed.clone()).unwrap(),
-    )
-    .await
-    .unwrap();
+    for alias in [
+        code.clone(),
+        code.to_lowercase(),
+        code.replace('-', ""),
+        format!(" {} ", code.strip_prefix("GC-").unwrap().to_lowercase()),
+    ] {
+        changed["giftCards"][0]["code"] = json!(alias);
+        let updated = invoices::service::update_invoice(
+            &state,
+            invoice.id,
+            serde_json::from_value(changed.clone()).unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(updated.gift_cards.len(), 1);
+        assert_eq!(updated.gift_cards[0].code, code);
+        let stored = service::get_gift_card_by_code(&state, &code).await.unwrap();
+        assert_eq!(updated.gift_cards[0].id, stored.id);
+    }
     let card = service::get_gift_card_by_code(&state, &code).await.unwrap();
-    assert_eq!(updated.gift_cards.len(), 1);
-    assert_eq!(updated.gift_cards[0].id, card.id);
-    assert_eq!(updated.gift_cards[0].code, code);
     let preview = delivery::preview(&state, card.id).await.unwrap();
     delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff")
         .await
@@ -606,4 +678,40 @@ async fn invoice_sales_generate_codes_and_keep_them_on_edit_until_delivery(pool:
             .id,
         card.id
     );
+}
+
+#[sqlx::test]
+async fn invoice_edits_generate_new_codes_for_foreign_or_invalid_submissions(pool: PgPool) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let foreign = service::create_gift_card(&state, input()).await.unwrap();
+    let mut sale = json!({"discountUnit":"amount","giftCards":[
+        {"amount":50,"recipientPhone":"33112233"},
+        {"amount":75,"recipientPhone":"33998877"}
+    ]});
+    let invoice = invoices::service::create_invoice(
+        &state,
+        serde_json::from_value(sale.clone()).unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
+    sale["giftCards"][0]["code"] = json!(foreign.code.to_lowercase().replace('-', ""));
+    sale["giftCards"][1]["code"] = json!("invalid");
+    let updated = invoices::service::update_invoice(
+        &state,
+        invoice.id,
+        serde_json::from_value(sale).unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(updated.gift_cards.len(), 2);
+    for card in updated.gift_cards {
+        assert_ne!(card.code, foreign.code);
+        assert_eq!(service::normalize_code(&card.code).unwrap(), card.code);
+    }
+    let untouched = service::get_gift_card_by_code(&state, &foreign.code)
+        .await
+        .unwrap();
+    assert_eq!(untouched.id, foreign.id);
+    assert_eq!(untouched.balance, foreign.balance);
 }
