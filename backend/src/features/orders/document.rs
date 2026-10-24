@@ -1121,6 +1121,13 @@ mod tests {
 fn services_order() -> crate::features::orders::types::OrderListItem {
     use crate::features::orders::types::OrderListItem;
     OrderListItem {
+        outcome: "active".into(),
+        closure_reason: None,
+        closed_at: None,
+        closed_by: None,
+        credit_amount: None,
+        retained_charge: 0.0,
+        restored_material_quantity: 0.0,
         id: uuid::Uuid::nil(),
         order_number: 12,
         invoice_id: uuid::Uuid::nil(),

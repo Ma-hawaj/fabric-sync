@@ -46,3 +46,9 @@ CREATE INDEX orders_status_idx ON orders (status);
 -- Picker order per category, and the admin table's default sort.
 CREATE INDEX design_options_category_idx
     ON design_options (category, sort_order);
+
+-- Return-line lookups and one closure per whole tailoring garment.
+CREATE INDEX invoice_return_lines_order_idx ON invoice_return_lines(order_id);
+CREATE INDEX invoice_return_lines_item_idx ON invoice_return_lines(item_id);
+CREATE UNIQUE INDEX invoice_return_lines_order_once
+    ON invoice_return_lines(order_id) WHERE order_id IS NOT NULL;

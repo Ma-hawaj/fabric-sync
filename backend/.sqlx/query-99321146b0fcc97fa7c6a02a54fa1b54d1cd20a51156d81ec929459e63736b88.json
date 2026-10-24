@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO order_cancellations (order_id, adjustment_id, retained_charge, restored_material_quantity,\n            stock_branch_id, work_charge_confirmed, unused_material_confirmed)\n        VALUES ($1, $2, $3::float8, $4::float8, $5, $6, $7)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Float8",
+        "Float8",
+        "Uuid",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "99321146b0fcc97fa7c6a02a54fa1b54d1cd20a51156d81ec929459e63736b88"
+}

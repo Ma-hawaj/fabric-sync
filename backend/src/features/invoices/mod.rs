@@ -10,3 +10,6 @@ pub(crate) mod repository;
 pub(crate) mod types;
 
 pub use routes::router;
+
+#[cfg(test)]
+mod payment_response_tests;

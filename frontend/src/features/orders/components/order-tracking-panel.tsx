@@ -66,6 +66,56 @@ export function OrderTrackingPanel({
   order,
   onLogRepair,
 }: OrderTrackingPanelProps) {
+  if (order.outcome === 'cancelled' || order.outcome === 'returned') {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          This order is closed. Its production and repair history is preserved.
+        </p>
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold">Production history</h3>
+          <ul className="space-y-2">
+            {order.stages.map((stage) => (
+              <li key={stage.stageId} className="rounded-lg border p-3 text-sm">
+                <div className="flex justify-between gap-3">
+                  <strong>{stage.name}</strong>
+                  <Badge variant={stageBadgeVariant(stage.status)}>
+                    {stageStatusLabel(stage)}
+                  </Badge>
+                </div>
+                {stage.assigneeName && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {stage.assigneeName}
+                  </p>
+                )}
+                {stageTimingLabel(stage) && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {stageTimingLabel(stage)}
+                  </p>
+                )}
+                {stage.notes && <p className="mt-1">{stage.notes}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+        {order.repairs.length > 0 && (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold">Repair history</h3>
+            {order.repairs.map((repair) => (
+              <div key={repair.id} className="rounded-lg border p-3 text-sm">
+                <p>
+                  {repair.reason} · {repairStatusLabel(repair.status)}
+                </p>
+                {repair.notes && (
+                  <p className="text-muted-foreground">{repair.notes}</p>
+                )}
+              </div>
+            ))}
+          </section>
+        )}
+      </div>
+    )
+  }
   return (
     <div className="space-y-6">
       <ProductionLocationPicker order={order} />

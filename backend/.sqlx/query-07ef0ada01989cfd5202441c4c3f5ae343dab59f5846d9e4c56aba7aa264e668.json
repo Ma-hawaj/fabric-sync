@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT amount_paid::float8 AS \"amount_paid!\",\n               amount_credited::float8 AS \"amount_credited!\",\n               cash_refunded::float8 AS \"cash_refunded!\",\n               gift_card_refunded::float8 AS \"gift_card_refunded!\",\n               net_total::float8 AS \"net_total!\",\n               net_amount_paid::float8 AS \"net_amount_paid!\",\n               net_gift_card_redeemed::float8 AS \"net_gift_card_redeemed!\",\n               balance_due::float8 AS \"balance_due!\",\n               refund_due::float8 AS \"refund_due!\",\n               payment_status AS \"payment_status!\"\n        FROM invoice_balances WHERE invoice_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "amount_paid!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 1,
+        "name": "amount_credited!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 2,
+        "name": "cash_refunded!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 3,
+        "name": "gift_card_refunded!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "net_total!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "net_amount_paid!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "net_gift_card_redeemed!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "balance_due!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 8,
+        "name": "refund_due!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 9,
+        "name": "payment_status!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      true
+    ]
+  },
+  "hash": "07ef0ada01989cfd5202441c4c3f5ae343dab59f5846d9e4c56aba7aa264e668"
+}

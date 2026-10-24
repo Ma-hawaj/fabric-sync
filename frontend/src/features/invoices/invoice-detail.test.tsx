@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { InvoiceDetailPage } from './invoice-detail'
 import type { InvoiceDetail } from './types/invoice-detail'
+import { CONTEXT } from '@/features/returns/test-fixtures'
+import type { ReturnContext } from '@/features/returns/types/returns'
+import { STAFF_USER } from '@/features/users/test-fixtures'
 
 const navigateMock = vi.fn()
 vi.mock('@/features/notifications/notification-dialog', () => ({
@@ -82,6 +85,7 @@ const DETAIL: InvoiceDetail = {
     },
   ],
   redemptions: [],
+  hasAdjustments: false,
   payments: [
     {
       id: 'pay-1',
@@ -104,12 +108,24 @@ const DETAIL: InvoiceDetail = {
     total: 300,
     giftCardRedeemed: 0,
     amountPaid: 60,
+    amountCredited: 0,
+    cashRefunded: 0,
+    giftCardRefunded: 0,
+    netTotal: 300,
+    netAmountPaid: 60,
+    netGiftCardRedeemed: 0,
+    refundDue: 0,
     balanceDue: 240,
   },
 }
 
-function renderPage(detail: InvoiceDetail | null) {
+function renderPage(
+  detail: InvoiceDetail | null,
+  adjustments: ReturnContext = CONTEXT,
+) {
   const client = new QueryClient()
+  client.setQueryData(['users'], [STAFF_USER])
+  client.setQueryData(['invoices', 'inv-1', 'returns'], adjustments)
   if (detail) {
     client.setQueryData(['invoices', detail.id], detail)
   }
@@ -195,9 +211,160 @@ describe('InvoiceDetailPage', () => {
   it('lists the payment history with method and amount', () => {
     renderPage(DETAIL)
 
-    expect(screen.queryByText('Payments')).toBeTruthy()
+    expect(screen.queryByText('Payments & Refunds')).toBeTruthy()
     expect(screen.queryByText('benefit')).toBeTruthy()
     expect(screen.queryByText('Invoice payment')).toBeTruthy()
+  })
+
+  it('places pending gift-card refunds in payment history even without external payment entries', () => {
+    renderPage(
+      {
+        ...DETAIL,
+        payments: [],
+        hasAdjustments: true,
+        totals: {
+          ...DETAIL.totals,
+          total: 100,
+          amountPaid: 0,
+          giftCardRedeemed: 100,
+          amountCredited: 30,
+          netTotal: 70,
+          netAmountPaid: 0,
+          netGiftCardRedeemed: 100,
+          refundDue: 30,
+          balanceDue: 0,
+        },
+      },
+      {
+        ...CONTEXT,
+        settlement: {
+          ...CONTEXT.settlement,
+          amountPaid: 0,
+          amountCredited: 30,
+          netTotal: 70,
+          netAmountPaid: 0,
+          netGiftCardRedeemed: 100,
+          refundDue: 30,
+        },
+      },
+    )
+    const credits = screen.getByRole('region', {
+      name: 'Returns & Cancellations',
+    })
+    const history = screen.getByRole('region', { name: 'Payments & Refunds' })
+    expect(
+      within(credits).queryByRole('button', { name: 'Refund Pending Credit' }),
+    ).toBeNull()
+    fireEvent.click(
+      within(history).getByRole('button', { name: 'Refund Pending Credit' }),
+    )
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Record Refund' })).toBeTruthy()
+  })
+
+  it('keeps the original sale and shows adjusted totals with negative refunds in payment history', () => {
+    renderPage(
+      {
+        ...DETAIL,
+        hasAdjustments: true,
+        totals: {
+          ...DETAIL.totals,
+          total: 100,
+          amountPaid: 80,
+          giftCardRedeemed: 20,
+          amountCredited: 30,
+          cashRefunded: 10,
+          giftCardRefunded: 20,
+          netTotal: 70,
+          netAmountPaid: 70,
+          netGiftCardRedeemed: 0,
+          balanceDue: 0,
+        },
+      },
+      {
+        ...CONTEXT,
+        returns: [
+          {
+            id: 'return-1',
+            reason: 'Garment returned',
+            kind: 'return',
+            amount: 30,
+            createdAt: '2026-07-28T09:00:00Z',
+            createdBy: STAFF_USER.id,
+            lines: [
+              {
+                lineId: 'order-1',
+                description: 'Japanese Toray Cotton',
+                quantity: 1,
+                amount: 30,
+                restocked: false,
+                originalLocationId: null,
+                originalLocationName: null,
+                restockLocationId: null,
+                restockLocationName: null,
+              },
+            ],
+          },
+        ],
+        refunds: [
+          {
+            id: 'r2',
+            reason: 'Restore original card',
+            amount: 20,
+            paymentType: 'gift_card',
+            giftCardCode: 'GC-1',
+            adjustmentId: 'return-1',
+            createdAt: '2026-07-28T12:00:00+03:00',
+            createdBy: 'staff',
+          },
+          {
+            id: 'r1',
+            reason: 'Wrong size',
+            amount: 10,
+            paymentType: 'cash',
+            giftCardCode: null,
+            adjustmentId: 'return-1',
+            createdAt: '2026-07-28T10:00:00Z',
+            createdBy: 'staff',
+          },
+        ],
+      },
+    )
+    for (const label of [
+      'Invoice total',
+      'After credits',
+      'Net paid (all methods)',
+    ]) {
+      const row = screen.getByText(label).parentElement!
+      expect(row.textContent).toMatch(
+        label === 'Invoice total' ? /100\.000/ : /70\.000/,
+      )
+    }
+    const history = screen.getByRole('table', { name: 'Payments and refunds' })
+    const rows = within(history).getAllByRole('row')
+    expect(rows[1].textContent).toContain('Gift card GC-1')
+    expect(rows[1].textContent).toMatch(/-BHD\s*20\.000/)
+    expect(rows[2].textContent).toContain('Payment')
+    expect(rows[3].textContent).toContain('Wrong size')
+    expect(rows[3].textContent).toMatch(/-BHD\s*10\.000/)
+    expect(rows[1].textContent).toContain(STAFF_USER.name)
+    expect(rows[3].textContent).toContain(STAFF_USER.name)
+    const credits = screen.getByRole('region', {
+      name: 'Returns & Cancellations',
+    })
+    expect(credits.querySelectorAll('article')).toHaveLength(1)
+    expect(within(credits).getByText('Garment returned')).toBeTruthy()
+    expect(within(credits).queryByText('Wrong size')).toBeNull()
+    expect(within(credits).queryByText('Restore original card')).toBeNull()
+    expect(within(credits).getByText(STAFF_USER.name)).toBeTruthy()
+    expect(
+      within(credits)
+        .getByRole('link', { name: 'View refund payments' })
+        .getAttribute('href'),
+    ).toBe('#refund-r2')
+    expect(document.getElementById('refund-r2')).toBe(rows[1])
+    expect(screen.queryByText('return-1')).toBeNull()
+    expect(screen.queryByText(STAFF_USER.id)).toBeNull()
   })
 
   it('shows collection separately from payment and still allows editing with an advance taken', () => {
@@ -216,7 +383,7 @@ describe('InvoiceDetailPage', () => {
       collected: true,
     })
 
-    expect(screen.queryByText('Collected')).toBeTruthy()
+    expect(screen.queryByText('Collection complete')).toBeTruthy()
     expect(
       screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
     ).toBe(false)
@@ -243,6 +410,13 @@ describe('InvoiceDetailPage', () => {
     renderPage({ ...DETAIL, lines: [first, second] })
     expect(screen.getAllByText('Omar')).toHaveLength(2)
     expect(screen.getAllByText('Ahmed Al-Mansoori')).toHaveLength(2)
+  })
+
+  it('protects the original sale after a return even when its credit was zero', () => {
+    renderPage({ ...DETAIL, collected: false, hasAdjustments: true })
+    expect(
+      screen.getByRole('button', { name: 'Edit' }).hasAttribute('disabled'),
+    ).toBe(true)
   })
 
   it('waits for the line items rather than rendering an empty invoice', () => {

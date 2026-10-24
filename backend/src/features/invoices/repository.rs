@@ -76,8 +76,8 @@ pub async fn fetch_invoice_detail(
             -- the total, so the paid sum, the status and the latest method
             -- are worked out here. The NUMERIC arithmetic stays exact —
             -- nothing is rounded until the service layer.
-            pay.paid AS "amount_paid!",
-            pay.status AS "payment_status!",
+            balance.amount_paid::float8 AS "amount_paid!",
+            balance.payment_status AS "payment_status!",
             method.payment_type AS "payment_method?",
             -- Goods receipt is separate from money: true once no order on
             -- the invoice is still pending collection. A retail-only invoice
@@ -90,6 +90,16 @@ pub async fn fetch_invoice_detail(
             collection.last_collected_at AS "last_collected_at?",
             i.total_price::float8 AS "total_price!",
             i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
+            balance.amount_credited::float8 AS "amount_credited!",
+            balance.cash_refunded::float8 AS "cash_refunded!",
+            balance.gift_card_refunded::float8 AS "gift_card_refunded!",
+            balance.net_total::float8 AS "net_total!",
+            balance.net_amount_paid::float8 AS "net_amount_paid!",
+            balance.net_gift_card_redeemed::float8 AS "net_gift_card_redeemed!",
+            balance.balance_due::float8 AS "balance_due!",
+            balance.refund_due::float8 AS "refund_due!",
+            (EXISTS(SELECT 1 FROM invoice_returns WHERE invoice_id = i.id)
+             OR EXISTS(SELECT 1 FROM invoice_refunds WHERE invoice_id = i.id)) AS "has_adjustments!",
             -- The `?` suffixes are for sqlx: it reads nullability off the
             -- column definition, which says NOT NULL, and can't see that a
             -- LEFT JOIN may not match.
@@ -101,25 +111,12 @@ pub async fn fetch_invoice_detail(
         LEFT JOIN branch b ON b.id = i.branch_id
         LEFT JOIN customers c ON c.id = i.customer_id
         LEFT JOIN LATERAL (
-            SELECT count(*) AS order_count,
+            SELECT count(*) FILTER (WHERE oc.outcome <> 'cancelled') AS order_count,
                    count(*) FILTER (WHERE status = 'collected') AS collected_order_count,
                    max(collected_at) AS last_collected_at
-            FROM orders WHERE invoice_id = i.id
+            FROM orders o JOIN order_outcomes oc ON oc.order_id = o.id WHERE o.invoice_id = i.id
         ) collection ON true
-        LEFT JOIN LATERAL (
-            SELECT
-                COALESCE(SUM(amount), 0)::float8 AS paid,
-                CASE
-                    WHEN GREATEST(
-                        i.total_price - i.gift_card_redeemed - COALESCE(SUM(amount), 0),
-                        0
-                    ) = 0 THEN 'paid'
-                    WHEN COALESCE(SUM(amount), 0) = 0 THEN 'unpaid'
-                    ELSE 'partial'
-                END AS status
-            FROM invoice_payments
-            WHERE invoice_id = i.id
-        ) pay ON true
+        LEFT JOIN invoice_balances balance ON balance.invoice_id = i.id
         LEFT JOIN LATERAL (
             SELECT payment_type
             FROM invoice_payments
@@ -306,6 +303,15 @@ pub async fn fetch_invoice_detail(
             collected_order_count: invoice.collected_order_count,
             last_collected_at: invoice.last_collected_at,
             gift_card_redeemed: invoice.gift_card_redeemed,
+            amount_credited: invoice.amount_credited,
+            cash_refunded: invoice.cash_refunded,
+            gift_card_refunded: invoice.gift_card_refunded,
+            net_total: invoice.net_total,
+            net_amount_paid: invoice.net_amount_paid,
+            net_gift_card_redeemed: invoice.net_gift_card_redeemed,
+            balance_due: invoice.balance_due,
+            refund_due: invoice.refund_due,
+            has_adjustments: invoice.has_adjustments,
         },
         lines,
         redemptions: redemptions
@@ -337,23 +343,28 @@ const SPEC: ListSpec = ListSpec {
             i.target_date,
             i.urgent_charge::float8 AS urgent_charge,
             i.collection_method,
-            pay.status AS payment_status,
+            balance.payment_status AS payment_status,
             i.total_price::float8 AS total_price,
-            pay.paid AS amount_paid,
-            GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS balance_due,
+            balance.net_total::float8 AS net_total,
+            balance.amount_credited::float8 AS amount_credited,
+            (balance.cash_refunded + balance.gift_card_refunded)::float8 AS amount_refunded,
+            balance.refund_due::float8 AS refund_due,
+            balance.net_amount_paid::float8 AS amount_paid,
+            balance.balance_due::float8 AS balance_due,
             method.payment_type AS payment_method,
             NOT EXISTS(
                 SELECT 1 FROM orders o
                 WHERE o.invoice_id = i.id AND o.status <> 'collected'
+                  AND NOT EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id = o.id)
             ) AS collected,
             -- The latest collection across the invoice's tailoring lines.
             -- NULL until the first order is collected (and on retail-only
             -- invoices, which have no orders at all).
             agg.last_collected_at AS last_collected_at,
-            COALESCE(agg.item_count, 0) AS order_count,
+            COALESCE(agg.collectible_order_count, 0) AS order_count,
             ready.readiness_status, ready.ready_order_count, ready.pending_order_count, ready.readiness_generation,
             COALESCE(agg.collected_order_count, 0) AS collected_order_count,
-            i.gift_card_redeemed::float8 AS gift_card_redeemed,
+            balance.net_gift_card_redeemed::float8 AS gift_card_redeemed,
             i.branch_id AS receiving_location_id,
             recv.name AS receiving_location,
             COALESCE(agg.production_locations, '[]') AS production_locations,
@@ -387,6 +398,7 @@ const SPEC: ListSpec = ListSpec {
         LEFT JOIN LATERAL (
             SELECT
                 count(*) AS item_count,
+                count(*) FILTER (WHERE NOT EXISTS(SELECT 1 FROM order_cancellations x WHERE x.order_id = o.id)) AS collectible_order_count,
                 count(*) FILTER (WHERE o.status = 'collected') AS collected_order_count,
                 json_agg(DISTINCT jsonb_build_object(
                     'name', c.name,
@@ -419,20 +431,7 @@ const SPEC: ListSpec = ListSpec {
         -- The money state, derived from the ledger like in
         -- fetch_invoice_detail above: the paid sum, the status, and the most
         -- recent payment's method.
-        LEFT JOIN LATERAL (
-            SELECT
-                COALESCE(SUM(amount), 0)::float8 AS paid,
-                CASE
-                    WHEN GREATEST(
-                        i.total_price - i.gift_card_redeemed - COALESCE(SUM(amount), 0),
-                        0
-                    ) = 0 THEN 'paid'
-                    WHEN COALESCE(SUM(amount), 0) = 0 THEN 'unpaid'
-                    ELSE 'partial'
-                END AS status
-            FROM invoice_payments
-            WHERE invoice_id = i.id
-        ) pay ON true
+        LEFT JOIN invoice_balances balance ON balance.invoice_id = i.id
         LEFT JOIN LATERAL (
             SELECT payment_type
             FROM invoice_payments
@@ -479,6 +478,10 @@ const SPEC: ListSpec = ListSpec {
         (
             "amountPaid",
             ColumnDef::new("amount_paid", ColumnKind::Number),
+        ),
+        (
+            "amountRefunded",
+            ColumnDef::new("amount_refunded", ColumnKind::Number),
         ),
         (
             "paymentStatus",
@@ -554,12 +557,10 @@ pub async fn insert_invoice(
     .map(|row| (row.id, row.invoice_date))
 }
 
-/// The invoice's totals with the row locked, so a payment validated against
-/// them cannot be interleaved with another one. `None` when the invoice
-/// doesn't exist.
-pub struct LockedInvoiceTotals {
-    pub total_price: f64,
-    pub gift_card_redeemed: f64,
+/// Locks the invoice before reading its ledger in a separate statement.
+/// That later read observes any changes committed while lock acquisition
+/// waited. `None` means the invoice does not exist.
+pub struct LockedInvoice {
     /// The server-set creation date. Gift card expiry on an edit is checked
     /// against this — the date the sale happened — not the editable target.
     pub invoice_date: chrono::DateTime<chrono::Utc>,
@@ -568,10 +569,10 @@ pub struct LockedInvoiceTotals {
 pub async fn lock_invoice(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
-) -> Result<Option<LockedInvoiceTotals>, sqlx::Error> {
+) -> Result<Option<LockedInvoice>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT total_price::float8 AS "total_price!", gift_card_redeemed::float8 AS "gift_card_redeemed!", invoice_date
+        SELECT invoice_date
         FROM invoices
         WHERE id = $1
         FOR UPDATE
@@ -581,9 +582,7 @@ pub async fn lock_invoice(
     .fetch_optional(&mut **tx)
     .await?;
 
-    Ok(row.map(|row| LockedInvoiceTotals {
-        total_price: row.total_price,
-        gift_card_redeemed: row.gift_card_redeemed,
+    Ok(row.map(|row| LockedInvoice {
         invoice_date: row.invoice_date,
     }))
 }
@@ -717,6 +716,7 @@ pub async fn mark_orders_collected(
         UPDATE orders
         SET status = 'collected', collected_at = now()
         WHERE invoice_id = $1 AND status <> 'collected'
+          AND NOT EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id = orders.id)
         "#,
         invoice_id,
     )
@@ -738,9 +738,9 @@ pub async fn insert_order(
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
             thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd, more_details,
-            production_branch_id, material_source, customer_material_description, base_price, is_urgent, urgent_charge
+            production_branch_id, material_source, customer_material_description, base_price, is_urgent, urgent_charge, material_stock_branch_id
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8, $18, $19::float8)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8, $18, $19::float8, CASE WHEN $15::text = 'shop' THEN $14::uuid ELSE NULL::uuid END)
         "#,
         measurement_id,
         order.material_id,
@@ -1197,7 +1197,7 @@ pub async fn old_order_lines(
     sqlx::query_as!(
         OldOrderLine,
         r#"
-        SELECT material_id, production_branch_id, material_amount::float8 AS "material_amount!"
+        SELECT material_id, COALESCE(material_stock_branch_id, production_branch_id) AS production_branch_id, material_amount::float8 AS "material_amount!"
         FROM orders
         WHERE invoice_id = $1
         "#,

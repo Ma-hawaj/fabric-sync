@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT g.id, g.code, (r.amount - COALESCE((\n            SELECT SUM(f.amount) FROM invoice_refunds f\n            WHERE f.invoice_id = r.invoice_id AND f.gift_card_id = g.id\n        ), 0))::float8 AS \"refundable_amount!\"\n        FROM gift_card_redemptions r JOIN gift_cards g ON g.id = r.gift_card_id\n        WHERE r.invoice_id = $1 ORDER BY g.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "refundable_amount!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "2862687f24c925740eeeb09b06b3279b08399092907bdc1de14994c680bf7082"
+}

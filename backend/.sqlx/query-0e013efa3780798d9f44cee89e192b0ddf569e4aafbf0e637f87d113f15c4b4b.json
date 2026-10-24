@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE orders\n        SET status = 'collected', collected_at = now()\n        WHERE invoice_id = $1 AND status <> 'collected'\n          AND NOT EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id = orders.id)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0e013efa3780798d9f44cee89e192b0ddf569e4aafbf0e637f87d113f15c4b4b"
+}

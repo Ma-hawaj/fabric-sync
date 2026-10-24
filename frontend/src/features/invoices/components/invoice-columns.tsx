@@ -397,7 +397,7 @@ export const getInvoiceColumns = (
       accessorKey: 'amountPaid',
       size: 116,
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} label="Paid" />
+        <DataTableColumnHeader column={column} label="Net Paid" />
       ),
       cell: ({ row }) => (
         <div className="text-end tabular-nums">
@@ -406,7 +406,37 @@ export const getInvoiceColumns = (
       ),
       enableSorting: true,
       enableColumnFilter: true,
-      meta: { label: 'Paid', variant: 'range', unit: CURRENCY, align: 'end' },
+      meta: {
+        label: 'Net paid',
+        variant: 'range',
+        unit: CURRENCY,
+        align: 'end',
+      },
+    },
+    {
+      accessorKey: 'amountRefunded',
+      size: 154,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Refunds" />
+      ),
+      cell: ({ row }) => (
+        <div className="text-end tabular-nums">
+          <div>{currencyFormatter.format(row.original.amountRefunded)}</div>
+          {row.original.refundDue > 0 && (
+            <div className="text-xs text-warning">
+              Due: {currencyFormatter.format(row.original.refundDue)}
+            </div>
+          )}
+        </div>
+      ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Refunds',
+        variant: 'range',
+        unit: CURRENCY,
+        align: 'end',
+      },
     },
     {
       accessorKey: 'balanceDue',
@@ -431,19 +461,30 @@ export const getInvoiceColumns = (
     },
     {
       accessorKey: 'totalPrice',
-      size: 116,
+      size: 164,
+      minSize: 150,
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} label="Total Price" />
+        <DataTableColumnHeader column={column} label="Invoice Total" />
       ),
       cell: ({ row }) => (
-        <div className="font-medium">
-          {currencyFormatter.format(row.getValue<number>('totalPrice'))}
+        <div
+          className="text-end tabular-nums"
+          title={`After credits: ${currencyFormatter.format(row.original.netTotal)}`}
+        >
+          <div className="font-medium">
+            {currencyFormatter.format(row.getValue<number>('totalPrice'))}
+          </div>
+          {row.original.amountCredited > 0 && (
+            <div className="text-xs text-muted-foreground">
+              Credit: {currencyFormatter.format(row.original.amountCredited)}
+            </div>
+          )}
         </div>
       ),
       enableSorting: true,
       enableColumnFilter: true,
       meta: {
-        label: 'Total Price',
+        label: 'Invoice total',
         variant: 'range',
         range: [0, 2000],
         unit: CURRENCY,
