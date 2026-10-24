@@ -113,7 +113,7 @@ pub(super) fn svg(
         balance => document::format_amount(card.balance), currency => document::CURRENCY,
         recipient_size => (720.0 / (recipient.chars().count().max(1) as f64 * 0.65)).min(32.0),
         recipient, recipient_x => if rtl {800} else {64}, recipient_anchor => if rtl {"end"} else {"start"},
-        code => card.code, code_size => (700.0 / (card.code.chars().count().max(1) as f64 * 0.61)).min(26.0),
+        code => card.code, code_size => (700.0 / (card.code.chars().count().max(1) as f64 * 0.61)).min(42.0),
         qr_size, qr_path, expiry, status,
     })?)
 }
@@ -190,7 +190,7 @@ mod tests {
     fn card() -> GiftCard {
         GiftCard {
             id: uuid::Uuid::nil(),
-            code: "GC-0123456789ABCDEF0123456789ABCDEF".into(),
+            code: "GC-7KMP-4RWT-9DXH".into(),
             initial_amount: 100.0,
             balance: 50.0,
             customer_id: None,
@@ -264,5 +264,18 @@ mod tests {
             original,
             render(&changed_brand, &card, today()).unwrap().sha256
         );
+    }
+
+    #[test]
+    fn existing_long_codes_still_render_in_full() {
+        let mut card = card();
+        card.code = "GC-0123456789ABCDEF0123456789ABCDEF".into();
+        assert!(svg(&branding(), &card, today())
+            .unwrap()
+            .contains(&card.code));
+        assert!(render(&branding(), &card, today())
+            .unwrap()
+            .png
+            .starts_with(b"\x89PNG"));
     }
 }

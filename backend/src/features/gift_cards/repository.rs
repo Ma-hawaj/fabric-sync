@@ -158,6 +158,27 @@ pub async fn insert_gift_card(
     .await
 }
 
+// A collision must not abort the caller's invoice transaction before retrying.
+pub async fn try_insert_generated_gift_card(
+    tx: &mut sqlx::PgTransaction<'_>,
+    code: &str,
+    amount: f64,
+    customer_id: Option<Uuid>,
+    expires_on: Option<NaiveDate>,
+    bought_for: Option<&str>,
+    recipient_phone: &str,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"
+        INSERT INTO gift_cards (code, initial_amount, balance, customer_id, expires_on, bought_for, recipient_phone)
+        VALUES ($1, $2::float8, $2::float8, $3, $4, NULLIF(BTRIM($5), ''), $6)
+        ON CONFLICT (code) DO NOTHING
+        RETURNING id
+        "#,
+        code, amount, customer_id, expires_on, bought_for, recipient_phone,
+    ).fetch_optional(&mut **tx).await
+}
+
 pub async fn update_gift_card(
     state: &AppState,
     gift_card_id: Uuid,

@@ -72,11 +72,169 @@ fn send(preview: &delivery::Preview, request_id: Uuid) -> delivery::SendInput {
 }
 
 #[sqlx::test]
+async fn short_code_lookup_and_redemption_accept_compact_input(pool: PgPool) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let card = service::create_gift_card(&state, input()).await.unwrap();
+    let payload = card.code.strip_prefix("GC-").unwrap().replace('-', "");
+    let spaced = payload
+        .as_bytes()
+        .chunks(4)
+        .map(|s| std::str::from_utf8(s).unwrap())
+        .collect::<Vec<_>>()
+        .join(" ");
+    for alias in [
+        payload.clone(),
+        spaced,
+        payload.to_lowercase(),
+        card.code.replace('-', ""),
+    ] {
+        assert_eq!(
+            service::get_gift_card_by_code(&state, &alias)
+                .await
+                .unwrap()
+                .id,
+            card.id
+        );
+    }
+    let mut tx = pool.begin().await.unwrap();
+    assert_eq!(
+        service::redeem(
+            &mut tx,
+            &payload.to_lowercase(),
+            10.0,
+            chrono::Utc::now().date_naive()
+        )
+        .await
+        .unwrap(),
+        card.id
+    );
+    tx.commit().await.unwrap();
+    assert_eq!(
+        service::get_gift_card_by_code(&state, &card.code)
+            .await
+            .unwrap()
+            .balance,
+        40.0
+    );
+}
+
+#[sqlx::test]
+async fn generated_code_collisions_retry_without_aborting_the_transaction(pool: PgPool) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let existing = service::create_gift_card(&state, input()).await.unwrap();
+    let fresh = loop {
+        let code = service::generate_code();
+        if code != existing.code {
+            break code;
+        }
+    };
+    let mut attempts = 0;
+    let mut tx = pool.begin().await.unwrap();
+    let (id, code) = service::issue_with_generator(&mut tx, &input(), "BH", || {
+        attempts += 1;
+        if attempts == 1 {
+            existing.code.clone()
+        } else {
+            fresh.clone()
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(attempts, 2);
+    assert_eq!(code, fresh);
+    tx.commit().await.unwrap();
+    assert_ne!(id, existing.id);
+    assert_eq!(
+        service::get_gift_card_by_code(&state, &existing.code)
+            .await
+            .unwrap()
+            .balance,
+        50.0
+    );
+}
+
+#[sqlx::test]
+async fn repeated_collisions_stop_without_poisoning_the_transaction(pool: PgPool) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let existing = service::create_gift_card(&state, input()).await.unwrap();
+    let mut attempts = 0;
+    let mut tx = pool.begin().await.unwrap();
+    let error = service::issue_with_generator(&mut tx, &input(), "BH", || {
+        attempts += 1;
+        existing.code.clone()
+    })
+    .await
+    .unwrap_err();
+    assert!(matches!(error, AppError::Conflict(_)));
+    assert_eq!(attempts, 8);
+    let usable: i32 = sqlx::query_scalar("SELECT 1")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert_eq!(usable, 1);
+    tx.rollback().await.unwrap();
+}
+
+#[sqlx::test]
+async fn existing_literal_codes_take_precedence_over_short_code_aliases(pool: PgPool) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let mut tx = pool.begin().await.unwrap();
+    let legacy =
+        repository::insert_gift_card(&mut tx, "7KMP4RWT9DXH", 50.0, None, None, None, None)
+            .await
+            .unwrap();
+    let grouped =
+        repository::insert_gift_card(&mut tx, "GC-7KMP-4RWT-9DXH", 75.0, None, None, None, None)
+            .await
+            .unwrap();
+    let long_code = "GC-0123456789ABCDEF0123456789ABCDEF";
+    let long = repository::insert_gift_card(&mut tx, long_code, 100.0, None, None, None, None)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(
+        service::get_gift_card_by_code(&state, "7kmp4rwt9dxh")
+            .await
+            .unwrap()
+            .id,
+        legacy
+    );
+    assert_eq!(
+        service::get_gift_card_by_code(&state, "GC-7KMP-4RWT-9DXH")
+            .await
+            .unwrap()
+            .id,
+        grouped
+    );
+    assert_eq!(
+        service::get_gift_card_by_code(&state, &long_code.to_lowercase())
+            .await
+            .unwrap()
+            .id,
+        long
+    );
+    let mut tx = pool.begin().await.unwrap();
+    assert_eq!(
+        service::redeem(
+            &mut tx,
+            &long_code.to_lowercase(),
+            10.0,
+            chrono::Utc::now().date_naive()
+        )
+        .await
+        .unwrap(),
+        long
+    );
+    tx.commit().await.unwrap();
+}
+
+#[sqlx::test]
 async fn codes_are_generated_and_recipient_is_separate_from_buyer(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
     let first = service::create_gift_card(&state, input()).await.unwrap();
     let second = service::create_gift_card(&state, input()).await.unwrap();
     assert!(first.code.starts_with("GC-"));
+    assert_eq!(first.code.len(), 17);
     assert_ne!(first.code, "USER-SUPPLIED");
     assert_ne!(first.code, second.code);
     assert_eq!(first.recipient_phone.as_deref(), Some("+97333112233"));

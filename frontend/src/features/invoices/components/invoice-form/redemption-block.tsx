@@ -50,11 +50,13 @@ export function RedemptionBlock({
   React.useEffect(() => {
     if (!card || status !== 'Active' || prefilledFor.current === card.id) return
     prefilledFor.current = card.id
+    form.setFieldValue(`${base}.code` as never, card.code as never)
     form.setFieldValue(`${base}.amount` as never, card.balance as never)
   }, [card, status, form, base])
 
   function hint() {
-    if (!lookupCode) return 'Enter the code printed on the customer’s card.'
+    if (!lookupCode)
+      return 'Enter or scan the code. For new cards, GC and dashes are optional.'
     if (isFetching) return 'Checking…'
     if (!card) return 'No gift card with this code.'
 
@@ -84,9 +86,11 @@ export function RedemptionBlock({
             <Input
               id={field.name}
               value={field.state.value ?? ''}
-              placeholder="e.g. GC-ABC123"
+              placeholder="e.g. 7KMP-4RWT-9DXH"
               className="font-mono"
               autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
               aria-invalid={field.state.meta.errors.length > 0 || unusable}
               onBlur={field.handleBlur}
               onChange={(event) => {

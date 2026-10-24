@@ -12,9 +12,12 @@ use super::{
     types::{CreateGiftCardInput, GiftCard, GiftCardBalance, UpdateGiftCardInput},
 };
 
-/// Codes are matched exactly on redemption, so they are uppercased on the way
-/// in — staff read them off a physical card and the case they type is not
-/// meaningful. Invoices uses this for redemption and retaining issued codes.
+// A power-of-two alphabet avoids modulo bias and omits 0/O and 1/I.
+const CODE_ALPHABET: &[u8; 32] = b"23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+const CODE_ATTEMPTS: usize = 8;
+
+/// Normalize case without changing existing code identities. Short-code aliases
+/// are considered separately, after an exact lookup has missed.
 pub fn normalize_code(code: &str) -> Result<String, AppError> {
     let code = code.trim();
 
@@ -38,7 +41,77 @@ pub fn validate_amount(amount: f64) -> Result<(), AppError> {
 }
 
 pub fn generate_code() -> String {
-    format!("GC-{}", Uuid::new_v4().simple().to_string().to_uppercase())
+    // The low 60 bits of a random UUID contain no fixed version/variant bits.
+    let random = Uuid::new_v4().as_u128();
+    let mut code = String::with_capacity(17);
+    code.push_str("GC-");
+    for index in 0..12 {
+        if index > 0 && index % 4 == 0 {
+            code.push('-');
+        }
+        code.push(CODE_ALPHABET[((random >> ((11 - index) * 5)) & 31) as usize] as char);
+    }
+    code
+}
+
+/// Used only after an exact lookup misses, so older literal codes keep working.
+pub fn short_code_alias(code: &str) -> Option<String> {
+    let compact: String = code
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '-')
+        .flat_map(char::to_uppercase)
+        .collect();
+    let payload = if compact.len() == 14 && compact.starts_with("GC") {
+        &compact[2..]
+    } else {
+        &compact
+    };
+    if payload.len() != 12 || !payload.bytes().all(|c| CODE_ALPHABET.contains(&c)) {
+        return None;
+    }
+    Some(format!(
+        "GC-{}-{}-{}",
+        &payload[..4],
+        &payload[4..8],
+        &payload[8..]
+    ))
+}
+
+pub async fn issue_gift_card(
+    tx: &mut sqlx::PgTransaction<'_>,
+    input: &CreateGiftCardInput,
+    region: &str,
+) -> Result<(Uuid, String), AppError> {
+    issue_with_generator(tx, input, region, generate_code).await
+}
+
+pub(super) async fn issue_with_generator(
+    tx: &mut sqlx::PgTransaction<'_>,
+    input: &CreateGiftCardInput,
+    region: &str,
+    mut generate: impl FnMut() -> String,
+) -> Result<(Uuid, String), AppError> {
+    validate_amount(input.amount)?;
+    let phone = recipient_phone(&input.recipient_phone, region)?;
+    for _ in 0..CODE_ATTEMPTS {
+        let code = generate();
+        if let Some(id) = repository::try_insert_generated_gift_card(
+            tx,
+            &code,
+            input.amount,
+            input.customer_id,
+            input.expires_on,
+            input.bought_for.as_deref(),
+            &phone,
+        )
+        .await?
+        {
+            return Ok((id, code));
+        }
+    }
+    Err(AppError::Conflict(
+        "Could not generate a unique gift card code. Please try again.".into(),
+    ))
 }
 
 pub fn recipient_phone(raw: &str, region: &str) -> Result<String, AppError> {
@@ -87,34 +160,24 @@ pub async fn list_gift_cards(
 pub async fn get_gift_card_by_code(state: &AppState, code: &str) -> Result<GiftCard, AppError> {
     let code = normalize_code(code)?;
 
-    repository::get_gift_card_by_code(state, &code)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("no gift card with code {code}")))
+    if let Some(card) = repository::get_gift_card_by_code(state, &code).await? {
+        return Ok(card);
+    }
+    if let Some(alias) = short_code_alias(&code).filter(|alias| alias != &code) {
+        if let Some(card) = repository::get_gift_card_by_code(state, &alias).await? {
+            return Ok(card);
+        }
+    }
+    Err(AppError::NotFound(format!("no gift card with code {code}")))
 }
 
 pub async fn create_gift_card(
     state: &AppState,
     input: CreateGiftCardInput,
 ) -> Result<GiftCard, AppError> {
-    let code = generate_code();
-    validate_amount(input.amount)?;
-    let phone = recipient_phone(
-        &input.recipient_phone,
-        &state.notifications().default_region,
-    )?;
-
     let mut tx = state.db().begin().await?;
-
-    let gift_card_id = repository::insert_gift_card(
-        &mut tx,
-        &code,
-        input.amount,
-        input.customer_id,
-        input.expires_on,
-        input.bought_for.as_deref(),
-        Some(&phone),
-    )
-    .await?;
+    let (gift_card_id, _) =
+        issue_gift_card(&mut tx, &input, &state.notifications().default_region).await?;
 
     tx.commit().await?;
 
@@ -170,11 +233,17 @@ pub async fn redeem(
     amount: f64,
     on: NaiveDate,
 ) -> Result<Uuid, AppError> {
-    let card = repository::lock_by_code(tx, code)
-        .await?
-        .ok_or_else(|| AppError::BadRequest(format!("no gift card with code {code}")))?;
+    let code = normalize_code(code)?;
+    let mut card = repository::lock_by_code(tx, &code).await?;
+    if card.is_none() {
+        if let Some(alias) = short_code_alias(&code).filter(|alias| alias != &code) {
+            card = repository::lock_by_code(tx, &alias).await?;
+        }
+    }
+    let card =
+        card.ok_or_else(|| AppError::BadRequest(format!("no gift card with code {code}")))?;
 
-    check_redeemable(&card, code, amount, on)?;
+    check_redeemable(&card, &code, amount, on)?;
 
     repository::decrement_balance(tx, card.id, amount).await?;
 
@@ -203,6 +272,46 @@ mod tests {
     #[test]
     fn normalize_code_trims_and_uppercases() {
         assert_eq!(normalize_code("  gc-abc123 \n").unwrap(), "GC-ABC123");
+    }
+
+    #[test]
+    fn new_codes_use_three_readable_groups_and_avoid_ambiguous_characters() {
+        for _ in 0..64 {
+            let code = generate_code();
+            let groups: Vec<_> = code.split('-').collect();
+            assert_eq!(groups.len(), 4);
+            assert_eq!(groups[0], "GC");
+            for group in &groups[1..] {
+                assert_eq!(group.len(), 4);
+                assert!(group.bytes().all(|c| CODE_ALPHABET.contains(&c)));
+                assert!(!group.bytes().any(|c| b"01IO".contains(&c)));
+            }
+        }
+    }
+
+    #[test]
+    fn short_codes_accept_optional_prefix_and_separators() {
+        for input in [
+            "GC-7KMP-4RWT-9DXH",
+            "gc7kmp4rwt9dxh",
+            "7KMP4RWT9DXH",
+            " 7kmp 4rwt 9dxh ",
+        ] {
+            assert_eq!(
+                short_code_alias(input).as_deref(),
+                Some("GC-7KMP-4RWT-9DXH"),
+                "{input}"
+            );
+        }
+        for input in [
+            "GC-ABC123",
+            "GC-0123456789ABCDEF0123456789ABCDEF",
+            "7KMP4RWT9DX",
+            "7KMP4RWT9DX0",
+            "7KMP4RWT9DXI",
+        ] {
+            assert!(short_code_alias(input).is_none(), "{input}");
+        }
     }
 
     #[test]

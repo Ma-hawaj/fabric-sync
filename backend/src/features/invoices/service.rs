@@ -1847,26 +1847,31 @@ async fn write_gift_card_sales(
     region: &str,
 ) -> Result<(), AppError> {
     for card in gift_cards {
-        let code = if card.code.trim().is_empty() {
-            gift_cards_service::generate_code()
+        let (gift_card_id, code) = if card.code.trim().is_empty() {
+            let input = crate::features::gift_cards::types::CreateGiftCardInput {
+                amount: card.amount,
+                customer_id,
+                expires_on: card.expires_on,
+                bought_for: card.bought_for.clone(),
+                recipient_phone: card.recipient_phone.clone(),
+            };
+            gift_cards_service::issue_gift_card(tx, &input, region).await?
         } else {
             // Existing invoice lines retain their issued code when rebuilt.
-            gift_cards_service::normalize_code(&card.code)?
+            let code = gift_cards_service::normalize_code(&card.code)?;
+            let phone = gift_cards_service::recipient_phone(&card.recipient_phone, region)?;
+            let id = gift_cards_repository::insert_gift_card(
+                tx,
+                &code,
+                card.amount,
+                customer_id,
+                card.expires_on,
+                card.bought_for.as_deref(),
+                Some(&phone),
+            )
+            .await?;
+            (id, code)
         };
-        let phone = gift_cards_service::recipient_phone(&card.recipient_phone, region)?;
-
-        let gift_card_id = gift_cards_repository::insert_gift_card(
-            tx,
-            &code,
-            card.amount,
-            // The card belongs to whoever the invoice is billed to, when the
-            // sale names someone at all.
-            customer_id,
-            card.expires_on,
-            card.bought_for.as_deref(),
-            Some(&phone),
-        )
-        .await?;
 
         repository::insert_gift_card_item(
             tx,
