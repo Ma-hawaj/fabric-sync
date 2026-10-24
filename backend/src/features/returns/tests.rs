@@ -44,6 +44,25 @@ async fn cancellation_and_return_credit_only_their_own_undiscounted_urgency_fee(
     assert_eq!(context.settlement.amount_credited, 95.0);
     assert_eq!(context.settlement.net_total, 90.0);
     assert_eq!(context.settlement.refund_due, 0.0);
+    let page = crate::features::invoices::service::list_invoices(&state, &Default::default())
+        .await
+        .unwrap();
+    let listed = page.data.iter().find(|row| row.id == invoice).unwrap();
+    assert_eq!(listed.original_total, 185.0);
+    assert_eq!(listed.total_price, 90.0);
+    assert_eq!(listed.amount_paid, 90.0);
+    assert_eq!(listed.amount_credited, 95.0);
+    assert_eq!(listed.amount_refunded, 95.0);
+    assert_eq!(listed.refund_due, 0.0);
+    assert_eq!(listed.balance_due, 0.0);
+    let detail = crate::features::invoices::service::get_invoice(&state, invoice)
+        .await
+        .unwrap();
+    assert_eq!(detail.totals.total, 185.0);
+    assert_eq!(detail.totals.amount_paid, 185.0);
+    assert_eq!(detail.totals.net_total, listed.total_price);
+    assert_eq!(detail.totals.net_amount_paid, listed.amount_paid);
+    assert_eq!(detail.totals.net_gift_card_redeemed, 0.0);
     sqlx::query("UPDATE orders SET status='collected',collected_at=now() WHERE id=$1")
         .bind(orders[1])
         .execute(&pool)
@@ -222,6 +241,14 @@ async fn collected_return_and_deferred_refund_invalidate_previews_atomically(poo
             .refund_due,
         100.0
     );
+    let page = crate::features::invoices::service::list_invoices(&state, &Default::default())
+        .await
+        .unwrap();
+    let listed = page.data.iter().find(|row| row.id == invoice).unwrap();
+    assert_eq!(listed.total_price, 0.0);
+    assert_eq!(listed.amount_paid, 100.0);
+    assert_eq!(listed.amount_refunded, 0.0);
+    assert_eq!(listed.refund_due, 100.0);
     service::create_refund(
         &state,
         invoice,
@@ -243,6 +270,14 @@ async fn collected_return_and_deferred_refund_invalidate_previews_atomically(poo
             .await
             .unwrap();
     assert!(after_refund > after_return);
+    let page = crate::features::invoices::service::list_invoices(&state, &Default::default())
+        .await
+        .unwrap();
+    let listed = page.data.iter().find(|row| row.id == invoice).unwrap();
+    assert_eq!(listed.total_price, 0.0);
+    assert_eq!(listed.amount_paid, 0.0);
+    assert_eq!(listed.amount_refunded, 100.0);
+    assert_eq!(listed.refund_due, 0.0);
     assert_eq!(
         service::context(&state, invoice)
             .await

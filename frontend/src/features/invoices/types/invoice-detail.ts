@@ -58,6 +58,9 @@ export interface InvoiceTotals {
   amountCredited: number
   cashRefunded: number
   giftCardRefunded: number
+  netTotal: number
+  netAmountPaid: number
+  netGiftCardRedeemed: number
   refundDue: number
   balanceDue: number
 }

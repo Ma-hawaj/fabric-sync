@@ -517,6 +517,9 @@ pub struct InvoiceTotalsBreakdown {
     pub amount_credited: f64,
     pub cash_refunded: f64,
     pub gift_card_refunded: f64,
+    pub net_total: f64,
+    pub net_amount_paid: f64,
+    pub net_gift_card_redeemed: f64,
     pub refund_due: f64,
     /// What the customer still owes: the total less everything already
     /// settled, whether in cash or in gift card tender.
@@ -562,6 +565,9 @@ pub struct InvoiceRecord {
     pub amount_credited: f64,
     pub cash_refunded: f64,
     pub gift_card_refunded: f64,
+    pub net_total: f64,
+    pub net_amount_paid: f64,
+    pub net_gift_card_redeemed: f64,
     pub balance_due: f64,
     pub refund_due: f64,
     pub has_adjustments: bool,
@@ -629,10 +635,14 @@ pub struct InvoiceListItem {
     #[sqlx(json)]
     pub materials: Vec<String>,
     pub total_price: f64,
+    pub original_total: f64,
+    pub amount_credited: f64,
+    pub amount_refunded: f64,
+    pub refund_due: f64,
     pub payment_status: String,
+    /// External payments less external refunds; gift card tender is separate.
     pub amount_paid: f64,
-    /// What the customer still owes: the total less gift card tender and
-    /// every payment. Display-only — the dialogs collect against it.
+    /// What the customer still owes after credits and refunded tender.
     pub balance_due: f64,
     /// The method of the most recent payment, backing the list's payment
     /// method column.

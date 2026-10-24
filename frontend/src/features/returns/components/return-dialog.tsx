@@ -109,7 +109,9 @@ export function ReturnDialog({
                 >
                   <p className="text-sm font-medium">{line.description}</p>
                   <p className="text-xs text-muted-foreground">
-                    Available: {remainingQuantity(line)}{' '}
+                    Purchased: {line.quantity} · Already returned:{' '}
+                    {line.returnedQuantity} · Available:{' '}
+                    {remainingQuantity(line)}{' '}
                     {line.kind === 'order' ? 'garment' : 'units'} · Remaining
                     credit: {money(line.creditLimit - line.creditedAmount)}
                   </p>
@@ -120,6 +122,13 @@ export function ReturnDialog({
                       form={form}
                       name={`lines[${index}].quantity`}
                       label={`Quantity to return — ${line.description}`}
+                      min={0}
+                      max={remainingQuantity(line)}
+                      step={line.kind === 'order' ? 1 : 'any'}
+                      format={{
+                        maximumFractionDigits: line.kind === 'order' ? 0 : 2,
+                      }}
+                      showControls
                     />
                   )}
                   {line.canRestock && (

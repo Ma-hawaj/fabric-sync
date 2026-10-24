@@ -23,6 +23,48 @@ function renderPanel(context: ReturnContext = CONTEXT) {
 afterEach(() => vi.restoreAllMocks())
 
 describe('ReturnsPanel', () => {
+  it('caps quantities at the purchased amount less previous returns, including typed values', () => {
+    renderPanel({
+      ...CONTEXT,
+      lines: [{ ...PRODUCT, returnedQuantity: 2, creditedAmount: 6.67 }],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Return & Refund' }))
+    const quantity = screen.getByLabelText('Quantity to return — Buttons')
+    expect(
+      screen.getByText(/Purchased: 3 · Already returned: 2 · Available: 1/),
+    ).toBeTruthy()
+    const increase = screen.getByRole('button', {
+      name: 'Increase Quantity to return — Buttons',
+    })
+    fireEvent.change(quantity, { target: { value: '0' } })
+    fireEvent.click(increase)
+    expect((quantity as HTMLInputElement).value).toBe('1')
+    expect(increase.hasAttribute('disabled')).toBe(true)
+    fireEvent.change(quantity, { target: { value: '9' } })
+    fireEvent.blur(quantity)
+    expect((quantity as HTMLInputElement).value).toBe('1')
+    fireEvent.change(quantity, { target: { value: '-1' } })
+    fireEvent.blur(quantity)
+    expect((quantity as HTMLInputElement).value).toBe('0')
+  })
+
+  it('keeps fractional retail quantities within the remaining purchased quantity', () => {
+    renderPanel({
+      ...CONTEXT,
+      lines: [{ ...PRODUCT, quantity: 2.5, returnedQuantity: 1.25 }],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Return & Refund' }))
+    const quantity = screen.getByLabelText('Quantity to return — Buttons')
+    fireEvent.change(quantity, { target: { value: '1.25' } })
+    fireEvent.blur(quantity)
+    expect((quantity as HTMLInputElement).value).toBe('1.25')
+    expect(
+      screen
+        .getByRole('button', { name: 'Increase Quantity to return — Buttons' })
+        .hasAttribute('disabled'),
+    ).toBe(true)
+  })
+
   it('records the return and its mixed-tender refund in one confirmation', async () => {
     const post = vi
       .spyOn(apiClient, 'post')

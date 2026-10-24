@@ -36,6 +36,10 @@ const invoice: Invoice = {
   itemCount: 4,
   materials: ['Cotton', 'Linen'],
   totalPrice: 90,
+  originalTotal: 90,
+  amountCredited: 0,
+  amountRefunded: 0,
+  refundDue: 0,
   paymentStatus: 'partial',
   amountPaid: 30,
   balanceDue: 60,
@@ -163,6 +167,26 @@ describe('Invoice table', () => {
     expect(screen.getByRole('link', { name: 'INV-42' })).toBeTruthy()
     expect(screen.getByText(/of.*records/, { exact: false })).toBeTruthy()
     expect(apiClient.get).not.toHaveBeenCalled()
+  })
+  it('shows paid refunds, pending refunds and the credit against the adjusted total', () => {
+    renderTable([
+      {
+        ...invoice,
+        originalTotal: 100,
+        totalPrice: 70,
+        amountCredited: 30,
+        amountPaid: 75,
+        amountRefunded: 25,
+        refundDue: 5,
+        balanceDue: 0,
+        paymentStatus: 'paid',
+      },
+    ])
+    expect(screen.getByRole('columnheader', { name: /Refunds/ })).toBeTruthy()
+    expect(screen.getByText(/Credit:.*30\.000/)).toBeTruthy()
+    expect(screen.getByText(/Due:.*5\.000/)).toBeTruthy()
+    expect(screen.getByText(/25\.000/)).toBeTruthy()
+    expect(screen.getByText(/70\.000/)).toBeTruthy()
   })
   it('loads only this invoice’s orders on expansion and groups them by customer', async () => {
     renderTable()

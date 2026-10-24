@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { InvoiceDetailPage } from './invoice-detail'
 import type { InvoiceDetail } from './types/invoice-detail'
+import { CONTEXT } from '@/features/returns/test-fixtures'
+import type { ReturnContext } from '@/features/returns/types/returns'
 
 const navigateMock = vi.fn()
 vi.mock('@/features/notifications/notification-dialog', () => ({
@@ -108,13 +110,20 @@ const DETAIL: InvoiceDetail = {
     amountCredited: 0,
     cashRefunded: 0,
     giftCardRefunded: 0,
+    netTotal: 300,
+    netAmountPaid: 60,
+    netGiftCardRedeemed: 0,
     refundDue: 0,
     balanceDue: 240,
   },
 }
 
-function renderPage(detail: InvoiceDetail | null) {
+function renderPage(
+  detail: InvoiceDetail | null,
+  adjustments: ReturnContext = CONTEXT,
+) {
   const client = new QueryClient()
+  client.setQueryData(['invoices', 'inv-1', 'returns'], adjustments)
   if (detail) {
     client.setQueryData(['invoices', detail.id], detail)
   }
@@ -200,9 +209,73 @@ describe('InvoiceDetailPage', () => {
   it('lists the payment history with method and amount', () => {
     renderPage(DETAIL)
 
-    expect(screen.queryByText('Payments')).toBeTruthy()
+    expect(screen.queryByText('Payments & Refunds')).toBeTruthy()
     expect(screen.queryByText('benefit')).toBeTruthy()
     expect(screen.queryByText('Invoice payment')).toBeTruthy()
+  })
+
+  it('keeps the original sale and shows adjusted totals with negative refunds in payment history', () => {
+    renderPage(
+      {
+        ...DETAIL,
+        hasAdjustments: true,
+        totals: {
+          ...DETAIL.totals,
+          total: 100,
+          amountPaid: 80,
+          giftCardRedeemed: 20,
+          amountCredited: 30,
+          cashRefunded: 10,
+          giftCardRefunded: 20,
+          netTotal: 70,
+          netAmountPaid: 70,
+          netGiftCardRedeemed: 0,
+          balanceDue: 0,
+        },
+      },
+      {
+        ...CONTEXT,
+        refunds: [
+          {
+            id: 'r2',
+            reason: 'Restore original card',
+            amount: 20,
+            paymentType: 'gift_card',
+            giftCardCode: 'GC-1',
+            adjustmentId: 'return-1',
+            createdAt: '2026-07-28T12:00:00+03:00',
+            createdBy: 'staff',
+          },
+          {
+            id: 'r1',
+            reason: 'Wrong size',
+            amount: 10,
+            paymentType: 'cash',
+            giftCardCode: null,
+            adjustmentId: 'return-1',
+            createdAt: '2026-07-28T10:00:00Z',
+            createdBy: 'staff',
+          },
+        ],
+      },
+    )
+    for (const label of [
+      'Original total',
+      'Adjusted total',
+      'Net paid (all methods)',
+    ]) {
+      const row = screen.getByText(label).parentElement!
+      expect(row.textContent).toMatch(
+        label === 'Original total' ? /100\.000/ : /70\.000/,
+      )
+    }
+    const history = screen.getByRole('table', { name: 'Payments and refunds' })
+    const rows = within(history).getAllByRole('row')
+    expect(rows[1].textContent).toContain('Gift card GC-1')
+    expect(rows[1].textContent).toMatch(/-BHD\s*20\.000/)
+    expect(rows[2].textContent).toContain('Payment')
+    expect(rows[3].textContent).toContain('Wrong size')
+    expect(rows[3].textContent).toMatch(/-BHD\s*10\.000/)
   })
 
   it('shows collection separately from payment and still allows editing with an advance taken', () => {

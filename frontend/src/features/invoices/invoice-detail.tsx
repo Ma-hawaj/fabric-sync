@@ -29,6 +29,7 @@ import {
 import { toast } from 'sonner'
 import { CollectInvoiceDialog } from './components/collect-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
+import { InvoicePaymentHistory } from './components/invoice-payment-history'
 import { ReturnsPanel } from '@/features/returns/components/returns-panel'
 import { useReturns } from '@/features/returns/hooks/use-returns'
 import { useInvoice } from './hooks/use-invoice'
@@ -314,7 +315,24 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
               value={detail.totals.urgentCharge}
             />
           )}
-          <TotalRow label="Total" value={detail.totals.total} emphasis />
+          <TotalRow
+            label={detail.hasAdjustments ? 'Original total' : 'Total'}
+            value={detail.totals.total}
+            emphasis={!detail.hasAdjustments}
+          />
+          {detail.hasAdjustments && (
+            <>
+              <TotalRow
+                label="Return / cancellation credits"
+                value={-detail.totals.amountCredited}
+              />
+              <TotalRow
+                label="Adjusted total"
+                value={detail.totals.netTotal}
+                emphasis
+              />
+            </>
+          )}
           {detail.totals.giftCardRedeemed > 0 && (
             <TotalRow
               label="Paid by gift card"
@@ -323,12 +341,6 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           )}
           {detail.totals.amountPaid > 0 && (
             <TotalRow label="Paid" value={-detail.totals.amountPaid} />
-          )}
-          {detail.totals.amountCredited > 0 && (
-            <TotalRow
-              label="Return credits"
-              value={-detail.totals.amountCredited}
-            />
           )}
           {detail.totals.cashRefunded > 0 && (
             <TotalRow
@@ -340,6 +352,15 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
             <TotalRow
               label="Restored to gift cards"
               value={detail.totals.giftCardRefunded}
+            />
+          )}
+          {(detail.totals.cashRefunded > 0 ||
+            detail.totals.giftCardRefunded > 0) && (
+            <TotalRow
+              label="Net paid (all methods)"
+              value={
+                detail.totals.netAmountPaid + detail.totals.netGiftCardRedeemed
+              }
             />
           )}
           {detail.totals.refundDue > 0 && (
@@ -359,52 +380,17 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 
       <ReturnsPanel invoiceId={detail.id} />
 
-      {detail.payments.length > 0 && (
+      {(detail.payments.length > 0 ||
+        (adjustments?.refunds.length ?? 0) > 0) && (
         <div>
           <SectionHeading icon={<ReceiptText className="h-3.5 w-3.5" />}>
-            Payments
+            Payments & Refunds
           </SectionHeading>
           <div className="rounded-xl border border-border/60 bg-card shadow-sm">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead>Pickup</TableHead>
-                  <TableHead className="text-end">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {detail.payments.map((payment) => (
-                  <TableRow key={payment.id}>
-                    <TableCell>
-                      {new Date(payment.paidAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="capitalize">
-                      {payment.paymentType ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      {payment.orderId ? (
-                        <Link
-                          to="/orders/$orderId"
-                          params={{ orderId: payment.orderId }}
-                          className="text-info hover:underline"
-                        >
-                          View order
-                        </Link>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          Invoice payment
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-end font-medium tabular-nums">
-                      {currencyFormatter.format(payment.amount)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <InvoicePaymentHistory
+              payments={detail.payments}
+              refunds={adjustments?.refunds ?? []}
+            />
           </div>
         </div>
       )}
@@ -504,14 +490,18 @@ function toInvoice(detail: InvoiceDetail): Invoice {
           .map((line) => line.description),
       ),
     ],
-    totalPrice: detail.totals.total,
+    totalPrice: detail.totals.netTotal,
+    originalTotal: detail.totals.total,
+    amountCredited: detail.totals.amountCredited,
+    amountRefunded: detail.totals.cashRefunded + detail.totals.giftCardRefunded,
+    refundDue: detail.totals.refundDue,
     urgentCharge: detail.totals.urgentCharge,
     collectionMethod: detail.collectionMethod,
     paymentStatus: detail.paymentStatus,
-    amountPaid: detail.totals.amountPaid,
+    amountPaid: detail.totals.netAmountPaid,
     balanceDue: detail.totals.balanceDue,
     paymentMethod: detail.paymentMethod,
-    giftCardRedeemed: detail.totals.giftCardRedeemed,
+    giftCardRedeemed: detail.totals.netGiftCardRedeemed,
     collected: detail.collected,
     orderCount: detail.orderCount,
     collectedOrderCount: detail.collectedOrderCount,

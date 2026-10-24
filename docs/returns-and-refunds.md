@@ -19,6 +19,8 @@ An order's outcome (**Active**, **Cancelled**, **Returned**) is separate from it
 
 Retail quantities can be returned in parts to two decimal places. Gift card **sales** cannot be returned through this flow. Gift card **tender** can only be restored to original redeemed cards. An invoice with any cancellation, return or refund cannot be rebuilt through editing.
 
+The quantity number field shows purchased, already-returned and available quantities. Its buttons and typed values are bounded from zero to the unreturned purchased quantity. Zero or blank leaves a line out of the return. Garments must be whole items; retail quantities keep their existing two-decimal precision. The server rechecks eligibility and quantity under the invoice lock, including when another staff member has returned an item since the form opened.
+
 ## Balances and safeguards
 
 `invoice_balances` is shared by invoices, orders, payments and refunds:
@@ -30,6 +32,10 @@ net tender = payments − cash/card/Benefit refunds
 balance due = max(net total − net tender, 0)
 refund due  = max(net tender − net total, 0)
 ```
+
+The invoice list shows the adjusted total, its return/cancellation credit, net external payments, and a **Refunds** column with total payouts (including gift card restorations) and any refund still due. Sorting and filtering total or paid amounts use the adjusted values. Invoice details retain the original total and payments, then show credits, the adjusted total, refunds, net tender and the remaining balance. The **Payments & Refunds** history combines incoming payments and negative outgoing refunds for display; gift card refunds identify the original card.
+
+Refunds remain positive amounts in the dedicated `invoice_refunds` audit ledger; no schema change or negative insert into `invoice_payments` is needed. A unified transaction table with an explicit payment/refund type is another valid design, but a negative amount alone would lose refund-specific validation and links. The shared balance view already subtracts refunds exactly once. For example, an invoice originally 100, paid 100, credited 30 and refunded 30 has an adjusted total of 70, net tender of 70, and no balance or refund due. A return reduces the sale; paying its refund reduces tender held rather than reducing the sale again.
 
 Discounted merchandise credit is allocated across original lines in stable line-ID order using cumulative integer cents, then each garment's original urgency fee is added to that garment's credit limit. Fees are never discounted or redistributed to other garments or retail items. Partial returns preserve rounding remainders, so returning a three-unit line in three parts credits the same total as one full return. Retained charges cannot exceed the order's credit limit.
 
