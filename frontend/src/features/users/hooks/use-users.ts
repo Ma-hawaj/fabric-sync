@@ -7,10 +7,11 @@ async function fetchUsers(): Promise<User[]> {
   return data
 }
 
-export function useUsers() {
+export function useUsers({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['users'],
     queryFn: fetchUsers,
     staleTime: 1000 * 60 * 5,
+    enabled,
   })
 }

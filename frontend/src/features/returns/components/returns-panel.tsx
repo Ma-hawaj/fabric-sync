@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select'
 import { NumberField, TextField } from '@/components/form/fields'
 import { CURRENCY } from '@/lib/currency'
+import { StaffName } from '@/features/users/components/staff-name'
 import { money, failureMessage } from '../lib/display'
 import { ReturnDialog } from './return-dialog'
 import { useCreateRefund, useReturns } from '../hooks/use-returns'
@@ -33,13 +34,13 @@ import type { CreateRefundInput, ReturnContext } from '../types/returns'
 
 export function ReturnsPanel({ invoiceId }: { invoiceId: string }) {
   const { data, isLoading, isError, refetch } = useReturns(invoiceId)
-  const [dialog, setDialog] = useState<'return' | 'refund' | null>(null)
+  const [dialog, setDialog] = useState<'return' | null>(null)
 
   return (
     <section className="space-y-3" aria-labelledby="returns-heading">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="returns-heading" className="text-sm font-semibold">
-          Returns & Refunds
+          Returns & Cancellations
         </h2>
         {data && (
           <div className="flex gap-2">
@@ -49,13 +50,6 @@ export function ReturnsPanel({ invoiceId }: { invoiceId: string }) {
               onClick={() => setDialog('return')}
             >
               Return & Refund
-            </Button>
-            <Button
-              variant="outline"
-              disabled={data.settlement.refundDue <= 0}
-              onClick={() => setDialog('refund')}
-            >
-              Refund Pending Credit
             </Button>
           </div>
         )}
@@ -76,80 +70,55 @@ export function ReturnsPanel({ invoiceId }: { invoiceId: string }) {
       {data && (
         <>
           <p className="text-sm text-muted-foreground">
-            Return credits: {money(data.settlement.amountCredited)} · Refunded:{' '}
-            {money(
-              data.settlement.cashRefunded + data.settlement.giftCardRefunded,
-            )}{' '}
-            · Refund due: {money(data.settlement.refundDue)}
+            Return / cancellation credits:{' '}
+            {money(data.settlement.amountCredited)}
           </p>
-          {data.returns.length === 0 && data.refunds.length === 0 && (
+          {data.returns.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              No returns or refunds recorded.
+              No returns or cancellations recorded.
             </p>
           )}
-          {data.returns.map((entry) => (
-            <article key={entry.id} className="rounded-lg border p-4 text-sm">
-              <div className="flex flex-wrap justify-between gap-2">
-                <strong>
-                  {entry.kind === 'cancellation' ? 'Cancellation' : 'Return'} ·{' '}
-                  {money(entry.amount)}
-                </strong>
-                <time dateTime={entry.createdAt}>
-                  {new Date(entry.createdAt).toLocaleString()}
-                </time>
-              </div>
-              <p className="mt-1">{entry.reason}</p>
-              {data.refunds.some(
-                (refund) => refund.adjustmentId === entry.id,
-              ) && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Refunded at confirmation:{' '}
-                  {money(
-                    data.refunds
-                      .filter((refund) => refund.adjustmentId === entry.id)
-                      .reduce((sum, refund) => sum + refund.amount, 0),
-                  )}
+          {data.returns.map((entry) => {
+            const firstRefund = data.refunds.find(
+              (refund) => refund.adjustmentId === entry.id,
+            )
+            return (
+              <article key={entry.id} className="rounded-lg border p-4 text-sm">
+                <div className="flex flex-wrap justify-between gap-2">
+                  <strong>
+                    {entry.kind === 'cancellation' ? 'Cancellation' : 'Return'}{' '}
+                    · {money(entry.amount)}
+                  </strong>
+                  <time dateTime={entry.createdAt}>
+                    {new Date(entry.createdAt).toLocaleString()}
+                  </time>
+                </div>
+                <p className="mt-1">{entry.reason}</p>
+                {firstRefund && (
+                  <a
+                    href={`#refund-${firstRefund.id}`}
+                    className="mt-1 inline-block text-xs text-info hover:underline"
+                  >
+                    View refund payments
+                  </a>
+                )}
+                <ul className="mt-2 space-y-1 text-muted-foreground">
+                  {entry.lines.map((line, index) => (
+                    <li key={index}>
+                      {line.description} × {line.quantity} ·{' '}
+                      {money(line.amount)}
+                      {line.restocked ? ' · Restocked' : ''}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Recorded by <StaffName userId={entry.createdBy} />
                 </p>
-              )}
-              <ul className="mt-2 space-y-1 text-muted-foreground">
-                {entry.lines.map((line, index) => (
-                  <li key={index}>
-                    {line.description} × {line.quantity} · {money(line.amount)}
-                    {line.restocked ? ' · Restocked' : ''}
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Recorded by {entry.createdBy} · {entry.id}
-              </p>
-            </article>
-          ))}
-          {data.refunds.map((entry) => (
-            <article key={entry.id} className="rounded-lg border p-4 text-sm">
-              <div className="flex flex-wrap justify-between gap-2">
-                <strong>
-                  Refund · {money(entry.amount)} ·{' '}
-                  {entry.giftCardCode ?? entry.paymentType}
-                </strong>
-                <time dateTime={entry.createdAt}>
-                  {new Date(entry.createdAt).toLocaleString()}
-                </time>
-              </div>
-              <p className="mt-1">{entry.reason}</p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Recorded by {entry.createdBy} · {entry.id}
-              </p>
-            </article>
-          ))}
+              </article>
+            )
+          })}
           {dialog === 'return' && (
             <ReturnDialog
-              invoiceId={invoiceId}
-              context={data}
-              onClose={() => setDialog(null)}
-            />
-          )}
-          {dialog === 'refund' && (
-            <RefundDialog
               invoiceId={invoiceId}
               context={data}
               onClose={() => setDialog(null)}
@@ -158,6 +127,34 @@ export function ReturnsPanel({ invoiceId }: { invoiceId: string }) {
         </>
       )}
     </section>
+  )
+}
+
+export function RefundPendingCreditAction({
+  invoiceId,
+  context,
+}: {
+  invoiceId: string
+  context: ReturnContext | undefined
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button
+        variant="outline"
+        disabled={!context || context.settlement.refundDue <= 0}
+        onClick={() => setOpen(true)}
+      >
+        Refund Pending Credit
+      </Button>
+      {open && context && (
+        <RefundDialog
+          invoiceId={invoiceId}
+          context={context}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   )
 }
 

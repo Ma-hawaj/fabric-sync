@@ -107,7 +107,7 @@ describe('ReturnsPanel', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
-  it('disables actions for uncollected goods and an invoice without customer credit', () => {
+  it('disables returns for uncollected goods and leaves deferred refunds to payment history', () => {
     renderPanel({
       ...CONTEXT,
       lines: [{ ...PRODUCT, collected: false }],
@@ -119,10 +119,8 @@ describe('ReturnsPanel', () => {
         .hasAttribute('disabled'),
     ).toBe(true)
     expect(
-      screen
-        .getByRole('button', { name: 'Refund Pending Credit' })
-        .hasAttribute('disabled'),
-    ).toBe(true)
+      screen.queryByRole('button', { name: 'Refund Pending Credit' }),
+    ).toBeNull()
   })
 
   it('submits the selected quantity and restock choice and refreshes affected data', async () => {

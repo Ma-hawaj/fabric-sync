@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { OrderDetailPage } from './order-detail'
 import { apiClient } from '@/lib/api'
 import type { OrderDetail } from './types/orders'
+import { STAFF_USER } from '@/features/users/test-fixtures'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -147,6 +148,7 @@ function designCatalogFixture() {
 
 function renderPage(order = ORDER) {
   const client = new QueryClient()
+  client.setQueryData(['users'], [STAFF_USER])
   client.setQueryData(['orders', order.id], order)
   client.setQueryData(['design-options', ''], designCatalogFixture())
   return render(
@@ -183,6 +185,7 @@ function renderDeliveryOrder(overrides: Partial<OrderDetail> = {}) {
     ...overrides,
   }
   const client = new QueryClient()
+  client.setQueryData(['users'], [STAFF_USER])
   client.setQueryData(['orders', order.id], order)
   client.setQueryData(['design-options', ''], designCatalogFixture())
   return render(
@@ -202,9 +205,13 @@ describe('OrderDetailPage', () => {
         creditAmount: 90,
         retainedCharge: 10,
         restoredMaterialQuantity: 2,
+        closedBy: STAFF_USER.id,
+        closedAt: '2026-10-24T09:00:00Z',
       })
       expect(screen.getByText('Customer changed plans')).toBeTruthy()
       expect(screen.getByText('Production history')).toBeTruthy()
+      expect(screen.getByText(STAFF_USER.name)).toBeTruthy()
+      expect(screen.queryByText(STAFF_USER.id)).toBeNull()
       expect(screen.queryByRole('button', { name: 'Done' })).toBeNull()
       expect(screen.queryByRole('button', { name: 'Cancel Order' })).toBeNull()
       expect(screen.queryByRole('button', { name: 'Return Order' })).toBeNull()

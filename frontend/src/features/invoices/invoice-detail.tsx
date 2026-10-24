@@ -30,7 +30,10 @@ import { toast } from 'sonner'
 import { CollectInvoiceDialog } from './components/collect-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
 import { InvoicePaymentHistory } from './components/invoice-payment-history'
-import { ReturnsPanel } from '@/features/returns/components/returns-panel'
+import {
+  ReturnsPanel,
+  RefundPendingCreditAction,
+} from '@/features/returns/components/returns-panel'
 import { useReturns } from '@/features/returns/hooks/use-returns'
 import { useInvoice } from './hooks/use-invoice'
 import { downloadInvoicePdf } from './lib/print-invoice'
@@ -377,18 +380,28 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
       <ReturnsPanel invoiceId={detail.id} />
 
       {(detail.payments.length > 0 ||
-        (adjustments?.refunds.length ?? 0) > 0) && (
-        <div>
-          <SectionHeading icon={<ReceiptText className="h-3.5 w-3.5" />}>
-            Payments & Refunds
-          </SectionHeading>
+        (adjustments?.refunds.length ?? 0) > 0 ||
+        detail.totals.refundDue > 0) && (
+        <section aria-labelledby="payments-heading">
+          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-3">
+            <SectionHeading
+              id="payments-heading"
+              icon={<ReceiptText className="h-3.5 w-3.5" />}
+            >
+              Payments & Refunds
+            </SectionHeading>
+            <RefundPendingCreditAction
+              invoiceId={detail.id}
+              context={adjustments}
+            />
+          </div>
           <div className="rounded-xl border border-border/60 bg-card shadow-sm">
             <InvoicePaymentHistory
               payments={detail.payments}
               refunds={adjustments?.refunds ?? []}
             />
           </div>
-        </div>
+        </section>
       )}
     </div>
   )
@@ -519,14 +532,19 @@ function deduplicate(customers: InvoiceCustomer[]): InvoiceCustomer[] {
 }
 
 function SectionHeading({
+  id,
   icon,
   children,
 }: {
+  id?: string
   icon: ReactNode
   children: ReactNode
 }) {
   return (
-    <h2 className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+    <h2
+      id={id}
+      className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+    >
       {icon}
       {children}
     </h2>

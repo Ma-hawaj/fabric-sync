@@ -5,6 +5,7 @@ import { InvoiceDetailPage } from './invoice-detail'
 import type { InvoiceDetail } from './types/invoice-detail'
 import { CONTEXT } from '@/features/returns/test-fixtures'
 import type { ReturnContext } from '@/features/returns/types/returns'
+import { STAFF_USER } from '@/features/users/test-fixtures'
 
 const navigateMock = vi.fn()
 vi.mock('@/features/notifications/notification-dialog', () => ({
@@ -123,6 +124,7 @@ function renderPage(
   adjustments: ReturnContext = CONTEXT,
 ) {
   const client = new QueryClient()
+  client.setQueryData(['users'], [STAFF_USER])
   client.setQueryData(['invoices', 'inv-1', 'returns'], adjustments)
   if (detail) {
     client.setQueryData(['invoices', detail.id], detail)
@@ -214,6 +216,52 @@ describe('InvoiceDetailPage', () => {
     expect(screen.queryByText('Invoice payment')).toBeTruthy()
   })
 
+  it('places pending gift-card refunds in payment history even without external payment entries', () => {
+    renderPage(
+      {
+        ...DETAIL,
+        payments: [],
+        hasAdjustments: true,
+        totals: {
+          ...DETAIL.totals,
+          total: 100,
+          amountPaid: 0,
+          giftCardRedeemed: 100,
+          amountCredited: 30,
+          netTotal: 70,
+          netAmountPaid: 0,
+          netGiftCardRedeemed: 100,
+          refundDue: 30,
+          balanceDue: 0,
+        },
+      },
+      {
+        ...CONTEXT,
+        settlement: {
+          ...CONTEXT.settlement,
+          amountPaid: 0,
+          amountCredited: 30,
+          netTotal: 70,
+          netAmountPaid: 0,
+          netGiftCardRedeemed: 100,
+          refundDue: 30,
+        },
+      },
+    )
+    const credits = screen.getByRole('region', {
+      name: 'Returns & Cancellations',
+    })
+    const history = screen.getByRole('region', { name: 'Payments & Refunds' })
+    expect(
+      within(credits).queryByRole('button', { name: 'Refund Pending Credit' }),
+    ).toBeNull()
+    fireEvent.click(
+      within(history).getByRole('button', { name: 'Refund Pending Credit' }),
+    )
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Record Refund' })).toBeTruthy()
+  })
+
   it('keeps the original sale and shows adjusted totals with negative refunds in payment history', () => {
     renderPage(
       {
@@ -235,6 +283,25 @@ describe('InvoiceDetailPage', () => {
       },
       {
         ...CONTEXT,
+        returns: [
+          {
+            id: 'return-1',
+            reason: 'Garment returned',
+            kind: 'return',
+            amount: 30,
+            createdAt: '2026-07-28T09:00:00Z',
+            createdBy: STAFF_USER.id,
+            lines: [
+              {
+                lineId: 'order-1',
+                description: 'Japanese Toray Cotton',
+                quantity: 1,
+                amount: 30,
+                restocked: false,
+              },
+            ],
+          },
+        ],
         refunds: [
           {
             id: 'r2',
@@ -276,6 +343,24 @@ describe('InvoiceDetailPage', () => {
     expect(rows[2].textContent).toContain('Payment')
     expect(rows[3].textContent).toContain('Wrong size')
     expect(rows[3].textContent).toMatch(/-BHD\s*10\.000/)
+    expect(rows[1].textContent).toContain(STAFF_USER.name)
+    expect(rows[3].textContent).toContain(STAFF_USER.name)
+    const credits = screen.getByRole('region', {
+      name: 'Returns & Cancellations',
+    })
+    expect(credits.querySelectorAll('article')).toHaveLength(1)
+    expect(within(credits).getByText('Garment returned')).toBeTruthy()
+    expect(within(credits).queryByText('Wrong size')).toBeNull()
+    expect(within(credits).queryByText('Restore original card')).toBeNull()
+    expect(within(credits).getByText(STAFF_USER.name)).toBeTruthy()
+    expect(
+      within(credits)
+        .getByRole('link', { name: 'View refund payments' })
+        .getAttribute('href'),
+    ).toBe('#refund-r2')
+    expect(document.getElementById('refund-r2')).toBe(rows[1])
+    expect(screen.queryByText('return-1')).toBeNull()
+    expect(screen.queryByText(STAFF_USER.id)).toBeNull()
   })
 
   it('shows collection separately from payment and still allows editing with an advance taken', () => {

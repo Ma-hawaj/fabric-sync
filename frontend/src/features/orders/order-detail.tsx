@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CURRENCY } from '@/lib/currency'
 import { OrderResolutionActions } from '@/features/returns/components/order-resolution-actions'
+import { StaffName } from '@/features/users/components/staff-name'
 import { ReadOnlyMeasurement } from '@/features/customers/components/read-only-measurement'
 import {
   ArrowLeftIcon,
@@ -169,7 +170,12 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           </p>
           <p className="text-xs text-muted-foreground">
             {order.closedAt ? new Date(order.closedAt).toLocaleString() : ''}
-            {order.closedBy ? ` · Recorded by ${order.closedBy}` : ''}
+            {order.closedBy && (
+              <>
+                {' '}
+                · Recorded by <StaffName userId={order.closedBy} />
+              </>
+            )}
           </p>
           <Link
             to="/invoices/$invoiceId"
