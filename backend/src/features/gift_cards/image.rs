@@ -265,17 +265,4 @@ mod tests {
             render(&changed_brand, &card, today()).unwrap().sha256
         );
     }
-
-    #[test]
-    fn existing_long_codes_still_render_in_full() {
-        let mut card = card();
-        card.code = "GC-0123456789ABCDEF0123456789ABCDEF".into();
-        assert!(svg(&branding(), &card, today())
-            .unwrap()
-            .contains(&card.code));
-        assert!(render(&branding(), &card, today())
-            .unwrap()
-            .png
-            .starts_with(b"\x89PNG"));
-    }
 }

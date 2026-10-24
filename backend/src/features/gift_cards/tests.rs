@@ -176,56 +176,28 @@ async fn repeated_collisions_stop_without_poisoning_the_transaction(pool: PgPool
 }
 
 #[sqlx::test]
-async fn existing_literal_codes_take_precedence_over_short_code_aliases(pool: PgPool) {
+async fn invalid_code_formats_are_not_looked_up_or_redeemed(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
+    let card = service::create_gift_card(&state, input()).await.unwrap();
     let mut tx = pool.begin().await.unwrap();
-    let legacy =
-        repository::insert_gift_card(&mut tx, "7KMP4RWT9DXH", 50.0, None, None, None, None)
-            .await
-            .unwrap();
-    let grouped =
-        repository::insert_gift_card(&mut tx, "GC-7KMP-4RWT-9DXH", 75.0, None, None, None, None)
-            .await
-            .unwrap();
-    let long_code = "GC-0123456789ABCDEF0123456789ABCDEF";
-    let long = repository::insert_gift_card(&mut tx, long_code, 100.0, None, None, None, None)
-        .await
-        .unwrap();
+    for code in ["GC-ABC123", "GC-0123456789ABCDEF0123456789ABCDEF"] {
+        assert!(matches!(
+            service::get_gift_card_by_code(&state, code).await,
+            Err(AppError::NotFound(_))
+        ));
+        assert!(matches!(
+            service::redeem(&mut tx, code, 10.0, chrono::Utc::now().date_naive()).await,
+            Err(AppError::BadRequest(_))
+        ));
+    }
     tx.commit().await.unwrap();
     assert_eq!(
-        service::get_gift_card_by_code(&state, "7kmp4rwt9dxh")
+        service::get_gift_card_by_code(&state, &card.code)
             .await
             .unwrap()
-            .id,
-        legacy
+            .balance,
+        card.balance
     );
-    assert_eq!(
-        service::get_gift_card_by_code(&state, "GC-7KMP-4RWT-9DXH")
-            .await
-            .unwrap()
-            .id,
-        grouped
-    );
-    assert_eq!(
-        service::get_gift_card_by_code(&state, &long_code.to_lowercase())
-            .await
-            .unwrap()
-            .id,
-        long
-    );
-    let mut tx = pool.begin().await.unwrap();
-    assert_eq!(
-        service::redeem(
-            &mut tx,
-            &long_code.to_lowercase(),
-            10.0,
-            chrono::Utc::now().date_naive()
-        )
-        .await
-        .unwrap(),
-        long
-    );
-    tx.commit().await.unwrap();
 }
 
 #[sqlx::test]
@@ -474,14 +446,9 @@ async fn damaged_approved_image_is_never_uploaded(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn image_download_works_for_legacy_cards_without_a_recipient(pool: PgPool) {
+async fn image_download_works_without_whatsapp_setup(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
     let card = service::create_gift_card(&state, input()).await.unwrap();
-    sqlx::query("UPDATE gift_cards SET recipient_phone=NULL WHERE id=$1")
-        .bind(card.id)
-        .execute(&pool)
-        .await
-        .unwrap();
     let image = image::get(&state, card.id).await.unwrap();
     assert!(image.png.starts_with(b"\x89PNG\r\n\x1a\n"));
     assert_eq!(image.filename, format!("gift-card-{}.png", card.id));

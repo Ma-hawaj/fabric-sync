@@ -16,18 +16,30 @@ use super::{
 const CODE_ALPHABET: &[u8; 32] = b"23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const CODE_ATTEMPTS: usize = 8;
 
-/// Normalize case without changing existing code identities. Short-code aliases
-/// are considered separately, after an exact lookup has missed.
+/// Resolve staff input to the issued format before validation or lookup.
+/// The prefix, separators, and letter case are optional.
 pub fn normalize_code(code: &str) -> Result<String, AppError> {
-    let code = code.trim();
-
-    if code.is_empty() {
+    let compact: String = code
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '-')
+        .flat_map(char::to_uppercase)
+        .collect();
+    let payload = if compact.len() == 14 && compact.starts_with("GC") {
+        &compact[2..]
+    } else {
+        &compact
+    };
+    if payload.len() != 12 || !payload.bytes().all(|c| CODE_ALPHABET.contains(&c)) {
         return Err(AppError::BadRequest(
-            "gift card code cannot be empty".to_string(),
+            "Enter the 12 characters shown on the gift card.".into(),
         ));
     }
-
-    Ok(code.to_uppercase())
+    Ok(format!(
+        "GC-{}-{}-{}",
+        &payload[..4],
+        &payload[4..8],
+        &payload[8..]
+    ))
 }
 
 pub fn validate_amount(amount: f64) -> Result<(), AppError> {
@@ -52,29 +64,6 @@ pub fn generate_code() -> String {
         code.push(CODE_ALPHABET[((random >> ((11 - index) * 5)) & 31) as usize] as char);
     }
     code
-}
-
-/// Used only after an exact lookup misses, so older literal codes keep working.
-pub fn short_code_alias(code: &str) -> Option<String> {
-    let compact: String = code
-        .chars()
-        .filter(|c| !c.is_whitespace() && *c != '-')
-        .flat_map(char::to_uppercase)
-        .collect();
-    let payload = if compact.len() == 14 && compact.starts_with("GC") {
-        &compact[2..]
-    } else {
-        &compact
-    };
-    if payload.len() != 12 || !payload.bytes().all(|c| CODE_ALPHABET.contains(&c)) {
-        return None;
-    }
-    Some(format!(
-        "GC-{}-{}-{}",
-        &payload[..4],
-        &payload[4..8],
-        &payload[8..]
-    ))
 }
 
 pub async fn issue_gift_card(
@@ -155,20 +144,14 @@ pub async fn list_gift_cards(
     repository::list_gift_cards(state, params).await
 }
 
-/// Resolves the code staff typed at the till. The code is normalized the same
-/// way it was on the way in, so the case they type does not matter.
+/// Resolves the code staff typed at the till with a single canonical lookup.
 pub async fn get_gift_card_by_code(state: &AppState, code: &str) -> Result<GiftCard, AppError> {
-    let code = normalize_code(code)?;
-
-    if let Some(card) = repository::get_gift_card_by_code(state, &code).await? {
-        return Ok(card);
-    }
-    if let Some(alias) = short_code_alias(&code).filter(|alias| alias != &code) {
-        if let Some(card) = repository::get_gift_card_by_code(state, &alias).await? {
-            return Ok(card);
-        }
-    }
-    Err(AppError::NotFound(format!("no gift card with code {code}")))
+    // A malformed or incomplete entry is a normal lookup miss at the till.
+    let code = normalize_code(code)
+        .map_err(|_| AppError::NotFound("no gift card with this code".into()))?;
+    repository::get_gift_card_by_code(state, &code)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("no gift card with code {code}")))
 }
 
 pub async fn create_gift_card(
@@ -234,14 +217,9 @@ pub async fn redeem(
     on: NaiveDate,
 ) -> Result<Uuid, AppError> {
     let code = normalize_code(code)?;
-    let mut card = repository::lock_by_code(tx, &code).await?;
-    if card.is_none() {
-        if let Some(alias) = short_code_alias(&code).filter(|alias| alias != &code) {
-            card = repository::lock_by_code(tx, &alias).await?;
-        }
-    }
-    let card =
-        card.ok_or_else(|| AppError::BadRequest(format!("no gift card with code {code}")))?;
+    let card = repository::lock_by_code(tx, &code)
+        .await?
+        .ok_or_else(|| AppError::BadRequest(format!("no gift card with code {code}")))?;
 
     check_redeemable(&card, &code, amount, on)?;
 
@@ -270,11 +248,6 @@ mod tests {
     }
 
     #[test]
-    fn normalize_code_trims_and_uppercases() {
-        assert_eq!(normalize_code("  gc-abc123 \n").unwrap(), "GC-ABC123");
-    }
-
-    #[test]
     fn new_codes_use_three_readable_groups_and_avoid_ambiguous_characters() {
         for _ in 0..64 {
             let code = generate_code();
@@ -298,19 +271,28 @@ mod tests {
             " 7kmp 4rwt 9dxh ",
         ] {
             assert_eq!(
-                short_code_alias(input).as_deref(),
-                Some("GC-7KMP-4RWT-9DXH"),
+                normalize_code(input).unwrap(),
+                "GC-7KMP-4RWT-9DXH",
                 "{input}"
             );
         }
+    }
+
+    #[test]
+    fn normalize_code_rejects_invalid_formats() {
         for input in [
             "GC-ABC123",
             "GC-0123456789ABCDEF0123456789ABCDEF",
             "7KMP4RWT9DX",
             "7KMP4RWT9DX0",
             "7KMP4RWT9DXI",
+            "7KMP4RWT9DXé",
+            "七KMP4RWT9DXH",
         ] {
-            assert!(short_code_alias(input).is_none(), "{input}");
+            assert!(
+                matches!(normalize_code(input), Err(AppError::BadRequest(_))),
+                "{input}"
+            );
         }
     }
 

@@ -936,7 +936,7 @@ mod tests {
     }
 
     fn gift_card(amount: f64) -> serde_json::Value {
-        serde_json::json!({ "code": "GC-1", "amount": amount })
+        serde_json::json!({ "code": "GC-7KMP-4RWT-9DXH", "amount": amount })
     }
 
     fn invoice(
@@ -1408,7 +1408,7 @@ mod tests {
     fn redeeming_a_gift_card_does_not_change_the_invoice_total() {
         let input = retail_invoice(serde_json::json!({
             "products": [product(1.0, 100.0)],
-            "giftCardRedemptions": [{ "code": "GC-1", "amount": 50.0 }],
+            "giftCardRedemptions": [{ "code": "GC-7KMP-4RWT-9DXH", "amount": 50.0 }],
         }));
         let totals = compute_totals(&input);
         assert_eq!(totals.total, 100.0);
@@ -1581,19 +1581,21 @@ mod tests {
         let invoice = retail_invoice(serde_json::json!({
             "products": [product(1.0, 500.0)],
             "giftCardRedemptions": [
-                { "code": "GC-1", "amount": 50.0 },
-                { "code": " gc-1 ", "amount": 25.0 },
+                { "code": "GC-7KMP-4RWT-9DXH", "amount": 50.0 },
+                { "code": " 7kmp4rwt9dxh ", "amount": 25.0 },
             ],
         }));
         let error = validate(&invoice).unwrap_err();
-        assert!(matches!(error, AppError::BadRequest(_)));
+        assert!(
+            matches!(error, AppError::BadRequest(message) if message.contains("same gift card"))
+        );
     }
 
     #[test]
     fn rejects_redemptions_worth_more_than_the_invoice() {
         let invoice = retail_invoice(serde_json::json!({
             "products": [product(1.0, 100.0)],
-            "giftCardRedemptions": [{ "code": "GC-1", "amount": 200.0 }],
+            "giftCardRedemptions": [{ "code": "GC-7KMP-4RWT-9DXH", "amount": 200.0 }],
         }));
         let error = validate(&invoice).unwrap_err();
         assert!(matches!(error, AppError::BadRequest(_)));
@@ -1603,7 +1605,7 @@ mod tests {
     fn accepts_a_redemption_that_settles_the_invoice_exactly() {
         let invoice = retail_invoice(serde_json::json!({
             "products": [product(1.0, 100.0)],
-            "giftCardRedemptions": [{ "code": "GC-1", "amount": 100.0 }],
+            "giftCardRedemptions": [{ "code": "GC-7KMP-4RWT-9DXH", "amount": 100.0 }],
         }));
         assert!(validate(&invoice).is_ok());
     }

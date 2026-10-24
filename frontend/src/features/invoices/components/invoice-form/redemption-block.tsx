@@ -11,8 +11,7 @@ import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
 import { CURRENCY } from '@/lib/currency'
 import type { InvoiceFormApi } from '../../types/invoice-form'
 
-// Matches normalize_code in the Rust service, so what staff type resolves to
-// the same card the backend will find when the invoice is saved.
+// Keep typing readable; the backend resolves optional prefixes and separators.
 function normalizeCode(code: string) {
   return code.trim().toUpperCase()
 }
@@ -56,7 +55,7 @@ export function RedemptionBlock({
 
   function hint() {
     if (!lookupCode)
-      return 'Enter or scan the code. For new cards, GC and dashes are optional.'
+      return 'Enter or scan the code. GC and dashes are optional.'
     if (isFetching) return 'Checking…'
     if (!card) return 'No gift card with this code.'
 
