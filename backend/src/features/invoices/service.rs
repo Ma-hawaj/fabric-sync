@@ -250,11 +250,11 @@ pub async fn record_payment(
         payment_status: payment_summary(
             balance.net_total,
             balance.net_gift_card_redeemed,
-            balance.net_amount_paid + amount,
+            balance.net_amount_paid + payment.amount,
         )
         .payment_status,
-        amount_paid: balance.amount_paid + amount,
-        balance_due: round2((balance.balance_due - amount).max(0.0)),
+        amount_paid: round2(balance.amount_paid + payment.amount),
+        balance_due: round2((balance.balance_due - payment.amount).max(0.0)),
     };
     Ok(RecordedPayment { payment, summary })
 }
@@ -309,7 +309,7 @@ pub async fn collect_invoice(
 
     let summary = PaymentSummary {
         payment_status: "paid".into(),
-        amount_paid: balance.amount_paid + summary.balance_due,
+        amount_paid: round2(balance.amount_paid + summary.balance_due),
         balance_due: 0.0,
     };
 
