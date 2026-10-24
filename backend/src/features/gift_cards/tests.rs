@@ -463,10 +463,13 @@ async fn image_download_works_without_whatsapp_setup(pool: PgPool) {
 async fn invoice_sales_generate_codes_and_keep_them_on_edit_until_delivery(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
     let input = json!({"discountUnit":"amount","giftCards":[{"amount":50,"recipientPhone":"33112233","boughtFor":"Gift Recipient","code":"MANUAL"}]});
-    let invoice =
-        invoices::service::create_invoice(&state, serde_json::from_value(input.clone()).unwrap())
-            .await
-            .unwrap();
+    let invoice = invoices::service::create_invoice(
+        &state,
+        serde_json::from_value(input.clone()).unwrap(),
+        "test-staff",
+    )
+    .await
+    .unwrap();
     let edit = invoices::service::get_invoice_for_edit(&state, invoice.id)
         .await
         .unwrap();

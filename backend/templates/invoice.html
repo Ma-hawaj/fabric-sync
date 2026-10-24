@@ -689,6 +689,22 @@
               <td class="num">− {{ currency }} {{ amounts.amountPaid }}</td>
             </tr>
           {% endif %}
+          {% if invoice.totals.amountCredited > 0 %}
+            <tr><td class="label">مرتجعات <span class="en">Return credits</span></td>
+              <td class="num">− {{ currency }} {{ amounts.amountCredited }}</td></tr>
+          {% endif %}
+          {% if invoice.totals.cashRefunded > 0 %}
+            <tr><td class="label">مبالغ مستردة <span class="en">Refunds paid back</span></td>
+              <td class="num">+ {{ currency }} {{ amounts.cashRefunded }}</td></tr>
+          {% endif %}
+          {% if invoice.totals.giftCardRefunded > 0 %}
+            <tr><td class="label">مسترد إلى بطاقة هدية <span class="en">Restored to gift cards</span></td>
+              <td class="num">+ {{ currency }} {{ amounts.giftCardRefunded }}</td></tr>
+          {% endif %}
+          {% if invoice.totals.refundDue > 0 %}
+            <tr><td class="label">رصيد العميل <span class="en">Refund due</span></td>
+              <td class="num">{{ currency }} {{ amounts.refundDue }}</td></tr>
+          {% endif %}
           <tr class="due">
             <td>المبلغ المستحق <span class="en">Balance due</span></td>
             <td class="num">{{ currency }} {{ amounts.balanceDue }}</td>

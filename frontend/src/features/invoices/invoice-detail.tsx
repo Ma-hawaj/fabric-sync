@@ -18,6 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { CURRENCY } from '@/lib/currency'
+import { StaffName } from '@/features/users/components/staff-name'
 import { OrderPriorityIndicator } from '@/features/orders/components/order-priority-indicator'
 import {
   ArrowLeftIcon,
@@ -29,6 +30,12 @@ import {
 import { toast } from 'sonner'
 import { CollectInvoiceDialog } from './components/collect-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
+import { InvoicePaymentHistory } from './components/invoice-payment-history'
+import {
+  ReturnsPanel,
+  RefundPendingCreditAction,
+} from '@/features/returns/components/returns-panel'
+import { useReturns } from '@/features/returns/hooks/use-returns'
 import { useInvoice } from './hooks/use-invoice'
 import { downloadInvoicePdf } from './lib/print-invoice'
 import type { Invoice, InvoiceCustomer } from './types/invoices'
@@ -47,6 +54,7 @@ const LINE_KIND_LABELS: Record<InvoiceLine['kind'], string> = {
 
 export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
   const { data: detail, isLoading, isError } = useInvoice(invoiceId)
+  const { data: adjustments } = useReturns(invoiceId)
   const navigate = useNavigate()
   const [resendOpen, setResendOpen] = useState(false)
 
@@ -104,6 +112,9 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                 : ''}
               {detail.branchName ? ` · ${detail.branchName}` : ''}
             </p>
+            <p className="text-sm text-muted-foreground">
+              Created by: <StaffName userId={detail.createdBy} />
+            </p>
           </div>
         </div>
 
@@ -123,7 +134,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                 : 'Unpaid'}
           </Badge>
           <Badge variant={invoice.collected ? 'default' : 'secondary'}>
-            {invoice.collected ? 'Collected' : 'Pending collection'}
+            {invoice.collected ? 'Collection complete' : 'Pending collection'}
           </Badge>
         </div>
 
@@ -146,6 +157,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 
           <Button
             variant="outline"
+            disabled={detail.hasAdjustments}
             onClick={() =>
               void navigate({
                 to: '/invoices/$invoiceId/edit',
@@ -225,6 +237,22 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                         <span>{line.description}</span>
                         <OrderPriorityIndicator isUrgent={line.isUrgent} />
                       </div>
+                      {line.orderId &&
+                        adjustments?.returns.some((entry) =>
+                          entry.lines.some(
+                            (item) => item.lineId === line.orderId,
+                          ),
+                        ) && (
+                          <Badge variant="secondary">
+                            {adjustments.returns.find((entry) =>
+                              entry.lines.some(
+                                (item) => item.lineId === line.orderId,
+                              ),
+                            )?.kind === 'cancellation'
+                              ? 'Cancelled'
+                              : 'Returned'}
+                          </Badge>
+                        )}
                       {line.customer && (
                         <div className="text-xs text-muted-foreground">
                           {line.customer.name}
@@ -294,7 +322,20 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
               value={detail.totals.urgentCharge}
             />
           )}
-          <TotalRow label="Total" value={detail.totals.total} emphasis />
+          <TotalRow
+            label="Invoice total"
+            value={detail.totals.total}
+            emphasis
+          />
+          {detail.hasAdjustments && (
+            <>
+              <TotalRow
+                label="Return / cancellation credits"
+                value={-detail.totals.amountCredited}
+              />
+              <TotalRow label="After credits" value={detail.totals.netTotal} />
+            </>
+          )}
           {detail.totals.giftCardRedeemed > 0 && (
             <TotalRow
               label="Paid by gift card"
@@ -304,6 +345,34 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           {detail.totals.amountPaid > 0 && (
             <TotalRow label="Paid" value={-detail.totals.amountPaid} />
           )}
+          {detail.totals.cashRefunded > 0 && (
+            <TotalRow
+              label="Refunds paid back"
+              value={detail.totals.cashRefunded}
+            />
+          )}
+          {detail.totals.giftCardRefunded > 0 && (
+            <TotalRow
+              label="Restored to gift cards"
+              value={detail.totals.giftCardRefunded}
+            />
+          )}
+          {(detail.totals.cashRefunded > 0 ||
+            detail.totals.giftCardRefunded > 0) && (
+            <TotalRow
+              label="Net paid (all methods)"
+              value={
+                detail.totals.netAmountPaid + detail.totals.netGiftCardRedeemed
+              }
+            />
+          )}
+          {detail.totals.refundDue > 0 && (
+            <TotalRow
+              label="Refund due"
+              value={detail.totals.refundDue}
+              emphasis
+            />
+          )}
           <TotalRow
             label="Balance due"
             value={detail.totals.balanceDue}
@@ -312,54 +381,31 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
         </dl>
       </div>
 
-      {detail.payments.length > 0 && (
-        <div>
-          <SectionHeading icon={<ReceiptText className="h-3.5 w-3.5" />}>
-            Payments
-          </SectionHeading>
-          <div className="rounded-xl border border-border/60 bg-card shadow-sm">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead>Pickup</TableHead>
-                  <TableHead className="text-end">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {detail.payments.map((payment) => (
-                  <TableRow key={payment.id}>
-                    <TableCell>
-                      {new Date(payment.paidAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="capitalize">
-                      {payment.paymentType ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      {payment.orderId ? (
-                        <Link
-                          to="/orders/$orderId"
-                          params={{ orderId: payment.orderId }}
-                          className="text-info hover:underline"
-                        >
-                          View order
-                        </Link>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          Invoice payment
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-end font-medium tabular-nums">
-                      {currencyFormatter.format(payment.amount)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+      <ReturnsPanel invoiceId={detail.id} />
+
+      {(detail.payments.length > 0 ||
+        (adjustments?.refunds.length ?? 0) > 0 ||
+        detail.totals.refundDue > 0) && (
+        <section aria-labelledby="payments-heading">
+          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-3">
+            <SectionHeading
+              id="payments-heading"
+              icon={<ReceiptText className="h-3.5 w-3.5" />}
+            >
+              Payments & Refunds
+            </SectionHeading>
+            <RefundPendingCreditAction
+              invoiceId={detail.id}
+              context={adjustments}
+            />
           </div>
-        </div>
+          <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+            <InvoicePaymentHistory
+              payments={detail.payments}
+              refunds={adjustments?.refunds ?? []}
+            />
+          </div>
+        </section>
       )}
     </div>
   )
@@ -445,6 +491,7 @@ function toInvoice(detail: InvoiceDetail): Invoice {
 
   return {
     id: detail.id,
+    createdBy: detail.createdBy,
     invoiceNumber: detail.invoiceNumber,
     date: detail.date,
     targetDate: detail.targetDate,
@@ -458,13 +505,17 @@ function toInvoice(detail: InvoiceDetail): Invoice {
       ),
     ],
     totalPrice: detail.totals.total,
+    netTotal: detail.totals.netTotal,
+    amountCredited: detail.totals.amountCredited,
+    amountRefunded: detail.totals.cashRefunded + detail.totals.giftCardRefunded,
+    refundDue: detail.totals.refundDue,
     urgentCharge: detail.totals.urgentCharge,
     collectionMethod: detail.collectionMethod,
     paymentStatus: detail.paymentStatus,
-    amountPaid: detail.totals.amountPaid,
+    amountPaid: detail.totals.netAmountPaid,
     balanceDue: detail.totals.balanceDue,
     paymentMethod: detail.paymentMethod,
-    giftCardRedeemed: detail.totals.giftCardRedeemed,
+    giftCardRedeemed: detail.totals.netGiftCardRedeemed,
     collected: detail.collected,
     orderCount: detail.orderCount,
     collectedOrderCount: detail.collectedOrderCount,
@@ -486,14 +537,19 @@ function deduplicate(customers: InvoiceCustomer[]): InvoiceCustomer[] {
 }
 
 function SectionHeading({
+  id,
   icon,
   children,
 }: {
+  id?: string
   icon: ReactNode
   children: ReactNode
 }) {
   return (
-    <h2 className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+    <h2
+      id={id}
+      className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+    >
       {icon}
       {children}
     </h2>

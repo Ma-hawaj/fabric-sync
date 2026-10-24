@@ -398,6 +398,13 @@ fn assemble_order(
         is_urgent: row.is_urgent,
         urgent_charge: row.urgent_charge,
         status: row.status,
+        outcome: row.outcome,
+        closure_reason: row.closure_reason,
+        closed_at: row.closed_at,
+        closed_by: row.closed_by,
+        credit_amount: row.credit_amount,
+        retained_charge: row.retained_charge,
+        restored_material_quantity: row.restored_material_quantity,
         collected_at: row.collected_at,
         ready_at: row.ready_at,
         ready_by: row.ready_by,
@@ -539,6 +546,7 @@ pub async fn collect_order(
     order_id: Uuid,
     amount: f64,
     payment_type: Option<PaymentType>,
+    actor: &str,
 ) -> Result<OrderListItem, AppError> {
     if amount < 0.0 {
         return Err(AppError::BadRequest(
@@ -559,13 +567,14 @@ pub async fn collect_order(
 
     // Match invoice edits and whole-invoice receipts: always lock the invoice
     // before its orders, including pickups that take no payment.
-    let invoice = crate::features::invoices::repository::lock_invoice(&mut tx, invoice_id)
+    crate::features::invoices::repository::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
     let locked = repository::lock_order(&mut tx, order_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
 
+    crate::features::returns::service::ensure_order_active(&mut tx, order_id).await?;
     if locked.status == "collected" {
         return Err(AppError::BadRequest(
             "this order is already collected".to_string(),
@@ -577,12 +586,12 @@ pub async fn collect_order(
 
     if amount > 0.0 {
         let payment_type = payment_type.expect("validated: payment type is set");
-        let paid = crate::features::invoices::repository::sum_payments(&mut tx, invoice_id).await?;
+        let balance = crate::features::returns::repository::settlement(&mut tx, invoice_id).await?;
         crate::features::invoices::service::validate_payment_amount(
             amount,
-            invoice.total_price,
-            invoice.gift_card_redeemed,
-            paid,
+            balance.net_total,
+            balance.net_gift_card_redeemed,
+            balance.net_amount_paid,
         )?;
         crate::features::invoices::repository::insert_payment(
             &mut tx,
@@ -590,6 +599,7 @@ pub async fn collect_order(
             Some(order_id),
             amount,
             Some(payment_type.as_str()),
+            actor,
         )
         .await?;
     }
@@ -609,12 +619,31 @@ pub async fn collect_order(
     load_order(state, order_id).await
 }
 
+async fn active_order_transaction(
+    state: &AppState,
+    order_id: Uuid,
+) -> Result<sqlx::PgTransaction<'static>, AppError> {
+    let order = repository::get_order(state, order_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
+    let mut tx = state.db().begin().await?;
+    crate::features::invoices::repository::lock_invoice(&mut tx, order.invoice_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("invoice {} not found", order.invoice_id)))?;
+    repository::lock_order(&mut tx, order_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
+    crate::features::returns::service::ensure_order_active(&mut tx, order_id).await?;
+    Ok(tx)
+}
+
 pub async fn update_order(
     state: &AppState,
     order_id: Uuid,
     input: UpdateOrderInput,
 ) -> Result<OrderListItem, AppError> {
-    repository::update_order(state, order_id, input.production_location_id)
+    let mut tx = active_order_transaction(state, order_id).await?;
+    repository::update_order(&mut tx, order_id, input.production_location_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
 
@@ -623,6 +652,8 @@ pub async fn update_order(
         production_location_id = ?input.production_location_id,
         "order production location updated"
     );
+
+    tx.commit().await?;
 
     load_order(state, order_id).await
 }
@@ -654,8 +685,7 @@ pub async fn set_stage(
         &single_location_materials,
     );
 
-    let mut tx = state.db().begin().await?;
-    super::readiness_repository::lock_invoice(&mut tx, order.invoice_id).await?;
+    let mut tx = active_order_transaction(state, order_id).await?;
     let (current_production, current_receiving) =
         super::readiness_repository::locations(&mut tx, order_id).await?;
     let effective_production_id = current_production.or(effective_production_id);
@@ -709,7 +739,7 @@ pub async fn set_stage(
 
 /// Assigns or clears a stage's assignee, independent of `set_stage` — a stage
 /// is assignable whether it's pending, done, or skipped. `assignee_name` is
-/// resolved here against the (currently mocked) user directory rather than
+/// resolved here against the configured user directory rather than
 /// trusted from the client, matching how a location's name is always looked
 /// up server-side instead of taken from the request.
 pub async fn set_assignee(
@@ -729,15 +759,20 @@ pub async fn set_assignee(
         )));
     }
 
-    match input.assignee_id {
-        Some(assignee_id) => {
-            let users = users::service::list_users(state).await?;
-            let user = users
-                .iter()
+    let assignee = match input.assignee_id {
+        Some(assignee_id) => Some(
+            users::service::list_users(state)
+                .await?
+                .into_iter()
                 .find(|user| user.id == assignee_id)
-                .ok_or_else(|| AppError::BadRequest(format!("unknown user {assignee_id}")))?;
-
-            repository::set_assignee(state, order_id, stage_id, &user.id, &user.name).await?;
+                .ok_or_else(|| AppError::BadRequest(format!("unknown user {assignee_id}")))?,
+        ),
+        None => None,
+    };
+    let mut tx = active_order_transaction(state, order_id).await?;
+    match assignee {
+        Some(user) => {
+            repository::set_assignee(&mut tx, order_id, stage_id, &user.id, &user.name).await?;
 
             tracing::info!(
                 order_id = %order_id,
@@ -748,7 +783,7 @@ pub async fn set_assignee(
             );
         }
         None => {
-            repository::clear_assignee(state, order_id, stage_id).await?;
+            repository::clear_assignee(&mut tx, order_id, stage_id).await?;
 
             tracing::info!(
                 order_id = %order_id,
@@ -757,6 +792,8 @@ pub async fn set_assignee(
             );
         }
     }
+
+    tx.commit().await?;
 
     load_order(state, order_id).await
 }
@@ -776,7 +813,7 @@ pub async fn create_repair(
     let reason = normalized_reason(&input.reason)?;
     validate_charge(input.charge)?;
 
-    let mut tx = state.db().begin().await?;
+    let mut tx = active_order_transaction(state, order_id).await?;
     let repair_id = repository::create_repair(
         &mut tx,
         order_id,
@@ -828,7 +865,7 @@ pub async fn update_repair(
         .status
         .and_then(|status| repair_completion_time(status, Utc::now()));
 
-    let mut tx = state.db().begin().await?;
+    let mut tx = active_order_transaction(state, order_id).await?;
     let locked = repository::lock_repair(&mut tx, repair_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("repair {repair_id} not found")))?;
@@ -882,7 +919,7 @@ pub async fn receive_repair(
         )));
     }
 
-    let mut tx = state.db().begin().await?;
+    let mut tx = active_order_transaction(state, order_id).await?;
     let locked = repository::lock_repair(&mut tx, repair_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("repair {repair_id} not found")))?;
@@ -941,7 +978,7 @@ pub async fn set_repair_measurement(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
 
-    let mut tx = state.db().begin().await?;
+    let mut tx = active_order_transaction(state, order_id).await?;
     let measurement_id =
         save_repair_measurement(&mut tx, context.customer_id, repair_id, &measurement).await?;
     tx.commit().await?;
@@ -1629,7 +1666,211 @@ mod tests {
 mod repair_collection_tests {
     use super::*;
     use crate::test_support;
+
+    #[sqlx::test]
+    async fn order_and_invoice_collection_payments_record_the_staff_taking_payment(pool: PgPool) {
+        let (invoice, garment_ids, _, _) = test_support::invoice(&pool, 2, false).await;
+        sqlx::query(
+            "INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,10,'cash')",
+        )
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let state = test_support::state(pool.clone(), None, None).await;
+        collect_order(
+            &state,
+            garment_ids[0],
+            40.0,
+            Some(PaymentType::Cash),
+            "pickup-cashier",
+        )
+        .await
+        .unwrap();
+        crate::features::invoices::service::collect_invoice(
+            &state,
+            invoice,
+            Some(PaymentType::Card),
+            "invoice-cashier",
+        )
+        .await
+        .unwrap();
+        let detail = crate::features::invoices::service::get_invoice(&state, invoice)
+            .await
+            .unwrap();
+        assert_eq!(detail.payments.len(), 3);
+        assert!(detail.payments[0].recorded_by.is_none());
+        assert_eq!(
+            detail.payments[1].recorded_by.as_deref(),
+            Some("pickup-cashier")
+        );
+        assert_eq!(detail.payments[1].order_id, Some(garment_ids[0]));
+        assert_eq!(
+            detail.payments[2].recorded_by.as_deref(),
+            Some("invoice-cashier")
+        );
+        assert_eq!(detail.payments[2].amount, 150.0);
+        assert_eq!(detail.totals.total, 200.0);
+        assert_eq!(detail.totals.balance_due, 0.0);
+    }
+
     use sqlx::PgPool;
+
+    #[sqlx::test]
+    async fn order_mutations_and_adjustments_work_with_a_single_pool_connection(db: PgPool) {
+        use crate::features::{invoices, returns};
+        use serde_json::{from_value, json};
+
+        let (invoice_id, orders, production, _) = test_support::invoice(&db, 2, false).await;
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(std::time::Duration::from_secs(2))
+            .connect_with((*db.connect_options()).clone())
+            .await
+            .unwrap();
+        let state = test_support::state(pool.clone(), None, None).await;
+        let order_id = orders[0];
+        let stage_id = repository::list_stage_catalog(&state).await.unwrap()[0].id;
+
+        update_order(
+            &state,
+            order_id,
+            from_value(json!({"productionLocationId": production})).unwrap(),
+        )
+        .await
+        .unwrap();
+        set_stage(
+            &state,
+            order_id,
+            stage_id,
+            from_value(json!({"status": "done"})).unwrap(),
+        )
+        .await
+        .unwrap();
+        set_assignee(&state, order_id, stage_id, AssignStageInput::default())
+            .await
+            .unwrap();
+        let updated = create_repair(&state, order_id, from_value(json!({
+                "reason": "Fit adjustment", "measurement": {"date": "2026-10-24", "type": "body", "fit": "medium", "chest": 50}
+        })).unwrap()).await.unwrap();
+        let repair_id = updated.repairs[0].id;
+        update_repair(
+            &state,
+            order_id,
+            repair_id,
+            from_value(json!({"status": "completed"})).unwrap(),
+        )
+        .await
+        .unwrap();
+        set_repair_measurement(
+            &state,
+            order_id,
+            repair_id,
+            from_value(json!({
+                "date": "2026-10-24", "type": "body", "fit": "medium", "chest": 52
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+        receive_repair(&state, order_id, repair_id, 0.0, None)
+            .await
+            .unwrap();
+
+        invoices::service::record_payment(
+            &state,
+            invoice_id,
+            invoices::types::RecordPaymentInput {
+                request_id: Uuid::new_v4(),
+                amount: 20.0,
+                payment_type: PaymentType::Cash,
+                order_id: None,
+            },
+            "staff",
+        )
+        .await
+        .unwrap();
+        collect_order(&state, order_id, 0.0, None, "staff")
+            .await
+            .unwrap();
+        returns::service::create_return(
+            &state,
+            invoice_id,
+            from_value(json!({
+                "requestId": Uuid::new_v4(), "reason": "Return collected garment",
+                "lines": [{"lineId": order_id, "quantity": 1, "restock": false}]
+            }))
+            .unwrap(),
+            "staff",
+        )
+        .await
+        .unwrap();
+        returns::service::cancellation_context(&state, orders[1])
+            .await
+            .unwrap();
+        returns::service::cancel_order(
+            &state,
+            orders[1],
+            from_value(json!({
+                "requestId": Uuid::new_v4(), "reason": "Cancel remaining garment",
+                "refund": {"timing": "later"}
+            }))
+            .unwrap(),
+            "staff",
+        )
+        .await
+        .unwrap();
+        returns::service::create_refund(
+            &state,
+            invoice_id,
+            from_value(json!({
+                "requestId": Uuid::new_v4(), "reason": "Settle deferred refund", "amount": 20,
+                "paymentType": "cash"
+            }))
+            .unwrap(),
+            "staff",
+        )
+        .await
+        .unwrap();
+        let context = returns::service::context(&state, invoice_id).await.unwrap();
+        assert_eq!(context.settlement.amount_credited, 200.0);
+        assert_eq!(context.settlement.cash_refunded, 20.0);
+        assert_eq!(context.settlement.balance_due, 0.0);
+        assert_eq!(context.settlement.refund_due, 0.0);
+        pool.close().await;
+    }
+
+    #[sqlx::test]
+    async fn cancelled_orders_block_repair_collection_and_measurement_fixes(db: PgPool) {
+        let (_, orders, _, _) = test_support::invoice(&db, 1, false).await;
+        let order_id = orders[0];
+        let repair_id: Uuid = sqlx::query_scalar("INSERT INTO order_repairs(order_id,reason,status) VALUES($1,'Fit adjustment','completed') RETURNING id")
+            .bind(order_id).fetch_one(&db).await.unwrap();
+        let state = test_support::state(db.clone(), None, None).await;
+        crate::features::returns::service::cancel_order(&state,order_id,serde_json::from_value(serde_json::json!({
+            "requestId":Uuid::new_v4(),"reason":"Customer cancellation","workChargeConfirmed":true
+        })).unwrap(),"staff").await.unwrap();
+        assert!(matches!(
+            receive_repair(&state, order_id, repair_id, 0.0, None).await,
+            Err(AppError::BadRequest(_))
+        ));
+        let measurement = serde_json::from_value(
+            serde_json::json!({"date":"2026-10-23","type":"body","fit":"medium","chest":52}),
+        )
+        .unwrap();
+        assert!(matches!(
+            set_repair_measurement(&state, order_id, repair_id, measurement).await,
+            Err(AppError::BadRequest(_))
+        ));
+        let saved: (String, Option<Uuid>, Option<DateTime<Utc>>) = sqlx::query_as(
+            "SELECT status,fixed_measurement_id,received_at FROM order_repairs WHERE id=$1",
+        )
+        .bind(repair_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(saved, ("completed".into(), None, None));
+    }
 
     #[sqlx::test]
     async fn collected_repairs_keep_their_status_and_original_payment(db: PgPool) {

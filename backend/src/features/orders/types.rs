@@ -127,6 +127,13 @@ pub struct OrderRow {
     pub is_urgent: bool,
     pub urgent_charge: f64,
     pub status: String,
+    pub outcome: String,
+    pub closure_reason: Option<String>,
+    pub closed_at: Option<DateTime<Utc>>,
+    pub closed_by: Option<String>,
+    pub credit_amount: Option<f64>,
+    pub retained_charge: f64,
+    pub restored_material_quantity: f64,
     /// When the customer collected the garment, stamped automatically when
     /// the order is collected. Null while the order is still pending.
     pub collected_at: Option<DateTime<Utc>>,
@@ -233,6 +240,13 @@ pub struct OrderListItem {
     pub is_urgent: bool,
     pub urgent_charge: f64,
     pub status: String,
+    pub outcome: String,
+    pub closure_reason: Option<String>,
+    pub closed_at: Option<DateTime<Utc>>,
+    pub closed_by: Option<String>,
+    pub credit_amount: Option<f64>,
+    pub retained_charge: f64,
+    pub restored_material_quantity: f64,
     /// When the customer collected the garment, stamped automatically when
     /// the order is collected. Null while the order is still pending.
     pub collected_at: Option<DateTime<Utc>>,

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO invoice_payments (invoice_id, order_id, amount, payment_type)\n        VALUES ($1, $2, $3::float8, $4)\n        RETURNING id, amount::float8 AS \"amount!\", payment_type, paid_at, order_id\n        ",
+  "query": "\n        INSERT INTO invoice_payments (invoice_id, order_id, amount, payment_type, recorded_by)\n        VALUES ($1, $2, $3::float8, $4, $5)\n        RETURNING id, amount::float8 AS \"amount!\", payment_type, paid_at, order_id, recorded_by\n        ",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,11 @@
         "ordinal": 4,
         "name": "order_id",
         "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "recorded_by",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -34,6 +39,7 @@
         "Uuid",
         "Uuid",
         "Float8",
+        "Text",
         "Text"
       ]
     },
@@ -42,8 +48,9 @@
       null,
       true,
       false,
+      true,
       true
     ]
   },
-  "hash": "bb0972b3cdc45e86a5ef52ffc052cf323ffa22344a89eb1461210a7a52ba15ad"
+  "hash": "0e9dfbc4ab242109953a86bae52eeb7f6ac11a2c20848d9ef2795f4b460b6ca0"
 }

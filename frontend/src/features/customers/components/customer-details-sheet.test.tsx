@@ -66,6 +66,18 @@ function renderSheet(customer: Customer | null) {
 }
 
 describe('CustomerDetailsSheet', () => {
+  it('shows fraction symbols in the grid and thobe sheet', () => {
+    renderSheet({
+      ...CUSTOMER,
+      measurements: [
+        { ...CUSTOMER.measurements[0], chest: 42.5, waist: 30.375 },
+      ],
+    })
+
+    expect(screen.getAllByText('42 ½')).toHaveLength(3)
+    expect(screen.getAllByText('30 ⅜')).toHaveLength(3)
+  })
+
   it('keeps every field of a shown group in place, leaving missing values empty', () => {
     renderSheet(CUSTOMER)
 

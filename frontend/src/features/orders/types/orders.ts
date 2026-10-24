@@ -117,6 +117,13 @@ export interface Order {
   isUrgent: boolean
   urgentCharge: number
   status: OrderStatus
+  outcome: 'active' | 'cancelled' | 'returned'
+  closureReason: string | null
+  closedAt: string | null
+  closedBy: string | null
+  creditAmount: number | null
+  retainedCharge: number
+  restoredMaterialQuantity: number
   /**
    * When the customer collected the garment, as an ISO datetime — parsed to
    * a Date in use-orders.ts for the table. Null while still pending.

@@ -27,6 +27,29 @@ const measurement: Measurement = {
 }
 
 describe('generateMeasurementsHtml', () => {
+  it('prints fraction symbols in the diagram and grid, preserving text and other decimals', () => {
+    const html = generateMeasurementsHtml(customer, {
+      ...measurement,
+      chest: 42.5,
+      waist: 30.125,
+      neckWidth: 7.13,
+      frontPocketLengthByWidth: '<12.5×8>',
+    })
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const svgValues = [...doc.querySelectorAll('text.thob-value')].map(
+      (el) => el.textContent,
+    )
+    const gridValues = [...doc.querySelectorAll('.measurement-grid .num')].map(
+      (el) => el.textContent,
+    )
+    for (const value of ['42 ½', '30 ⅛', '7.13', '<12.5×8>']) {
+      expect(svgValues).toContain(value)
+      expect(gridValues).toContain(value)
+    }
+    expect(html).toContain('&lt;12.5×8&gt;')
+    expect(html).toContain('direction="ltr"')
+  })
+
   it('includes the customer name and phone', () => {
     const html = generateMeasurementsHtml(customer, measurement)
 

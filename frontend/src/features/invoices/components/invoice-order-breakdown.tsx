@@ -129,11 +129,15 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
                           order.status === 'collected' ? 'default' : 'secondary'
                         }
                       >
-                        {order.status === 'collected'
-                          ? 'Collected'
-                          : order.status === 'ready'
-                            ? 'Ready for pickup'
-                            : 'In progress'}
+                        {order.outcome === 'cancelled'
+                          ? 'Cancelled'
+                          : order.outcome === 'returned'
+                            ? 'Returned'
+                            : order.status === 'collected'
+                              ? 'Collected'
+                              : order.status === 'ready'
+                                ? 'Ready for pickup'
+                                : 'In progress'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-end tabular-nums">

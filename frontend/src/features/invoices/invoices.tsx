@@ -115,6 +115,7 @@ export function InvoicesPage() {
         'itemCount',
         'paymentStatus',
         'amountPaid',
+        'amountRefunded',
         'balanceDue',
         'totalPrice',
         'readinessStatus',

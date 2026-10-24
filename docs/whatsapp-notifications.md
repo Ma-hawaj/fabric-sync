@@ -138,6 +138,61 @@ unstarted sends. Once a gift card has any approved delivery history, the invoice
 that sold it cannot be rebuilt, preserving the distributed code and delivery
 audit. Recipient details can still be corrected from Gift Cards.
 
+### English and Arabic in one message
+
+The message body can contain both English and Arabic, with line breaks between
+the two languages. Both appear in the same preview and are approved and sent
+as one message. The invoice PDF remains bilingual.
+
+Use the following as proposed bodies when submitting your templates to Meta.
+The exact bilingual wording must be approved before delivery, as required by
+[WhatsApp's template policy](https://business.whatsapp.com/policy/).
+
+Invoice template `invoice_document_bilingual_v1`, with a Document/PDF header:
+
+```text
+Your invoice is attached.
+فاتورتكم مرفقة.
+
+Invoice / رقم الفاتورة: {{1}}
+Company / المتجر: {{2}}
+Total / الإجمالي: {{3}}
+Balance due / المبلغ المتبقي: {{4}}.
+```
+
+Pickup template `invoice_ready_bilingual_v1`, with no header:
+
+```text
+Your order is ready for pickup.
+طلبكم جاهز للاستلام.
+
+Invoice / رقم الفاتورة: {{1}}
+Pickup branch / فرع الاستلام: {{2}}
+Balance due / المبلغ المتبقي: {{3}}.
+```
+
+The numbered placeholders and parameter order are the same as in the table
+above. The invoice reference, company/branch name, and BHD amounts use the
+stored values. The paired labels provide both languages around those values.
+
+After approval, set the names and exact bodies in `backend/.env` or your
+deployment environment. This example assumes both templates are approved under
+the `ar` language code; use their actual approved code if different:
+
+```dotenv
+WHATSAPP_TEMPLATE_LANGUAGE=ar
+WHATSAPP_INVOICE_TEMPLATE=invoice_document_bilingual_v1
+WHATSAPP_READY_TEMPLATE=invoice_ready_bilingual_v1
+WHATSAPP_INVOICE_BODY="Your invoice is attached.\nفاتورتكم مرفقة.\n\nInvoice / رقم الفاتورة: {{1}}\nCompany / المتجر: {{2}}\nTotal / الإجمالي: {{3}}\nBalance due / المبلغ المتبقي: {{4}}."
+WHATSAPP_READY_BODY="Your order is ready for pickup.\nطلبكم جاهز للاستلام.\n\nInvoice / رقم الفاتورة: {{1}}\nPickup branch / فرع الاستلام: {{2}}\nBalance due / المبلغ المتبقي: {{3}}."
+```
+
+Double-quoted `.env` values turn `\n` into line breaks. For a deployment's
+environment editor, enter the body with actual line breaks. The language code
+selects one approved template variant; the bilingual text is written explicitly
+in that variant's body. Configure both templates with the same language code,
+which is shared by invoice and pickup notifications.
+
 The generic invoice document wording is used for creation, edits, and explicit
 resends. Set `WHATSAPP_INVOICE_BODY` / `WHATSAPP_READY_BODY` to the exact approved
 wording if it differs. Approved template messages are used even outside the

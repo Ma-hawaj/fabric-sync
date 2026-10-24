@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import type { PaymentType } from '../types/invoices'
@@ -25,10 +26,11 @@ async function recordPayment({
   amount,
   paymentType,
   orderId,
-}: RecordPaymentInput): Promise<RecordedPayment> {
+  requestId,
+}: RecordPaymentInput & { requestId: string }): Promise<RecordedPayment> {
   const { data } = await apiClient.post<RecordedPayment>(
     `/invoices/${invoiceId}/payments`,
-    { amount, paymentType, orderId: orderId ?? null },
+    { requestId, amount, paymentType, orderId: orderId ?? null },
   )
   return data
 }
@@ -37,12 +39,20 @@ async function recordPayment({
 // now, or the remainder after everything was already collected.
 export function useRecordPayment() {
   const queryClient = useQueryClient()
+  // One intended payment per mounted dialog, including edited retries.
+  const requestId = useRef<string | null>(null)
 
   return useMutation({
-    mutationFn: recordPayment,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
-      void queryClient.invalidateQueries({ queryKey: ['orders'] })
+    mutationFn: (input: RecordPaymentInput) => {
+      requestId.current ??= crypto.randomUUID()
+      return recordPayment({ ...input, requestId: requestId.current })
+    },
+    // A lost response may follow a committed payment. Refresh on failure too.
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+        queryClient.invalidateQueries({ queryKey: ['orders'] }),
+      ])
     },
   })
 }
