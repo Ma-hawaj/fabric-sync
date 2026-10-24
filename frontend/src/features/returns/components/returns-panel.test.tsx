@@ -82,10 +82,7 @@ describe('ReturnsPanel', () => {
     act(() => typeSearchText(location, 'Riffa'))
     await screen.findByRole('option', { name: 'Riffa' })
     await waitFor(
-      () =>
-        expect(
-          screen.queryByRole('option', { name: 'Manama', exact: true }),
-        ).toBeNull(),
+      () => expect(screen.queryByRole('option', { name: 'Manama' })).toBeNull(),
       { timeout: 3000 },
     )
     expect(screen.queryByRole('option', { name: 'Retired store' })).toBeNull()
