@@ -9,8 +9,7 @@ SQLx applies the files in version order:
    order lifecycle (`pending`, `ready`, `collected`), customer addresses,
    notification preferences, invoice collection method, and per-order urgency
    and automatic charges. The invoice charge column stores the computed sum of its
-   order charges. Return credits and lines, refund payouts, cancellation details,
-   original fabric stock locations, and the balance/outcome views are defined here.
+   order charges.
 2. `0002_notification_schema.sql` creates immutable PDF artifacts, notification
    previews and approvals, recipients, delivery attempts, and webhook storage.
 3. `0003_readiness_and_revisions.sql` creates the invoice-readiness view and the
@@ -18,6 +17,9 @@ SQLx applies the files in version order:
    Readiness excludes closed orders, and credits/refunds invalidate previews.
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
    return-line lookups and the unique index allowing one closure per garment.
+
+The core schema also defines return credits and lines, refund payouts,
+cancellation details, original fabric stock locations, and balance/outcome views.
 
 Reference data, the design catalog, and optional demo data live in `backend/seeds/`
 and are loaded separately. Future deployed schema changes should be added as new
