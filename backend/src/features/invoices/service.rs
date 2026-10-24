@@ -22,10 +22,10 @@ use uuid::Uuid;
 use super::{
     repository,
     types::{
-        CollectedInvoice, CreateGiftCardLineInput, CreateInvoiceInput, CreateOrderInput,
-        CreateProductLineInput, CreatedInvoice, DiscountUnit, GiftCardRedemptionInput,
-        InvoiceCustomerInput, InvoiceDetail, InvoiceEdit, InvoiceListItem, InvoiceTotalsBreakdown,
-        MaterialSource, PaymentSummary, PaymentType, RecordedPayment,
+        CollectedInvoice, CreateGiftCardLineInput, CreateInvoiceInput, CreateMaterialLineInput,
+        CreateOrderInput, CreateProductLineInput, CreatedInvoice, DiscountUnit,
+        GiftCardRedemptionInput, InvoiceCustomerInput, InvoiceDetail, InvoiceEdit, InvoiceListItem,
+        InvoiceTotalsBreakdown, MaterialSource, PaymentSummary, PaymentType, RecordedPayment,
     },
 };
 use crate::features::customers::types::{normalize_customer_identity, CreateMeasurementInput};
@@ -321,6 +321,10 @@ fn product_line_total(line: &CreateProductLineInput) -> f64 {
     round2(line.quantity * line.unit_price)
 }
 
+fn material_line_total(line: &CreateMaterialLineInput) -> f64 {
+    round2(line.quantity * line.unit_price)
+}
+
 /// Every figure between the line items and the total. Shared by the create
 /// path, which stores `total`, and the read path behind `GET /invoices/:id`,
 /// which has to rebuild the rest from the lines in order to print it — a
@@ -411,7 +415,9 @@ fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
     let gift_card_sales: f64 = input.gift_cards.iter().map(|card| card.amount).sum();
 
     let totals = breakdown(
-        order_subtotal + product_subtotal,
+        order_subtotal
+            + product_subtotal
+            + input.materials.iter().map(material_line_total).sum::<f64>(),
         gift_card_sales,
         input.discount,
         input.discount_unit,
@@ -614,9 +620,13 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
         .iter()
         .any(|customer| !customer.orders.is_empty());
 
-    if !has_orders && input.products.is_empty() && input.gift_cards.is_empty() {
+    if !has_orders
+        && input.products.is_empty()
+        && input.gift_cards.is_empty()
+        && input.materials.is_empty()
+    {
         return Err(AppError::BadRequest(
-            "an invoice needs at least one order, product, or gift card".to_string(),
+            "an invoice needs at least one order, material, product, or gift card".to_string(),
         ));
     }
 
@@ -694,6 +704,31 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
         if line.unit_price < 0.0 {
             return Err(AppError::BadRequest(
                 "a product price cannot be negative".to_string(),
+            ));
+        }
+    }
+
+    for line in &input.materials {
+        if !line.quantity.is_finite() || line.quantity < 0.01 {
+            return Err(AppError::BadRequest(
+                "a material line needs a quantity of at least 0.01".into(),
+            ));
+        }
+        if !line.unit_price.is_finite()
+            || line.unit_price < 0.0
+            || !(line.quantity * line.unit_price).is_finite()
+        {
+            return Err(AppError::BadRequest(
+                "a material price must be finite and nonnegative".into(),
+            ));
+        }
+        // Stock and prices are stored at two decimal places. Reject excess
+        // precision so saved totals and stock always match the submitted sale.
+        if (round2(line.quantity) - line.quantity).abs() > 1e-9
+            || (round2(line.unit_price) - line.unit_price).abs() > 1e-9
+        {
+            return Err(AppError::BadRequest(
+                "material quantities and prices support at most two decimal places".into(),
             ));
         }
     }
@@ -1548,6 +1583,67 @@ mod tests {
         assert!(validate(&invoice).is_err());
     }
 
+    fn material(quantity: f64, unit_price: f64) -> serde_json::Value {
+        serde_json::json!({
+            "materialId": "0197fdd2-6a67-7000-8000-000000000001",
+            "branchId": "0197fdd2-6a67-7000-8000-000000000005",
+            "quantity": quantity, "unitPrice": unit_price,
+        })
+    }
+
+    #[test]
+    fn material_only_sale_needs_no_customer_or_measurements() {
+        let invoice = retail_invoice(serde_json::json!({ "materials": [material(2.5, 11.0)] }));
+        assert!(validate(&invoice).is_ok());
+        assert!(invoice.customers.is_empty());
+        assert_eq!(compute_totals(&invoice).total, 27.5);
+        assert!(
+            retail_invoice(serde_json::json!({ "products": [product(1.0, 10.0)] }))
+                .materials
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn material_sales_share_discount_and_payment_rules_with_other_goods() {
+        let mut invoice = retail_invoice(serde_json::json!({
+            "materials": [material(2.5, 11.0)], "products": [product(1.0, 22.0)],
+            "discount": 10.0, "discountUnit": "percent", "giftCards": [gift_card(10.0)],
+            "payments": [{ "amount": 54.55, "paymentType": "cash" }],
+        }));
+        assert_eq!(compute_totals(&invoice).total, 54.55);
+        assert!(validate(&invoice).is_ok());
+        invoice.payments[0].amount = 54.56;
+        assert!(validate(&invoice).is_err());
+    }
+
+    #[test]
+    fn material_sales_and_urgent_orders_share_discounts_but_not_urgent_charges() {
+        let mut input = invoice(10.0, "percent", vec![customer(vec![order(100.0)])]);
+        input.materials = serde_json::from_value(serde_json::json!([material(2.5, 11.0)])).unwrap();
+        input.customers[0].orders[0].is_urgent = true;
+        input.customers[0].orders[0].urgent_charge = 5.0;
+        assert!(validate(&input).is_ok());
+        assert_eq!(compute_totals(&input).total, 119.75);
+        assert_eq!(compute_totals(&input).urgent_charge, 5.0);
+    }
+
+    #[test]
+    fn material_sales_reject_invalid_numbers() {
+        let mut invoice = retail_invoice(serde_json::json!({ "materials": [material(2.5, 11.0)] }));
+        for quantity in [0.0, -1.0, 0.001, 1.234, f64::INFINITY, f64::NAN] {
+            invoice.materials[0].quantity = quantity;
+            assert!(validate(&invoice).is_err());
+        }
+        invoice.materials[0].quantity = 2.5;
+        for price in [-1.0, 1.234, f64::INFINITY, f64::NAN] {
+            invoice.materials[0].unit_price = price;
+            assert!(validate(&invoice).is_err());
+        }
+        invoice.materials[0].unit_price = 0.0;
+        assert!(validate(&invoice).is_ok());
+    }
+
     #[test]
     fn accepts_an_invoice_of_only_products() {
         let invoice = retail_invoice(serde_json::json!({ "products": [product(2.0, 30.0)] }));
@@ -1798,6 +1894,36 @@ async fn write_customer_orders(
     Ok(())
 }
 
+async fn write_material_lines(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    materials: &[CreateMaterialLineInput],
+) -> Result<(), AppError> {
+    for line in materials {
+        if !repository::is_production_location(tx, line.branch_id).await? {
+            return Err(AppError::BadRequest(
+                "pick an active stock-holding location for material sales".into(),
+            ));
+        }
+        // The same guarded decrement used by tailoring orders runs in the
+        // invoice transaction, so repeated and mixed lines share availability.
+        if !materials_repository::decrement_stock(
+            tx,
+            line.material_id,
+            line.branch_id,
+            line.quantity,
+        )
+        .await?
+        {
+            return Err(AppError::BadRequest(
+                "not enough material in stock at the selected location".into(),
+            ));
+        }
+        repository::insert_material_item(tx, invoice_id, line, material_line_total(line)).await?;
+    }
+    Ok(())
+}
+
 async fn write_product_lines(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
@@ -1937,6 +2063,7 @@ pub async fn create_invoice(
     }
 
     write_product_lines(&mut tx, invoice_id, &input.products).await?;
+    write_material_lines(&mut tx, invoice_id, &input.materials).await?;
 
     write_gift_card_sales(&mut tx, invoice_id, input.customer_id, &input.gift_cards).await?;
 
@@ -2042,6 +2169,7 @@ pub async fn update_invoice(
     // Everything the rebuild is about to tear down.
     let order_lines = repository::old_order_lines(&mut tx, invoice_id).await?;
     let product_lines = repository::old_product_lines(&mut tx, invoice_id).await?;
+    let material_lines = repository::old_material_lines(&mut tx, invoice_id).await?;
     let gift_sales = repository::old_gift_card_sales(&mut tx, invoice_id).await?;
     let redemptions = repository::old_redemptions(&mut tx, invoice_id).await?;
     let measurement_refs = repository::old_measurement_refs(&mut tx, invoice_id).await?;
@@ -2085,6 +2213,12 @@ pub async fn update_invoice(
             .await?;
         }
     }
+    for line in &material_lines {
+        if let (Some(material_id), Some(branch_id)) = (line.material_id, line.branch_id) {
+            repository::restore_material_stock(&mut tx, material_id, branch_id, line.quantity)
+                .await?;
+        }
+    }
     for line in &product_lines {
         if let (Some(product_id), Some(branch_id)) = (line.product_id, line.branch_id) {
             repository::restore_product_stock(&mut tx, product_id, branch_id, line.quantity)
@@ -2118,6 +2252,7 @@ pub async fn update_invoice(
     }
 
     write_product_lines(&mut tx, invoice_id, &input.products).await?;
+    write_material_lines(&mut tx, invoice_id, &input.materials).await?;
 
     write_gift_card_sales(&mut tx, invoice_id, input.customer_id, &input.gift_cards).await?;
 

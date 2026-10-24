@@ -7,10 +7,11 @@ use crate::{
 };
 
 use super::types::{
-    CreateInvoiceInput, CreateOrderInput, CreateProductLineInput, InvoiceDetailLine, InvoiceEdit,
-    InvoiceEditCustomer, InvoiceEditGiftCardLine, InvoiceEditOrder, InvoiceEditProductLine,
-    InvoiceEditRedemption, InvoiceLineKind, InvoiceListItem, InvoiceParty, InvoicePayment,
-    InvoiceRecord, InvoiceRedemptionLine, OrderDesignValues,
+    CreateInvoiceInput, CreateMaterialLineInput, CreateOrderInput, CreateProductLineInput,
+    InvoiceDetailLine, InvoiceEdit, InvoiceEditCustomer, InvoiceEditGiftCardLine,
+    InvoiceEditMaterialLine, InvoiceEditOrder, InvoiceEditProductLine, InvoiceEditRedemption,
+    InvoiceLineKind, InvoiceListItem, InvoiceParty, InvoicePayment, InvoiceRecord,
+    InvoiceRedemptionLine, OrderDesignValues,
 };
 use crate::features::customers::types::CreateMeasurementInput;
 
@@ -178,6 +179,7 @@ pub async fn fetch_invoice_detail(
         r#"
         SELECT
             kind,
+            unit,
             description,
             quantity::float8 AS "quantity!",
             unit_price::float8 AS "unit_price!",
@@ -259,6 +261,8 @@ pub async fn fetch_invoice_detail(
         InvoiceDetailLine {
             kind: if is_gift_card {
                 InvoiceLineKind::GiftCard
+            } else if row.kind == "material" {
+                InvoiceLineKind::Material
             } else {
                 InvoiceLineKind::Product
             },
@@ -269,7 +273,7 @@ pub async fn fetch_invoice_detail(
             detail: None,
             customer: None,
             quantity: row.quantity,
-            unit: None,
+            unit: row.unit,
             unit_price: row.unit_price,
             line_total: row.line_total,
             taxable: !is_gift_card,
@@ -369,7 +373,7 @@ const SPEC: ListSpec = ListSpec {
                 END,
                 '[]'
             ) AS customers,
-            COALESCE(agg.materials, '[]') AS materials,
+            array_to_json(ARRAY(SELECT DISTINCT unnest(COALESCE(agg.material_names, ARRAY[]::text[]) || COALESCE(items.material_names, ARRAY[]::text[])))) AS materials,
             COALESCE(
                 agg.customer_names,
                 CASE WHEN ic.id IS NOT NULL THEN ic.name END,
@@ -380,7 +384,7 @@ const SPEC: ListSpec = ListSpec {
                 CASE WHEN ic.id IS NOT NULL THEN ic.mobile_no END,
                 ''
             ) AS customer_mobiles,
-            COALESCE(agg.material_names, ARRAY[]::text[]) AS material_names
+            ARRAY(SELECT DISTINCT unnest(COALESCE(agg.material_names, ARRAY[]::text[]) || COALESCE(items.material_names, ARRAY[]::text[]))) AS material_names
         FROM invoices i
         LEFT JOIN branch recv ON recv.id = i.branch_id
         JOIN invoice_readiness ready ON ready.invoice_id = i.id
@@ -392,7 +396,6 @@ const SPEC: ListSpec = ListSpec {
                     'name', c.name,
                     'mobileNo', c.mobile_no
                 )) AS customers,
-                json_agg(DISTINCT CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END) AS materials,
                 string_agg(DISTINCT c.name, ', ') AS customer_names,
                 string_agg(DISTINCT c.mobile_no, ', ') AS customer_mobiles,
                 array_agg(DISTINCT CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END) AS material_names,
@@ -406,10 +409,11 @@ const SPEC: ListSpec = ListSpec {
             LEFT JOIN branch prod ON prod.id = o.production_branch_id
             WHERE o.invoice_id = i.id
         ) agg ON true
-        -- Product and gift card lines live in their own table, so they need a
+        -- Material, product and gift card lines live in their own table, so they need a
         -- second aggregate to be counted alongside the tailoring orders.
         LEFT JOIN LATERAL (
-            SELECT count(*) AS item_count
+            SELECT count(*) AS item_count,
+                array_agg(DISTINCT ii.description) FILTER (WHERE ii.kind = 'material') AS material_names
             FROM invoice_items ii
             WHERE ii.invoice_id = i.id
         ) items ON true
@@ -1113,6 +1117,7 @@ pub async fn fetch_invoice_edit(
         payments,
         customer_id: header.customer_id,
         customers,
+        materials: material_lines(state.db(), invoice_id).await?,
         products: product_rows
             .into_iter()
             .map(|row| InvoiceEditProductLine {
@@ -1485,4 +1490,58 @@ pub async fn is_production_location(
         "SELECT EXISTS(SELECT 1 FROM branch WHERE id = $1 AND is_active AND holds_stock) AS \"usable!\"",
         location_id,
     ).fetch_one(&mut **tx).await?)
+}
+
+/// Material metadata is stored on the sale rather than read from the catalog
+/// later, keeping old receipts stable when a material is renamed.
+pub async fn insert_material_item(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    line: &CreateMaterialLineInput,
+    line_total: f64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"INSERT INTO invoice_items
+            (invoice_id, kind, material_id, branch_id, description, unit, quantity, unit_price, line_total)
+        SELECT $1, 'material', id, $3, name, unit, $4::float8, $5::float8, $6::float8
+        FROM materials WHERE id = $2"#,
+        invoice_id, line.material_id, line.branch_id, line.quantity, line.unit_price, line_total,
+    ).execute(&mut **tx).await?;
+    Ok(())
+}
+
+async fn material_lines(
+    pool: &sqlx::PgPool,
+    invoice_id: Uuid,
+) -> Result<Vec<InvoiceEditMaterialLine>, sqlx::Error> {
+    sqlx::query_as!(InvoiceEditMaterialLine,
+        r#"SELECT ii.material_id, ii.description AS material_name, ii.unit AS "unit!",
+            ii.branch_id, b.name AS branch_name, ii.quantity::float8 AS "quantity!",
+            ii.unit_price::float8 AS "unit_price!", ms.quantity::float8 AS stock_quantity
+        FROM invoice_items ii
+        LEFT JOIN branch b ON b.id = ii.branch_id
+        LEFT JOIN material_stock ms ON ms.material_id = ii.material_id AND ms.branch_id = ii.branch_id
+        WHERE ii.invoice_id = $1 AND ii.kind = 'material' ORDER BY ii.id"#,
+        invoice_id,
+    ).fetch_all(pool).await
+}
+
+pub struct OldMaterialLine {
+    pub material_id: Option<Uuid>,
+    pub branch_id: Option<Uuid>,
+    pub quantity: f64,
+}
+
+pub async fn old_material_lines(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<OldMaterialLine>, sqlx::Error> {
+    sqlx::query_as!(
+        OldMaterialLine,
+        r#"SELECT material_id, branch_id, quantity::float8 AS "quantity!"
+        FROM invoice_items WHERE invoice_id = $1 AND kind = 'material'"#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await
 }

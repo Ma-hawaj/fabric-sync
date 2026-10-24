@@ -301,6 +301,29 @@ export const invoiceFormSchema = z
     payments: z.array(paymentDraftSchema),
     customers: customersArraySchema,
     products: z.array(productLineDraftSchema),
+    materials: z.array(
+      z.object({
+        key: z.string(),
+        materialId: z.string().min(1, 'Pick a material.'),
+        branchId: z.string().min(1, 'Pick where this material is sold from.'),
+        quantity: z
+          .number()
+          .finite()
+          .min(0.01, 'Enter a quantity of at least 0.01.')
+          .refine(
+            (n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-7,
+            'Use at most two decimal places.',
+          ),
+        unitPrice: z
+          .number()
+          .finite()
+          .min(0, 'Enter a nonnegative price.')
+          .refine(
+            (n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-7,
+            'Use at most two decimal places.',
+          ),
+      }),
+    ),
     giftCards: z.array(giftCardLineDraftSchema),
     redemptions: z.array(redemptionDraftSchema),
   })
@@ -340,10 +363,15 @@ export const invoiceFormSchema = z
     const hasOrders = value.customers.some(
       (customer) => customer.orders.length > 0,
     )
-    if (!hasOrders && !value.products.length && !value.giftCards.length) {
+    if (
+      !hasOrders &&
+      !value.products.length &&
+      !value.giftCards.length &&
+      !value.materials.length
+    ) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Add at least one order, product, or gift card.',
+        message: 'Add at least one order, material, product, or gift card.',
         path: ['customers'],
       })
     }
@@ -420,7 +448,7 @@ export const invoiceFormSchema = z
     )
     const totals = computeInvoiceTotals({
       orderTotal,
-      productTotal: value.products.reduce(
+      productTotal: [...value.products, ...value.materials].reduce(
         (sum, line) => sum + computeProductLineTotal(line),
         0,
       ),

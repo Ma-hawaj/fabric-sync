@@ -29,6 +29,11 @@ export function useCreateInvoice() {
       // A sale can draw down product stock, issue new cards, and spend the
       // balance on existing ones.
       void queryClient.invalidateQueries({ queryKey: ['products'] })
+      void queryClient.invalidateQueries({ queryKey: ['materials'] })
+      void queryClient.invalidateQueries({ queryKey: ['invoice-material'] })
+      void queryClient.invalidateQueries({
+        queryKey: ['invoice-order-material'],
+      })
       void queryClient.invalidateQueries({ queryKey: ['gift-cards'] })
     },
   })

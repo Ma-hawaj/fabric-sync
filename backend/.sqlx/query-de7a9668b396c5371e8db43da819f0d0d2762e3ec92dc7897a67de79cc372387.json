@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO invoice_items\n            (invoice_id, kind, material_id, branch_id, description, unit, quantity, unit_price, line_total)\n        SELECT $1, 'material', id, $3, name, unit, $4::float8, $5::float8, $6::float8\n        FROM materials WHERE id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Float8",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "de7a9668b396c5371e8db43da819f0d0d2762e3ec92dc7897a67de79cc372387"
+}
