@@ -794,6 +794,37 @@ mod tests {
     }
 
     #[test]
+    fn fraction_values_match_between_diagram_and_measurement_tables() {
+        let mut measurement = tests_support::measurement();
+        measurement.waist = Some(38.5);
+        measurement.front_pocket_length = Some(6.125);
+        measurement.fo_width = Some(3.75);
+        measurement.chest_up = Some(7.13);
+        measurement.neck_width = Some(0.0);
+        measurement.front_pocket_length_by_width = Some("No <16x14>".to_string());
+        let detail = OrderDetail {
+            order: services_order(),
+            invoice_number: 7,
+            measurement,
+        };
+        let html = test_render(&detail, &branding());
+        let (diagram, tables) = html.split_once("<div class=\"measurements\">").unwrap();
+
+        for value in ["38 ½", "6 ⅛", "3 ¾", "7.13", "0", "No &lt;16x14&gt;"] {
+            assert!(
+                diagram.contains(&format!(">{value}</text>")),
+                "diagram: {value}"
+            );
+            assert!(
+                tables.contains(&format!("<span class=\"num\">{value}</span>")),
+                "table: {value}"
+            );
+        }
+        assert!(tables.contains("<span class=\"num\">body</span>"));
+        assert!(tables.contains("<span class=\"num\">medium</span>"));
+    }
+
+    #[test]
     fn the_template_renders_the_thobe_sheet() {
         let mut measurement = tests_support::measurement();
         measurement.back_height = Some(124.0);
