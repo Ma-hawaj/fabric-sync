@@ -36,7 +36,7 @@ const invoice: Invoice = {
   itemCount: 4,
   materials: ['Cotton', 'Linen'],
   totalPrice: 90,
-  originalTotal: 90,
+  netTotal: 90,
   amountCredited: 0,
   amountRefunded: 0,
   refundDue: 0,
@@ -168,12 +168,12 @@ describe('Invoice table', () => {
     expect(screen.getByText(/of.*records/, { exact: false })).toBeTruthy()
     expect(apiClient.get).not.toHaveBeenCalled()
   })
-  it('shows paid refunds, pending refunds and the credit against the adjusted total', () => {
+  it('preserves the invoice total and shows credits, paid refunds and pending refunds separately', () => {
     renderTable([
       {
         ...invoice,
-        originalTotal: 100,
-        totalPrice: 70,
+        totalPrice: 100,
+        netTotal: 70,
         amountCredited: 30,
         amountPaid: 75,
         amountRefunded: 25,
@@ -186,7 +186,10 @@ describe('Invoice table', () => {
     expect(screen.getByText(/Credit:.*30\.000/)).toBeTruthy()
     expect(screen.getByText(/Due:.*5\.000/)).toBeTruthy()
     expect(screen.getByText(/25\.000/)).toBeTruthy()
-    expect(screen.getByText(/70\.000/)).toBeTruthy()
+    expect(
+      screen.getByRole('columnheader', { name: /Invoice Total/ }),
+    ).toBeTruthy()
+    expect(screen.getByText(/100\.000/)).toBeTruthy()
   })
   it('loads only this invoice’s orders on expansion and groups them by customer', async () => {
     renderTable()

@@ -11,8 +11,8 @@ export interface InvoiceCustomer {
 
 // Shape of GET /invoices — one row per invoice, with its customers and
 // material names aggregated. An invoice is settled through any number of
-// payments (the ledger). Totals and tender are net of credits and refunds;
-// `paymentMethod` is the most recent payment's method.
+// payments (the ledger). The invoice total stays at the original sale value;
+// `netTotal` and tender account for credits and refunds separately.
 export interface Invoice extends ReadinessFields {
   urgentCharge: number
   collectionMethod: 'delivery' | 'pickup'
@@ -25,8 +25,9 @@ export interface Invoice extends ReadinessFields {
   customers: InvoiceCustomer[]
   itemCount: number
   materials: string[]
+  /** Original invoice value, preserved after returns and refunds. */
   totalPrice: number
-  originalTotal: number
+  netTotal: number
   amountCredited: number
   amountRefunded: number
   refundDue: number

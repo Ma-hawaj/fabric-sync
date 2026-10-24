@@ -634,8 +634,10 @@ pub struct InvoiceListItem {
     pub item_count: i64,
     #[sqlx(json)]
     pub materials: Vec<String>,
+    /// Original invoice total; credits and payouts never rewrite this value.
     pub total_price: f64,
-    pub original_total: f64,
+    /// Original sale total, less separately recorded credits.
+    pub net_total: f64,
     pub amount_credited: f64,
     pub amount_refunded: f64,
     pub refund_due: f64,

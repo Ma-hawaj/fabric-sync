@@ -260,13 +260,13 @@ describe('InvoiceDetailPage', () => {
       },
     )
     for (const label of [
-      'Original total',
-      'Adjusted total',
+      'Invoice total',
+      'After credits',
       'Net paid (all methods)',
     ]) {
       const row = screen.getByText(label).parentElement!
       expect(row.textContent).toMatch(
-        label === 'Original total' ? /100\.000/ : /70\.000/,
+        label === 'Invoice total' ? /100\.000/ : /70\.000/,
       )
     }
     const history = screen.getByRole('table', { name: 'Payments and refunds' })

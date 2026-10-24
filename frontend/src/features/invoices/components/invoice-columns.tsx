@@ -464,12 +464,12 @@ export const getInvoiceColumns = (
       size: 164,
       minSize: 150,
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} label="Net Total" />
+        <DataTableColumnHeader column={column} label="Invoice Total" />
       ),
       cell: ({ row }) => (
         <div
           className="text-end tabular-nums"
-          title={`Original total: ${currencyFormatter.format(row.original.originalTotal)}`}
+          title={`After credits: ${currencyFormatter.format(row.original.netTotal)}`}
         >
           <div className="font-medium">
             {currencyFormatter.format(row.getValue<number>('totalPrice'))}
@@ -484,7 +484,7 @@ export const getInvoiceColumns = (
       enableSorting: true,
       enableColumnFilter: true,
       meta: {
-        label: 'Net total',
+        label: 'Invoice total',
         variant: 'range',
         range: [0, 2000],
         unit: CURRENCY,

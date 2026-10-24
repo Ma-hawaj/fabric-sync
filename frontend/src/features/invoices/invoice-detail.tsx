@@ -316,9 +316,9 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
             />
           )}
           <TotalRow
-            label={detail.hasAdjustments ? 'Original total' : 'Total'}
+            label="Invoice total"
             value={detail.totals.total}
-            emphasis={!detail.hasAdjustments}
+            emphasis
           />
           {detail.hasAdjustments && (
             <>
@@ -326,11 +326,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                 label="Return / cancellation credits"
                 value={-detail.totals.amountCredited}
               />
-              <TotalRow
-                label="Adjusted total"
-                value={detail.totals.netTotal}
-                emphasis
-              />
+              <TotalRow label="After credits" value={detail.totals.netTotal} />
             </>
           )}
           {detail.totals.giftCardRedeemed > 0 && (
@@ -490,8 +486,8 @@ function toInvoice(detail: InvoiceDetail): Invoice {
           .map((line) => line.description),
       ),
     ],
-    totalPrice: detail.totals.netTotal,
-    originalTotal: detail.totals.total,
+    totalPrice: detail.totals.total,
+    netTotal: detail.totals.netTotal,
     amountCredited: detail.totals.amountCredited,
     amountRefunded: detail.totals.cashRefunded + detail.totals.giftCardRefunded,
     refundDue: detail.totals.refundDue,
