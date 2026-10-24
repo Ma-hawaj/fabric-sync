@@ -6,6 +6,8 @@ export interface GiftCardPreview {
   mobile: string
   boughtFor: string | null
   body: string
+  imageDataUrl: string
+  imageFilename: string
   canSend: boolean
   unavailableReason: string | null
 }

@@ -229,12 +229,14 @@ fn failure(message: &str, retry: bool, uncertain: bool) -> Failure {
     }
 }
 
-pub(crate) async fn send_template(
+pub(crate) async fn send_image_template(
     state: &AppState,
     mobile: &str,
     template: &str,
     language: &str,
     parameters: &[String],
+    image_filename: &str,
+    image_png: Vec<u8>,
 ) -> Result<String, Failure> {
     let config = state.notifications();
     let client = service::http_client()
@@ -246,10 +248,35 @@ pub(crate) async fn send_template(
     );
     #[cfg(test)]
     let root = config.test_graph_url.clone().unwrap_or(root);
+    let token = config
+        .access_token
+        .as_deref()
+        .ok_or_else(|| failure("WhatsApp is not configured", false, false))?;
+    let part = reqwest::multipart::Part::bytes(image_png)
+        .file_name(image_filename.to_string())
+        .mime_str("image/png")
+        .map_err(|_| failure("Invalid gift card image type", false, false))?;
+    let upload = client
+        .post(format!("{root}/media"))
+        .bearer_auth(token)
+        .multipart(
+            reqwest::multipart::Form::new()
+                .part("file", part)
+                .text("messaging_product", "whatsapp")
+                .text("type", "image/png"),
+        )
+        .send()
+        .await
+        .map_err(|_| failure("The gift card image upload was interrupted", true, false))?;
+    let upload = graph_response(upload, false).await?;
+    let media_id = upload["id"]
+        .as_str()
+        .filter(|id| !id.is_empty())
+        .ok_or_else(|| failure("WhatsApp did not return an image media ID", true, false))?;
     let response = client.post(format!("{root}/messages"))
         .bearer_auth(config.access_token.as_deref().unwrap_or_default())
         .json(&json!({"messaging_product":"whatsapp","to":mobile.trim_start_matches('+'),"type":"template",
-            "template":{"name":template,"language":{"code":language},"components":[{"type":"body",
+            "template":{"name":template,"language":{"code":language},"components":[{"type":"header","parameters":[{"type":"image","image":{"id":media_id}}]},{"type":"body",
                 "parameters":parameters.iter().map(|text|json!({"type":"text","text":text})).collect::<Vec<_>>()}]}}))
         .send().await.map_err(|_|failure("The send result is unknown. Check delivery before resending.",false,true))?;
     let value = graph_response(response, true).await?;

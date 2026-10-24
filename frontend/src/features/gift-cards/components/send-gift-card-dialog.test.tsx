@@ -33,6 +33,8 @@ const preview = {
   mobile: '+97333112233',
   boughtFor: 'Recipient',
   body: 'Hello Recipient. Code: GC-AUTO. Available balance: 50.000 BHD.',
+  imageDataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+  imageFilename: 'gift-card-card-1.png',
   canSend: true,
   unavailableReason: null,
 }
@@ -61,6 +63,14 @@ describe('gift card WhatsApp approval', () => {
     vi.mocked(apiClient.post).mockResolvedValue({ data: { state: 'queued' } })
     const onClose = open()
     expect(await screen.findByText(preview.body)).toBeTruthy()
+    expect(
+      screen
+        .getByRole('img', { name: 'Gift card GC-AUTO' })
+        .getAttribute('src'),
+    ).toBe(preview.imageDataUrl)
+    const download = screen.getByRole('link', { name: 'Download PNG' })
+    expect(download.getAttribute('href')).toBe(preview.imageDataUrl)
+    expect(download.getAttribute('download')).toBe(preview.imageFilename)
     expect(screen.getByText(/Recipient · \+97333112233/)).toBeTruthy()
     expect(apiClient.post).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Send via WhatsApp' }))

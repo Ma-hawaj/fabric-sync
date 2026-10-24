@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+  <defs>
+    <clipPath id="card"><rect width="1200" height="720" rx="28"/></clipPath>
+  </defs>
+  <g clip-path="url(#card)">
+    <rect width="1200" height="720" fill="#18372f"/>
+    <circle cx="1115" cy="190" r="245" fill="#21463c"/>
+    <path d="M810 -80 C715 180 1260 80 1190 350 M880 -60 C800 130 1300 150 1250 350 M-80 615 C150 480 270 840 580 715" fill="none" stroke="#c7aa73" stroke-width="2" opacity=".25"/>
+    <rect x="18" y="18" width="1164" height="684" rx="18" fill="none" stroke="#c7aa73" stroke-dasharray="3 8" opacity=".4"/>
+    {% if logo %}<image x="64" y="52" width="66" height="66" href="{{ logo }}" preserveAspectRatio="xMidYMid meet"/>{% endif %}
+    <text x="{{ brand_x }}" y="92" font-family="DejaVu Sans" font-size="{{ brand_size }}" fill="#f5f0e5">{{ brand }}</text>
+    <text x="1136" y="89" text-anchor="end" font-family="DejaVu Sans" font-size="17" letter-spacing="3" fill="#d5bc8e">GIFT CARD</text>
+    <text x="64" y="185" font-family="DejaVu Sans" font-size="22" fill="#d5bc8e">A gift, made for you.</text>
+    <text x="58" y="300" font-family="DejaVu Sans" font-size="100" font-weight="bold" fill="#f5f0e5">{{ balance }}</text>
+    <text x="66" y="334" font-family="DejaVu Sans" font-size="15" letter-spacing="2" fill="#bccac0">{{ currency }} · AVAILABLE TO SPEND</text>
+    <g fill="none" stroke="#d5bc8e" stroke-width="3" stroke-linejoin="round" opacity=".85">
+      <path d="M959 217 H1081 V307 H959 Z M948 195 H1092 V217 H948 Z M1020 195 V307"/>
+      <path d="M1020 195 C970 200 964 155 992 161 C1010 165 1020 195 1020 195 C1070 200 1076 155 1048 161 C1030 165 1020 195 1020 195 Z"/>
+    </g>
+    <text x="64" y="399" font-family="DejaVu Sans" font-size="13" letter-spacing="2" fill="#d5bc8e">BOUGHT FOR</text>
+    <text x="{{ recipient_x }}" y="442" text-anchor="{{ recipient_anchor }}" font-family="DejaVu Sans" font-size="{{ recipient_size }}" fill="#f5f0e5">{{ recipient }}</text>
+    <rect x="64" y="482" width="752" height="108" rx="12" fill="#122d26" stroke="#496152"/>
+    <text x="86" y="513" font-family="DejaVu Sans" font-size="12" letter-spacing="2" fill="#d5bc8e">REDEMPTION CODE</text>
+    <text x="86" y="557" font-family="DejaVu Sans Mono" font-size="{{ code_size }}" fill="#ffffff">{{ code }}</text>
+    <rect x="884" y="382" width="252" height="252" rx="16" fill="#f5f0e5"/>
+    <svg x="902" y="400" width="216" height="216" viewBox="0 0 {{ qr_size }} {{ qr_size }}">
+      <rect width="{{ qr_size }}" height="{{ qr_size }}" fill="#ffffff"/>
+      <path d="{{ qr_path }}" fill="#122d26"/>
+    </svg>
+    <text x="1010" y="662" text-anchor="middle" font-family="DejaVu Sans" font-size="11" letter-spacing="1.5" fill="#bccac0">SCAN TO READ CODE</text>
+    <text x="64" y="644" font-family="DejaVu Sans" font-size="14" fill="#f5f0e5">{{ expiry }}</text>
+    {% if status %}<text x="800" y="644" text-anchor="end" font-family="DejaVu Sans" font-size="18" font-weight="bold" fill="#f4bc94">{{ status }}</text>{% endif %}
+    <text x="64" y="678" font-family="DejaVu Sans" font-size="10" fill="#bccac0">Present this card to redeem. The balance shown is current when generated.</text>
+  </g>
+</svg>

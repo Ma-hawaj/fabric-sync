@@ -1,4 +1,10 @@
-import { BanIcon, RotateCcwIcon, SendIcon, PencilIcon } from 'lucide-react'
+import {
+  BanIcon,
+  RotateCcwIcon,
+  SendIcon,
+  PencilIcon,
+  DownloadIcon,
+} from 'lucide-react'
 import { defineColumns } from '@/lib/define-columns'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
@@ -18,6 +24,8 @@ export const getGiftCardColumns = (
   today: string,
   onEditRecipient: (card: GiftCard) => void,
   onSend: (card: GiftCard) => void,
+  onDownload: (card: GiftCard) => void,
+  isDownloading: boolean,
 ) =>
   defineColumns<GiftCard>()([
     {
@@ -194,6 +202,12 @@ export const getGiftCardColumns = (
         return (
           <RowActions
             items={[
+              {
+                label: 'Download image',
+                icon: DownloadIcon,
+                disabled: isDownloading,
+                onClick: () => onDownload(card),
+              },
               {
                 label: 'Edit recipient',
                 icon: PencilIcon,

@@ -114,6 +114,9 @@ CREATE TABLE gift_card_deliveries (
     parameters JSONB NOT NULL,
     template_name TEXT NOT NULL,
     language TEXT NOT NULL,
+    image_png BYTEA NOT NULL CHECK (octet_length(image_png) BETWEEN 1 AND 5242880),
+    image_filename TEXT NOT NULL,
+    image_sha256 TEXT NOT NULL CHECK (image_sha256 ~ '^[0-9a-f]{64}$'),
     state TEXT NOT NULL DEFAULT 'queued' CHECK (state IN
         ('queued', 'sending', 'accepted', 'delivered', 'read', 'failed', 'uncertain', 'cancelled')),
     attempt_count INTEGER NOT NULL DEFAULT 0,

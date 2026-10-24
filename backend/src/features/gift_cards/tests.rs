@@ -1,5 +1,5 @@
 use super::{
-    delivery, repository, service,
+    delivery, image, repository, service,
     types::{CreateGiftCardInput, UpdateGiftCardInput},
 };
 use crate::{
@@ -7,7 +7,7 @@ use crate::{
     features::{invoices, notifications::worker},
     test_support,
 };
-use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
+use axum::{body::Bytes, extract::State, http::StatusCode, routing::post, Json, Router};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::sync::{
@@ -19,10 +19,21 @@ use uuid::Uuid;
 #[derive(Clone, Default)]
 struct Mock {
     messages: Arc<Mutex<Vec<Value>>>,
+    uploads: Arc<Mutex<Vec<Vec<u8>>>>,
     response: Arc<AtomicUsize>,
 }
 
 async fn mock_server() -> (String, Mock) {
+    async fn upload(State(mock): State<Mock>, body: Bytes) -> (StatusCode, Json<Value>) {
+        mock.uploads.lock().unwrap().push(body.to_vec());
+        if mock.response.load(Ordering::SeqCst) == 3 {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error":{"message":"Upload unavailable"}})),
+            );
+        }
+        (StatusCode::OK, Json(json!({"id":"gift-media-test"})))
+    }
     async fn send(State(mock): State<Mock>, Json(value): Json<Value>) -> (StatusCode, Json<Value>) {
         mock.messages.lock().unwrap().push(value);
         match mock.response.load(Ordering::SeqCst) {
@@ -40,6 +51,7 @@ async fn mock_server() -> (String, Mock) {
     let mock = Mock::default();
     let app = Router::new()
         .route("/messages", post(send))
+        .route("/media", post(upload))
         .with_state(mock.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
@@ -96,8 +108,13 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
     assert!(preview.body.contains(&card.code));
     assert!(preview.body.contains("Gift Recipient"));
     assert!(preview.body.contains("50.000 BHD"));
+    assert!(preview
+        .image_data_url
+        .starts_with("data:image/png;base64,iVBOR"));
+    let preview_png = preview.image.png.clone();
     delivery::tick(&state).await.unwrap();
     assert!(mock.messages.lock().unwrap().is_empty());
+    assert!(mock.uploads.lock().unwrap().is_empty());
     let request = Uuid::new_v4();
     delivery::approve(&state, card.id, send(&preview, request), "test-staff")
         .await
@@ -115,11 +132,28 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
     let messages = mock.messages.lock().unwrap().clone();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0]["to"], "97333112233");
-    assert_eq!(messages[0]["template"]["name"], "gift_card_v1");
+    assert_eq!(messages[0]["template"]["name"], "gift_card_image_v1");
     assert_eq!(
-        messages[0]["template"]["components"][0]["parameters"][2]["text"],
+        messages[0]["template"]["components"][0],
+        json!({"type":"header","parameters":[{"type":"image","image":{"id":"gift-media-test"}}]})
+    );
+    assert_eq!(
+        messages[0]["template"]["components"][1]["parameters"][2]["text"],
         card.code
     );
+    let uploads = mock.uploads.lock().unwrap().clone();
+    assert_eq!(uploads.len(), 1);
+    assert!(uploads[0]
+        .windows(preview_png.len())
+        .any(|bytes| bytes == preview_png));
+    assert!(String::from_utf8_lossy(&uploads[0]).contains("image/png"));
+    let stored: Vec<u8> =
+        sqlx::query_scalar("SELECT image_png FROM gift_card_deliveries WHERE gift_card_id=$1")
+            .bind(card.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored, preview_png);
     assert_eq!(
         repository::get_gift_card(&state, card.id)
             .await
@@ -214,6 +248,11 @@ async fn retries_known_failures_but_never_replays_an_unknown_submission(pool: Pg
     delivery::tick(&state).await.unwrap();
     delivery::tick(&state).await.unwrap();
     assert_eq!(mock.messages.lock().unwrap().len(), 2);
+    for upload in mock.uploads.lock().unwrap().iter() {
+        assert!(upload
+            .windows(preview.image.png.len())
+            .any(|bytes| bytes == preview.image.png));
+    }
     assert_eq!(
         repository::get_gift_card(&state, card.id)
             .await
@@ -223,6 +262,76 @@ async fn retries_known_failures_but_never_replays_an_unknown_submission(pool: Pg
             .as_deref(),
         Some("uncertain")
     );
+}
+
+#[sqlx::test]
+async fn image_upload_failure_retries_without_submitting_a_message(pool: PgPool) {
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), None, Some(url)).await;
+    let card = service::create_gift_card(&state, input()).await.unwrap();
+    let preview = delivery::preview(&state, card.id).await.unwrap();
+    delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff")
+        .await
+        .unwrap();
+    mock.response.store(3, Ordering::SeqCst);
+    delivery::tick(&state).await.unwrap();
+    assert!(mock.messages.lock().unwrap().is_empty());
+    assert_eq!(mock.uploads.lock().unwrap().len(), 1);
+    let card = repository::get_gift_card(&state, card.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(card.delivery_status.as_deref(), Some("queued"));
+    assert_eq!(card.delivery_error.as_deref(), Some("Upload unavailable"));
+}
+
+#[sqlx::test]
+async fn damaged_approved_image_is_never_uploaded(pool: PgPool) {
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), None, Some(url)).await;
+    let card = service::create_gift_card(&state, input()).await.unwrap();
+    let preview = delivery::preview(&state, card.id).await.unwrap();
+    delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff")
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE gift_card_deliveries SET image_png=decode('00','hex') WHERE gift_card_id=$1",
+    )
+    .bind(card.id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    delivery::tick(&state).await.unwrap();
+    assert!(mock.messages.lock().unwrap().is_empty());
+    assert!(mock.uploads.lock().unwrap().is_empty());
+    assert_eq!(
+        repository::get_gift_card(&state, card.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .delivery_status
+            .as_deref(),
+        Some("failed")
+    );
+}
+
+#[sqlx::test]
+async fn image_download_works_for_legacy_cards_without_a_recipient(pool: PgPool) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let card = service::create_gift_card(&state, input()).await.unwrap();
+    sqlx::query("UPDATE gift_cards SET recipient_phone=NULL WHERE id=$1")
+        .bind(card.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let image = image::get(&state, card.id).await.unwrap();
+    assert!(image.png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(image.filename, format!("gift-card-{}.png", card.id));
+    let sends: i64 = sqlx::query_scalar("SELECT count(*) FROM gift_card_deliveries")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(sends, 0);
 }
 
 #[sqlx::test]

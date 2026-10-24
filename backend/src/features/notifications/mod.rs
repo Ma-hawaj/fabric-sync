@@ -72,7 +72,7 @@ impl Config {
                 "WHATSAPP_READY_BODY",
                 "Your order for invoice {{1}} is ready for pickup at {{2}}. Balance due: {{3}}.",
             ),
-            gift_card_template: value("WHATSAPP_GIFT_CARD_TEMPLATE", "gift_card_v1"),
+            gift_card_template: value("WHATSAPP_GIFT_CARD_TEMPLATE", "gift_card_image_v1"),
             gift_card_body: value(
                 "WHATSAPP_GIFT_CARD_BODY",
                 "Hello {{1}}, you have a gift card from {{2}}. Code: {{3}}. Available balance: {{4}}. Expires: {{5}}.",

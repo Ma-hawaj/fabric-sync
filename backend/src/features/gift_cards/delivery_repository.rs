@@ -12,6 +12,9 @@ pub(super) struct Job {
     pub template_name: String,
     pub language: String,
     pub attempt_count: i32,
+    pub image_png: Vec<u8>,
+    pub image_filename: String,
+    pub image_sha256: String,
 }
 
 pub(super) async fn lock_card(tx: &mut PgTransaction<'_>, id: Uuid) -> Result<bool, sqlx::Error> {
@@ -47,9 +50,10 @@ pub(super) async fn insert(
     preview: &Preview,
     config: &Config,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("INSERT INTO gift_card_deliveries(gift_card_id,request_id,approved_by,source_hash,normalized_mobile,body,parameters,template_name,language) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)")
+    sqlx::query("INSERT INTO gift_card_deliveries(gift_card_id,request_id,approved_by,source_hash,normalized_mobile,body,parameters,template_name,language,image_png,image_filename,image_sha256) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)")
         .bind(id).bind(request).bind(actor).bind(&preview.source_hash).bind(&preview.mobile).bind(&preview.body)
         .bind(Json(&preview.parameters)).bind(&config.gift_card_template).bind(&config.language)
+        .bind(&preview.image.png).bind(&preview.image.filename).bind(&preview.image.sha256)
         .execute(&mut **tx).await?;
     Ok(())
 }
@@ -69,7 +73,7 @@ pub(super) async fn lock_job(
     tx: &mut PgTransaction<'_>,
     id: Uuid,
 ) -> Result<Option<Job>, sqlx::Error> {
-    sqlx::query_as("SELECT id,gift_card_id,source_hash,normalized_mobile,parameters,template_name,language,attempt_count FROM gift_card_deliveries WHERE id=$1 AND state='queued' AND available_at <= now() FOR UPDATE SKIP LOCKED")
+    sqlx::query_as("SELECT id,gift_card_id,source_hash,normalized_mobile,parameters,template_name,language,attempt_count,image_png,image_filename,image_sha256 FROM gift_card_deliveries WHERE id=$1 AND state='queued' AND available_at <= now() FOR UPDATE SKIP LOCKED")
         .bind(id).fetch_optional(&mut **tx).await
 }
 

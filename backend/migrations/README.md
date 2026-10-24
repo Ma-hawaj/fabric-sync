@@ -12,7 +12,7 @@ SQLx applies the files in version order:
    order charges. Gift card recipient names and phone numbers are declared here.
 2. `0002_notification_schema.sql` creates immutable PDF artifacts, notification
    previews and approvals, recipients, delivery attempts, webhook storage, and
-   the staff-approved gift card delivery queue.
+   the staff-approved gift card delivery queue with its immutable PNG attachments.
 3. `0003_readiness_and_revisions.sql` creates the invoice-readiness view and the
    triggers that serialize related writes and invalidate outdated previews.
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins.

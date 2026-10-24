@@ -4,24 +4,28 @@ use serde_json::{json, Value};
 use sqlx::PgTransaction;
 use uuid::Uuid;
 
-use super::{delivery_repository as store, repository, service, types::GiftCard};
+use super::{delivery_repository as store, image, repository, service, types::GiftCard};
 use crate::{
     error::AppError,
     features::notifications::{service::hash, worker},
     state::AppState,
 };
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Preview {
     pub source_hash: String,
     pub mobile: String,
     pub bought_for: Option<String>,
     pub body: String,
+    pub image_data_url: String,
+    pub image_filename: String,
     pub can_send: bool,
     pub unavailable_reason: Option<String>,
     #[serde(skip)]
     pub(super) parameters: Vec<String>,
+    #[serde(skip)]
+    pub(super) image: image::GiftCardImage,
 }
 
 #[derive(Deserialize)]
@@ -36,7 +40,7 @@ pub struct DeliveryResult {
     pub state: String,
 }
 
-fn preview_card(state: &AppState, card: &GiftCard) -> Result<Preview, AppError> {
+async fn preview_card(state: &AppState, card: &GiftCard) -> Result<Preview, AppError> {
     let config = state.notifications();
     let mobile = service::recipient_phone(
         card.recipient_phone.as_deref().unwrap_or_default(),
@@ -63,19 +67,20 @@ fn preview_card(state: &AppState, card: &GiftCard) -> Result<Preview, AppError> 
             "The gift card template contains an unconfigured parameter.".into(),
         ));
     }
-    let unavailable_reason = if !card.is_active
-        || card.balance <= 0.0
-        || card.expires_on.is_some_and(|d| d < Utc::now().date_naive())
-    {
-        Some("Only active gift cards with an available balance can be sent.".into())
-    } else if !config.can_send() {
-        Some("WhatsApp delivery is not configured.".into())
-    } else {
-        None
-    };
+    let today = Utc::now().with_timezone(&state.timezone()?).date_naive();
+    let unavailable_reason =
+        if !card.is_active || card.balance <= 0.0 || card.expires_on.is_some_and(|d| d < today) {
+            Some("Only active gift cards with an available balance can be sent.".into())
+        } else if !config.can_send() {
+            Some("WhatsApp delivery is not configured.".into())
+        } else {
+            None
+        };
+    let image = image::for_card(state, card).await?;
     let source_hash = hash(
         json!({"id":card.id,"mobile":mobile,"parameters":parameters,"body":body,
-        "active":card.is_active,"template":config.gift_card_template,"language":config.language})
+        "active":card.is_active,"template":config.gift_card_template,"language":config.language,
+        "imageSha256":image.sha256})
         .to_string()
         .as_bytes(),
     );
@@ -84,6 +89,9 @@ fn preview_card(state: &AppState, card: &GiftCard) -> Result<Preview, AppError> 
         mobile,
         bought_for: card.bought_for.clone(),
         body,
+        image_data_url: image.data_url(),
+        image_filename: image.filename.clone(),
+        image,
         can_send: unavailable_reason.is_none(),
         unavailable_reason,
         parameters,
@@ -94,7 +102,7 @@ pub async fn preview(state: &AppState, id: Uuid) -> Result<Preview, AppError> {
     let card = repository::get_gift_card(state, id)
         .await?
         .ok_or_else(|| AppError::NotFound("Gift card not found.".into()))?;
-    preview_card(state, &card)
+    preview_card(state, &card).await
 }
 
 pub async fn approve(
@@ -120,7 +128,7 @@ pub async fn approve(
     }
     // The card lock prevents edits and redemptions while checking the preview.
     let card = repository::get_gift_card_in_tx(&mut tx, id).await?;
-    let current = preview_card(state, &card)?;
+    let current = preview_card(state, &card).await?;
     if current.source_hash != input.source_hash {
         return Err(AppError::Conflict(
             "The gift card or recipient changed. Close and reopen the preview.".into(),
@@ -165,21 +173,36 @@ pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
         return Ok(());
     };
     let card = repository::get_gift_card_in_tx(&mut tx, job.gift_card_id).await?;
-    let valid =
-        preview_card(state, &card).is_ok_and(|p| p.can_send && p.source_hash == job.source_hash);
+    let current = preview_card(state, &card).await?;
+    let valid = current.can_send && current.source_hash == job.source_hash;
     if !valid {
         store::cancel(&mut tx, id).await?;
         tx.commit().await?;
         return Ok(());
     }
+    if hash(&job.image_png) != job.image_sha256 {
+        store::status(
+            &mut tx,
+            id,
+            "failed",
+            Some(
+                "The approved gift card image failed its integrity check. Preview and send again.",
+            ),
+        )
+        .await?;
+        tx.commit().await?;
+        return Ok(());
+    }
     store::claim(&mut tx, id).await?;
     tx.commit().await?;
-    let result = worker::send_template(
+    let result = worker::send_image_template(
         state,
         &job.normalized_mobile,
         &job.template_name,
         &job.language,
         &job.parameters,
+        &job.image_filename,
+        job.image_png,
     )
     .await;
     let (status, message_id, error, delay) = match result {

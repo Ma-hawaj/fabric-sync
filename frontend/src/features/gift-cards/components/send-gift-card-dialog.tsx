@@ -54,11 +54,11 @@ export function SendGiftCardDialog({
         if (!open && !send.isPending) onClose()
       }}
     >
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Send gift card via WhatsApp</DialogTitle>
           <DialogDescription>
-            Check the recipient and message for {card.code}.
+            Check the recipient, gift card image, and message for {card.code}.
           </DialogDescription>
         </DialogHeader>
         {preview.isPending && <p>Loading preview…</p>}
@@ -70,6 +70,24 @@ export function SendGiftCardDialog({
               {preview.data.boughtFor ? `${preview.data.boughtFor} · ` : ''}
               {preview.data.mobile}
             </p>
+            <figure className="space-y-2">
+              <img
+                src={preview.data.imageDataUrl}
+                alt={`Gift card ${card.code}`}
+                width={1200}
+                height={720}
+                className="w-full rounded-lg"
+              />
+              <figcaption>
+                <a
+                  href={preview.data.imageDataUrl}
+                  download={preview.data.imageFilename}
+                  className="text-sm underline underline-offset-4"
+                >
+                  Download PNG
+                </a>
+              </figcaption>
+            </figure>
             <p className="whitespace-pre-wrap rounded-md border p-3">
               {preview.data.body}
             </p>
