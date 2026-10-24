@@ -65,7 +65,7 @@ Mapping decisions worth knowing:
     gifts and mixed strings map to NULL (unknown method, not a missing
     payment).
   * Cutter/Tailor/Finishing names become order_stage_assignments on the
-    Cutting/Sewing/Finishing stages (assignee_id is the name string — there is
+    cutting/stitching/finishing stages (assignee_id is the name string — there is
     no user directory key for legacy staff, matching the schema's TEXT-not-FK
     choice). order_stage_progress is left empty: the workbook records who
     worked, not when each stage completed, and fabricating checklist rows would
@@ -924,8 +924,8 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
 
         # ---- invoices + orders ----------------------------------------------
         stage_ids = state["stages"]
-        made_stages = {("Cutting", "cutting_by"), ("Sewing", "tailor_by"),
-                       ("Finishing", "finishing_by")}
+        made_stages = {("cutting", "cutting_by"), ("stitching", "tailor_by"),
+                       ("finishing", "finishing_by")}
 
         # Orders resolve through receipts, so this also serves repairs on a
         # re-run: number -> receipt(s) -> orders, all without a stored key.
@@ -1079,7 +1079,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 order_by_invoice[inv["invoice_number"]].append(str(order_id))
                 report.count("orders created")
 
-                # Staff assignment on the cutting/sewing/finishing stages.
+                # Staff assignment on the cutting/stitching/finishing stages.
                 for stage_name, attr in made_stages:
                     stage_id = stage_ids.get(stage_name)
                     person = inv[attr]

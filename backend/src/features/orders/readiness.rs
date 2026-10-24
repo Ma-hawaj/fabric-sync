@@ -289,12 +289,12 @@ mod tests {
         let (invoice, orders, _, pickup) = crate::test_support::invoice(&pool, 1, false).await;
         crate::test_support::finish_stages(&pool, orders[0], pickup).await;
         confirm(&pool, invoice, None, "staff", true).await.unwrap();
-        sqlx::query("DELETE FROM order_stage_progress WHERE order_id=$1 AND stage_id=(SELECT id FROM order_stages WHERE name='Finishing')").bind(orders[0]).execute(&pool).await.unwrap();
+        sqlx::query("DELETE FROM order_stage_progress WHERE order_id=$1 AND stage_id=(SELECT id FROM order_stages WHERE name='finishing')").bind(orders[0]).execute(&pool).await.unwrap();
         assert_eq!(
             summary(&pool, invoice).await.unwrap().readiness_status,
             "in_progress"
         );
-        sqlx::query("INSERT INTO order_stage_progress(order_id,stage_id,status) SELECT $1,id,'done' FROM order_stages WHERE name='Finishing'").bind(orders[0]).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO order_stage_progress(order_id,stage_id,status) SELECT $1,id,'done' FROM order_stages WHERE name='finishing'").bind(orders[0]).execute(&pool).await.unwrap();
         assert!(
             confirm(&pool, invoice, None, "staff", true)
                 .await
