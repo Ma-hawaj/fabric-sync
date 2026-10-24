@@ -98,6 +98,10 @@ Invoice PDF exports and notification attachments share stored, server-rendered
 Chromium PDFs. See [notification setup and verification](docs/whatsapp-notifications.md)
 for sender templates, renderer configuration, delivery history, and retries.
 
+Staff can cancel orders and record returns with their refunds in one action. See
+[Cancellations, returns and refunds](docs/returns-and-refunds.md) for the workflow, refund
+limits, stock behavior, and API examples.
+
 The backend reads configuration from environment variables (`backend/.env`
 via `dotenvy` when running locally — copy `backend/.env.example` there
 first).

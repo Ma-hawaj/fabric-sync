@@ -5,6 +5,7 @@ import { Link } from '@tanstack/react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CURRENCY } from '@/lib/currency'
+import { OrderResolutionActions } from '@/features/returns/components/order-resolution-actions'
 import { ReadOnlyMeasurement } from '@/features/customers/components/read-only-measurement'
 import {
   ArrowLeftIcon,
@@ -27,6 +28,7 @@ import { LogRepairDialog } from './components/log-repair-dialog'
 import { CollectOrderDialog } from './components/collect-order-dialog'
 import { useOrder } from './hooks/use-order'
 import { printOrderDocument } from './lib/print-order'
+import { currentStageLabel } from './lib/order-tracking'
 import type { OrderDetail } from './types/orders'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -38,6 +40,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   const { data: order, isLoading, isError } = useOrder(orderId)
   const [repairOrderId, setRepairOrderId] = useState<string | null>(null)
   const [collectOpen, setCollectOpen] = useState(false)
+  const closed = order?.outcome === 'cancelled' || order?.outcome === 'returned'
 
   if (isLoading) {
     return (
@@ -92,11 +95,15 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             <Badge
               variant={order.status === 'collected' ? 'default' : 'secondary'}
             >
-              {order.status === 'collected'
-                ? 'Collected'
-                : order.status === 'ready'
-                  ? 'Ready for pickup'
-                  : 'Pending'}
+              {closed
+                ? order.outcome === 'cancelled'
+                  ? 'Cancelled'
+                  : 'Returned'
+                : order.status === 'collected'
+                  ? 'Collected'
+                  : order.status === 'ready'
+                    ? 'Ready for pickup'
+                    : 'Pending'}
             </Badge>
             <Badge
               variant={
@@ -121,24 +128,58 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
 
         <div className="flex items-center gap-2">
           <ExportPdfButton order={order} />
-          <ReadinessControls
-            id={order.id}
-            invoiceId={order.invoiceId}
-            scope="orders"
-            status={order.status}
-            readyAt={order.readyAt}
-            readyBy={order.readyBy}
-          />
+          {!closed && (
+            <ReadinessControls
+              id={order.id}
+              invoiceId={order.invoiceId}
+              scope="orders"
+              status={order.status}
+              readyAt={order.readyAt}
+              readyBy={order.readyBy}
+            />
+          )}
+          <OrderResolutionActions order={order} />
           <Button
             variant="outline"
             className="text-info hover:text-info/80 hover:bg-info/5 dark:hover:bg-info/10"
-            disabled={order.status === 'collected'}
+            disabled={closed || order.status === 'collected'}
             onClick={() => setCollectOpen(true)}
           >
             {order.status === 'collected' ? 'Collected' : 'Mark Collected'}
           </Button>
         </div>
       </div>
+
+      {closed && (
+        <section className="space-y-2 rounded-xl border bg-card p-4 text-sm">
+          <h2 className="font-semibold">
+            {order.outcome === 'cancelled'
+              ? 'Order cancelled'
+              : 'Order returned'}
+          </h2>
+          <p>{order.closureReason}</p>
+          <p>
+            Credit: {currencyFormatter.format(order.creditAmount ?? 0)}
+            {order.retainedCharge > 0
+              ? ` · Retained charge: ${currencyFormatter.format(order.retainedCharge)}`
+              : ''}
+            {order.restoredMaterialQuantity > 0
+              ? ` · Unused fabric restored: ${order.restoredMaterialQuantity} m`
+              : ''}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {order.closedAt ? new Date(order.closedAt).toLocaleString() : ''}
+            {order.closedBy ? ` · Recorded by ${order.closedBy}` : ''}
+          </p>
+          <Link
+            to="/invoices/$invoiceId"
+            params={{ invoiceId: order.invoiceId }}
+            className="text-info hover:underline"
+          >
+            View invoice credit and refund history
+          </Link>
+        </section>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <DetailCard icon={<Users className="h-3.5 w-3.5" />} title="Customer">
@@ -193,15 +234,21 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Collected from</dt>
+              <dt className="text-muted-foreground">
+                {order.status === 'collected'
+                  ? 'Collected from'
+                  : 'Collection location'}
+              </dt>
               <dd className="font-medium">
                 {order.receivingLocation ?? 'Not assigned'}
               </dd>
             </div>
-            {order.currentStage && (
+            {(closed || order.currentStage) && (
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Current stage</dt>
-                <dd className="font-medium">{order.currentStage}</dd>
+                <dd className="font-medium">
+                  {closed ? currentStageLabel(order) : order.currentStage}
+                </dd>
               </div>
             )}
           </dl>
@@ -231,14 +278,22 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
 
       <section className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
         <dl className="ms-auto max-w-sm space-y-1.5 text-sm">
-          <PaymentRow label="Invoice Total" value={order.invoiceTotalPrice} />
+          <PaymentRow
+            label={closed ? 'Original Invoice Total' : 'Invoice Total'}
+            value={order.invoiceTotalPrice}
+          />
           {order.invoiceGiftCardRedeemed > 0 && (
             <PaymentRow
-              label="Paid by gift card"
+              label={
+                closed ? 'Original gift card payment' : 'Paid by gift card'
+              }
               value={-order.invoiceGiftCardRedeemed}
             />
           )}
-          <PaymentRow label="Paid" value={-order.invoiceAmountPaid} />
+          <PaymentRow
+            label={closed ? 'Original payments' : 'Paid'}
+            value={-order.invoiceAmountPaid}
+          />
           <PaymentRow
             label="Balance due"
             value={order.invoiceBalanceDue}

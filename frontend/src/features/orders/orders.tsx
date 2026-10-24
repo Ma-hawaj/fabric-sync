@@ -47,7 +47,11 @@ export function OrdersPage() {
     }))
     return getOrderColumns(
       names.map((name) => ({ label: name, value: name })),
-      stages.map((stage) => ({ label: stage.name, value: stage.name })),
+      [
+        ...stages.map((stage) => ({ label: stage.name, value: stage.name })),
+        { label: 'Cancelled', value: 'Cancelled' },
+        { label: 'Returned', value: 'Returned' },
+      ],
       receiving,
       production,
       setSelectedOrder,

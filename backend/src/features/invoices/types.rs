@@ -514,6 +514,13 @@ pub struct InvoiceTotalsBreakdown {
     pub total: f64,
     pub gift_card_redeemed: f64,
     pub amount_paid: f64,
+    pub amount_credited: f64,
+    pub cash_refunded: f64,
+    pub gift_card_refunded: f64,
+    pub net_total: f64,
+    pub net_amount_paid: f64,
+    pub net_gift_card_redeemed: f64,
+    pub refund_due: f64,
     /// What the customer still owes: the total less everything already
     /// settled, whether in cash or in gift card tender.
     pub balance_due: f64,
@@ -555,6 +562,15 @@ pub struct InvoiceRecord {
     /// collected (and on retail-only invoices, which have no orders).
     pub last_collected_at: Option<DateTime<Utc>>,
     pub gift_card_redeemed: f64,
+    pub amount_credited: f64,
+    pub cash_refunded: f64,
+    pub gift_card_refunded: f64,
+    pub net_total: f64,
+    pub net_amount_paid: f64,
+    pub net_gift_card_redeemed: f64,
+    pub balance_due: f64,
+    pub refund_due: f64,
+    pub has_adjustments: bool,
 }
 
 /// Shape of `GET /invoices/:id`, and the context the invoice document template
@@ -595,6 +611,7 @@ pub struct InvoiceDetail {
     pub lines: Vec<InvoiceDetailLine>,
     pub redemptions: Vec<InvoiceRedemptionLine>,
     pub payments: Vec<InvoicePayment>,
+    pub has_adjustments: bool,
     pub totals: InvoiceTotalsBreakdown,
 }
 
@@ -617,11 +634,17 @@ pub struct InvoiceListItem {
     pub item_count: i64,
     #[sqlx(json)]
     pub materials: Vec<String>,
+    /// Original invoice total; credits and payouts never rewrite this value.
     pub total_price: f64,
+    /// Original sale total, less separately recorded credits.
+    pub net_total: f64,
+    pub amount_credited: f64,
+    pub amount_refunded: f64,
+    pub refund_due: f64,
     pub payment_status: String,
+    /// External payments less external refunds; gift card tender is separate.
     pub amount_paid: f64,
-    /// What the customer still owes: the total less gift card tender and
-    /// every payment. Display-only — the dialogs collect against it.
+    /// What the customer still owes after credits and refunded tender.
     pub balance_due: f64,
     /// The method of the most recent payment, backing the list's payment
     /// method column.

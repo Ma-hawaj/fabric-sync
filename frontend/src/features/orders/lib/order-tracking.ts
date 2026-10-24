@@ -18,6 +18,8 @@ export const COMPLETED = 'Completed'
  * is a more useful distinction on the list than repeating the first stage name.
  */
 export function currentStageLabel(order: Order): string {
+  if (order.outcome === 'cancelled') return 'Cancelled'
+  if (order.outcome === 'returned') return 'Returned'
   if (order.currentStage === null) return COMPLETED
   const untouched = order.stages.every((stage) => stage.status === 'pending')
   return untouched ? NOT_STARTED : order.currentStage
@@ -35,7 +37,7 @@ export function stageFilterOptions(orders: Order[]): string[] {
     .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
     .map(([name]) => name)
 
-  return [NOT_STARTED, ...ordered, COMPLETED]
+  return [NOT_STARTED, ...ordered, COMPLETED, 'Cancelled', 'Returned']
 }
 
 export function stageBadgeVariant(
@@ -138,6 +140,7 @@ export function isRepairFinished(status: RepairStatus): boolean {
 }
 
 export function openRepairCount(order: Order): number {
+  if (order.outcome === 'cancelled' || order.outcome === 'returned') return 0
   return order.repairs.filter(
     (repair) => repair.status === 'open' || repair.status === 'in_progress',
   ).length

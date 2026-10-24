@@ -53,6 +53,13 @@ const ORDER: OrderDetail = {
   isUrgent: false,
   urgentCharge: 0,
   status: 'pending',
+  outcome: 'active',
+  closureReason: null,
+  closedAt: null,
+  closedBy: null,
+  creditAmount: null,
+  retainedCharge: 0,
+  restoredMaterialQuantity: 0,
   collectedAt: null,
   thobeType: 'thobx',
   fPocket: 'round',
@@ -186,6 +193,29 @@ function renderDeliveryOrder(overrides: Partial<OrderDetail> = {}) {
 }
 
 describe('OrderDetailPage', () => {
+  it.each(['cancelled', 'returned'] as const)(
+    'keeps a %s order and its production history read-only',
+    (outcome) => {
+      renderDeliveryOrder({
+        outcome,
+        closureReason: 'Customer changed plans',
+        creditAmount: 90,
+        retainedCharge: 10,
+        restoredMaterialQuantity: 2,
+      })
+      expect(screen.getByText('Customer changed plans')).toBeTruthy()
+      expect(screen.getByText('Production history')).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Done' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Cancel Order' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Return Order' })).toBeNull()
+      expect(
+        screen
+          .getByRole('button', { name: /Mark Collected/ })
+          .hasAttribute('disabled'),
+      ).toBe(true)
+    },
+  )
+
   it('titles the page with the human-readable order number', () => {
     renderPage()
 

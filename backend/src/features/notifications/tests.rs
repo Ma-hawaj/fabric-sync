@@ -89,6 +89,32 @@ fn send(draft: &Notification) -> SendInput {
 }
 
 #[sqlx::test]
+async fn cancellation_invalidates_an_approved_invoice_preview(pool: PgPool) {
+    let (invoice, orders, _, _) = test_support::invoice(&pool, 1, false).await;
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), Some(url.clone()), Some(url)).await;
+    let draft = service::prepare(&state, invoice, prepare("invoice_created"), "staff")
+        .await
+        .unwrap();
+    crate::features::returns::service::cancel_order(
+        &state,
+        orders[0],
+        serde_json::from_value(json!({
+            "requestId": Uuid::new_v4(), "reason": "Customer cancelled"
+        }))
+        .unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        service::approve(&state, draft.id, send(&draft), "staff", true).await,
+        Err(AppError::Conflict(_))
+    ));
+    assert!(mock.messages.lock().unwrap().is_empty());
+}
+
+#[sqlx::test]
 async fn all_customers_default_to_unique_mobiles_and_nothing_sends_before_approval(pool: PgPool) {
     let (invoice, orders, _, _) = test_support::invoice(&pool, 2, false).await;
     let shared:Uuid=sqlx::query_scalar("INSERT INTO customers(name,mobile_no) VALUES('Shared Customer','+973 3311 2233') RETURNING id").fetch_one(&pool).await.unwrap();
