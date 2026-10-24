@@ -112,6 +112,15 @@ image** on the Gift Cards list also works independently of WhatsApp setup and
 does not require a saved recipient number. Voided, expired, and fully redeemed
 cards are labelled accordingly.
 
+When an invoice sells gift cards, saving it opens each card's recipient, PNG,
+and message preview in turn. Choose **Send via WhatsApp** to queue that card or
+**Skip** to continue to the next one. The invoice notification preview follows
+after the gift cards. Each card goes to its own saved recipient number, separate
+from the invoice's customers. A send failure keeps the saved invoice and the
+current preview open for retry; it does not create the invoice again. Skipped
+cards remain available to send later from Gift Cards. Editing an invoice keeps
+the updated-invoice notification flow and does not prompt to resend its cards.
+
 The server renders PNGs locally from the bundled SVG and licensed DejaVu fonts,
 including Arabic text shaping, without requiring the PDF renderer or an external
 image service. Company name and optional PNG/JPEG/WebP logo come from the same

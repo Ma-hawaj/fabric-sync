@@ -16,9 +16,13 @@ import type { GiftCard } from '../types/gift-card'
 export function SendGiftCardDialog({
   card,
   onClose,
+  description,
+  cancelLabel = 'Cancel',
 }: {
-  card: GiftCard
+  card: Pick<GiftCard, 'id' | 'code'>
   onClose: () => void
+  description?: string
+  cancelLabel?: string
 }) {
   const preview = useGiftCardPreview(card.id)
   const send = useSendGiftCard()
@@ -58,7 +62,8 @@ export function SendGiftCardDialog({
         <DialogHeader>
           <DialogTitle>Send gift card via WhatsApp</DialogTitle>
           <DialogDescription>
-            Check the recipient, gift card image, and message for {card.code}.
+            {description ??
+              `Check the recipient, gift card image, and message for ${card.code}.`}
           </DialogDescription>
         </DialogHeader>
         {preview.isPending && <p>Loading preview…</p>}
@@ -103,7 +108,7 @@ export function SendGiftCardDialog({
         )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={send.isPending}>
-            Cancel
+            {cancelLabel}
           </Button>
           <Button
             onClick={() => void submit()}

@@ -55,7 +55,7 @@ export function GiftCardBlock({
               {code
                 ? `Code: ${code}`
                 : 'A unique code is generated automatically when you save.'}{' '}
-              Send from Gift Cards after saving.
+              You can also send the card later from Gift Cards.
             </p>
           )}
         </form.Subscribe>

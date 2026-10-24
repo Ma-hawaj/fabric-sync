@@ -460,6 +460,99 @@ async fn image_download_works_without_whatsapp_setup(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn invoice_creation_returns_cards_ready_for_individual_delivery(pool: PgPool) {
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), None, Some(url)).await;
+    let input = json!({"discountUnit":"amount","giftCards":[
+        {"amount":50,"boughtFor":"First recipient","recipientPhone":"33112233"},
+        {"amount":75,"boughtFor":"Second recipient","recipientPhone":"33998877"}
+    ]});
+    let invoice = invoices::service::create_invoice(
+        &state,
+        serde_json::from_value(input).unwrap(),
+        "test-staff",
+    )
+    .await
+    .unwrap();
+    assert_eq!(invoice.gift_cards.len(), 2);
+    assert_ne!(invoice.gift_cards[0].id, invoice.gift_cards[1].id);
+    assert_ne!(invoice.gift_cards[0].code, invoice.gift_cards[1].code);
+    let response = serde_json::to_value(&invoice).unwrap();
+    assert_eq!(
+        response["giftCards"][0]["id"],
+        invoice.gift_cards[0].id.to_string()
+    );
+    assert_eq!(response["giftCards"][0]["code"], invoice.gift_cards[0].code);
+
+    for (card, (recipient, phone, amount)) in invoice.gift_cards.iter().zip([
+        ("First recipient", "+97333112233", 50.0),
+        ("Second recipient", "+97333998877", 75.0),
+    ]) {
+        let stored = service::get_gift_card_by_code(&state, &card.code)
+            .await
+            .unwrap();
+        assert_eq!(stored.id, card.id);
+        assert_eq!(stored.balance, amount);
+        let linked: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM invoice_items WHERE invoice_id=$1 AND gift_card_id=$2)",
+        )
+        .bind(invoice.id)
+        .bind(card.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(linked);
+        let preview = delivery::preview(&state, card.id).await.unwrap();
+        assert_eq!(preview.bought_for.as_deref(), Some(recipient));
+        assert_eq!(preview.mobile, phone);
+        assert!(preview.body.contains(&card.code));
+    }
+    delivery::tick(&state).await.unwrap();
+    assert!(mock.messages.lock().unwrap().is_empty());
+    assert!(mock.uploads.lock().unwrap().is_empty());
+
+    let first = &invoice.gift_cards[0];
+    let preview = delivery::preview(&state, first.id).await.unwrap();
+    let request_id = Uuid::new_v4();
+    for _ in 0..2 {
+        delivery::approve(&state, first.id, send(&preview, request_id), "test-staff")
+            .await
+            .unwrap();
+    }
+    delivery::tick(&state).await.unwrap();
+    let messages = mock.messages.lock().unwrap();
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0]["to"], "97333112233");
+    assert!(messages[0].to_string().contains(&first.code));
+    assert_eq!(mock.uploads.lock().unwrap().len(), 1);
+}
+
+#[sqlx::test]
+async fn invalid_invoice_recipient_rolls_back_all_cards_without_delivery(pool: PgPool) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let input = json!({"discountUnit":"amount","giftCards":[
+        {"amount":50,"recipientPhone":"33112233"},
+        {"amount":75,"recipientPhone":"invalid"}
+    ]});
+    assert!(matches!(
+        invoices::service::create_invoice(
+            &state,
+            serde_json::from_value(input).unwrap(),
+            "test-staff"
+        )
+        .await,
+        Err(AppError::BadRequest(_))
+    ));
+    for table in ["invoices", "gift_cards", "gift_card_deliveries"] {
+        let count: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {table}"))
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "{table}");
+    }
+}
+
+#[sqlx::test]
 async fn invoice_sales_generate_codes_and_keep_them_on_edit_until_delivery(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
     let input = json!({"discountUnit":"amount","giftCards":[{"amount":50,"recipientPhone":"33112233","boughtFor":"Gift Recipient","code":"MANUAL"}]});
@@ -474,6 +567,8 @@ async fn invoice_sales_generate_codes_and_keep_them_on_edit_until_delivery(pool:
         .await
         .unwrap();
     let code = edit.gift_cards[0].code.clone();
+    assert_eq!(invoice.gift_cards.len(), 1);
+    assert_eq!(invoice.gift_cards[0].code, code);
     assert_ne!(code, "MANUAL");
     assert_eq!(
         edit.gift_cards[0].recipient_phone.as_deref(),
@@ -481,7 +576,7 @@ async fn invoice_sales_generate_codes_and_keep_them_on_edit_until_delivery(pool:
     );
     let mut changed = input.clone();
     changed["giftCards"][0]["code"] = json!(code);
-    invoices::service::update_invoice(
+    let updated = invoices::service::update_invoice(
         &state,
         invoice.id,
         serde_json::from_value(changed.clone()).unwrap(),
@@ -489,6 +584,9 @@ async fn invoice_sales_generate_codes_and_keep_them_on_edit_until_delivery(pool:
     .await
     .unwrap();
     let card = service::get_gift_card_by_code(&state, &code).await.unwrap();
+    assert_eq!(updated.gift_cards.len(), 1);
+    assert_eq!(updated.gift_cards[0].id, card.id);
+    assert_eq!(updated.gift_cards[0].code, code);
     let preview = delivery::preview(&state, card.id).await.unwrap();
     delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff")
         .await

@@ -26,7 +26,8 @@ use super::{
         CollectedInvoice, CreateGiftCardLineInput, CreateInvoiceInput, CreateOrderInput,
         CreateProductLineInput, CreatedInvoice, DiscountUnit, GiftCardRedemptionInput,
         InvoiceCustomerInput, InvoiceDetail, InvoiceEdit, InvoiceListItem, InvoiceTotalsBreakdown,
-        MaterialSource, PaymentSummary, PaymentType, RecordPaymentInput, RecordedPayment,
+        IssuedGiftCard, MaterialSource, PaymentSummary, PaymentType, RecordPaymentInput,
+        RecordedPayment,
     },
 };
 use crate::features::customers::types::{normalize_customer_identity, CreateMeasurementInput};
@@ -1878,7 +1879,8 @@ async fn write_gift_card_sales(
     customer_id: Option<Uuid>,
     gift_cards: &[CreateGiftCardLineInput],
     region: &str,
-) -> Result<(), AppError> {
+) -> Result<Vec<IssuedGiftCard>, AppError> {
+    let mut issued = Vec::with_capacity(gift_cards.len());
     for card in gift_cards {
         let (gift_card_id, code) = if card.code.trim().is_empty() {
             let input = crate::features::gift_cards::types::CreateGiftCardInput {
@@ -1914,9 +1916,13 @@ async fn write_gift_card_sales(
             card.amount,
         )
         .await?;
+        issued.push(IssuedGiftCard {
+            id: gift_card_id,
+            code,
+        });
     }
 
-    Ok(())
+    Ok(issued)
 }
 
 async fn write_redemptions(
@@ -1990,7 +1996,7 @@ pub async fn create_invoice(
 
     write_product_lines(&mut tx, invoice_id, &input.products).await?;
 
-    write_gift_card_sales(
+    let gift_cards = write_gift_card_sales(
         &mut tx,
         invoice_id,
         input.customer_id,
@@ -2025,6 +2031,7 @@ pub async fn create_invoice(
         id: invoice_id,
         total_price: totals.total,
         gift_card_redeemed: totals.redeemed,
+        gift_cards,
     })
 }
 
@@ -2204,7 +2211,7 @@ pub async fn update_invoice(
             card.code.clear();
         }
     }
-    write_gift_card_sales(
+    let gift_cards = write_gift_card_sales(
         &mut tx,
         invoice_id,
         input.customer_id,
@@ -2248,5 +2255,6 @@ pub async fn update_invoice(
         id: invoice_id,
         total_price: totals.total,
         gift_card_redeemed: totals.redeemed,
+        gift_cards,
     })
 }

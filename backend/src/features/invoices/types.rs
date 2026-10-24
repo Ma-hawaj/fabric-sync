@@ -225,12 +225,21 @@ pub struct CreateInvoiceInput {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct IssuedGiftCard {
+    pub id: Uuid,
+    pub code: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreatedInvoice {
     pub id: Uuid,
     pub total_price: f64,
     // Echoed back so the client can confirm how much gift card tender was
     // actually applied against the total.
     pub gift_card_redeemed: f64,
+    /// Cards sold on this invoice, ready for recipient/image preview after save.
+    pub gift_cards: Vec<IssuedGiftCard>,
 }
 
 /// One tailoring line as it was entered, not as it prints: ids rather than

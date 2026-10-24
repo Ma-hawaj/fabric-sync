@@ -13,6 +13,7 @@ export interface CreatedInvoice {
   id: string
   totalPrice: number
   giftCardRedeemed: number
+  giftCards: Array<{ id: string; code: string }>
 }
 
 function numberOrZero(value: NumberInput): number {
