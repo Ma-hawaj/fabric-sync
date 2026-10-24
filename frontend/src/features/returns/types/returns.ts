@@ -22,6 +22,9 @@ export interface ReturnableLine {
   creditLimit: number
   collected: boolean
   canRestock: boolean
+  originalLocationId: string | null
+  originalLocationName: string | null
+  defaultRestockLocationId: string | null
   outcome: 'active' | 'cancelled' | 'returned'
 }
 
@@ -41,6 +44,10 @@ export interface ReturnContext {
       quantity: number
       amount: number
       restocked: boolean
+      originalLocationId: string | null
+      originalLocationName: string | null
+      restockLocationId: string | null
+      restockLocationName: string | null
     }[]
   }[]
   refunds: {
@@ -58,7 +65,12 @@ export interface ReturnContext {
 
 export interface CreateReturnInput {
   reason: string
-  lines: { lineId: string; quantity: number; restock: boolean }[]
+  lines: {
+    lineId: string
+    quantity: number
+    restock: boolean
+    restockLocationId?: string | null
+  }[]
   refund: RefundPlan
 }
 

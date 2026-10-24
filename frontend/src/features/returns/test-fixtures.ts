@@ -15,6 +15,9 @@ export const PRODUCT: ReturnableLine = {
   creditLimit: 10,
   collected: true,
   canRestock: true,
+  originalLocationId: 'location-original',
+  originalLocationName: 'Manama',
+  defaultRestockLocationId: 'location-original',
   outcome: 'active',
 }
 

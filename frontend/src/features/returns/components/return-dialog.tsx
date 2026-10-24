@@ -10,7 +10,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { FieldError } from '@/components/ui/field'
+import { Field, FieldError, FieldLabel } from '@/components/ui/field'
+import { AsyncCombobox } from '@/components/form/async-combobox'
+import { STOCK_FILTERS } from '@/features/locations/lib/location-filters'
+import type { Location } from '@/features/locations/types/location'
 import { NumberField, TextField } from '@/components/form/fields'
 import { useCreateReturn } from '../hooks/use-returns'
 import {
@@ -49,7 +52,13 @@ export function ReturnDialog({
     onSubmit: async ({ value }) => {
       const selected = value.lines.flatMap((line) =>
         line.quantity !== '' && line.quantity > 0
-          ? [{ ...line, quantity: line.quantity }]
+          ? [
+              {
+                ...line,
+                quantity: line.quantity,
+                restockLocationId: line.restock ? line.restockLocationId : null,
+              },
+            ]
           : [],
       )
       const due = adjustmentSummary(
@@ -132,20 +141,76 @@ export function ReturnDialog({
                     />
                   )}
                   {line.canRestock && (
-                    <form.Field name={`lines[${index}].restock`}>
-                      {(field) => (
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={field.state.value}
-                            onChange={(event) =>
-                              field.handleChange(event.target.checked)
-                            }
-                          />
-                          Restock at the original sale location
-                        </label>
-                      )}
-                    </form.Field>
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        Originally sold from:{' '}
+                        {line.originalLocationName ?? 'Location not recorded'}
+                      </p>
+                      <form.Field name={`lines[${index}].restock`}>
+                        {(field) => (
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              aria-label={`Restock ${line.description}`}
+                              checked={field.state.value}
+                              onChange={(event) =>
+                                field.handleChange(event.target.checked)
+                              }
+                            />
+                            Restock returned item
+                          </label>
+                        )}
+                      </form.Field>
+                      <form.Subscribe
+                        selector={(state) => state.values.lines[index].restock}
+                      >
+                        {(restock) =>
+                          restock && (
+                            <form.Field
+                              name={`lines[${index}].restockLocationId`}
+                            >
+                              {(field) => (
+                                <Field
+                                  data-invalid={
+                                    field.state.meta.errors.length > 0
+                                  }
+                                >
+                                  <FieldLabel htmlFor={field.name}>
+                                    Restock location — {line.description}
+                                  </FieldLabel>
+                                  <AsyncCombobox<Location>
+                                    id={field.name}
+                                    endpoint="/locations"
+                                    queryKey="return-restock-locations"
+                                    searchField="name"
+                                    filters={STOCK_FILTERS}
+                                    toOption={(location) => ({
+                                      value: location.id,
+                                      label: location.name,
+                                    })}
+                                    getValueLabel={(id) =>
+                                      id === line.originalLocationId
+                                        ? line.originalLocationName
+                                        : null
+                                    }
+                                    value={field.state.value || null}
+                                    onValueChange={(id) =>
+                                      field.handleChange(id ?? '')
+                                    }
+                                    placeholder="Select a stock location..."
+                                    emptyMessage="No active stock locations found."
+                                    disabled={mutation.isPending}
+                                  />
+                                  <FieldError
+                                    errors={field.state.meta.errors}
+                                  />
+                                </Field>
+                              )}
+                            </form.Field>
+                          )
+                        }
+                      </form.Subscribe>
+                    </>
                   )}
                 </div>
               ))}

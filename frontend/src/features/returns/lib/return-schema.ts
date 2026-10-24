@@ -36,7 +36,12 @@ export function previewCredit(line: ReturnableLine, quantity: number) {
 
 interface ReturnFormValues extends RefundSettings {
   reason: string
-  lines: { lineId: string; quantity: NumberInput; restock: boolean }[]
+  lines: {
+    lineId: string
+    quantity: NumberInput
+    restock: boolean
+    restockLocationId: string
+  }[]
 }
 
 export function createReturnForm(
@@ -52,6 +57,7 @@ export function createReturnForm(
         lineId: line.lineId,
         quantity: orderId ? 1 : '',
         restock: false,
+        restockLocationId: line.defaultRestockLocationId ?? '',
       })),
   }
 }
@@ -71,6 +77,7 @@ export function returnSchema(context: ReturnContext) {
           lineId: z.string(),
           quantity: z.union([z.number(), z.literal('')]),
           restock: z.boolean(),
+          restockLocationId: z.string(),
         }),
       ),
     })
@@ -103,6 +110,12 @@ export function returnSchema(context: ReturnContext) {
             code: 'custom',
             path: ['lines', index, 'restock'],
             message: 'This item cannot be restocked.',
+          })
+        if (item.restock && !item.restockLocationId.trim())
+          ctx.addIssue({
+            code: 'custom',
+            path: ['lines', index, 'restockLocationId'],
+            message: 'Select a restock location.',
           })
       })
       if (selected === 0)

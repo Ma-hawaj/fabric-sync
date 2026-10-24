@@ -107,7 +107,16 @@ export function ReturnsPanel({ invoiceId }: { invoiceId: string }) {
                     <li key={index}>
                       {line.description} × {line.quantity} ·{' '}
                       {money(line.amount)}
-                      {line.restocked ? ' · Restocked' : ''}
+                      {line.restocked && (
+                        <>
+                          {' '}
+                          · Restocked at{' '}
+                          {line.restockLocationName ?? 'Location unavailable'}
+                          {line.originalLocationName && (
+                            <> (sold from {line.originalLocationName})</>
+                          )}
+                        </>
+                      )}
                     </li>
                   ))}
                 </ul>

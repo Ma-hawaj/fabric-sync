@@ -11,6 +11,30 @@ import {
 import { PRODUCT, CONTEXT } from '../test-fixtures'
 
 describe('return rules', () => {
+  it('requires a restock destination and uses the server-provided eligible default', () => {
+    const values = createReturnForm([PRODUCT])
+    expect(values.lines[0].restockLocationId).toBe(PRODUCT.originalLocationId)
+    values.reason = 'Restock at the receiving branch'
+    values.refundTiming = 'later'
+    values.lines[0].quantity = 1
+    values.lines[0].restock = true
+    values.lines[0].restockLocationId = ''
+    const result = returnSchema(CONTEXT).safeParse(values)
+    expect(result.success).toBe(false)
+    if (!result.success)
+      expect(
+        result.error.issues.some(
+          (issue) => issue.path.join('.') === 'lines.0.restockLocationId',
+        ),
+      ).toBe(true)
+    values.lines[0].restockLocationId = 'another-stock-location'
+    expect(returnSchema(CONTEXT).safeParse(values).success).toBe(true)
+    expect(
+      createReturnForm([{ ...PRODUCT, defaultRestockLocationId: null }])
+        .lines[0].restockLocationId,
+    ).toBe('')
+  })
+
   it('excludes uncollected and completely returned goods', () => {
     expect(
       eligibleLines([

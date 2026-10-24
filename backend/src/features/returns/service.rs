@@ -90,8 +90,11 @@ fn line_credit(line: &ReturnableLine, input: &ReturnLineInput) -> Result<f64, Ap
         return Err(bad_request("return a tailoring garment as one whole item"));
     }
     if input.restock && !line.can_restock {
+        return Err(bad_request("only retail products can be restocked"));
+    }
+    if input.restock != input.restock_location_id.is_some() {
         return Err(bad_request(
-            "only retail products at an active stock location can be restocked",
+            "select a restock location only when restocking the returned product",
         ));
     }
     let target = (i128::from(cents(line.credit_limit)) * i128::from(returned)
@@ -196,7 +199,7 @@ pub async fn create_return(
     if input.lines.is_empty() || input.lines.len() > 200 {
         return Err(bad_request("select between 1 and 200 lines to return"));
     }
-    let hash = request_hash("invoice.return.v1", invoice_id, &input);
+    let hash = request_hash("invoice.return.v2", invoice_id, &input);
     let mut tx = state.db().begin().await?;
     invoices::lock_invoice(&mut tx, invoice_id)
         .await?
@@ -221,6 +224,11 @@ pub async fn create_return(
                 bad_request("this line is not returnable merchandise on this invoice")
             })?;
         let amount = line_credit(line, item)?;
+        if let Some(location_id) = item.restock_location_id {
+            if !repository::lock_restock_location(&mut tx, location_id).await? {
+                return Err(bad_request("select an active location that holds stock"));
+            }
+        }
         planned.push((line, item, amount));
     }
     let total = planned
@@ -232,13 +240,14 @@ pub async fn create_return(
     for (line, item, amount) in planned {
         repository::insert_line(&mut tx, id, line, item, amount).await?;
         if item.restock {
-            // The original sale location is used; cut tailoring fabric is
-            // never replenished as a side effect of returning a garment.
+            // Only the selected receiving location gains returned retail stock.
             products::upsert_stock(
                 &mut tx,
                 line.product_id.expect("retail product"),
                 &[StockEntryInput {
-                    location_id: line.branch_id.expect("validated stock location"),
+                    location_id: item
+                        .restock_location_id
+                        .expect("validated restock location"),
                     quantity: item.quantity,
                 }],
             )
@@ -471,6 +480,7 @@ pub async fn cancel_order(
             line_id: order_id,
             quantity: 1.0,
             restock: false,
+            restock_location_id: None,
         },
         credit,
     )
@@ -515,7 +525,9 @@ mod tests {
             outcome: "active".into(),
             credit_limit: total,
             product_id: None,
-            branch_id: None,
+            original_location_id: None,
+            original_location_name: None,
+            default_restock_location_id: None,
         }
     }
 
@@ -547,6 +559,7 @@ mod tests {
             line_id: line.line_id,
             quantity: 1.0,
             restock: true,
+            restock_location_id: Some(Uuid::new_v4()),
         };
         let mut credits = Vec::new();
         for _ in 0..3 {
@@ -583,6 +596,7 @@ mod tests {
             line_id: line.line_id,
             quantity: 1.0,
             restock: false,
+            restock_location_id: None,
         };
         assert!(line_credit(&line, &input).is_err());
         line.collected = true;
@@ -711,6 +725,7 @@ mod tests {
                     line_id: closed_line.line_id,
                     quantity: 1.0,
                     restock: false,
+                    restock_location_id: None,
                 }
             )
             .is_err());

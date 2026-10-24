@@ -56,9 +56,11 @@ pub async fn returnable_lines(
                COALESCE(ret.quantity, 0)::float8 AS "returned_quantity!",
                COALESCE(ret.amount, 0)::float8 AS "credited_amount!",
                sold.line_total::float8 AS "line_total!", sold.urgent_charge::float8 AS "urgent_charge!", sold.collected AS "collected!",
-               COALESCE(b.is_active AND b.holds_stock, false) AS "can_restock!",
+               (sold.kind = 'product') AS "can_restock!",
                0::float8 AS "credit_limit!", sold.product_id AS "product_id?",
-               sold.branch_id AS "branch_id?", sold.outcome AS "outcome!"
+               sold.branch_id AS "original_location_id?", b.name AS "original_location_name?",
+               CASE WHEN b.is_active AND b.holds_stock THEN b.id END AS "default_restock_location_id?",
+               sold.outcome AS "outcome!"
         FROM (
             SELECT o.id AS line_id, 'order' AS kind,
                    'Order #' || o.order_number AS description, 1::numeric AS quantity,
@@ -93,8 +95,14 @@ pub async fn history(
         SELECT r.id, r.reason, r.kind, r.amount::float8 AS "amount!", r.created_at, r.created_by,
                (SELECT jsonb_agg(jsonb_build_object(
                    'lineId', COALESCE(l.order_id, l.item_id), 'description', l.description, 'quantity', l.quantity::float8,
-                   'amount', l.amount::float8, 'restocked', l.restocked
-               ) ORDER BY l.id) FROM invoice_return_lines l WHERE l.return_id = r.id)
+                   'amount', l.amount::float8, 'restocked', l.restocked,
+                   'originalLocationId', sold.branch_id, 'originalLocationName', origin.name,
+                   'restockLocationId', l.restock_location_id, 'restockLocationName', destination.name
+               ) ORDER BY l.id) FROM invoice_return_lines l
+                 LEFT JOIN invoice_items sold ON sold.id = l.item_id
+                 LEFT JOIN branch origin ON origin.id = sold.branch_id
+                 LEFT JOIN branch destination ON destination.id = l.restock_location_id
+                 WHERE l.return_id = r.id)
                AS "lines!: sqlx::types::Json<Vec<ReturnedLine>>"
         FROM invoice_returns r WHERE r.invoice_id = $1 ORDER BY r.created_at, r.id
         "#,
@@ -201,8 +209,8 @@ pub async fn insert_line(
     let item_id = (line.kind == "product").then_some(line.line_id);
     sqlx::query!(
         r#"
-        INSERT INTO invoice_return_lines (return_id, order_id, item_id, description, quantity, amount, restocked)
-        VALUES ($1, $2, $3, $4, $5::float8, $6::float8, $7)
+        INSERT INTO invoice_return_lines (return_id, order_id, item_id, description, quantity, amount, restocked, restock_location_id)
+        VALUES ($1, $2, $3, $4, $5::float8, $6::float8, $7, $8)
         "#,
         return_id,
         order_id,
@@ -211,10 +219,25 @@ pub async fn insert_line(
         input.quantity,
         amount,
         input.restock,
+        input.restock_location_id,
     )
     .execute(&mut **tx)
     .await?;
     Ok(())
+}
+
+/// Keep location retirement/capability changes serialized with the stock write.
+pub async fn lock_restock_location(
+    tx: &mut sqlx::PgTransaction<'_>,
+    location_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query_scalar!(
+        "SELECT id FROM branch WHERE id = $1 AND is_active AND holds_stock FOR SHARE",
+        location_id,
+    )
+    .fetch_optional(&mut **tx)
+    .await?
+    .is_some())
 }
 
 pub async fn insert_refund(

@@ -37,7 +37,7 @@ fn typed_request_hashes_apply_defaults_and_detect_changed_financial_intent() {
         "lines":[{"lineId":Uuid::new_v4(),"quantity":1,"restock":false}],
         "refund":{"timing":"now","payments":[{"amount":10,"paymentType":"cash","giftCardId":null}]}});
     let input: CreateReturnInput = serde_json::from_value(original.clone()).unwrap();
-    let hash = request_hash("invoice.return.v1", target, &input);
+    let hash = request_hash("invoice.return.v2", target, &input);
     for (path, value) in [
         ("/lines/0/quantity", json!(2)),
         ("/lines/0/restock", json!(true)),
@@ -52,7 +52,7 @@ fn typed_request_hashes_apply_defaults_and_detect_changed_financial_intent() {
         let changed: CreateReturnInput = serde_json::from_value(changed).unwrap();
         assert_ne!(
             hash,
-            request_hash("invoice.return.v1", target, &changed),
+            request_hash("invoice.return.v2", target, &changed),
             "{path}"
         );
     }

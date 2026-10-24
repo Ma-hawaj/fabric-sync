@@ -419,6 +419,8 @@ CREATE TABLE invoice_return_lines (
     quantity NUMERIC(10, 2) NOT NULL CHECK (quantity > 0),
     amount NUMERIC(10, 2) NOT NULL CHECK (amount >= 0),
     restocked BOOLEAN NOT NULL,
+    restock_location_id UUID REFERENCES branch(id),
+    CHECK (restocked = (restock_location_id IS NOT NULL)),
     CHECK ((order_id IS NULL) <> (item_id IS NULL)),
     CHECK (order_id IS NULL OR (quantity = 1 AND NOT restocked)),
     UNIQUE (return_id, order_id),

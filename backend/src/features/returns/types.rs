@@ -8,6 +8,8 @@ pub struct ReturnLineInput {
     pub line_id: Uuid,
     pub quantity: f64,
     pub restock: bool,
+    #[serde(default)]
+    pub restock_location_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -126,8 +128,9 @@ pub struct ReturnableLine {
     pub credit_limit: f64,
     #[serde(skip)]
     pub product_id: Option<Uuid>,
-    #[serde(skip)]
-    pub branch_id: Option<Uuid>,
+    pub original_location_id: Option<Uuid>,
+    pub original_location_name: Option<String>,
+    pub default_restock_location_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -150,6 +153,10 @@ pub struct ReturnedLine {
     pub quantity: f64,
     pub amount: f64,
     pub restocked: bool,
+    pub original_location_id: Option<Uuid>,
+    pub original_location_name: Option<String>,
+    pub restock_location_id: Option<Uuid>,
+    pub restock_location_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]

@@ -20,6 +20,9 @@ SQLx applies the files in version order:
 
 The core schema also defines return credits and lines, refund payouts,
 cancellation details, original fabric stock locations, and balance/outcome views.
+Return lines store their chosen restock location with a foreign key and require a
+destination exactly when stock was restored; the original sale location remains
+on the invoice item.
 Adjustment retry checks store a 32-byte SHA-256 hash, not the request JSON;
 structured credit, stock and refund records retain the audit details.
 
