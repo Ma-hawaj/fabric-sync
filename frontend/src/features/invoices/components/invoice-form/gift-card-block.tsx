@@ -1,6 +1,11 @@
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { NumberField, PhoneField, TextField } from '@/components/form/fields'
+import {
+  DateField,
+  NumberField,
+  PhoneField,
+  TextField,
+} from '@/components/form/fields'
 import { CURRENCY } from '@/lib/currency'
 import type { InvoiceFormApi } from '../../types/invoice-form'
 
@@ -41,7 +46,7 @@ export function GiftCardBlock({
         </div>
 
         <div>
-          <TextField
+          <DateField
             form={form}
             name={`${base}.expiresOn`}
             label="Expires (optional)"

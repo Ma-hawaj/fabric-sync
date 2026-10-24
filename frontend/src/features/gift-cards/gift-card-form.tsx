@@ -3,7 +3,12 @@ import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
-import { NumberField, PhoneField, TextField } from '@/components/form/fields'
+import {
+  DateField,
+  NumberField,
+  PhoneField,
+  TextField,
+} from '@/components/form/fields'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import { CURRENCY } from '@/lib/currency'
 import { useCreateGiftCard } from './hooks/use-create-gift-card'
@@ -109,7 +114,7 @@ export function GiftCardFormPage() {
             )}
           </form.Field>
 
-          <TextField
+          <DateField
             form={form}
             name="expiresOn"
             label="Expires On (optional)"
