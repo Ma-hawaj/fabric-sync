@@ -1,20 +1,106 @@
 import { describe, expect, it, vi } from 'vitest'
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
+import {
+  act,
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { InvoiceFormPage } from './invoice-form'
+import { InvoiceForm, InvoiceFormPage } from './invoice-form'
+
+import { createEmptyInvoiceForm, createEmptyOrder } from './types/invoice-form'
+import type { InvoiceFormValues } from './types/invoice-form'
+import { apiGetMock } from '@/lib/list-fixtures'
 
 // Hoisted by vitest above these imports at transform time.
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
 }))
 
+vi.mock('@/features/notifications/notification-dialog', () => ({
+  NotificationDialog: ({ invoiceId }: { invoiceId: string | null }) =>
+    invoiceId ? <p>Invoice saved</p> : null,
+}))
+const { apiGet } = vi.hoisted(() => ({ apiGet: vi.fn() }))
+vi.mock('@/lib/api', () => ({
+  apiBaseUrl: '/api',
+  apiClient: { get: apiGet },
+  ApiError: class ApiError extends Error {},
+}))
+
+function clientForForm() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  client.setQueryData(['design-options', ''], {
+    data: [],
+    page: 1,
+    perPage: 100,
+    total: 0,
+    pageCount: 1,
+  })
+  client.setQueryData(['pricing'], {
+    urgentCharge: { amount: 5, unit: 'amount' },
+    customerMaterialBasePrice: 20,
+  })
+  client.setQueryData(['default-location'], {
+    defaultLocation: null,
+    defaultLocationId: null,
+  })
+  apiGet.mockImplementation(
+    apiGetMock({
+      '/customers': [],
+      '/locations': [],
+      '/materials': [],
+      '/products': [],
+    }),
+  )
+  return client
+}
+
 function renderPage() {
-  const client = new QueryClient()
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={clientForForm()}>
       <InvoiceFormPage />
     </QueryClientProvider>,
   )
+}
+
+function validInvoice(): InvoiceFormValues {
+  const values = createEmptyInvoiceForm()
+  values.customers[0].existingCustomerId = 'customer-1'
+  values.customers[0].measurement.type = 'body'
+  values.customers[0].measurement.fit = 'medium'
+  values.customers[0].orders[0] = {
+    ...createEmptyOrder(),
+    materialSource: 'customer',
+    customerMaterialDescription: 'White linen',
+    materialAmount: 3.5,
+    productionLocationId: 'workshop',
+    price: 20,
+  }
+  return values
+}
+
+function renderInvoice(values = validInvoice()) {
+  const save = vi
+    .fn()
+    .mockResolvedValue({ id: 'saved-invoice', totalPrice: 40 })
+  render(
+    <QueryClientProvider client={clientForForm()}>
+      <InvoiceForm
+        defaultValues={values}
+        title="New Invoice"
+        subtitle="Build the order, then review and save."
+        saveVerb="Saving"
+        savedVerb="saved"
+        mutation={{ mutateAsync: save, isPending: false }}
+      />
+    </QueryClientProvider>,
+  )
+  return save
 }
 
 describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
@@ -28,7 +114,7 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
     expect(urgentOptions[0].getAttribute('aria-checked')).toBe('true')
     expect(urgentOptions[1].getAttribute('aria-checked')).toBe('false')
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
     })
 
     expect(
@@ -42,7 +128,7 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
 
     fireEvent.click(urgentOptions[0])
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
     })
     await waitFor(() => {
       expect(
@@ -50,10 +136,11 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
       ).toBeNull()
     })
   })
+
   it('shows the zod error inline on the field and a banner, blocking submit', async () => {
     renderPage()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
 
     expect(
       await screen.findByText(
@@ -68,7 +155,7 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
   it('clears the error on the next submit attempt once the field is fixed', async () => {
     renderPage()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
     await screen.findByText(
       'Pick an existing customer or switch to "+ New Customer".',
     )
@@ -83,7 +170,7 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
       target: { value: '+971-50-1234567' },
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
 
     expect(
       screen.queryByText(
@@ -93,5 +180,100 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
     expect(
       await screen.findByText('Pick a material and quantity.'),
     ).toBeTruthy()
+  })
+})
+
+describe('Invoice workspace', () => {
+  it('keeps optional sections out of the initial workspace until added', () => {
+    renderInvoice()
+    expect(screen.queryByRole('region', { name: 'Products' })).toBeNull()
+    expect(
+      screen.queryByRole('region', { name: 'Gift cards for sale' }),
+    ).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Add Product' }))
+    expect(screen.getByRole('region', { name: 'Products' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Sell a Gift Card' }))
+    expect(
+      screen.getByRole('region', { name: 'Gift cards for sale' }),
+    ).toBeTruthy()
+  })
+
+  it('duplicates an order, opens only its editor, and preserves both lines on save', async () => {
+    const values = validInvoice()
+    const originalKey = values.customers[0].orders[0].key
+    const save = renderInvoice(values)
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate order 1' }))
+    expect(
+      within(screen.getByRole('region', { name: 'Order 1' })).queryByRole(
+        'button',
+        { name: 'Choose Collar' },
+      ),
+    ).toBeNull()
+    expect(
+      within(screen.getByRole('region', { name: 'Order 2' })).getByRole(
+        'button',
+        { name: 'Choose Collar' },
+      ),
+    ).toBeTruthy()
+    await waitFor(() =>
+      expect(
+        screen.getByText('Subtotal (incl. VAT)').parentElement?.textContent,
+      ).toContain('40.00'),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    await waitFor(() => expect(save).toHaveBeenCalledOnce())
+    const saved = save.mock.calls[0][0] as InvoiceFormValues
+    expect(saved.customers[0].orders).toHaveLength(2)
+    expect(saved.customers[0].orders[0].key).toBe(originalKey)
+    expect(saved.customers[0].orders[1].key).not.toBe(originalKey)
+    expect(saved.customers[0].orders[1]).toMatchObject({
+      customerMaterialDescription: 'White linen',
+      materialAmount: 3.5,
+      price: 20,
+    })
+  })
+
+  it('opens a collapsed invalid order and focuses its first issue when saving', async () => {
+    const values = validInvoice()
+    values.customers[0].orders[0].customerMaterialDescription = ''
+    const save = renderInvoice(values)
+    fireEvent.click(screen.getByRole('button', { name: 'Add Another Order' }))
+    expect(
+      within(screen.getByRole('region', { name: 'Order 1' })).queryByRole(
+        'button',
+        { name: 'Choose Collar' },
+      ),
+    ).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('region', { name: 'Order 1' })).getByRole(
+          'button',
+          { name: 'Choose Collar' },
+        ),
+      ).toBeTruthy(),
+    )
+    await waitFor(() =>
+      expect(document.activeElement?.id).toBe(
+        'customers[0].orders[0].customerMaterialDescription',
+      ),
+    )
+    expect(save).not.toHaveBeenCalled()
+  })
+
+  it('opens missing measurement details even when staff have hidden them', async () => {
+    const values = validInvoice()
+    values.customers[0].measurement.type = ''
+    const save = renderInvoice(values)
+    fireEvent.click(screen.getByRole('button', { name: 'Hide measurements' }))
+    expect(screen.queryByRole('radio', { name: 'Body' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    expect(await screen.findByRole('radio', { name: 'Body' })).toBeTruthy()
+    await waitFor(() =>
+      expect(document.activeElement?.closest('[role="radiogroup"]')?.id).toBe(
+        'customers[0].measurement.type',
+      ),
+    )
+    expect(save).not.toHaveBeenCalled()
   })
 })

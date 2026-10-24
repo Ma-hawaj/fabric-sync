@@ -14,6 +14,7 @@ interface DesignOptionGridProps {
   onChange: (value: string) => void
   columns?: number
   id?: string
+  density?: 'compact' | 'comfortable'
 }
 
 // An image-per-choice radio group, in the spirit of SegmentedOptions but for
@@ -25,13 +26,17 @@ export const DesignOptionGrid = memo(function DesignOptionGrid({
   onChange,
   columns = 3,
   id,
+  density = 'compact',
 }: DesignOptionGridProps) {
   return (
     <div
       id={id}
       role="radiogroup"
       aria-label="Design options"
-      className="grid max-h-72 gap-1.5 overflow-y-auto pr-1"
+      className={cn(
+        'grid gap-2 overflow-y-auto pe-1',
+        density === 'comfortable' ? 'max-h-[50dvh]' : 'max-h-72',
+      )}
       style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
     >
       {options.map((option) => (
@@ -44,7 +49,8 @@ export const DesignOptionGrid = memo(function DesignOptionGrid({
           title={option.label}
           onClick={() => onChange(option.id)}
           className={cn(
-            'flex flex-col items-center gap-1 rounded-md border bg-background p-1 transition-colors',
+            'flex flex-col items-center gap-2 rounded-md border bg-background transition-colors',
+            density === 'comfortable' ? 'p-3' : 'p-1',
             value === option.id
               ? 'border-primary bg-primary/10'
               : 'border-border hover:bg-muted hover:text-foreground',
@@ -57,19 +63,28 @@ export const DesignOptionGrid = memo(function DesignOptionGrid({
               draggable={false}
               loading="lazy"
               decoding="async"
-              className="h-16 w-full object-contain"
+              className={cn(
+                'w-full object-contain',
+                density === 'comfortable' ? 'h-24' : 'h-16',
+              )}
             />
           ) : (
             <span
               aria-hidden
-              className="flex h-16 w-full items-center justify-center rounded bg-muted px-1 text-center text-sm font-semibold text-muted-foreground"
+              className={cn(
+                'flex w-full items-center justify-center rounded bg-muted px-1 text-center text-sm font-semibold text-muted-foreground',
+                density === 'comfortable' ? 'h-24' : 'h-16',
+              )}
             >
               {option.label}
             </span>
           )}
           <span
             className={cn(
-              'line-clamp-2 w-full text-center text-[10px] leading-tight',
+              'w-full text-center leading-tight',
+              density === 'comfortable'
+                ? 'text-xs'
+                : 'line-clamp-2 text-[10px]',
               value === option.id
                 ? 'font-semibold text-primary'
                 : 'text-muted-foreground',

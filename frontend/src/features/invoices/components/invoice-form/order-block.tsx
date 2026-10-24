@@ -11,9 +11,8 @@ import {
 import { usePricing } from '../../hooks/use-pricing'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { PRODUCTION_FILTERS } from '@/features/locations/lib/location-filters'
-import { XIcon } from 'lucide-react'
+import { CheckIcon, ChevronDownIcon, CopyIcon, XIcon } from 'lucide-react'
 import { NumberField, TextField } from '@/components/form/fields'
-import { DesignOptionGrid } from '@/features/design-options/components/design-option-grid'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import { Button } from '@/components/ui/button'
 import {
@@ -25,19 +24,21 @@ import {
   ComboboxList,
 } from '@/components/ui/combobox'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
-import { Separator } from '@/components/ui/separator'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { CURRENCY } from '@/lib/currency'
-import {
-  selectCategoryOptions,
-  useDesignOptions,
-  designOptionImageSrc,
-} from '@/features/design-options/hooks/use-design-options'
-import type { DesignOption } from '@/features/design-options/types/design-option'
+import { useDesignOptions } from '@/features/design-options/hooks/use-design-options'
 import type { Location } from '@/features/locations/types/location'
 import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
 import { GrossVatHint } from './gross-vat-hint'
+import { DesignPicker } from './design-picker'
+import {
+  focusInvoiceField,
+  invoiceFieldPath,
+  useInvoiceWorkspace,
+} from './invoice-workspace'
+import { orderDraftSchema } from '../../lib/invoice-schema'
+import { cn } from '@/lib/utils'
 import { materialTotalStock } from '../../types/materials'
 import type { Material } from '../../types/materials'
 import type {
@@ -47,95 +48,6 @@ import type {
 
 function materialOptionLabel(material: Material) {
   return material.sku ? `${material.name} (${material.sku})` : material.name
-}
-
-// A stored value that matches no catalog option (legacy free text like
-// "Saudi") can't be shown selected, but it still prints as text on the
-// documents — so it stays put with a note rather than being wiped.
-function UnknownDesignValue({
-  value,
-  onClear,
-}: {
-  value: string
-  onClear: () => void
-}) {
-  return (
-    <p className="text-xs text-muted-foreground">
-      Saved value &ldquo;{value}&rdquo; is not in the catalog.{' '}
-      <button
-        type="button"
-        className="underline hover:text-foreground"
-        onClick={onClear}
-      >
-        Clear it
-      </button>{' '}
-      or select a catalog option to calculate pricing. Saved invoices still
-      print this value as text.
-    </p>
-  )
-}
-
-function CatalogGrid({
-  form,
-  name,
-  category,
-  options,
-  columns = 3,
-}: {
-  form: InvoiceFormApi
-  name: string
-  category: string
-  options: DesignOption[]
-  columns?: number
-}) {
-  // EMD is optional. Keep an actual grid choice for clearing a stored value;
-  // an empty form value cannot be selected by a button-less grid.
-  const clearOption =
-    category === 'emd' ? [{ id: '', label: 'None', image: null }] : []
-  const items = [
-    ...clearOption,
-    ...selectCategoryOptions(options, category).map((option) => ({
-      id: option.slug,
-      label:
-        option.cost > 0
-          ? `${option.label} (+${CURRENCY} ${option.cost.toFixed(2)})`
-          : option.label,
-      image: designOptionImageSrc(option),
-    })),
-  ]
-  return (
-    <form.Field name={name as never}>
-      {(field: any) => {
-        const stored: string = field.state.value ?? ''
-        const savedOption = options.find(
-          (option) => option.category === category && option.slug === stored,
-        )
-        const known = stored === '' || savedOption != null
-        return (
-          <div className="space-y-1.5">
-            <DesignOptionGrid
-              options={items}
-              value={stored}
-              onChange={field.handleChange}
-              columns={columns}
-            />
-            {!known && (
-              <UnknownDesignValue
-                value={stored}
-                onClear={() => field.handleChange('')}
-              />
-            )}
-            {savedOption && !savedOption.isActive && (
-              <p className="text-xs text-muted-foreground">
-                Saved option {savedOption.label} is retired. Its cost is
-                included.
-              </p>
-            )}
-          </div>
-        )
-      }}
-    </form.Field>
-  )
 }
 
 interface StockLocationOption extends Location {
@@ -159,6 +71,7 @@ interface OrderBlockProps {
   locationLabelForId?: (id: string) => string | null
   onRemove: () => void
   removable: boolean
+  onDuplicate?: () => void
 }
 
 export function OrderBlock({
@@ -171,8 +84,13 @@ export function OrderBlock({
   locationLabelForId,
   onRemove,
   removable,
+  onDuplicate,
 }: OrderBlockProps) {
   const base = `customers[${customerIndex}].orders[${orderIndex}]`
+  const workspace = useInvoiceWorkspace()
+  const [localExpanded, setLocalExpanded] = useState(true)
+  const [showErrors, setShowErrors] = useState(false)
+  const [showNotes, setShowNotes] = useState(false)
   const materialSource = useStore(
     form.store,
     (state) =>
@@ -197,34 +115,6 @@ export function OrderBlock({
   // Shop fabric needs stock at the default location. Customer fabric can use
   // the active production default directly. Never overwrite a chosen location.
   const stockDefault = useApplicableDefaultLocation('stock')
-  React.useEffect(() => {
-    if (!stockDefault || (materialSource === 'shop' && !pickedMaterial)) {
-      return
-    }
-    const stocked =
-      materialSource === 'customer' ||
-      pickedMaterial?.locations.some(
-        (stock) => stock.locationId === stockDefault.id && stock.quantity > 0,
-      )
-    if (
-      stocked &&
-      form.state.values.customers[customerIndex]?.orders[orderIndex]
-        ?.productionLocationId === ''
-    ) {
-      form.setFieldValue(
-        `${base}.productionLocationId` as never,
-        stockDefault.id as never,
-      )
-    }
-  }, [
-    stockDefault,
-    pickedMaterial,
-    form,
-    base,
-    materialSource,
-    customerIndex,
-    orderIndex,
-  ])
   // The whole design catalog, shared across every order block on the form —
   // one cached request for all seven pickers, however many orders there are.
   const {
@@ -256,6 +146,37 @@ export function OrderBlock({
   const pricingMaterial = hasPickedPrices
     ? pickedMaterial
     : (currentMaterial ?? null)
+  const resolvedMaterial = pickedMatches
+    ? pickedMaterial
+    : (currentMaterial ?? null)
+  React.useEffect(() => {
+    if (!stockDefault || (materialSource === 'shop' && !resolvedMaterial)) {
+      return
+    }
+    const stocked =
+      materialSource === 'customer' ||
+      resolvedMaterial?.locations.some(
+        (stock) => stock.locationId === stockDefault.id && stock.quantity > 0,
+      )
+    if (
+      stocked &&
+      form.state.values.customers[customerIndex]?.orders[orderIndex]
+        ?.productionLocationId === ''
+    ) {
+      form.setFieldValue(
+        `${base}.productionLocationId` as never,
+        stockDefault.id as never,
+      )
+    }
+  }, [
+    stockDefault,
+    resolvedMaterial,
+    form,
+    base,
+    materialSource,
+    customerIndex,
+    orderIndex,
+  ])
   const { data: pricingRules } = usePricing()
   const pricing =
     draft &&
@@ -288,385 +209,483 @@ export function OrderBlock({
     }
   }, [form, base, draft, computedPrice])
 
+  const expanded = workspace
+    ? workspace.activeOrderKey === draft?.key
+    : localExpanded
+  const setExpanded = (next: boolean) => {
+    if (workspace)
+      workspace.setActiveOrderKey(next ? (draft?.key ?? null) : null)
+    else setLocalExpanded(next)
+  }
+  const validation = orderDraftSchema.safeParse(draft)
+  const thobe = designOptions.find(
+    (option) =>
+      option.category === 'thob_type' && option.slug === draft?.thobeType,
+  )
+  const fabric =
+    materialSource === 'customer'
+      ? draft?.customerMaterialDescription || 'Customer fabric'
+      : (resolvedMaterial?.name ??
+        (draft?.materialId ? materialLabelForId?.(draft.materialId) : null))
+  const finishEditing = () => {
+    if (!validation.success) {
+      setShowErrors(true)
+      focusInvoiceField(
+        `${base}.${invoiceFieldPath(validation.error.issues[0].path)}`,
+      )
+      return
+    }
+    setShowErrors(false)
+    setExpanded(false)
+  }
+
   return (
-    <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold">Order {orderNumber}</h4>
+    <section
+      className={cn(
+        'overflow-hidden rounded-xl border bg-card transition-colors',
+        expanded ? 'border-primary/50' : 'border-border/60',
+      )}
+      aria-label={`Order ${orderNumber}`}
+    >
+      <div className="flex flex-wrap items-center gap-2 p-4">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 basis-full items-center gap-3 text-start sm:basis-56"
+          onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
+          aria-controls={`${base}.editor`}
+        >
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted font-mono text-xs text-muted-foreground">
+            {String(orderNumber).padStart(2, '0')}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">
+              {thobe?.label ?? `Order ${orderNumber}`}
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">
+              {fabric || 'Choose fabric and production location'}
+              {draft?.materialAmount !== ''
+                ? ` · ${draft?.materialAmount} m`
+                : ''}
+            </span>
+          </span>
+          <span
+            className={cn(
+              'hidden items-center gap-1 rounded-md px-2 py-1 text-xs sm:inline-flex',
+              validation.success
+                ? 'bg-primary/10 text-primary'
+                : 'bg-muted text-muted-foreground',
+            )}
+          >
+            {validation.success && <CheckIcon className="size-3" />}
+            {expanded
+              ? 'Editing'
+              : validation.success
+                ? 'Ready'
+                : 'Needs details'}
+          </span>
+          <span className="shrink-0 text-sm font-semibold tabular-nums">
+            {pricing && computedUrgentCharge !== ''
+              ? `${CURRENCY} ${(pricing.total + computedUrgentCharge).toFixed(2)}`
+              : '—'}
+          </span>
+          <ChevronDownIcon
+            className={cn(
+              'size-4 shrink-0 text-muted-foreground transition-transform',
+              expanded && 'rotate-180',
+            )}
+          />
+        </button>
+        <div className="me-auto shrink-0 sm:me-0">
+          <form.Field name={`${base}.isUrgent` as never}>
+            {(field: any) => (
+              <Field orientation="horizontal">
+                <Switch.Root
+                  id={field.name}
+                  checked={field.state.value}
+                  onCheckedChange={(checked) => {
+                    field.handleChange(checked)
+                    if (form.state.submissionAttempts > 0)
+                      void form.validate('submit')
+                  }}
+                  onBlur={field.handleBlur}
+                  className="inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full bg-input outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring data-checked:bg-primary"
+                >
+                  <Switch.Thumb className="ms-0.5 block size-4 rounded-full bg-background shadow-sm transition-transform data-checked:translate-x-4 rtl:data-checked:-translate-x-4" />
+                </Switch.Root>
+                <FieldLabel htmlFor={field.name}>
+                  Urgent <span className="sr-only">order {orderNumber}</span>
+                </FieldLabel>
+              </Field>
+            )}
+          </form.Field>
+        </div>
+        {onDuplicate && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={`Duplicate order ${orderNumber}`}
+            onClick={onDuplicate}
+          >
+            <CopyIcon className="size-4" />
+          </Button>
+        )}
         {removable && (
-          <Button variant="ghost" size="sm" onClick={onRemove} type="button">
-            <XIcon className="h-3.5 w-3.5" />
-            Remove Order
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onRemove}
+            type="button"
+            aria-label={`Remove order ${orderNumber}`}
+          >
+            <XIcon className="size-4" />
           </Button>
         )}
       </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="space-y-1.5">
-          <Label>Thob Type</Label>
-          <CatalogGrid
-            form={form}
-            name={`${base}.thobeType`}
-            category="thob_type"
-            options={designOptions}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label>Front Pocket</Label>
-          <CatalogGrid
-            form={form}
-            name={`${base}.fPocket`}
-            category="front_pocket"
-            options={designOptions}
-            columns={2}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label>Side Pocket</Label>
-          <CatalogGrid
-            form={form}
-            name={`${base}.sPocket`}
-            category="side_pocket"
-            options={designOptions}
-            columns={2}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label>Collar</Label>
-          <CatalogGrid
-            form={form}
-            name={`${base}.collar`}
-            category="neck"
-            options={designOptions}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label>Sleeve</Label>
-          <CatalogGrid
-            form={form}
-            name={`${base}.sleeve`}
-            category="sleeve"
-            options={designOptions}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label>Patti (Front Strip)</Label>
-          <CatalogGrid
-            form={form}
-            name={`${base}.patti`}
-            category="patti"
-            options={designOptions}
-            columns={2}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label>EMD</Label>
-          <CatalogGrid
-            form={form}
-            name={`${base}.emd`}
-            category="emd"
-            options={designOptions}
-          />
-        </div>
-
-        {designLoading && (
-          <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-3">
-            Loading design options...
-          </p>
-        )}
-
-        <form.Field name={`${base}.moreDetails` as never}>
-          {(field: any) => (
-            <div className="space-y-1.5">
-              <Label htmlFor={field.name}>More Details</Label>
-              <Textarea
-                id={field.name}
-                placeholder="e.g. double stitching on hem, rush order for Eid..."
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-              />
-            </div>
-          )}
-        </form.Field>
-      </div>
-
-      <div className="space-y-3">
-        <Separator />
-        <form.Field name={`${base}.materialSource` as never}>
-          {(field: any) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>Material supplied by</FieldLabel>
-              <SegmentedOptions
-                id={field.name}
-                options={['Shop', 'Customer']}
-                value={field.state.value === 'customer' ? 'Customer' : 'Shop'}
-                onChange={(label) => {
-                  const source = label === 'Customer' ? 'customer' : 'shop'
-                  if (source === field.state.value) return
-                  field.handleChange(source)
-                  form.setFieldValue(`${base}.materialId` as never, '' as never)
-                  form.setFieldValue(
-                    `${base}.customerMaterialDescription` as never,
-                    '' as never,
-                  )
-                  form.setFieldValue(
-                    `${base}.productionLocationId` as never,
-                    '' as never,
-                  )
-                  setPickedMaterial(null)
-                }}
-              />
-            </Field>
-          )}
-        </form.Field>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {materialSource === 'customer' ? (
-            <div className="lg:col-span-2">
-              <TextField
-                form={form}
-                name={`${base}.customerMaterialDescription`}
-                label="Customer fabric description"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Customer-provided material does not use shop stock.
-              </p>
-            </div>
-          ) : (
-            <form.Field name={`${base}.materialId` as never}>
+      <div id={`${base}.editor`} hidden={!expanded}>
+        <div className="space-y-5 border-t border-border/50 p-4">
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold">Fabric &amp; production</h4>
+            <form.Field name={`${base}.materialSource` as never}>
               {(field: any) => (
-                <Field
-                  className="lg:col-span-2"
-                  data-invalid={field.state.meta.errors.length > 0}
-                >
-                  <FieldLabel htmlFor={field.name}>Material</FieldLabel>
-                  <AsyncCombobox<Material>
+                <Field>
+                  <FieldLabel htmlFor={field.name}>
+                    Material supplied by
+                  </FieldLabel>
+                  <SegmentedOptions
                     id={field.name}
-                    endpoint="/materials"
-                    queryKey="invoice-order-material"
-                    searchField={['name', 'sku']}
-                    toOption={(material) => ({
-                      value: material.id,
-                      label: materialOptionLabel(material),
-                    })}
-                    getValueLabel={materialLabelForId}
-                    value={field.state.value || null}
-                    onValueChange={(value) => {
-                      field.handleChange(value ?? '')
-                      // "Made At" only lists this material's stock locations —
-                      // drop a previously chosen one that may not stock it.
+                    options={['Shop', 'Customer']}
+                    value={
+                      field.state.value === 'customer' ? 'Customer' : 'Shop'
+                    }
+                    onChange={(label) => {
+                      const source = label === 'Customer' ? 'customer' : 'shop'
+                      if (source === field.state.value) return
+                      field.handleChange(source)
+                      form.setFieldValue(
+                        `${base}.materialId` as never,
+                        '' as never,
+                      )
+                      form.setFieldValue(
+                        `${base}.customerMaterialDescription` as never,
+                        '' as never,
+                      )
                       form.setFieldValue(
                         `${base}.productionLocationId` as never,
                         '' as never,
                       )
+                      setPickedMaterial(null)
                     }}
-                    onSelectRow={setPickedMaterial}
-                    placeholder="Search material by name or SKU..."
-                    emptyMessage="No materials found."
                   />
-                  <FieldError errors={field.state.meta.errors} />
-                  {pickedMaterial && (
-                    <p className="text-xs text-muted-foreground">
-                      Available: {materialTotalStock(pickedMaterial)}{' '}
-                      {pickedMaterial.unit}
-                      {pickedMaterial.locations.length > 0 &&
-                        ` — ${pickedMaterial.locations
-                          .map(
-                            (stock) => `${stock.location}: ${stock.quantity}`,
-                          )
-                          .join(', ')}`}
-                    </p>
-                  )}
                 </Field>
               )}
             </form.Field>
-          )}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              {materialSource === 'customer' ? (
+                <div className="lg:col-span-2">
+                  <TextField
+                    form={form}
+                    name={`${base}.customerMaterialDescription`}
+                    label="Customer fabric description"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Customer-provided material does not use shop stock.
+                  </p>
+                </div>
+              ) : (
+                <form.Field name={`${base}.materialId` as never}>
+                  {(field: any) => (
+                    <Field
+                      className="lg:col-span-2"
+                      data-invalid={field.state.meta.errors.length > 0}
+                    >
+                      <FieldLabel htmlFor={field.name}>Material</FieldLabel>
+                      <AsyncCombobox<Material>
+                        id={field.name}
+                        endpoint="/materials"
+                        queryKey="invoice-order-material"
+                        searchField={['name', 'sku']}
+                        toOption={(material) => ({
+                          value: material.id,
+                          label: materialOptionLabel(material),
+                        })}
+                        getValueLabel={(id) =>
+                          resolvedMaterial?.id === id
+                            ? materialOptionLabel(resolvedMaterial)
+                            : (materialLabelForId?.(id) ?? null)
+                        }
+                        value={field.state.value || null}
+                        onValueChange={(value) => {
+                          field.handleChange(value ?? '')
+                          // "Made At" only lists this material's stock locations —
+                          // drop a previously chosen one that may not stock it.
+                          form.setFieldValue(
+                            `${base}.productionLocationId` as never,
+                            '' as never,
+                          )
+                        }}
+                        onSelectRow={setPickedMaterial}
+                        placeholder="Search material by name or SKU..."
+                        emptyMessage="No materials found."
+                      />
+                      <FieldError errors={field.state.meta.errors} />
+                      {resolvedMaterial && (
+                        <p className="text-xs text-muted-foreground">
+                          Available: {materialTotalStock(resolvedMaterial)}{' '}
+                          {resolvedMaterial.unit}
+                          {resolvedMaterial.locations.length > 0 &&
+                            ` — ${resolvedMaterial.locations
+                              .map(
+                                (stock) =>
+                                  `${stock.location}: ${stock.quantity}`,
+                              )
+                              .join(', ')}`}
+                        </p>
+                      )}
+                    </Field>
+                  )}
+                </form.Field>
+              )}
 
-          {/* A material can only be made at a location where it is in
+              {/* A material can only be made at a location where it is in
               stock — so this picker lists the selected material's stock
               locations rather than every stock-holding branch. */}
-          <form.Field name={`${base}.productionLocationId` as never}>
-            {(field: any) => {
-              if (materialSource === 'customer') {
-                return (
-                  <Field data-invalid={field.state.meta.errors.length > 0}>
-                    <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
-                    <AsyncCombobox<Location>
-                      id={field.name}
-                      endpoint="/locations"
-                      queryKey="invoice-customer-material-production"
-                      searchField="name"
-                      filters={PRODUCTION_FILTERS}
-                      toOption={(location) => ({
-                        value: location.id,
-                        label: location.name,
-                      })}
-                      getValueLabel={(id) =>
-                        locationLabelForId?.(id) ??
-                        (id === stockDefault?.id ? stockDefault.name : null)
-                      }
-                      value={field.state.value || null}
-                      onValueChange={(value) => field.handleChange(value ?? '')}
-                      placeholder="Search production location..."
-                      emptyMessage="No active production locations found."
-                    />
-                    <FieldError errors={field.state.meta.errors} />
-                  </Field>
-                )
-              }
-              const stockOptions: StockLocationOption[] =
-                pickedMaterial?.locations
-                  .filter((stock) => stock.quantity > 0)
-                  .map((stock) => ({
-                    id: stock.locationId,
-                    name: stock.location,
-                    receivesOrders: false,
-                    holdsStock: true,
-                    isActive: true,
-                    quantity: stock.quantity,
-                    unit: pickedMaterial.unit,
-                  })) ?? []
-              const selected = stockOptions.find(
-                (location) => location.id === field.state.value,
-              )
-              return (
-                <Field data-invalid={field.state.meta.errors.length > 0}>
-                  <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
-                  <Combobox
-                    items={stockOptions}
-                    itemToStringLabel={stockOptionLabel}
-                    isItemEqualToValue={(a: Location, b: Location) =>
-                      a.id === b.id
-                    }
-                    value={selected ?? null}
-                    onValueChange={(location: Location | null) => {
-                      field.handleChange(location?.id ?? '')
-                    }}
-                  >
-                    <ComboboxInput
-                      id={field.name}
-                      placeholder="Search location..."
-                      className="w-full"
-                      showClear
-                    />
-                    <ComboboxContent>
-                      <ComboboxEmpty>
-                        {pickedMaterial
-                          ? 'This material has no stock available.'
-                          : 'Pick a material first.'}
-                      </ComboboxEmpty>
-                      <ComboboxList>
-                        {(location: StockLocationOption) => (
-                          <ComboboxItem key={location.id} value={location}>
-                            {stockOptionLabel(location)}
-                          </ComboboxItem>
-                        )}
-                      </ComboboxList>
-                    </ComboboxContent>
-                  </Combobox>
-                  <FieldError errors={field.state.meta.errors} />
-                </Field>
-              )
-            }}
-          </form.Field>
+              <form.Field name={`${base}.productionLocationId` as never}>
+                {(field: any) => {
+                  if (materialSource === 'customer') {
+                    return (
+                      <Field data-invalid={field.state.meta.errors.length > 0}>
+                        <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
+                        <AsyncCombobox<Location>
+                          id={field.name}
+                          endpoint="/locations"
+                          queryKey="invoice-customer-material-production"
+                          searchField="name"
+                          filters={PRODUCTION_FILTERS}
+                          toOption={(location) => ({
+                            value: location.id,
+                            label: location.name,
+                          })}
+                          getValueLabel={(id) =>
+                            locationLabelForId?.(id) ??
+                            (id === stockDefault?.id ? stockDefault.name : null)
+                          }
+                          value={field.state.value || null}
+                          onValueChange={(value) =>
+                            field.handleChange(value ?? '')
+                          }
+                          placeholder="Search production location..."
+                          emptyMessage="No active production locations found."
+                        />
+                        <FieldError errors={field.state.meta.errors} />
+                      </Field>
+                    )
+                  }
+                  const stockOptions: StockLocationOption[] =
+                    resolvedMaterial?.locations
+                      .filter((stock) => stock.quantity > 0)
+                      .map((stock) => ({
+                        id: stock.locationId,
+                        name: stock.location,
+                        receivesOrders: false,
+                        holdsStock: true,
+                        isActive: true,
+                        quantity: stock.quantity,
+                        unit: resolvedMaterial.unit,
+                      })) ?? []
+                  const selected = stockOptions.find(
+                    (location) => location.id === field.state.value,
+                  )
+                  return (
+                    <Field data-invalid={field.state.meta.errors.length > 0}>
+                      <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
+                      <Combobox
+                        items={stockOptions}
+                        itemToStringLabel={stockOptionLabel}
+                        isItemEqualToValue={(a: Location, b: Location) =>
+                          a.id === b.id
+                        }
+                        value={selected ?? null}
+                        onValueChange={(location: Location | null) => {
+                          field.handleChange(location?.id ?? '')
+                        }}
+                      >
+                        <ComboboxInput
+                          id={field.name}
+                          placeholder="Search location..."
+                          className="w-full"
+                          showClear
+                        />
+                        <ComboboxContent>
+                          <ComboboxEmpty>
+                            {resolvedMaterial
+                              ? 'This material has no stock available.'
+                              : 'Pick a material first.'}
+                          </ComboboxEmpty>
+                          <ComboboxList>
+                            {(location: StockLocationOption) => (
+                              <ComboboxItem key={location.id} value={location}>
+                                {stockOptionLabel(location)}
+                              </ComboboxItem>
+                            )}
+                          </ComboboxList>
+                        </ComboboxContent>
+                      </Combobox>
+                      <FieldError errors={field.state.meta.errors} />
+                    </Field>
+                  )
+                }}
+              </form.Field>
 
-          <NumberField
-            form={form}
-            name={`${base}.materialAmount`}
-            label="Quantity (m)"
-          />
+              <NumberField
+                form={form}
+                name={`${base}.materialAmount`}
+                label="Quantity (m)"
+              />
 
-          <div className="space-y-2">
-            <form.Field name={`${base}.price` as never}>
-              {(field: any) => (
-                <Field data-invalid={field.state.meta.errors.length > 0}>
-                  <FieldLabel>Price incl. VAT ({CURRENCY})</FieldLabel>
-                  <output
-                    aria-label={`Price incl. VAT (${CURRENCY})`}
-                    className="text-sm font-semibold"
-                  >
-                    {pricing ? `${CURRENCY} ${pricing.total.toFixed(2)}` : '—'}
-                  </output>
-                  {pricing ? (
-                    <p className="text-xs text-muted-foreground">
-                      {pricing.tier
-                        ? `${pricing.tier[0].toUpperCase()}${pricing.tier.slice(1)}`
-                        : 'Fixed tailoring base'}
-                      : {pricing.base.toFixed(2)} + designs:{' '}
-                      {pricing.designCost.toFixed(2)}
-                    </p>
-                  ) : (
-                    <p
-                      role={designError || materialError ? 'alert' : undefined}
-                      className="text-xs text-muted-foreground"
-                    >
-                      {designError || materialError
-                        ? 'Could not load pricing. Reload to try again.'
-                        : materialSource === 'customer' &&
-                            pricingRules?.customerMaterialBasePrice == null
-                          ? 'Customer-material pricing is unavailable. Contact an administrator.'
-                          : 'Choose a priced material, quantity and valid designs.'}
-                    </p>
+              <div className="space-y-2">
+                <form.Field name={`${base}.price` as never}>
+                  {(field: any) => (
+                    <Field data-invalid={field.state.meta.errors.length > 0}>
+                      <FieldLabel>Price incl. VAT ({CURRENCY})</FieldLabel>
+                      <output
+                        id={field.name}
+                        tabIndex={-1}
+                        aria-label={`Price incl. VAT (${CURRENCY})`}
+                        className="text-sm font-semibold"
+                      >
+                        {pricing
+                          ? `${CURRENCY} ${pricing.total.toFixed(2)}`
+                          : '—'}
+                      </output>
+                      {pricing ? (
+                        <p className="text-xs text-muted-foreground">
+                          {pricing.tier
+                            ? `${pricing.tier[0].toUpperCase()}${pricing.tier.slice(1)}`
+                            : 'Fixed tailoring base'}
+                          : {pricing.base.toFixed(2)} + designs:{' '}
+                          {pricing.designCost.toFixed(2)}
+                        </p>
+                      ) : (
+                        <p
+                          role={
+                            designError || materialError ? 'alert' : undefined
+                          }
+                          className="text-xs text-muted-foreground"
+                        >
+                          {designError || materialError
+                            ? 'Could not load pricing. Reload to try again.'
+                            : materialSource === 'customer' &&
+                                pricingRules?.customerMaterialBasePrice == null
+                              ? 'Customer-material pricing is unavailable. Contact an administrator.'
+                              : 'Choose a priced material, quantity and valid designs.'}
+                        </p>
+                      )}
+                      <FieldError errors={field.state.meta.errors} />
+                    </Field>
                   )}
-                  <FieldError errors={field.state.meta.errors} />
-                </Field>
+                </form.Field>
+                <GrossVatHint gross={computedPrice} />
+              </div>
+              {draft?.isUrgent && (
+                <div className="space-y-1.5">
+                  <Label>Urgent charge incl. VAT ({CURRENCY})</Label>
+                  <output
+                    id={`${base}.urgentCharge`}
+                    tabIndex={-1}
+                    aria-label={`Urgent charge incl. VAT (${CURRENCY})`}
+                    className="block text-sm font-semibold"
+                  >
+                    {draft.urgentCharge === ''
+                      ? '—'
+                      : `${CURRENCY} ${draft.urgentCharge.toFixed(2)}`}
+                  </output>
+                  <p className="text-xs text-muted-foreground">
+                    {computedUrgentCharge === ''
+                      ? 'Urgent pricing is unavailable. Contact an administrator.'
+                      : 'Applied automatically for this order.'}
+                  </p>
+                  <form.Field name={`${base}.urgentCharge` as never}>
+                    {(field: any) => (
+                      <FieldError errors={field.state.meta.errors} />
+                    )}
+                  </form.Field>
+                </div>
               )}
-            </form.Field>
-            <GrossVatHint gross={computedPrice} />
+            </div>
           </div>
-          {draft?.isUrgent && (
-            <div className="space-y-1.5">
-              <Label>Urgent charge incl. VAT ({CURRENCY})</Label>
-              <output
-                aria-label={`Urgent charge incl. VAT (${CURRENCY})`}
-                className="block text-sm font-semibold"
-              >
-                {draft.urgentCharge === ''
-                  ? '—'
-                  : `${CURRENCY} ${draft.urgentCharge.toFixed(2)}`}
-              </output>
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold">Design details</h4>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {[
+                ['thobeType', 'thob_type', 'Thob Type'],
+                ['collar', 'neck', 'Collar'],
+                ['sleeve', 'sleeve', 'Sleeve'],
+                ['fPocket', 'front_pocket', 'Front Pocket'],
+                ['sPocket', 'side_pocket', 'Side Pocket'],
+                ['patti', 'patti', 'Patti (Front Strip)'],
+                ['emd', 'emd', 'EMD'],
+              ].map(([field, category, label]) => (
+                <DesignPicker
+                  key={field}
+                  form={form}
+                  name={`${base}.${field}`}
+                  category={category}
+                  label={label}
+                  options={designOptions}
+                />
+              ))}
+            </div>
+            {designLoading && (
               <p className="text-xs text-muted-foreground">
-                {computedUrgentCharge === ''
-                  ? 'Urgent pricing is unavailable. Contact an administrator.'
-                  : 'Applied automatically for this order.'}
+                Loading design options...
               </p>
-              <form.Field name={`${base}.urgentCharge` as never}>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-expanded={showNotes || !!draft?.moreDetails}
+              onClick={() => setShowNotes(!showNotes)}
+            >
+              Add a note
+            </Button>
+            <div hidden={!showNotes && !draft?.moreDetails}>
+              <form.Field name={`${base}.moreDetails` as never}>
                 {(field: any) => (
-                  <FieldError errors={field.state.meta.errors} />
+                  <div className="space-y-1.5">
+                    <Label htmlFor={field.name}>More Details</Label>
+                    <Textarea
+                      id={field.name}
+                      placeholder="e.g. double stitching on hem, rush order for Eid..."
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(event) =>
+                        field.handleChange(event.target.value)
+                      }
+                    />
+                  </div>
                 )}
               </form.Field>
             </div>
+          </div>
+          {showErrors && !validation.success && (
+            <div role="alert" className="space-y-1 text-sm text-destructive">
+              {validation.error.issues.map((issue, index) => (
+                <p key={index}>{issue.message}</p>
+              ))}
+            </div>
           )}
+          <div className="flex justify-end border-t pt-4">
+            <Button type="button" onClick={finishEditing}>
+              Done editing
+            </Button>
+          </div>
         </div>
       </div>
-
-      <form.Field name={`${base}.isUrgent` as never}>
-        {(field: any) => (
-          <Field orientation="horizontal">
-            <Switch.Root
-              id={field.name}
-              checked={field.state.value}
-              onCheckedChange={(checked) => {
-                field.handleChange(checked)
-                if (form.state.submissionAttempts > 0)
-                  void form.validate('submit')
-              }}
-              onBlur={field.handleBlur}
-              className="inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full bg-input outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring data-checked:bg-primary"
-            >
-              <Switch.Thumb className="ms-0.5 block size-4 rounded-full bg-background shadow-sm transition-transform data-checked:translate-x-4 rtl:data-checked:-translate-x-4" />
-            </Switch.Root>
-            <FieldLabel htmlFor={field.name}>
-              Urgent <span className="sr-only">order {orderNumber}</span>
-            </FieldLabel>
-          </Field>
-        )}
-      </form.Field>
-    </div>
+    </section>
   )
 }
