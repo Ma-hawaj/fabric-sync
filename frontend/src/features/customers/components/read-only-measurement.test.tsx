@@ -12,6 +12,18 @@ function blankMeasurement(): Measurement {
 }
 
 describe('ReadOnlyMeasurement', () => {
+  it('uses fraction symbols in both the diagram and recorded values', () => {
+    render(
+      <ReadOnlyMeasurement
+        measurement={{ ...blankMeasurement(), chest: 42.5, waist: 30.125 }}
+      />,
+    )
+
+    // Each value appears twice in the SVG (outline and ink) and once in the grid.
+    expect(screen.getAllByText('42 ½')).toHaveLength(3)
+    expect(screen.getAllByText('30 ⅛')).toHaveLength(3)
+  })
+
   it('shows the no-measurements state when every field is blank', () => {
     render(<ReadOnlyMeasurement measurement={blankMeasurement()} />)
 

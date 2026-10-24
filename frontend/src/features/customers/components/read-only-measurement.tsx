@@ -1,6 +1,7 @@
 import { ShieldAlert } from 'lucide-react'
 import { MEASUREMENT_GROUPS, fieldsInGroup } from '../data/measurement-fields'
 import type { Measurement } from '../types/customers'
+import { formatMeasurement } from '../lib/format-measurement'
 import { ThobDiagram } from './thob-diagram'
 import type { MeasurementValues } from './thob-diagram'
 
@@ -85,8 +86,11 @@ export function ReadOnlyMeasurement({
                 <span className="text-xs text-muted-foreground font-medium">
                   {field.label}
                 </span>
-                <span className="text-sm font-semibold text-foreground mt-0.5">
-                  {value}
+                <span
+                  className="text-sm font-semibold text-foreground mt-0.5"
+                  dir="ltr"
+                >
+                  {formatMeasurement(value)}
                 </span>
               </div>
             ))}

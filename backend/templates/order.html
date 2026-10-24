@@ -721,7 +721,7 @@
               <path class="thob-arrow" d="{{ d }}" />
             {%- endfor %}
           </g>
-          <g font-family="Arial, sans-serif">
+          <g font-family="Arial, sans-serif" direction="ltr">
             {%- for slot in thob_slots %}
               {% set value = thob_values[slot.key] %}
               {% if value is defined and value is not none and value != '' %}

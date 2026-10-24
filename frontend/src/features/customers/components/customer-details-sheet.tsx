@@ -22,6 +22,7 @@ import { CURRENCY } from '@/lib/currency'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { printMeasurements } from '../lib/print-measurements'
+import { formatMeasurement } from '../lib/format-measurement'
 import {
   Ruler,
   ShieldAlert,
@@ -335,10 +336,11 @@ function MetricItem({
       <span
         className="text-sm font-semibold text-foreground mt-0.5"
         data-empty={empty ? '' : undefined}
+        dir="ltr"
       >
         {/* Non-breaking space: holds the value line's height so an empty
             slot occupies exactly the same box as a recorded one. */}
-        {empty ? '\u00A0' : value}
+        {empty ? '\u00A0' : formatMeasurement(value)}
       </span>
     </div>
   )

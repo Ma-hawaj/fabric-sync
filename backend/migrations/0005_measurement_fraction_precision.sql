@@ -1,0 +1,27 @@
+-- Eighth-inch measurements need three decimal places: ⅛ = 0.125.
+-- Keep the existing four integer digits while preserving these fractions.
+ALTER TABLE measurements
+    ALTER COLUMN front_height TYPE NUMERIC(7, 3),
+    ALTER COLUMN back_height TYPE NUMERIC(7, 3),
+    ALTER COLUMN chest TYPE NUMERIC(7, 3),
+    ALTER COLUMN waist TYPE NUMERIC(7, 3),
+    ALTER COLUMN hip TYPE NUMERIC(7, 3),
+    ALTER COLUMN shoulder TYPE NUMERIC(7, 3),
+    ALTER COLUMN shoulder_down TYPE NUMERIC(7, 3),
+    ALTER COLUMN sleeve_length TYPE NUMERIC(7, 3),
+    ALTER COLUMN neck_size TYPE NUMERIC(7, 3),
+    ALTER COLUMN open_hand TYPE NUMERIC(7, 3),
+    ALTER COLUMN chest_up TYPE NUMERIC(7, 3),
+    ALTER COLUMN cuff_width TYPE NUMERIC(7, 3),
+    ALTER COLUMN cuff_size TYPE NUMERIC(7, 3),
+    ALTER COLUMN neck_width TYPE NUMERIC(7, 3),
+    ALTER COLUMN armhole TYPE NUMERIC(7, 3),
+    ALTER COLUMN fo_width TYPE NUMERIC(7, 3),
+    ALTER COLUMN fo TYPE NUMERIC(7, 3),
+    ALTER COLUMN bottom TYPE NUMERIC(7, 3),
+    ALTER COLUMN bottom_fold TYPE NUMERIC(7, 3),
+    ALTER COLUMN full_body TYPE NUMERIC(7, 3),
+    ALTER COLUMN sleeve_half TYPE NUMERIC(7, 3),
+    ALTER COLUMN open_fold TYPE NUMERIC(7, 3),
+    ALTER COLUMN front_pocket_length TYPE NUMERIC(7, 3),
+    ALTER COLUMN side_pocket TYPE NUMERIC(7, 3);

@@ -15,6 +15,8 @@ SQLx applies the files in version order:
 3. `0003_readiness_and_revisions.sql` creates the invoice-readiness view and the
    triggers that serialize related writes and invalidate outdated previews.
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins.
+5. `0005_measurement_fraction_precision.sql` preserves eighth-inch measurements
+   with three decimal places, keeping the existing range of whole numbers.
 
 Reference data, the design catalog, and optional demo data live in `backend/seeds/`
 and are loaded separately. Future deployed schema changes should be added as new
