@@ -546,6 +546,7 @@ pub async fn collect_order(
     order_id: Uuid,
     amount: f64,
     payment_type: Option<PaymentType>,
+    actor: &str,
 ) -> Result<OrderListItem, AppError> {
     if amount < 0.0 {
         return Err(AppError::BadRequest(
@@ -598,6 +599,7 @@ pub async fn collect_order(
             Some(order_id),
             amount,
             Some(payment_type.as_str()),
+            actor,
         )
         .await?;
     }
@@ -1664,6 +1666,54 @@ mod tests {
 mod repair_collection_tests {
     use super::*;
     use crate::test_support;
+
+    #[sqlx::test]
+    async fn order_and_invoice_collection_payments_record_the_staff_taking_payment(pool: PgPool) {
+        let (invoice, garment_ids, _, _) = test_support::invoice(&pool, 2, false).await;
+        sqlx::query(
+            "INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,10,'cash')",
+        )
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let state = test_support::state(pool.clone(), None, None).await;
+        collect_order(
+            &state,
+            garment_ids[0],
+            40.0,
+            Some(PaymentType::Cash),
+            "pickup-cashier",
+        )
+        .await
+        .unwrap();
+        crate::features::invoices::service::collect_invoice(
+            &state,
+            invoice,
+            Some(PaymentType::Card),
+            "invoice-cashier",
+        )
+        .await
+        .unwrap();
+        let detail = crate::features::invoices::service::get_invoice(&state, invoice)
+            .await
+            .unwrap();
+        assert_eq!(detail.payments.len(), 3);
+        assert!(detail.payments[0].recorded_by.is_none());
+        assert_eq!(
+            detail.payments[1].recorded_by.as_deref(),
+            Some("pickup-cashier")
+        );
+        assert_eq!(detail.payments[1].order_id, Some(garment_ids[0]));
+        assert_eq!(
+            detail.payments[2].recorded_by.as_deref(),
+            Some("invoice-cashier")
+        );
+        assert_eq!(detail.payments[2].amount, 150.0);
+        assert_eq!(detail.totals.total, 200.0);
+        assert_eq!(detail.totals.balance_due, 0.0);
+    }
+
     use sqlx::PgPool;
 
     #[sqlx::test]
@@ -1727,10 +1777,22 @@ mod repair_collection_tests {
             .await
             .unwrap();
 
-        invoices::service::record_payment(&state, invoice_id, 20.0, PaymentType::Cash, None)
+        invoices::service::record_payment(
+            &state,
+            invoice_id,
+            invoices::types::RecordPaymentInput {
+                request_id: Uuid::new_v4(),
+                amount: 20.0,
+                payment_type: PaymentType::Cash,
+                order_id: None,
+            },
+            "staff",
+        )
+        .await
+        .unwrap();
+        collect_order(&state, order_id, 0.0, None, "staff")
             .await
             .unwrap();
-        collect_order(&state, order_id, 0.0, None).await.unwrap();
         returns::service::create_return(
             &state,
             invoice_id,

@@ -26,7 +26,7 @@ use super::{
         CollectedInvoice, CreateGiftCardLineInput, CreateInvoiceInput, CreateOrderInput,
         CreateProductLineInput, CreatedInvoice, DiscountUnit, GiftCardRedemptionInput,
         InvoiceCustomerInput, InvoiceDetail, InvoiceEdit, InvoiceListItem, InvoiceTotalsBreakdown,
-        MaterialSource, PaymentSummary, PaymentType, RecordedPayment,
+        MaterialSource, PaymentSummary, PaymentType, RecordPaymentInput, RecordedPayment,
     },
 };
 use crate::features::customers::types::{normalize_customer_identity, CreateMeasurementInput};
@@ -85,6 +85,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         date: invoice.date,
         target_date: invoice.target_date,
         created_at: invoice.created_at,
+        created_by: invoice.created_by,
         branch_name: invoice.branch_name,
         buyer: invoice.buyer,
         payment_status: invoice.payment_status,
@@ -201,61 +202,61 @@ fn validate_kept_payments(paid: f64, total: f64, redeemed: f64) -> Result<(), Ap
 pub async fn record_payment(
     state: &AppState,
     invoice_id: Uuid,
-    amount: f64,
-    payment_type: PaymentType,
-    order_id: Option<Uuid>,
+    input: RecordPaymentInput,
+    actor: &str,
 ) -> Result<RecordedPayment, AppError> {
-    let mut tx = state.db().begin().await?;
+    use crate::idempotency::{request_hash, verify_request_hash};
 
+    let hash = request_hash("invoice.payment.v1", invoice_id, &input);
+    let mut tx = state.db().begin().await?;
     repository::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
 
-    if let Some(order_id) = order_id {
-        if !repository::order_belongs_to_invoice(&mut tx, order_id, invoice_id).await? {
-            return Err(AppError::NotFound(format!(
-                "order {order_id} not found on invoice {invoice_id}"
-            )));
+    // Replay before checking today's balance or order eligibility: the first
+    // attempt may have settled the invoice, or the order may now be closed.
+    let previous =
+        repository::previous_payment_request(&mut tx, invoice_id, input.request_id).await?;
+    let is_replay = previous.is_some();
+    let payment = if let Some((payment, stored)) = previous {
+        verify_request_hash(&stored, &hash)?;
+        payment
+    } else {
+        if let Some(order_id) = input.order_id {
+            if !repository::order_belongs_to_invoice(&mut tx, order_id, invoice_id).await? {
+                return Err(AppError::NotFound(format!(
+                    "order {order_id} not found on invoice {invoice_id}"
+                )));
+            }
+            crate::features::returns::service::ensure_order_active(&mut tx, order_id).await?;
         }
-        crate::features::returns::service::ensure_order_active(&mut tx, order_id).await?;
-    }
-
-    let balance = returns_repository::settlement(&mut tx, invoice_id).await?;
-    validate_payment_amount(
-        amount,
-        balance.net_total,
-        balance.net_gift_card_redeemed,
-        balance.net_amount_paid,
-    )?;
-
-    let payment = repository::insert_payment(
-        &mut tx,
-        invoice_id,
-        order_id,
-        amount,
-        Some(payment_type.as_str()),
-    )
-    .await?;
-
-    tx.commit().await?;
-
-    tracing::info!(
-        invoice_id = %invoice_id,
-        amount,
-        payment_type = payment_type.as_str(),
-        "payment recorded"
-    );
-
-    let summary = PaymentSummary {
-        payment_status: payment_summary(
+        let balance = returns_repository::settlement(&mut tx, invoice_id).await?;
+        validate_payment_amount(
+            input.amount,
             balance.net_total,
             balance.net_gift_card_redeemed,
-            balance.net_amount_paid + payment.amount,
-        )
-        .payment_status,
-        amount_paid: round2(balance.amount_paid + payment.amount),
-        balance_due: round2((balance.balance_due - payment.amount).max(0.0)),
+            balance.net_amount_paid,
+        )?;
+        repository::insert_requested_payment(&mut tx, invoice_id, &input, &hash, actor).await?
     };
+
+    // Use persisted cents for both first writes and replays. The original
+    // payment is returned alongside the current, transaction-consistent balance.
+    let balance = returns_repository::settlement(&mut tx, invoice_id).await?;
+    let summary = PaymentSummary {
+        payment_status: balance.payment_status,
+        amount_paid: balance.amount_paid,
+        balance_due: balance.balance_due,
+    };
+    tx.commit().await?;
+    if !is_replay {
+        tracing::info!(
+            invoice_id = %invoice_id,
+            amount = payment.amount,
+            payment_type = input.payment_type.as_str(),
+            "payment recorded"
+        );
+    }
     Ok(RecordedPayment { payment, summary })
 }
 
@@ -267,6 +268,7 @@ pub async fn collect_invoice(
     state: &AppState,
     invoice_id: Uuid,
     payment_type: Option<PaymentType>,
+    actor: &str,
 ) -> Result<CollectedInvoice, AppError> {
     let mut tx = state.db().begin().await?;
 
@@ -293,6 +295,7 @@ pub async fn collect_invoice(
             None,
             summary.balance_due,
             Some(payment_type.as_str()),
+            actor,
         )
         .await?;
         Some(payment_type.as_str().to_string())
@@ -1158,13 +1161,15 @@ mod tests {
         }))
         .unwrap()];
         assert!(matches!(
-            create_invoice(&state, overpaid).await,
+            create_invoice(&state, overpaid, "staff").await,
             Err(AppError::BadRequest(_))
         ));
 
         // Only the first order is urgent. Client-submitted charges are ignored.
         // (10 + 2.5 + 15 + 3.5) * 90% + 5 = 32.90.
-        let created = create_invoice(&state, input.clone()).await.unwrap();
+        let created = create_invoice(&state, input.clone(), "staff")
+            .await
+            .unwrap();
         assert_eq!(created.total_price, 32.9);
         let editing = get_invoice_for_edit(&state, created.id).await.unwrap();
         let customer = &editing.customers[0];
@@ -1919,6 +1924,7 @@ async fn write_redemptions(
 pub async fn create_invoice(
     state: &AppState,
     mut input: CreateInvoiceInput,
+    actor: &str,
 ) -> Result<CreatedInvoice, AppError> {
     let mut tx = state.db().begin().await?;
     resolve_order_prices(
@@ -1941,6 +1947,7 @@ pub async fn create_invoice(
         totals.total,
         totals.redeemed,
         totals.urgent_charge,
+        actor,
     )
     .await?;
 
@@ -1951,6 +1958,7 @@ pub async fn create_invoice(
             None,
             payment.amount,
             Some(payment.payment_type.as_str()),
+            actor,
         )
         .await?;
     }

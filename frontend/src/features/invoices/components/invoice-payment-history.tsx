@@ -33,7 +33,7 @@ export function InvoicePaymentHistory({
       amount: payment.amount,
       orderId: payment.orderId,
       description: 'Invoice payment',
-      recordedBy: null,
+      recordedBy: payment.recordedBy,
     })),
     ...refunds.map((refund) => ({
       id: refund.id,
@@ -101,11 +101,7 @@ export function InvoicePaymentHistory({
               )}
             </TableCell>
             <TableCell>
-              {transaction.recordedBy ? (
-                <StaffName userId={transaction.recordedBy} />
-              ) : (
-                '—'
-              )}
+              <StaffName userId={transaction.recordedBy} />
             </TableCell>
             <TableCell className="text-end font-medium tabular-nums">
               {currencyFormatter.format(transaction.amount)}

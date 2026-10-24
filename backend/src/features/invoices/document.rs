@@ -826,6 +826,7 @@ mod tests_support {
 
     pub fn detail() -> InvoiceDetail {
         InvoiceDetail {
+            created_by: None,
             readiness: Default::default(),
             id: uuid::Uuid::nil(),
             invoice_number: 1,

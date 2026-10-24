@@ -18,6 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { CURRENCY } from '@/lib/currency'
+import { StaffName } from '@/features/users/components/staff-name'
 import { OrderPriorityIndicator } from '@/features/orders/components/order-priority-indicator'
 import {
   ArrowLeftIcon,
@@ -110,6 +111,9 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                 ? ` · Target ${new Date(invoice.targetDate).toLocaleDateString()}`
                 : ''}
               {detail.branchName ? ` · ${detail.branchName}` : ''}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Created by: <StaffName userId={detail.createdBy} />
             </p>
           </div>
         </div>
@@ -487,6 +491,7 @@ function toInvoice(detail: InvoiceDetail): Invoice {
 
   return {
     id: detail.id,
+    createdBy: detail.createdBy,
     invoiceNumber: detail.invoiceNumber,
     date: detail.date,
     targetDate: detail.targetDate,
