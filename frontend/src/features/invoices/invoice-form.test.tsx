@@ -95,3 +95,28 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
     ).toBeTruthy()
   })
 })
+
+it('adds direct material lines after removing the tailoring customer block', async () => {
+  renderPage()
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Customer' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Add Material' }))
+  expect(screen.getByLabelText('Material')).toBeTruthy()
+  expect(screen.getByLabelText('Sold From')).toBeTruthy()
+  expect(screen.queryByText('Pick where this order is made.')).toBeNull()
+  fireEvent.change(screen.getByLabelText('Quantity'), {
+    target: { value: '2.5' },
+  })
+  fireEvent.change(screen.getByLabelText(/Price per unit/), {
+    target: { value: '11' },
+  })
+  expect(await screen.findByText(/Line total:.*27\.50/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  expect(await screen.findByText('Pick a material.')).toBeTruthy()
+  expect(
+    screen.queryByText(
+      'Pick an existing customer or switch to "+ New Customer".',
+    ),
+  ).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Remove material' }))
+  expect(screen.queryByLabelText('Material')).toBeNull()
+})

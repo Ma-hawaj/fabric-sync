@@ -4,6 +4,7 @@ import {
   createReturnForm,
   eligibleLines,
   previewCredit,
+  remainingQuantity,
   refundLimit,
   refundSchema,
   returnSchema,
@@ -146,4 +147,23 @@ describe('refund rules', () => {
     values.amount = 0.001
     expect(refundSchema(CONTEXT).safeParse(values).success).toBe(false)
   })
+})
+
+it('previews cumulative fractional material credits without losing a cent', () => {
+  const material = {
+    ...PRODUCT,
+    kind: 'material' as const,
+    unit: 'meters',
+    quantity: 2.5,
+    lineTotal: 27.5,
+    creditLimit: 24.75,
+  }
+  expect(previewCredit(material, 1.25)).toBe(12.38)
+  expect(
+    previewCredit(
+      { ...material, returnedQuantity: 1.25, creditedAmount: 12.38 },
+      1.25,
+    ),
+  ).toBe(12.37)
+  expect(remainingQuantity(material)).toBe(2.5)
 })

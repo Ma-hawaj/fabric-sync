@@ -13,8 +13,9 @@ export interface Settlement {
 
 export interface ReturnableLine {
   lineId: string
-  kind: 'order' | 'product'
+  kind: 'order' | 'product' | 'material'
   description: string
+  unit?: string | null
   quantity: number
   returnedQuantity: number
   creditedAmount: number

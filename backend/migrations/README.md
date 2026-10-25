@@ -11,7 +11,9 @@ SQLx applies the files in version order:
    and automatic charges. The invoice charge column stores the computed sum of its
    order charges. Numeric measurements use three decimal places to preserve
    eighth-inch fractions. Gift card recipient names and phone numbers are
-   declared here.
+   declared here. Direct material sales are invoice items with a material reference,
+   the stock location, and a description/unit snapshot; they share the existing
+   return-credit and refund tables.
 2. `0002_notification_schema.sql` creates immutable PDF artifacts, notification
    previews and approvals, recipients, delivery attempts, webhook storage, and
    the staff-approved gift card delivery queue with its immutable PNG attachments.

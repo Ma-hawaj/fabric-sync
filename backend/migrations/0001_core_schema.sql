@@ -354,22 +354,27 @@ CREATE TABLE gift_card_redemptions (
 
 -- Invoice lines that are not tailoring orders. These cannot live in `orders`,
 -- whose measurement_id and material_id are NOT NULL and meaningless for a
--- retail sale. branch_id records where a product line's stock came off, and is
--- NULL for a gift card, which has no stock.
+-- retail sale. branch_id records where product or material stock came off;
+-- material descriptions and units are snapshots of the sale. Gift cards have no stock.
 CREATE TABLE invoice_items (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     invoice_id UUID NOT NULL REFERENCES invoices(id),
-    kind TEXT NOT NULL CHECK (kind IN ('product', 'gift_card')),
+    kind TEXT NOT NULL CHECK (kind IN ('product', 'gift_card', 'material')),
     product_id UUID REFERENCES products(id),
     gift_card_id UUID REFERENCES gift_cards(id),
+    material_id UUID REFERENCES materials(id),
+    unit TEXT,
     branch_id UUID REFERENCES branch(id),
     description TEXT NOT NULL,
     quantity NUMERIC(10, 2) NOT NULL DEFAULT 1,
     unit_price NUMERIC(10, 2) NOT NULL,
     line_total NUMERIC(10, 2) NOT NULL,
     CHECK (
-        (kind = 'product' AND product_id IS NOT NULL AND gift_card_id IS NULL)
-        OR (kind = 'gift_card' AND gift_card_id IS NOT NULL AND product_id IS NULL)
+        (kind = 'product' AND product_id IS NOT NULL AND gift_card_id IS NULL AND material_id IS NULL)
+        OR (kind = 'gift_card' AND gift_card_id IS NOT NULL AND product_id IS NULL AND material_id IS NULL)
+        OR (kind = 'material' AND material_id IS NOT NULL AND product_id IS NULL
+            AND gift_card_id IS NULL AND branch_id IS NOT NULL AND unit IS NOT NULL
+            AND quantity > 0 AND unit_price >= 0)
     )
 );
 

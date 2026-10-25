@@ -90,11 +90,13 @@ fn line_credit(line: &ReturnableLine, input: &ReturnLineInput) -> Result<f64, Ap
         return Err(bad_request("return a tailoring garment as one whole item"));
     }
     if input.restock && !line.can_restock {
-        return Err(bad_request("only retail products can be restocked"));
+        return Err(bad_request(
+            "only retail products and materials can be restocked",
+        ));
     }
     if input.restock != input.restock_location_id.is_some() {
         return Err(bad_request(
-            "select a restock location only when restocking the returned product",
+            "select a restock location only when restocking the returned item",
         ));
     }
     let target = (i128::from(cents(line.credit_limit)) * i128::from(returned)
@@ -241,17 +243,30 @@ pub async fn create_return(
         repository::insert_line(&mut tx, id, line, item, amount).await?;
         if item.restock {
             // Only the selected receiving location gains returned retail stock.
-            products::upsert_stock(
-                &mut tx,
-                line.product_id.expect("retail product"),
-                &[StockEntryInput {
-                    location_id: item
-                        .restock_location_id
-                        .expect("validated restock location"),
-                    quantity: item.quantity,
-                }],
-            )
-            .await?;
+            let location_id = item
+                .restock_location_id
+                .expect("validated restock location");
+            if line.kind == "material" {
+                materials::upsert_stock(
+                    &mut tx,
+                    line.material_id.expect("retail material"),
+                    &[MaterialStockInput {
+                        location_id,
+                        quantity: item.quantity,
+                    }],
+                )
+                .await?;
+            } else {
+                products::upsert_stock(
+                    &mut tx,
+                    line.product_id.expect("retail product"),
+                    &[StockEntryInput {
+                        location_id,
+                        quantity: item.quantity,
+                    }],
+                )
+                .await?;
+            }
         }
     }
     apply_refund_plan(&mut tx, invoice_id, id, &input.reason, &input.refund, actor).await?;
@@ -525,6 +540,8 @@ mod tests {
             outcome: "active".into(),
             credit_limit: total,
             product_id: None,
+            material_id: None,
+            unit: None,
             original_location_id: None,
             original_location_name: None,
             default_restock_location_id: None,

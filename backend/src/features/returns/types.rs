@@ -113,7 +113,7 @@ pub struct ReturnableLine {
     pub line_id: Uuid,
     pub kind: String,
     pub description: String,
-    /// One garment for tailoring, units sold for retail (never metres of fabric).
+    /// One garment for tailoring, units for products, or the sold fabric quantity.
     pub quantity: f64,
     pub returned_quantity: f64,
     pub credited_amount: f64,
@@ -128,6 +128,9 @@ pub struct ReturnableLine {
     pub credit_limit: f64,
     #[serde(skip)]
     pub product_id: Option<Uuid>,
+    #[serde(skip)]
+    pub material_id: Option<Uuid>,
+    pub unit: Option<String>,
     pub original_location_id: Option<Uuid>,
     pub original_location_name: Option<String>,
     pub default_restock_location_id: Option<Uuid>,

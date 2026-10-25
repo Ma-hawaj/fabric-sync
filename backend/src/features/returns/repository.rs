@@ -56,8 +56,9 @@ pub async fn returnable_lines(
                COALESCE(ret.quantity, 0)::float8 AS "returned_quantity!",
                COALESCE(ret.amount, 0)::float8 AS "credited_amount!",
                sold.line_total::float8 AS "line_total!", sold.urgent_charge::float8 AS "urgent_charge!", sold.collected AS "collected!",
-               (sold.kind = 'product') AS "can_restock!",
+               (sold.kind IN ('product', 'material')) AS "can_restock!",
                0::float8 AS "credit_limit!", sold.product_id AS "product_id?",
+               sold.material_id AS "material_id?", sold.unit AS "unit?",
                sold.branch_id AS "original_location_id?", b.name AS "original_location_name?",
                CASE WHEN b.is_active AND b.holds_stock THEN b.id END AS "default_restock_location_id?",
                sold.outcome AS "outcome!"
@@ -65,11 +66,11 @@ pub async fn returnable_lines(
             SELECT o.id AS line_id, 'order' AS kind,
                    'Order #' || o.order_number AS description, 1::numeric AS quantity,
                    o.price AS line_total, o.urgent_charge, o.status = 'collected' AS collected,
-                   NULL::uuid AS product_id, NULL::uuid AS branch_id, oc.outcome
+                   NULL::uuid AS product_id, NULL::uuid AS material_id, NULL::text AS unit, NULL::uuid AS branch_id, oc.outcome
             FROM orders o JOIN order_outcomes oc ON oc.order_id = o.id WHERE o.invoice_id = $1
             UNION ALL
-            SELECT id, 'product', description, quantity, line_total, 0::numeric, true, product_id, branch_id, 'active'
-            FROM invoice_items WHERE invoice_id = $1 AND kind = 'product'
+            SELECT id, kind, description, quantity, line_total, 0::numeric, true, product_id, material_id, unit, branch_id, 'active'
+            FROM invoice_items WHERE invoice_id = $1 AND kind IN ('product', 'material')
         ) sold
         LEFT JOIN branch b ON b.id = sold.branch_id
         LEFT JOIN LATERAL (
@@ -206,7 +207,7 @@ pub async fn insert_line(
     amount: f64,
 ) -> Result<(), sqlx::Error> {
     let order_id = (line.kind == "order").then_some(line.line_id);
-    let item_id = (line.kind == "product").then_some(line.line_id);
+    let item_id = matches!(line.kind.as_str(), "product" | "material").then_some(line.line_id);
     sqlx::query!(
         r#"
         INSERT INTO invoice_return_lines (return_id, order_id, item_id, description, quantity, amount, restocked, restock_location_id)

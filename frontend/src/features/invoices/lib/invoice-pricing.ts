@@ -48,13 +48,17 @@ export function computeUrgentCharges(
   )
 }
 
-// A product line is the one thing priced per unit — products carry a list
-// price, so the quantity is a real multiplier rather than metres consumed.
+// Retail products and direct material sales are priced per unit. Round each
+// line before adding it to the invoice, matching the stored backend total.
 // The unit price is gross (VAT included), like an order price.
-export function computeProductLineTotal(line: InvoiceProductDraft): number {
+export function computeProductLineTotal(
+  line: Pick<InvoiceProductDraft, 'quantity' | 'unitPrice'>,
+): number {
   const quantity = typeof line.quantity === 'number' ? line.quantity : 0
   const unitPrice = typeof line.unitPrice === 'number' ? line.unitPrice : 0
-  return quantity > 0 && unitPrice > 0 ? quantity * unitPrice : 0
+  return quantity > 0 && unitPrice > 0
+    ? Math.round(quantity * unitPrice * 100) / 100
+    : 0
 }
 
 // A card is sold at face value — there is nothing to multiply out.

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            kind,\n            description,\n            quantity::float8 AS \"quantity!\",\n            unit_price::float8 AS \"unit_price!\",\n            line_total::float8 AS \"line_total!\"\n        FROM invoice_items\n        WHERE invoice_id = $1\n        ORDER BY id\n        ",
+  "query": "\n        SELECT\n            kind,\n            unit,\n            description,\n            quantity::float8 AS \"quantity!\",\n            unit_price::float8 AS \"unit_price!\",\n            line_total::float8 AS \"line_total!\"\n        FROM invoice_items\n        WHERE invoice_id = $1\n        ORDER BY id\n        ",
   "describe": {
     "columns": [
       {
@@ -10,21 +10,26 @@
       },
       {
         "ordinal": 1,
-        "name": "description",
+        "name": "unit",
         "type_info": "Text"
       },
       {
         "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
         "name": "quantity!",
         "type_info": "Float8"
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "unit_price!",
         "type_info": "Float8"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "line_total!",
         "type_info": "Float8"
       }
@@ -36,11 +41,12 @@
     },
     "nullable": [
       false,
+      true,
       false,
       null,
       null,
       null
     ]
   },
-  "hash": "93a7af07d082b49ead323421e4765cdd9776b1108d8625b1fda5af93fecbbf61"
+  "hash": "e0951364dcb4ae615f0adee239e4b4e6173a1c5d87b0edd800fe8bb92beda2cb"
 }

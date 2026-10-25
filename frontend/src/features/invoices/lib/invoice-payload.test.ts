@@ -102,3 +102,22 @@ describe('invoice material payload', () => {
     expect(orders[1]).not.toHaveProperty('customerBasePrice')
   })
 })
+
+it('sends direct material sales without customer or order payloads', () => {
+  const values = createEmptyInvoiceForm()
+  values.customers = []
+  values.materials = [
+    {
+      key: 'draft',
+      materialId: 'mat-1',
+      branchId: 'loc-1',
+      quantity: 2.5,
+      unitPrice: 11,
+    },
+  ]
+  const payload = invoicePayload(values)
+  expect(payload.customers).toEqual([])
+  expect(payload.materials).toEqual([
+    { materialId: 'mat-1', branchId: 'loc-1', quantity: 2.5, unitPrice: 11 },
+  ])
+})

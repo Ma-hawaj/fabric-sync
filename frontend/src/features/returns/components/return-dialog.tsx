@@ -121,8 +121,9 @@ export function ReturnDialog({
                     Purchased: {line.quantity} · Already returned:{' '}
                     {line.returnedQuantity} · Available:{' '}
                     {remainingQuantity(line)}{' '}
-                    {line.kind === 'order' ? 'garment' : 'units'} · Remaining
-                    credit: {money(line.creditLimit - line.creditedAmount)}
+                    {line.kind === 'order' ? 'garment' : (line.unit ?? 'units')}{' '}
+                    · Remaining credit:{' '}
+                    {money(line.creditLimit - line.creditedAmount)}
                   </p>
                   {orderId ? (
                     <p className="text-sm">Returning one whole garment.</p>

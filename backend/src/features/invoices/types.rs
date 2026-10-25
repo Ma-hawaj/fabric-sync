@@ -126,6 +126,15 @@ pub struct CreateProductLineInput {
     pub branch_id: Uuid,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateMaterialLineInput {
+    pub material_id: Uuid,
+    pub branch_id: Uuid,
+    pub quantity: f64,
+    pub unit_price: f64,
+}
+
 /// A gift card sold on this invoice. Selling stored value is not a taxable
 /// supply — VAT is charged when the card is spent — so the amount is added to
 /// the total outside the VAT base.
@@ -218,6 +227,8 @@ pub struct CreateInvoiceInput {
     #[serde(default)]
     pub products: Vec<CreateProductLineInput>,
     #[serde(default)]
+    pub materials: Vec<CreateMaterialLineInput>,
+    #[serde(default)]
     pub gift_cards: Vec<CreateGiftCardLineInput>,
     #[serde(default)]
     pub gift_card_redemptions: Vec<GiftCardRedemptionInput>,
@@ -302,6 +313,19 @@ pub struct InvoiceEditProductLine {
     pub stock_quantity: Option<f64>,
 }
 
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceEditMaterialLine {
+    pub material_id: Option<Uuid>,
+    pub material_name: String,
+    pub unit: String,
+    pub branch_id: Option<Uuid>,
+    pub branch_name: Option<String>,
+    pub quantity: f64,
+    pub unit_price: f64,
+    pub stock_quantity: Option<f64>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEditGiftCardLine {
@@ -358,6 +382,7 @@ pub struct InvoiceEdit {
     pub customer_id: Option<Uuid>,
     pub customers: Vec<InvoiceEditCustomer>,
     pub products: Vec<InvoiceEditProductLine>,
+    pub materials: Vec<InvoiceEditMaterialLine>,
     pub gift_cards: Vec<InvoiceEditGiftCardLine>,
     pub gift_card_redemptions: Vec<InvoiceEditRedemption>,
 }
@@ -449,6 +474,7 @@ pub struct InvoiceParty {
 pub enum InvoiceLineKind {
     Order,
     Product,
+    Material,
     GiftCard,
 }
 

@@ -18,6 +18,8 @@ import { CURRENCY } from '@/lib/currency'
 import { CustomerBlock } from './components/invoice-form/customer-block'
 import { GiftCardBlock } from './components/invoice-form/gift-card-block'
 import { InvoiceSummary } from './components/invoice-form/invoice-summary'
+import { MaterialBlock } from './components/invoice-form/material-block'
+import type { Material } from './types/materials'
 import { ProductBlock } from './components/invoice-form/product-block'
 import { RedemptionBlock } from './components/invoice-form/redemption-block'
 import { useCreateInvoice } from './hooks/use-create-invoice'
@@ -30,6 +32,7 @@ import {
   createEmptyGiftCardLine,
   createEmptyInvoiceForm,
   createEmptyProductLine,
+  createEmptyMaterialLine,
   createEmptyRedemption,
 } from './types/invoice-form'
 import type { InvoiceFormValues } from './types/invoice-form'
@@ -80,6 +83,10 @@ export function InvoiceForm({
   // correctly before anything is re-picked.
   const pickedCustomersRef = useRef(new Map<string, Customer>(seeds?.customers))
   const pickedProductsRef = useRef(new Map<string, Product>(seeds?.products))
+  const pickedMaterialsRef = useRef(new Map<string, Material>(seeds?.materials))
+  const rememberMaterial = useCallback((material: Material | null) => {
+    if (material) pickedMaterialsRef.current.set(material.id, material)
+  }, [])
   const rememberCustomer = useCallback((customer: Customer | null) => {
     if (customer) {
       pickedCustomersRef.current.set(customer.id, customer)
@@ -254,6 +261,47 @@ export function InvoiceForm({
 
         <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
           <div>
+            <h3 className="text-sm font-semibold">Materials</h3>
+            <p className="text-xs text-muted-foreground">
+              Sell fabric directly by quantity, without a tailoring order.
+            </p>
+          </div>
+          <form.Field name="materials" mode="array">
+            {(materialsField) => (
+              <div className="space-y-3">
+                {materialsField.state.value.map((line, index) => (
+                  <MaterialBlock
+                    key={line.key}
+                    form={form as never}
+                    lineIndex={index}
+                    onMaterialPicked={rememberMaterial}
+                    initialMaterialForId={(id) =>
+                      seeds?.materials.get(id) ?? null
+                    }
+                    materialLabelForId={(id) =>
+                      seeds?.materialLabels.get(id) ?? null
+                    }
+                    onRemove={() => materialsField.removeValue(index)}
+                  />
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() =>
+                    materialsField.pushValue(createEmptyMaterialLine())
+                  }
+                  className="w-full border-dashed"
+                >
+                  <PlusIcon className="h-3.5 w-3.5" /> Add Material
+                </Button>
+              </div>
+            )}
+          </form.Field>
+        </div>
+
+        <div className="space-y-4 rounded-xl border border-border/60 bg-card p-4">
+          <div>
             <h3 className="text-sm font-semibold">Products</h3>
             <p className="text-xs text-muted-foreground">
               Finished goods sold as-is. These are taxed with the tailoring
@@ -415,6 +463,7 @@ export function InvoiceForm({
           form={form as never}
           customerNames={pickedCustomersRef}
           productNames={pickedProductsRef}
+          materialNames={pickedMaterialsRef}
           locationLabelForId={(id) => seeds?.locationLabels.get(id) ?? null}
           customerLabelForId={(id) => seeds?.customerLabels.get(id) ?? null}
           paymentsLocked={editing}
@@ -471,7 +520,7 @@ export function InvoiceFormPage() {
     <InvoiceForm
       defaultValues={defaultValues}
       title="New Invoice"
-      subtitle="Create a customer order, updating measurements or adding customers as needed."
+      subtitle="Create an invoice for tailoring, materials, products, or gift cards."
       saveVerb="Saving"
       savedVerb="saved"
       mutation={createInvoice}

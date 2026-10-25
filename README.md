@@ -180,6 +180,32 @@ cd frontend
 VITE_API_BASE_URL=http://localhost:8000 pnpm run dev
 ```
 
+## Direct material sales
+
+On **New Invoice**, remove the tailoring customer block for a material-only
+sale, then select **Add Material**. Pick the material and **Sold From** stock
+location, enter a quantity and VAT-inclusive price per unit, and save. Materials
+can also share an invoice with tailoring orders, products, and gift cards.
+Quantities and unit prices support two decimal places. The buyer is optional
+for a sale without tailoring orders.
+
+Invoice create/update requests accept an optional `materials` array containing
+`materialId`, `branchId`, `quantity`, and `unitPrice`. Saving deducts stock in the
+invoice transaction; editing restores the previous material lines before applying
+the replacements. Material lines do not create orders or measurements. Direct material sales also
+support fractional returns, discounted credits, cash or original gift-card refunds,
+and optional restocking at an active stock location.
+
+Run the PostgreSQL regression test against a local PostgreSQL 18+ database:
+
+```bash
+cd backend
+TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/fabric_sync cargo test material_sales_database -- --ignored
+```
+
+This opt-in test creates and removes its own schema. Ordinary backend tests do
+not need a database when the committed SQLx offline metadata is used.
+
 ## Garment pricing
 
 Urgency is selected separately for each tailoring order. The server applies a
