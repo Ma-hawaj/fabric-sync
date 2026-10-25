@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  act,
   render,
   screen,
   fireEvent,
@@ -105,17 +104,24 @@ function renderInvoice(values = validInvoice()) {
 
 describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
   it('requires a target date for an urgent order and clears the error when that order becomes regular', async () => {
-    renderPage()
-    fireEvent.click(screen.getByRole('button', { name: 'Add Another Order' }))
-    const urgentOptions = screen.getAllByRole('switch', {
-      name: /Urgent order/,
+    const values = validInvoice()
+    values.customers[0].orders.push({
+      ...values.customers[0].orders[0],
+      key: crypto.randomUUID(),
     })
-    fireEvent.click(urgentOptions[0])
-    expect(urgentOptions[0].getAttribute('aria-checked')).toBe('true')
-    expect(urgentOptions[1].getAttribute('aria-checked')).toBe('false')
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    const save = renderInvoice(values)
+    const firstOrderUrgency = screen.getByLabelText('Urgent order 1', {
+      selector: '[role="switch"]',
     })
+    const secondOrderUrgency = screen.getByLabelText('Urgent order 2', {
+      selector: '[role="switch"]',
+    })
+    const saveButton = screen.getByRole('button', { name: 'Save invoice' })
+
+    fireEvent.click(firstOrderUrgency)
+    expect(firstOrderUrgency.getAttribute('aria-checked')).toBe('true')
+    expect(secondOrderUrgency.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(saveButton)
 
     expect(
       await screen.findByText('Pick a target date for urgent orders.'),
@@ -125,16 +131,16 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
         .getByLabelText('Target Date (required)')
         .getAttribute('aria-invalid'),
     ).toBe('true')
+    expect(save).not.toHaveBeenCalled()
 
-    fireEvent.click(urgentOptions[0])
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
-    })
+    fireEvent.click(firstOrderUrgency)
     await waitFor(() => {
       expect(
         screen.queryByText('Pick a target date for urgent orders.'),
       ).toBeNull()
     })
+    expect(screen.getByLabelText('Target Date (optional)')).toBeTruthy()
+    expect(secondOrderUrgency.getAttribute('aria-checked')).toBe('false')
   })
 
   it('shows the zod error inline on the field and a banner, blocking submit', async () => {
