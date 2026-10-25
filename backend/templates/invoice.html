@@ -30,8 +30,10 @@
                     in that order)
     line_notes — per line, the free-text more-details note, or empty
 
-  Amount keys: subtotal, discountAmount, taxable, vat, giftCardSales, total,
-  giftCardRedeemed, amountPaid, balanceDue, line<N>UnitPrice, line<N>Total,
+  Amount keys: subtotal, urgentCharge, discountAmount, discountPercent, taxable,
+  vat, giftCardSales, totalWithoutVat, total, giftCardRedeemed, amountPaid,
+  amountCredited, netTotal, cashRefunded, giftCardRefunded, refundDue, balanceDue,
+  line<N>UnitPrice, line<N>Total,
   redemption<N> — where <N> is the zero-based index in invoice.lines /
   invoice.redemptions.
 #}
@@ -350,16 +352,29 @@
       }
 
       .summary {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 16px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 108px;
+        align-items: start;
+        gap: 12px;
         margin-top: 10px;
+      }
+
+      .summary-card {
+        min-width: 0;
+        padding: 8px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+      }
+
+      .summary-heading {
+        margin: 0 0 6px;
+        font-size: 11px;
+        font-weight: 700;
       }
 
       .qr {
         text-align: center;
-        flex-shrink: 0;
+        margin: 0;
       }
 
       .qr svg {
@@ -376,19 +391,19 @@
       }
 
       .totals {
-        width: 56%;
+        width: 100%;
         border-collapse: collapse;
         margin: 0;
         font-size: 11px;
       }
 
       .totals td {
-        padding: 2px 8px;
+        padding: 3px 0;
         border: none;
       }
 
-      .totals tr + tr td {
-        border-top: 1px solid var(--rule);
+      .totals .num {
+        padding-inline-start: 8px;
       }
 
       .totals .label {
@@ -397,15 +412,38 @@
 
       .totals .grand td {
         border-top: 2px solid var(--ink);
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 700;
         padding-top: 6px;
       }
 
       .totals .due td {
         border-top: 1px solid var(--rule);
+        padding: 6px;
+        background: var(--tint);
         font-weight: 700;
         color: var(--accent);
+      }
+
+      .price-breakdown {
+        margin-top: 8px;
+        padding-top: 6px;
+        border-top: 1px solid var(--rule);
+      }
+
+      .price-breakdown .summary-heading,
+      .price-breakdown .totals {
+        font-size: 9.5px;
+      }
+
+      @media screen and (max-width: 600px) {
+        .summary {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .qr {
+          justify-self: center;
+        }
       }
 
       footer {
@@ -613,103 +651,137 @@
     </table>
 
     <div class="closing">
-      <section class="summary">
+      <section class="summary" aria-label="Invoice summary">
+        <div class="summary-card">
+          <h3 class="summary-heading">ملخص الفاتورة <span class="en">Invoice summary</span></h3>
+          <table class="totals" aria-label="Invoice price totals">
+            <tr>
+              <td class="label">
+                الإجمالي بدون الضريبة <span class="en">Total without VAT</span>
+              </td>
+              <td class="num">{{ currency }} {{ amounts.totalWithoutVat }}</td>
+            </tr>
+            <tr>
+              <td class="label">
+                ضريبة القيمة المضافة {{ vat_percent }}%
+                <span class="en">VAT {{ vat_percent }}%</span>
+              </td>
+              <td class="num">{{ currency }} {{ amounts.vat }}</td>
+            </tr>
+            <tr class="grand">
+              <td>
+                الإجمالي شامل الضريبة <span class="en">Total incl. VAT</span>
+              </td>
+              <td class="num">{{ currency }} {{ amounts.total }}</td>
+            </tr>
+          </table>
+
+          {% if invoice.totals.discountAmount > 0 or invoice.totals.urgentCharge > 0 or invoice.totals.giftCardSales > 0 %}
+            <div class="price-breakdown">
+              <h4 class="summary-heading">تفاصيل السعر <span class="en">Price breakdown</span></h4>
+              <table class="totals" aria-label="Price breakdown">
+                <tr>
+                  <td class="label">
+                    المجموع الفرعي شامل الضريبة <span class="en">Subtotal (incl. VAT)</span>
+                  </td>
+                  <td class="num">{{ currency }} {{ amounts.subtotal }}</td>
+                </tr>
+                {% if invoice.totals.discountAmount > 0 %}
+                  <tr>
+                    <td class="label">
+                      الخصم
+                      {%- if invoice.totals.discountUnit == "percent" %}
+                      ({{ amounts.discountPercent }}%)
+                      {%- endif %}
+                      <span class="en">Discount</span>
+                    </td>
+                    <td class="num">− {{ currency }} {{ amounts.discountAmount }}</td>
+                  </tr>
+                {% endif %}
+                {% if invoice.totals.urgentCharge > 0 %}
+                  <tr>
+                    <td class="label">رسوم الاستعجال <span class="en">Urgent charges (incl. VAT)</span></td>
+                    <td class="num">{{ currency }} {{ amounts.urgentCharge }}</td>
+                  </tr>
+                {% endif %}
+                {% if invoice.totals.giftCardSales > 0 %}
+                  <tr>
+                    <td class="label">
+                      بطاقات الهدايا (غير خاضعة للضريبة) <span class="en">Gift cards sold (not taxed)</span>
+                    </td>
+                    <td class="num">{{ currency }} {{ amounts.giftCardSales }}</td>
+                  </tr>
+                  {% if invoice.totals.taxable > 0 %}
+                    <tr>
+                      <td class="label">الوعاء الضريبي <span class="en">Taxable amount</span></td>
+                      <td class="num">{{ currency }} {{ amounts.taxable }}</td>
+                    </tr>
+                  {% endif %}
+                {% endif %}
+              </table>
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="summary-card">
+          <h3 class="summary-heading">المدفوعات والأرصدة <span class="en">Payments &amp; credits</span></h3>
+          <table class="totals" aria-label="Payments and credits">
+            {% if invoice.totals.amountCredited > 0 %}
+              <tr>
+                <td class="label">مرتجعات <span class="en">Return credits</span></td>
+                <td class="num">− {{ currency }} {{ amounts.amountCredited }}</td>
+              </tr>
+              <tr>
+                <td class="label">الإجمالي بعد المرتجعات <span class="en">After credits</span></td>
+                <td class="num">{{ currency }} {{ amounts.netTotal }}</td>
+              </tr>
+            {% endif %}
+            {% if invoice.totals.giftCardRedeemed > 0 %}
+              <tr>
+                <td class="label">
+                  مدفوع ببطاقة هدية <span class="en">Paid by gift card</span>
+                  {% for redemption in invoice.redemptions %}
+                    <span class="line-note" dir="ltr">{{ redemption.code }}</span>
+                  {% endfor %}
+                </td>
+                <td class="num">− {{ currency }} {{ amounts.giftCardRedeemed }}</td>
+              </tr>
+            {% endif %}
+            {% if invoice.totals.amountPaid > 0 %}
+              <tr>
+                <td class="label">المدفوع <span class="en">Paid</span></td>
+                <td class="num">− {{ currency }} {{ amounts.amountPaid }}</td>
+              </tr>
+            {% endif %}
+            {% if invoice.totals.cashRefunded > 0 %}
+              <tr>
+                <td class="label">مبالغ مستردة <span class="en">Refunds paid back</span></td>
+                <td class="num">+ {{ currency }} {{ amounts.cashRefunded }}</td>
+              </tr>
+            {% endif %}
+            {% if invoice.totals.giftCardRefunded > 0 %}
+              <tr>
+                <td class="label">مسترد إلى بطاقة هدية <span class="en">Restored to gift cards</span></td>
+                <td class="num">+ {{ currency }} {{ amounts.giftCardRefunded }}</td>
+              </tr>
+            {% endif %}
+            {% if invoice.totals.refundDue > 0 %}
+              <tr class="due">
+                <td>المبلغ الواجب رده <span class="en">Refund due</span></td>
+                <td class="num">{{ currency }} {{ amounts.refundDue }}</td>
+              </tr>
+            {% endif %}
+            <tr class="due">
+              <td>المبلغ المستحق <span class="en">Balance due</span></td>
+              <td class="num">{{ currency }} {{ amounts.balanceDue }}</td>
+            </tr>
+          </table>
+        </div>
+
         <figure class="qr">
           {{ qr_svg | safe }}
           <figcaption>امسح للتحقق · Scan to verify</figcaption>
         </figure>
-
-        <table class="totals">
-          <tr>
-            <td class="label">
-              المجموع الفرعي شامل الضريبة <span class="en">Subtotal (incl. VAT)</span>
-            </td>
-            <td class="num">{{ currency }} {{ amounts.subtotal }}</td>
-          </tr>
-          {% if invoice.totals.discountAmount > 0 %}
-            <tr>
-              <td class="label">
-                الخصم
-                {%- if invoice.totals.discountUnit == "percent" %}
-                ({{ amounts.discountPercent }}%)
-                {%- endif %}
-                <span class="en">Discount</span>
-              </td>
-              <td class="num">− {{ currency }} {{ amounts.discountAmount }}</td>
-            </tr>
-            <tr>
-              <td class="label">
-                الوعاء الضريبي <span class="en">Taxable amount</span>
-              </td>
-              <td class="num">{{ currency }} {{ amounts.taxable }}</td>
-            </tr>
-          {% endif %}
-          <tr>
-            <td class="label">
-              ضريبة القيمة المضافة {{ vat_percent }}%
-              <span class="en">VAT {{ vat_percent }}%</span>
-            </td>
-            <td class="num">{{ currency }} {{ amounts.vat }}</td>
-          </tr>
-          {% if invoice.totals.urgentCharge > 0 %}
-            <tr>
-              <td class="label">رسوم الاستعجال <span class="en">Urgent charges (incl. VAT)</span></td>
-              <td class="num">{{ currency }} {{ amounts.urgentCharge }}</td>
-            </tr>
-          {% endif %}
-          {% if invoice.totals.giftCardSales > 0 %}
-            <tr>
-              <td class="label">
-                بطاقات الهدايا <span class="en">Gift cards sold</span>
-              </td>
-              <td class="num">{{ currency }} {{ amounts.giftCardSales }}</td>
-            </tr>
-          {% endif %}
-          <tr class="grand">
-            <td>
-              الإجمالي شامل الضريبة
-              <span class="en">Total incl. VAT</span>
-            </td>
-            <td class="num">{{ currency }} {{ amounts.total }}</td>
-          </tr>
-          {% if invoice.totals.giftCardRedeemed > 0 %}
-            <tr>
-              <td class="label">
-                مدفوع ببطاقة هدية <span class="en">Paid by gift card</span>
-                {% for redemption in invoice.redemptions %}
-                  <span class="line-note" dir="ltr">{{ redemption.code }}</span>
-                {% endfor %}
-              </td>
-              <td class="num">− {{ currency }} {{ amounts.giftCardRedeemed }}</td>
-            </tr>
-          {% endif %}
-          {% if invoice.totals.amountPaid > 0 %}
-            <tr>
-              <td class="label">المدفوع <span class="en">Paid</span></td>
-              <td class="num">− {{ currency }} {{ amounts.amountPaid }}</td>
-            </tr>
-          {% endif %}
-          {% if invoice.totals.amountCredited > 0 %}
-            <tr><td class="label">مرتجعات <span class="en">Return credits</span></td>
-              <td class="num">− {{ currency }} {{ amounts.amountCredited }}</td></tr>
-          {% endif %}
-          {% if invoice.totals.cashRefunded > 0 %}
-            <tr><td class="label">مبالغ مستردة <span class="en">Refunds paid back</span></td>
-              <td class="num">+ {{ currency }} {{ amounts.cashRefunded }}</td></tr>
-          {% endif %}
-          {% if invoice.totals.giftCardRefunded > 0 %}
-            <tr><td class="label">مسترد إلى بطاقة هدية <span class="en">Restored to gift cards</span></td>
-              <td class="num">+ {{ currency }} {{ amounts.giftCardRefunded }}</td></tr>
-          {% endif %}
-          {% if invoice.totals.refundDue > 0 %}
-            <tr><td class="label">رصيد العميل <span class="en">Refund due</span></td>
-              <td class="num">{{ currency }} {{ amounts.refundDue }}</td></tr>
-          {% endif %}
-          <tr class="due">
-            <td>المبلغ المستحق <span class="en">Balance due</span></td>
-            <td class="num">{{ currency }} {{ amounts.balanceDue }}</td>
-          </tr>
-        </table>
       </section>
 
       <footer>

@@ -232,6 +232,20 @@ describe('InvoiceDetailPage', () => {
   it('shows the VAT rate and the balance still owed', () => {
     renderPage(DETAIL)
 
+    const summary = screen.getByRole('region', { name: 'Invoice Summary' })
+    const row = (label: string) =>
+      within(summary).getByText(label).closest('div')!.querySelector('dd')!
+        .textContent
+    expect(row('Total without VAT')).toBe('BHD 290.910')
+    expect(row('VAT (10%)')).toBe('BHD 9.090')
+    expect(row('Total incl. VAT')).toBe('BHD 300.000')
+    expect(row('Balance due')).toBe('BHD 240.000')
+    const breakdown = within(summary)
+      .getByText('Price breakdown')
+      .closest('details')!
+    expect(breakdown.open).toBe(false)
+    fireEvent.click(within(summary).getByText('Price breakdown'))
+    expect(breakdown.open).toBe(true)
     expect(screen.queryByText('VAT (10%)')).toBeTruthy()
     expect(screen.queryByText('Gift cards sold')).toBeTruthy()
     expect(screen.queryByText('Balance due')).toBeTruthy()
@@ -359,14 +373,20 @@ describe('InvoiceDetailPage', () => {
         ],
       },
     )
+    const refundBreakdown = screen
+      .getByText('Refund breakdown')
+      .closest('details')!
+    expect(refundBreakdown.open).toBe(false)
+    fireEvent.click(screen.getByText('Refund breakdown'))
+    expect(refundBreakdown.open).toBe(true)
     for (const label of [
-      'Invoice total',
+      'Total incl. VAT',
       'After credits',
       'Net paid (all methods)',
     ]) {
       const row = screen.getByText(label).parentElement!
       expect(row.textContent).toMatch(
-        label === 'Invoice total' ? /100\.000/ : /70\.000/,
+        label === 'Total incl. VAT' ? /100\.000/ : /70\.000/,
       )
     }
     const history = screen.getByRole('table', { name: 'Payments and refunds' })

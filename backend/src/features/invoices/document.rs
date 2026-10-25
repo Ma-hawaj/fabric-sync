@@ -349,10 +349,12 @@ fn formatted_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<Strin
         ("taxable", totals.taxable),
         ("vat", totals.vat),
         ("giftCardSales", totals.gift_card_sales),
+        ("totalWithoutVat", totals.total - totals.vat),
         ("total", totals.total),
         ("giftCardRedeemed", totals.gift_card_redeemed),
         ("amountPaid", totals.amount_paid),
         ("amountCredited", totals.amount_credited),
+        ("netTotal", totals.net_total),
         ("cashRefunded", totals.cash_refunded),
         ("giftCardRefunded", totals.gift_card_refunded),
         ("refundDue", totals.refund_due),
@@ -537,6 +539,90 @@ mod tests {
     fn the_default_template_compiles() {
         let env = environment(&branding()).unwrap();
         assert!(env.get_template(TEMPLATE_NAME).is_ok());
+    }
+
+    fn render_test_document(detail: &InvoiceDetail) -> String {
+        let env = environment(&branding()).unwrap();
+        env.get_template(TEMPLATE_NAME)
+            .unwrap()
+            .render(context! {
+                invoice => minijinja::Value::from_serialize(detail),
+                customers => minijinja::Value::from_serialize(billed_customers(detail)),
+                company => minijinja::Value::from_serialize(branding()),
+                currency => CURRENCY,
+                amounts => minijinja::Value::from_serialize(formatted_amounts(detail)),
+                vat_percent => "10",
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn printed_totals_without_vat_include_untaxed_sales_and_ignore_payments() {
+        for (total, vat, gift_cards, discount, urgent_charge, paid, expected_net) in [
+            (100.0, 9.09, 0.0, 0.0, 0.0, 0.0, "90.910"),
+            (80.0, 7.27, 0.0, 10.0, 0.0, 0.0, "72.730"),
+            (110.0, 10.0, 0.0, 0.0, 10.0, 0.0, "100.000"),
+            (300.0, 9.09, 200.0, 0.0, 0.0, 60.0, "290.910"),
+            (200.0, 0.0, 200.0, 0.0, 0.0, 60.0, "200.000"),
+            (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "0.000"),
+        ] {
+            let mut detail = tests_support::detail();
+            detail.totals.total = total;
+            detail.totals.vat = vat;
+            detail.totals.taxable = total - vat - gift_cards;
+            detail.totals.gift_card_sales = gift_cards;
+            detail.totals.discount_amount = discount;
+            detail.totals.urgent_charge = urgent_charge;
+            detail.totals.amount_paid = paid;
+            detail.totals.balance_due = total - paid;
+            let html = render_test_document(&detail);
+            let prices = html
+                .split("aria-label=\"Invoice price totals\"")
+                .nth(1)
+                .unwrap()
+                .split("</table>")
+                .next()
+                .unwrap();
+            let rows: Vec<_> = prices.split("<tr").skip(1).collect();
+            assert_eq!(rows.len(), 3);
+            assert!(rows[0].contains("Total without VAT"));
+            assert!(rows[0].contains(&format!("BHD {expected_net}")));
+            assert!(rows[1].contains("VAT 10%"));
+            assert!(rows[1].contains(&format!("BHD {}", format_amount(vat))));
+            assert!(rows[2].contains("Total incl. VAT"));
+            assert!(rows[2].contains(&format!("BHD {}", format_amount(total))));
+            assert!(!prices.contains("Balance due"));
+            assert!(html.contains("Payments &amp; credits"));
+            assert!(html.contains("Balance due"));
+            assert_eq!(
+                html.contains("aria-label=\"Price breakdown\""),
+                discount > 0.0 || urgent_charge > 0.0 || gift_cards > 0.0
+            );
+        }
+    }
+
+    #[test]
+    fn printed_credits_and_refunds_leave_the_original_price_totals_intact() {
+        let mut detail = tests_support::detail();
+        detail.totals.amount_credited = 30.0;
+        detail.totals.net_total = 70.0;
+        detail.totals.cash_refunded = 10.0;
+        detail.totals.gift_card_refunded = 20.0;
+        detail.totals.refund_due = 5.0;
+        let html = render_test_document(&detail);
+        assert!(html.contains("BHD 90.910"));
+        assert!(html.contains("BHD 100.000"));
+        for label in [
+            "Return credits",
+            "After credits",
+            "Refunds paid back",
+            "Restored to gift cards",
+            "Refund due",
+        ] {
+            assert!(html.contains(label), "missing {label}");
+        }
+        assert!(html.contains("BHD 70.000"));
+        assert!(html.contains("BHD 5.000"));
     }
 
     #[test]

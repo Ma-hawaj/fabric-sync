@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { InvoicePriceSummary } from '../invoice-price-summary'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
@@ -286,63 +287,24 @@ export function InvoiceSummary({
 
           return (
             <>
-              <div className="space-y-1.5 text-sm">
-                {lineItems.flatMap((item) =>
-                  item.orders.map((order) => (
-                    <div
-                      key={order.key}
-                      className="flex justify-between text-muted-foreground"
-                    >
-                      <span>
-                        {item.customerName} — {order.label}
-                      </span>
-                      <span>
-                        {CURRENCY} {order.total.toFixed(2)}
-                        {order.urgentCharge > 0 && (
-                          <span className="block text-xs">
-                            + {CURRENCY} {order.urgentCharge.toFixed(2)} urgent
-                            charge
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  )),
-                )}
-                {productRows.map((row) => (
-                  <div
-                    key={row.key}
-                    className="flex justify-between text-muted-foreground"
-                  >
-                    <span>{row.label}</span>
-                    <span>
-                      {CURRENCY} {row.total.toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <Separator />
-
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">
-                  Subtotal (incl. VAT)
-                </span>
-                <span>
-                  {CURRENCY} {subtotal.toFixed(2)}
-                </span>
-              </div>
-
               <div className="grid grid-cols-2 gap-3 items-end">
                 <NumberField form={form} name="discount" label="Discount" />
                 <form.Field name={'discountUnit' as never}>
                   {(field: any) => (
                     <Select
+                      items={[
+                        { value: 'amount', label: CURRENCY },
+                        { value: 'percent', label: '%' },
+                      ]}
                       value={field.state.value}
                       onValueChange={(value: string) =>
                         field.handleChange(value)
                       }
                     >
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger
+                        aria-label="Discount unit"
+                        className="w-full"
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -398,52 +360,91 @@ export function InvoiceSummary({
 
                   return (
                     <>
-                      {urgentCharge > 0 && (
+                      <InvoicePriceSummary
+                        total={totals.total}
+                        vat={totals.vat}
+                        vatRate={VAT_RATE}
+                      >
+                        <div className="space-y-1.5 text-sm">
+                          {lineItems.flatMap((item) =>
+                            item.orders.map((order) => (
+                              <div
+                                key={order.key}
+                                className="flex justify-between gap-4 text-muted-foreground"
+                              >
+                                <span>
+                                  {item.customerName} — {order.label}
+                                </span>
+                                <span className="shrink-0 text-end">
+                                  {CURRENCY} {order.total.toFixed(2)}
+                                  {order.urgentCharge > 0 && (
+                                    <span className="block text-xs">
+                                      + {CURRENCY}{' '}
+                                      {order.urgentCharge.toFixed(2)} urgent
+                                      charge
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            )),
+                          )}
+                          {productRows.map((row) => (
+                            <div
+                              key={row.key}
+                              className="flex justify-between gap-4 text-muted-foreground"
+                            >
+                              <span>{row.label}</span>
+                              <span>
+                                {CURRENCY} {row.total.toFixed(2)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <Separator />
+
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">
-                            Urgent charges (incl. VAT)
+                            Subtotal (incl. VAT)
                           </span>
                           <span>
-                            {CURRENCY} {(urgentCharge || 0).toFixed(2)}
+                            {CURRENCY} {subtotal.toFixed(2)}
                           </span>
                         </div>
-                      )}
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">
-                          VAT ({Math.round(VAT_RATE * 100)}%, incl.)
-                        </span>
-                        <span>
-                          {CURRENCY} {totals.vat.toFixed(2)}
-                        </span>
-                      </div>
-                      {giftCardRows.map((row) => (
-                        <div
-                          key={row.key}
-                          className="flex justify-between text-sm text-muted-foreground"
-                        >
-                          <span>{row.label} (not taxed)</span>
-                          <span>
-                            {CURRENCY} {row.total.toFixed(2)}
-                          </span>
-                        </div>
-                      ))}
+
+                        {totals.discountAmount > 0 && (
+                          <div className="flex justify-between gap-4 text-sm">
+                            <span className="text-muted-foreground">
+                              Discount applied
+                            </span>
+                            <span className="shrink-0">
+                              −{CURRENCY} {totals.discountAmount.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                        {urgentCharge > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">
+                              Urgent charges (incl. VAT)
+                            </span>
+                            <span>
+                              {CURRENCY} {(urgentCharge || 0).toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                        {giftCardRows.map((row) => (
+                          <div
+                            key={row.key}
+                            className="flex justify-between text-sm text-muted-foreground"
+                          >
+                            <span>{row.label} (not taxed)</span>
+                            <span>
+                              {CURRENCY} {row.total.toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                      </InvoicePriceSummary>
                       <Separator />
-                      <div className="flex justify-between font-semibold">
-                        <span>Total</span>
-                        <span>
-                          {CURRENCY} {totals.total.toFixed(2)}
-                        </span>
-                      </div>
-                      {totals.redeemed > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">
-                            Gift Card Redeemed
-                          </span>
-                          <span>
-                            −{CURRENCY} {totals.redeemed.toFixed(2)}
-                          </span>
-                        </div>
-                      )}
 
                       {/* Payments taken up front with the invoice. Later ones
                           go through the collect endpoints or a till payment,
@@ -452,15 +453,25 @@ export function InvoiceSummary({
                         {(paymentsField: any) => (
                           <div className="space-y-2 pt-2">
                             <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium">
+                              <h4 className="text-sm font-semibold">
                                 Payments
-                              </span>
+                              </h4>
                               {totals.paid > 0 && (
                                 <span className="text-sm text-muted-foreground">
                                   {CURRENCY} {totals.paid.toFixed(2)} paid
                                 </span>
                               )}
                             </div>
+                            {totals.redeemed > 0 && (
+                              <div className="flex justify-between gap-4 text-sm">
+                                <span className="text-muted-foreground">
+                                  Gift Card Redeemed
+                                </span>
+                                <span className="shrink-0">
+                                  −{CURRENCY} {totals.redeemed.toFixed(2)}
+                                </span>
+                              </div>
+                            )}
                             {paymentsLocked && (
                               <p className="text-xs text-muted-foreground">
                                 Already taken — an edit never changes money.
@@ -583,8 +594,8 @@ export function InvoiceSummary({
                         )}
                       </form.Field>
 
-                      <div className="flex justify-between font-semibold pt-1">
-                        <span>Balance Due</span>
+                      <div className="flex items-baseline justify-between gap-4 rounded-lg bg-muted/50 p-3 font-semibold tabular-nums">
+                        <span>Balance due</span>
                         <span>
                           {CURRENCY} {totals.balanceDue.toFixed(2)}
                         </span>
