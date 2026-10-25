@@ -35,7 +35,7 @@ pub async fn lock_orders(
     invoice: Uuid,
     order: Option<Uuid>,
 ) -> Result<Vec<ReadyOrder>, AppError> {
-    Ok(sqlx::query_as("SELECT o.id,o.order_number,o.status,o.production_branch_id,i.branch_id FROM orders o JOIN invoices i ON i.id=o.invoice_id WHERE o.invoice_id=$1 AND ($2::uuid IS NULL OR o.id=$2) AND ($2::uuid IS NOT NULL OR o.status <> 'collected') ORDER BY o.id FOR UPDATE OF o").bind(invoice).bind(order).fetch_all(conn).await?)
+    Ok(sqlx::query_as("SELECT o.id,o.order_number,o.status,o.production_branch_id,i.branch_id FROM orders o JOIN invoices i ON i.id=o.invoice_id WHERE o.invoice_id=$1 AND ($2::uuid IS NULL OR o.id=$2) AND NOT EXISTS (SELECT 1 FROM invoice_return_lines l WHERE l.order_id=o.id) AND ($2::uuid IS NOT NULL OR o.status <> 'collected') ORDER BY o.id FOR UPDATE OF o").bind(invoice).bind(order).fetch_all(conn).await?)
 }
 
 pub async fn stages(conn: &mut PgConnection, order: Uuid) -> Result<Vec<Stage>, AppError> {

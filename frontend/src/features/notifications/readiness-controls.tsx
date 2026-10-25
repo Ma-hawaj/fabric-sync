@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import { StaffName } from '@/features/users/components/staff-name'
 import {
   Dialog,
   DialogContent,
@@ -105,7 +106,12 @@ export function ReadinessControls({
       {readyAt && (
         <span className="text-xs text-muted-foreground">
           Ready {new Date(readyAt).toLocaleString()}
-          {readyBy ? ` · ${readyBy}` : ''}
+          {readyBy && (
+            <>
+              {' '}
+              · <StaffName userId={readyBy} />
+            </>
+          )}
         </span>
       )}
       <Dialog open={open} onOpenChange={setOpen}>

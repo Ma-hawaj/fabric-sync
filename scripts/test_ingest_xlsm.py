@@ -8,7 +8,53 @@ from pathlib import Path
 
 import openpyxl
 
-from ingest_xlsm import Report, read_workbook
+from ingest_xlsm import Report, measurement_signature, parse_measurement, read_workbook
+
+
+class ParseMeasurementTests(unittest.TestCase):
+    def test_symbols_attached_spaced_and_standalone(self):
+        for symbol, fraction in [
+            ("½", "0.5"), ("¼", "0.25"), ("¾", "0.75"),
+            ("⅛", "0.125"), ("⅜", "0.375"), ("⅝", "0.625"), ("⅞", "0.875"),
+        ]:
+            for text, whole in [(symbol, 0), (f"55{symbol}", 55),
+                                (f"55  {symbol}", 55), (f"55\u00a0{symbol}", 55)]:
+                with self.subTest(text=text):
+                    self.assertEqual(parse_measurement(text),
+                                     (Decimal(whole) + Decimal(fraction), True))
+
+    def test_slash_fractions(self):
+        for text, expected in [("55 1/2", "55.5"), ("17 3/4", "17.75"),
+                               ("⅛", "0.125"), ("1/8", "0.125"),
+                               ("17 3 / 8", "17.375"), ("17 5⁄8", "17.625")]:
+            with self.subTest(text=text):
+                self.assertEqual(parse_measurement(text), (Decimal(expected), True))
+
+    def test_existing_workbook_notation(self):
+        for text, expected in [("15 ½ .1", "15.5"), ("1 ¼.1", "1.25"),
+                               ("24. ½", "24.5"), ("18,5", "18.5"),
+                               ("7. 75", "7.75"), ("24. ⅜", "24.375"),
+                               ("17⅝.1", "17.625"), (32, "32"),
+                               (17.125, "17.125"), (Decimal("17.875"), "17.875")]:
+            with self.subTest(text=text):
+                self.assertEqual(parse_measurement(text), (Decimal(expected), True))
+
+    def test_blank_invalid_and_ambiguous_values(self):
+        for text in [None, "", "   "]:
+            self.assertEqual(parse_measurement(text), (None, True))
+        for text in ["CANCEL", "SHIRT", "17-18", "17 ½ ¾", "1/0", "3/2",
+                     "1/3", "55 1/2 extra", float("nan"), float("inf"),
+                     Decimal("NaN"), True]:
+            with self.subTest(text=text):
+                self.assertEqual(parse_measurement(text), (None, False))
+
+    def test_rerun_signatures_preserve_eighths_and_ignore_scale(self):
+        date = dt.date(2026, 5, 1)
+        def signature(value):
+            return measurement_signature("customer", date, {"chest": value})
+        self.assertEqual(signature(Decimal("42.125")), signature(Decimal("42.1250")))
+        self.assertEqual(signature(42), signature(Decimal("42.000")))
+        self.assertNotEqual(signature(Decimal("42.125")), signature(Decimal("42.13")))
 
 
 class ReadWorkbookTests(unittest.TestCase):
@@ -106,6 +152,17 @@ class ReadWorkbookTests(unittest.TestCase):
                 measurement["values"]["bottom_fold"], Decimal("3"))
             self.assertNotIn("button", measurement["values"])
             self.assertNotIn("button_fold", measurement["values"])
+
+    def test_fraction_cells_are_imported_without_losing_eighths(self):
+        rows = [
+            [7, self.date, "Customer", "33333333", "42 ½", "29¼", "3 ⅛"],
+            [8, self.date, "Customer", "33333333", "42 3/8", "29¾", "3⅞"],
+        ]
+        actual, _ = self.read(measurements=rows)
+        expected = [("42.5", "29.25", "3.125"), ("42.375", "29.75", "3.875")]
+        for measurement, values in zip(actual["measurements"], expected, strict=True):
+            for key, value in zip(["chest", "bottom", "bottom_fold"], values):
+                self.assertEqual(measurement["values"][key], Decimal(value))
 
 
 if __name__ == "__main__":

@@ -55,11 +55,19 @@ export interface InvoiceTotals {
   total: number
   giftCardRedeemed: number
   amountPaid: number
+  amountCredited: number
+  cashRefunded: number
+  giftCardRefunded: number
+  netTotal: number
+  netAmountPaid: number
+  netGiftCardRedeemed: number
+  refundDue: number
   balanceDue: number
 }
 
 /** One row of the invoice's payments ledger, oldest first. */
 export interface InvoicePayment {
+  recordedBy: string | null
   id: string
   amount: number
   /** Null only on legacy rows imported without a recorded method. */
@@ -71,6 +79,7 @@ export interface InvoicePayment {
 
 /** Shape of GET /invoices/:id. */
 export interface InvoiceDetail extends ReadinessFields {
+  createdBy: string | null
   collectionMethod: 'delivery' | 'pickup'
   id: string
   invoiceNumber: number
@@ -98,5 +107,6 @@ export interface InvoiceDetail extends ReadinessFields {
   lines: InvoiceLine[]
   redemptions: InvoiceRedemption[]
   payments: InvoicePayment[]
+  hasAdjustments: boolean
   totals: InvoiceTotals
 }

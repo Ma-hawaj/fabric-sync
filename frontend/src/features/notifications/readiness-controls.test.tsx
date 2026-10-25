@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import { ReadinessControls } from './readiness-controls'
 import type { NotificationDraft } from './types'
+import { STAFF_USER } from '@/features/users/test-fixtures'
 
 vi.mock('@/lib/api', () => ({
   apiClient: {
@@ -49,6 +50,24 @@ function fixture(): NotificationDraft {
 }
 
 describe('readiness notification lifecycle', () => {
+  it('shows the staff name for the person who confirmed readiness', () => {
+    const client = new QueryClient()
+    client.setQueryData(['users'], [STAFF_USER])
+    render(
+      <QueryClientProvider client={client}>
+        <ReadinessControls
+          id="order-1"
+          invoiceId="invoice-1"
+          scope="orders"
+          status="ready"
+          readyAt="2026-10-24T09:00:00Z"
+          readyBy={STAFF_USER.id}
+        />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByText(STAFF_USER.name)).toBeTruthy()
+    expect(screen.queryByText(STAFF_USER.id)).toBeNull()
+  })
   let draft: NotificationDraft
   beforeEach(() => {
     vi.clearAllMocks()

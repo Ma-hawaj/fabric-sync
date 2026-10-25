@@ -14,6 +14,7 @@ import {
   THOBE_VIEWBOX,
 } from '../components/thob-diagram'
 import type { Customer, Measurement } from '../types/customers'
+import { formatMeasurement } from './format-measurement'
 
 const TEARDOWN_FALLBACK_MS = 60_000
 
@@ -120,11 +121,11 @@ function thobeSheetSvg(measurement: Measurement): string {
   }
   svg += '</g>'
 
-  svg += '<g font-family="Arial, sans-serif">'
+  svg += '<g font-family="Arial, sans-serif" direction="ltr">'
   for (const slot of THOBE_VALUE_SLOTS) {
     const value = values[slot.key]
     if (value === undefined || value === null || value === '') continue
-    const text = escapeHtml(String(value))
+    const text = escapeHtml(formatMeasurement(value as string | number))
     svg +=
       `<g><title>${escapeHtml(slot.label)}</title>` +
       `<text x="${slot.x}" y="${slot.y}" font-size="${slot.size}" text-anchor="middle" fill="none" stroke="#fff" stroke-width="3.5" stroke-linejoin="round">${text}</text>` +
@@ -136,11 +137,11 @@ function thobeSheetSvg(measurement: Measurement): string {
   return svg
 }
 
-/** Value as it appears in the measurement grid — unit-less, decimals kept. */
+/** Value as it appears in the measurement grid, without a unit. */
 function gridValue(field: MeasurementField, value: unknown): string {
   if (value === undefined || value === null || value === '') return ''
   if (field.input.kind === 'number') {
-    return String(Number(value))
+    return formatMeasurement(Number(value))
   }
   return String(value).trim()
 }

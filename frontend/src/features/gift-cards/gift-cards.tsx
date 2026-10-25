@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -10,10 +11,16 @@ import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-adv
 import { getGiftCardColumns } from './components/gift-card-columns'
 import { useGiftCards } from './hooks/use-gift-cards'
 import { useUpdateGiftCard } from './hooks/use-update-gift-card'
+import { useDownloadGiftCardImage } from './hooks/use-download-gift-card-image'
+import { GiftCardRecipientDialog } from './components/gift-card-recipient-dialog'
+import { SendGiftCardDialog } from './components/send-gift-card-dialog'
 import type { GiftCard } from './types/gift-card'
 
 export function GiftCardsPage() {
+  const [editing, setEditing] = useState<GiftCard | null>(null)
+  const [sending, setSending] = useState<GiftCard | null>(null)
   const updateGiftCard = useUpdateGiftCard()
+  const download = useDownloadGiftCardImage()
   const today = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
 
   const toggleActive = React.useCallback(
@@ -37,8 +44,23 @@ export function GiftCardsPage() {
   )
 
   const columns = React.useMemo(
-    () => getGiftCardColumns(toggleActive, updateGiftCard.isPending, today),
-    [toggleActive, updateGiftCard.isPending, today],
+    () =>
+      getGiftCardColumns(
+        toggleActive,
+        updateGiftCard.isPending,
+        today,
+        setEditing,
+        setSending,
+        (card) => {
+          toast.promise(download.mutateAsync(card.id), {
+            loading: 'Preparing gift card image…',
+            success: 'Gift card image downloaded.',
+            error: 'Could not download the gift card image. Please try again.',
+          })
+        },
+        download.isPending,
+      ),
+    [toggleActive, updateGiftCard.isPending, today, download],
   )
 
   const { searchParams } = useListParams({ columns })
@@ -88,6 +110,20 @@ export function GiftCardsPage() {
           quickFilter={{ columnId: 'status', allLabel: 'All statuses' }}
         />
       </DataTable>
+      {editing && (
+        <GiftCardRecipientDialog
+          key={editing.id}
+          card={editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
+      {sending && (
+        <SendGiftCardDialog
+          key={sending.id}
+          card={sending}
+          onClose={() => setSending(null)}
+        />
+      )}
     </div>
   )
 }

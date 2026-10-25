@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO gift_cards (code, initial_amount, balance, customer_id, expires_on, bought_for, recipient_phone)\n        VALUES ($1, $2::float8, $2::float8, $3, $4, NULLIF(BTRIM($5), ''), $6)\n        ON CONFLICT (code) DO NOTHING\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Float8",
+        "Uuid",
+        "Date",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "649f5953dda6035b2b892bcecc99a3f30671b68908cd85b31c033527b578ead0"
+}

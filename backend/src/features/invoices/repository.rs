@@ -11,7 +11,7 @@ use super::types::{
     InvoiceDetailLine, InvoiceEdit, InvoiceEditCustomer, InvoiceEditGiftCardLine,
     InvoiceEditMaterialLine, InvoiceEditOrder, InvoiceEditProductLine, InvoiceEditRedemption,
     InvoiceLineKind, InvoiceListItem, InvoiceParty, InvoicePayment, InvoiceRecord,
-    InvoiceRedemptionLine, OrderDesignValues,
+    InvoiceRedemptionLine, OrderDesignValues, RecordPaymentInput,
 };
 use crate::features::customers::types::CreateMeasurementInput;
 
@@ -71,14 +71,15 @@ pub async fn fetch_invoice_detail(
             i.urgent_charge::float8 AS "urgent_charge!",
             i.collection_method,
             i.created_at,
+            i.created_by,
             i.discount::float8 AS "discount!",
             i.discount_unit,
             -- Money state is derived from the ledger: the table stores only
             -- the total, so the paid sum, the status and the latest method
             -- are worked out here. The NUMERIC arithmetic stays exact —
             -- nothing is rounded until the service layer.
-            pay.paid AS "amount_paid!",
-            pay.status AS "payment_status!",
+            balance.amount_paid::float8 AS "amount_paid!",
+            balance.payment_status AS "payment_status!",
             method.payment_type AS "payment_method?",
             -- Goods receipt is separate from money: true once no order on
             -- the invoice is still pending collection. A retail-only invoice
@@ -91,6 +92,16 @@ pub async fn fetch_invoice_detail(
             collection.last_collected_at AS "last_collected_at?",
             i.total_price::float8 AS "total_price!",
             i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
+            balance.amount_credited::float8 AS "amount_credited!",
+            balance.cash_refunded::float8 AS "cash_refunded!",
+            balance.gift_card_refunded::float8 AS "gift_card_refunded!",
+            balance.net_total::float8 AS "net_total!",
+            balance.net_amount_paid::float8 AS "net_amount_paid!",
+            balance.net_gift_card_redeemed::float8 AS "net_gift_card_redeemed!",
+            balance.balance_due::float8 AS "balance_due!",
+            balance.refund_due::float8 AS "refund_due!",
+            (EXISTS(SELECT 1 FROM invoice_returns WHERE invoice_id = i.id)
+             OR EXISTS(SELECT 1 FROM invoice_refunds WHERE invoice_id = i.id)) AS "has_adjustments!",
             -- The `?` suffixes are for sqlx: it reads nullability off the
             -- column definition, which says NOT NULL, and can't see that a
             -- LEFT JOIN may not match.
@@ -102,25 +113,12 @@ pub async fn fetch_invoice_detail(
         LEFT JOIN branch b ON b.id = i.branch_id
         LEFT JOIN customers c ON c.id = i.customer_id
         LEFT JOIN LATERAL (
-            SELECT count(*) AS order_count,
+            SELECT count(*) FILTER (WHERE oc.outcome <> 'cancelled') AS order_count,
                    count(*) FILTER (WHERE status = 'collected') AS collected_order_count,
                    max(collected_at) AS last_collected_at
-            FROM orders WHERE invoice_id = i.id
+            FROM orders o JOIN order_outcomes oc ON oc.order_id = o.id WHERE o.invoice_id = i.id
         ) collection ON true
-        LEFT JOIN LATERAL (
-            SELECT
-                COALESCE(SUM(amount), 0)::float8 AS paid,
-                CASE
-                    WHEN GREATEST(
-                        i.total_price - i.gift_card_redeemed - COALESCE(SUM(amount), 0),
-                        0
-                    ) = 0 THEN 'paid'
-                    WHEN COALESCE(SUM(amount), 0) = 0 THEN 'unpaid'
-                    ELSE 'partial'
-                END AS status
-            FROM invoice_payments
-            WHERE invoice_id = i.id
-        ) pay ON true
+        LEFT JOIN invoice_balances balance ON balance.invoice_id = i.id
         LEFT JOIN LATERAL (
             SELECT payment_type
             FROM invoice_payments
@@ -290,6 +288,7 @@ pub async fn fetch_invoice_detail(
             urgent_charge: invoice.urgent_charge,
             collection_method: invoice.collection_method,
             created_at: invoice.created_at,
+            created_by: invoice.created_by,
             branch_name: invoice.branch_name,
             buyer: invoice
                 .buyer_name
@@ -310,6 +309,15 @@ pub async fn fetch_invoice_detail(
             collected_order_count: invoice.collected_order_count,
             last_collected_at: invoice.last_collected_at,
             gift_card_redeemed: invoice.gift_card_redeemed,
+            amount_credited: invoice.amount_credited,
+            cash_refunded: invoice.cash_refunded,
+            gift_card_refunded: invoice.gift_card_refunded,
+            net_total: invoice.net_total,
+            net_amount_paid: invoice.net_amount_paid,
+            net_gift_card_redeemed: invoice.net_gift_card_redeemed,
+            balance_due: invoice.balance_due,
+            refund_due: invoice.refund_due,
+            has_adjustments: invoice.has_adjustments,
         },
         lines,
         redemptions: redemptions
@@ -338,26 +346,32 @@ const SPEC: ListSpec = ListSpec {
             i.id,
             i.invoice_number,
             i.invoice_date,
+            i.created_by,
             i.target_date,
             i.urgent_charge::float8 AS urgent_charge,
             i.collection_method,
-            pay.status AS payment_status,
+            balance.payment_status AS payment_status,
             i.total_price::float8 AS total_price,
-            pay.paid AS amount_paid,
-            GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS balance_due,
+            balance.net_total::float8 AS net_total,
+            balance.amount_credited::float8 AS amount_credited,
+            (balance.cash_refunded + balance.gift_card_refunded)::float8 AS amount_refunded,
+            balance.refund_due::float8 AS refund_due,
+            balance.net_amount_paid::float8 AS amount_paid,
+            balance.balance_due::float8 AS balance_due,
             method.payment_type AS payment_method,
             NOT EXISTS(
                 SELECT 1 FROM orders o
                 WHERE o.invoice_id = i.id AND o.status <> 'collected'
+                  AND NOT EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id = o.id)
             ) AS collected,
             -- The latest collection across the invoice's tailoring lines.
             -- NULL until the first order is collected (and on retail-only
             -- invoices, which have no orders at all).
             agg.last_collected_at AS last_collected_at,
-            COALESCE(agg.item_count, 0) AS order_count,
+            COALESCE(agg.collectible_order_count, 0) AS order_count,
             ready.readiness_status, ready.ready_order_count, ready.pending_order_count, ready.readiness_generation,
             COALESCE(agg.collected_order_count, 0) AS collected_order_count,
-            i.gift_card_redeemed::float8 AS gift_card_redeemed,
+            balance.net_gift_card_redeemed::float8 AS gift_card_redeemed,
             i.branch_id AS receiving_location_id,
             recv.name AS receiving_location,
             COALESCE(agg.production_locations, '[]') AS production_locations,
@@ -391,6 +405,7 @@ const SPEC: ListSpec = ListSpec {
         LEFT JOIN LATERAL (
             SELECT
                 count(*) AS item_count,
+                count(*) FILTER (WHERE NOT EXISTS(SELECT 1 FROM order_cancellations x WHERE x.order_id = o.id)) AS collectible_order_count,
                 count(*) FILTER (WHERE o.status = 'collected') AS collected_order_count,
                 json_agg(DISTINCT jsonb_build_object(
                     'name', c.name,
@@ -423,20 +438,7 @@ const SPEC: ListSpec = ListSpec {
         -- The money state, derived from the ledger like in
         -- fetch_invoice_detail above: the paid sum, the status, and the most
         -- recent payment's method.
-        LEFT JOIN LATERAL (
-            SELECT
-                COALESCE(SUM(amount), 0)::float8 AS paid,
-                CASE
-                    WHEN GREATEST(
-                        i.total_price - i.gift_card_redeemed - COALESCE(SUM(amount), 0),
-                        0
-                    ) = 0 THEN 'paid'
-                    WHEN COALESCE(SUM(amount), 0) = 0 THEN 'unpaid'
-                    ELSE 'partial'
-                END AS status
-            FROM invoice_payments
-            WHERE invoice_id = i.id
-        ) pay ON true
+        LEFT JOIN invoice_balances balance ON balance.invoice_id = i.id
         LEFT JOIN LATERAL (
             SELECT payment_type
             FROM invoice_payments
@@ -485,6 +487,10 @@ const SPEC: ListSpec = ListSpec {
             ColumnDef::new("amount_paid", ColumnKind::Number),
         ),
         (
+            "amountRefunded",
+            ColumnDef::new("amount_refunded", ColumnKind::Number),
+        ),
+        (
             "paymentStatus",
             ColumnDef::new("payment_status", ColumnKind::Text),
         ),
@@ -526,6 +532,7 @@ pub async fn insert_invoice(
     total_price: f64,
     gift_card_redeemed: f64,
     urgent_charge: f64,
+    actor: &str,
 ) -> Result<(Uuid, chrono::DateTime<chrono::Utc>), sqlx::Error> {
     // invoice_date is server-set (DEFAULT now()) and never taken from
     // input — staff promise a target_date instead. Returned so gift card
@@ -535,11 +542,11 @@ pub async fn insert_invoice(
         INSERT INTO invoices (
             target_date, branch_id, discount, discount_unit,
             total_price, customer_id, gift_card_redeemed,
-            urgent_charge, collection_method
+            urgent_charge, collection_method, created_by
         )
         VALUES (
             $1, $2, $3::float8, $4, $5::float8, $6, $7::float8,
-            $8::float8, $9
+            $8::float8, $9, $10
         )
         RETURNING id, invoice_date
         "#,
@@ -552,18 +559,17 @@ pub async fn insert_invoice(
         gift_card_redeemed,
         urgent_charge,
         input.collection_method.as_str(),
+        actor,
     )
     .fetch_one(&mut **tx)
     .await
     .map(|row| (row.id, row.invoice_date))
 }
 
-/// The invoice's totals with the row locked, so a payment validated against
-/// them cannot be interleaved with another one. `None` when the invoice
-/// doesn't exist.
-pub struct LockedInvoiceTotals {
-    pub total_price: f64,
-    pub gift_card_redeemed: f64,
+/// Locks the invoice before reading its ledger in a separate statement.
+/// That later read observes any changes committed while lock acquisition
+/// waited. `None` means the invoice does not exist.
+pub struct LockedInvoice {
     /// The server-set creation date. Gift card expiry on an edit is checked
     /// against this — the date the sale happened — not the editable target.
     pub invoice_date: chrono::DateTime<chrono::Utc>,
@@ -572,10 +578,10 @@ pub struct LockedInvoiceTotals {
 pub async fn lock_invoice(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
-) -> Result<Option<LockedInvoiceTotals>, sqlx::Error> {
+) -> Result<Option<LockedInvoice>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT total_price::float8 AS "total_price!", gift_card_redeemed::float8 AS "gift_card_redeemed!", invoice_date
+        SELECT invoice_date
         FROM invoices
         WHERE id = $1
         FOR UPDATE
@@ -585,9 +591,7 @@ pub async fn lock_invoice(
     .fetch_optional(&mut **tx)
     .await?;
 
-    Ok(row.map(|row| LockedInvoiceTotals {
-        total_price: row.total_price,
-        gift_card_redeemed: row.gift_card_redeemed,
+    Ok(row.map(|row| LockedInvoice {
         invoice_date: row.invoice_date,
     }))
 }
@@ -619,17 +623,19 @@ pub async fn insert_payment(
     order_id: Option<Uuid>,
     amount: f64,
     payment_type: Option<&str>,
+    actor: &str,
 ) -> Result<InvoicePayment, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        INSERT INTO invoice_payments (invoice_id, order_id, amount, payment_type)
-        VALUES ($1, $2, $3::float8, $4)
-        RETURNING id, amount::float8 AS "amount!", payment_type, paid_at, order_id
+        INSERT INTO invoice_payments (invoice_id, order_id, amount, payment_type, recorded_by)
+        VALUES ($1, $2, $3::float8, $4, $5)
+        RETURNING id, amount::float8 AS "amount!", payment_type, paid_at, order_id, recorded_by
         "#,
         invoice_id,
         order_id,
         amount,
         payment_type,
+        actor,
     )
     .fetch_one(&mut **tx)
     .await?;
@@ -640,7 +646,66 @@ pub async fn insert_payment(
         payment_type: row.payment_type,
         paid_at: row.paid_at,
         order_id: row.order_id,
+        recorded_by: row.recorded_by,
     })
+}
+
+/// Read only after acquiring the parent invoice lock.
+pub async fn previous_payment_request(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    request_id: Uuid,
+) -> Result<Option<(InvoicePayment, Vec<u8>)>, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        SELECT id, amount::float8 AS "amount!", payment_type, paid_at, order_id, recorded_by,
+               request_hash AS "request_hash!"
+        FROM invoice_payments WHERE invoice_id = $1 AND request_id = $2
+        "#,
+        invoice_id,
+        request_id,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(row.map(|row| {
+        (
+            InvoicePayment {
+                id: row.id,
+                amount: row.amount,
+                payment_type: row.payment_type,
+                paid_at: row.paid_at,
+                order_id: row.order_id,
+                recorded_by: row.recorded_by,
+            },
+            row.request_hash,
+        )
+    }))
+}
+
+pub async fn insert_requested_payment(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    input: &RecordPaymentInput,
+    hash: &[u8],
+    actor: &str,
+) -> Result<InvoicePayment, sqlx::Error> {
+    sqlx::query_as!(
+        InvoicePayment,
+        r#"
+        INSERT INTO invoice_payments (invoice_id, order_id, amount, payment_type, request_id, request_hash, recorded_by)
+        VALUES ($1, $2, $3::float8, $4, $5, $6, $7)
+        RETURNING id, amount::float8 AS "amount!", payment_type, paid_at, order_id, recorded_by
+        "#,
+        invoice_id,
+        input.order_id,
+        input.amount,
+        input.payment_type.as_str(),
+        input.request_id,
+        hash,
+        actor,
+    )
+    .fetch_one(&mut **tx)
+    .await
 }
 
 /// Every payment on the invoice, oldest first — the history the detail page
@@ -652,7 +717,7 @@ pub async fn list_payments(
     sqlx::query_as!(
         InvoicePayment,
         r#"
-        SELECT id, amount::float8 AS "amount!", payment_type, paid_at, order_id
+        SELECT id, amount::float8 AS "amount!", payment_type, paid_at, order_id, recorded_by
         FROM invoice_payments
         WHERE invoice_id = $1
         ORDER BY paid_at, id
@@ -721,6 +786,7 @@ pub async fn mark_orders_collected(
         UPDATE orders
         SET status = 'collected', collected_at = now()
         WHERE invoice_id = $1 AND status <> 'collected'
+          AND NOT EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id = orders.id)
         "#,
         invoice_id,
     )
@@ -742,9 +808,9 @@ pub async fn insert_order(
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
             thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd, more_details,
-            production_branch_id, material_source, customer_material_description, base_price, is_urgent, urgent_charge
+            production_branch_id, material_source, customer_material_description, base_price, is_urgent, urgent_charge, material_stock_branch_id
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8, $18, $19::float8)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8, $18, $19::float8, CASE WHEN $15::text = 'shop' THEN $14::uuid ELSE NULL::uuid END)
         "#,
         measurement_id,
         order.material_id,
@@ -1074,7 +1140,7 @@ pub async fn fetch_invoice_edit(
 
     let gift_rows = sqlx::query!(
         r#"
-        SELECT g.code, ii.line_total::float8 AS "amount!", g.expires_on
+        SELECT g.code, ii.line_total::float8 AS "amount!", g.expires_on, g.bought_for, g.recipient_phone
         FROM invoice_items ii
         JOIN gift_cards g ON g.id = ii.gift_card_id
         WHERE ii.invoice_id = $1 AND ii.kind = 'gift_card'
@@ -1135,6 +1201,8 @@ pub async fn fetch_invoice_edit(
             .map(|row| InvoiceEditGiftCardLine {
                 code: row.code,
                 amount: row.amount,
+                bought_for: row.bought_for,
+                recipient_phone: row.recipient_phone,
                 expires_on: row.expires_on,
             })
             .collect(),
@@ -1202,7 +1270,7 @@ pub async fn old_order_lines(
     sqlx::query_as!(
         OldOrderLine,
         r#"
-        SELECT material_id, production_branch_id, material_amount::float8 AS "material_amount!"
+        SELECT material_id, COALESCE(material_stock_branch_id, production_branch_id) AS production_branch_id, material_amount::float8 AS "material_amount!"
         FROM orders
         WHERE invoice_id = $1
         "#,
@@ -1544,4 +1612,16 @@ pub async fn old_material_lines(
     )
     .fetch_all(&mut **tx)
     .await
+}
+
+pub async fn sold_card_has_deliveries(
+    tx: &mut sqlx::PgTransaction<'_>,
+    id: Uuid,
+) -> Result<bool, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM gift_card_deliveries WHERE gift_card_id=$1)",
+    )
+    .bind(id)
+    .fetch_one(&mut **tx)
+    .await?)
 }

@@ -364,7 +364,13 @@ describe('invoiceFormSchema', () => {
 
   it('accepts an invoice of only gift cards', () => {
     const input = values({
-      giftCards: [{ ...createEmptyGiftCardLine(), code: 'GC-1', amount: 200 }],
+      giftCards: [
+        {
+          ...createEmptyGiftCardLine(),
+          recipientPhone: '+97333112233',
+          amount: 200,
+        },
+      ],
     })
     expect(firstErrorFor(input)).toBeNull()
   })
@@ -433,7 +439,13 @@ describe('invoiceFormSchema', () => {
 
   it('rejects a gift card sold with no amount', () => {
     const input = values({
-      giftCards: [{ ...createEmptyGiftCardLine(), code: 'GC-1', amount: '' }],
+      giftCards: [
+        {
+          ...createEmptyGiftCardLine(),
+          recipientPhone: '+97333112233',
+          amount: '',
+        },
+      ],
     })
     const error = firstErrorFor(input)
     expect(error?.message).toMatch(/amount greater than 0/i)

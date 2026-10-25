@@ -52,12 +52,18 @@ pub async fn order_document(
 
 pub async fn collect_order(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(order_id): Path<Uuid>,
     Json(input): Json<CollectOrderInput>,
 ) -> Result<Json<OrderListItem>, AppError> {
+    let actor = user
+        .subject()
+        .filter(|subject| !subject.trim().is_empty())
+        .ok_or_else(|| {
+            AppError::Unauthorized("a user identity is required to record a collection".into())
+        })?;
     Ok(Json(
-        service::collect_order(&state, order_id, input.amount, input.payment_type).await?,
+        service::collect_order(&state, order_id, input.amount, input.payment_type, actor).await?,
     ))
 }
 

@@ -50,6 +50,10 @@ const SPEC: ListSpec = ListSpec {
             o.is_urgent,
             o.urgent_charge::float8 AS urgent_charge,
             o.status,
+            oc.outcome, oc.reason AS closure_reason, oc.closed_at, oc.closed_by,
+            oc.credited_amount::float8 AS credit_amount,
+            oc.retained_charge::float8 AS retained_charge,
+            oc.restored_material_quantity::float8 AS restored_material_quantity,
             o.collected_at,
             o.ready_at,
             o.ready_by,
@@ -72,16 +76,18 @@ const SPEC: ListSpec = ListSpec {
             -- consistent with the displayed location.
             COALESCE(prod.name, inferred.branch_name) AS effective_production_location,
             i.total_price::float8 AS invoice_total_price,
-            pay.paid AS invoice_amount_paid,
-            pay.status AS invoice_payment_status,
+            balance.amount_paid::float8 AS invoice_amount_paid,
+            balance.payment_status AS invoice_payment_status,
             i.gift_card_redeemed::float8 AS invoice_gift_card_redeemed,
             -- Unlike the list page's own balance, this one nets off gift
             -- card tender too — it is what the collect dialog collects.
-            GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS invoice_balance_due,
+            balance.balance_due::float8 AS invoice_balance_due,
             method.payment_type AS invoice_payment_method,
-            GREATEST(i.total_price - i.gift_card_redeemed - pay.paid, 0)::float8 AS balance_due,
+            balance.balance_due::float8 AS balance_due,
             method.payment_type AS payment_method,
             CASE
+                WHEN oc.outcome = 'cancelled' THEN 'Cancelled'
+                WHEN oc.outcome = 'returned' THEN 'Returned'
                 WHEN next_stage.name IS NULL THEN 'Completed'
                 WHEN NOT EXISTS (
                     SELECT 1 FROM order_stage_progress p WHERE p.order_id = o.id
@@ -89,6 +95,7 @@ const SPEC: ListSpec = ListSpec {
                 ELSE next_stage.name
             END AS current_stage
         FROM orders o
+        JOIN order_outcomes oc ON oc.order_id = o.id
         JOIN invoices i ON i.id = o.invoice_id
         JOIN measurements m ON m.id = o.measurement_id
         JOIN customers c ON c.id = m.customer_id
@@ -98,20 +105,7 @@ const SPEC: ListSpec = ListSpec {
         -- The invoice's money state, derived from the payments ledger: the
         -- table stores only the total, so the paid sum, the status and the
         -- latest method are worked out here — mirrors fetch_invoice_detail.
-        LEFT JOIN LATERAL (
-            SELECT
-                COALESCE(SUM(amount), 0)::float8 AS paid,
-                CASE
-                    WHEN GREATEST(
-                        i.total_price - i.gift_card_redeemed - COALESCE(SUM(amount), 0),
-                        0
-                    ) = 0 THEN 'paid'
-                    WHEN COALESCE(SUM(amount), 0) = 0 THEN 'unpaid'
-                    ELSE 'partial'
-                END AS status
-            FROM invoice_payments
-            WHERE invoice_id = i.id
-        ) pay ON true
+        LEFT JOIN invoice_balances balance ON balance.invoice_id = i.id
         LEFT JOIN LATERAL (
             SELECT payment_type
             FROM invoice_payments
@@ -190,6 +184,7 @@ const SPEC: ListSpec = ListSpec {
         ),
         ("price", ColumnDef::new("price", ColumnKind::Number)),
         ("status", ColumnDef::new("status", ColumnKind::Text)),
+        ("outcome", ColumnDef::new("outcome", ColumnKind::Text)),
         (
             "collectedAt",
             ColumnDef::new("collected_at", ColumnKind::Date),
@@ -332,7 +327,7 @@ pub async fn list_assignments(
 /// resolved by the caller against the user directory rather than trusted from
 /// the client — see `orders/service.rs::set_assignee`.
 pub async fn set_assignee(
-    state: &AppState,
+    tx: &mut sqlx::PgTransaction<'_>,
     order_id: Uuid,
     stage_id: Uuid,
     assignee_id: &str,
@@ -353,14 +348,14 @@ pub async fn set_assignee(
         assignee_id,
         assignee_name,
     )
-    .execute(state.db())
+    .execute(&mut **tx)
     .await?;
 
     Ok(())
 }
 
 pub async fn clear_assignee(
-    state: &AppState,
+    tx: &mut sqlx::PgTransaction<'_>,
     order_id: Uuid,
     stage_id: Uuid,
 ) -> Result<(), sqlx::Error> {
@@ -372,7 +367,7 @@ pub async fn clear_assignee(
         order_id,
         stage_id,
     )
-    .execute(state.db())
+    .execute(&mut **tx)
     .await?;
 
     Ok(())
@@ -639,9 +634,9 @@ pub async fn invoice_fully_collected(
 ) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar!(
         r#"
-        SELECT COUNT(*) FILTER (WHERE status <> 'collected') = 0
-        FROM orders
-        WHERE invoice_id = $1
+        SELECT COUNT(*) FILTER (WHERE o.status <> 'collected' AND oc.outcome = 'active') = 0
+        FROM orders o JOIN order_outcomes oc ON oc.order_id = o.id
+        WHERE o.invoice_id = $1
         "#,
         invoice_id,
     )
@@ -654,22 +649,11 @@ pub async fn invoice_fully_collected(
 /// the partial-update shape used across the other features. The flip side is
 /// that a production location can be reassigned but not cleared back to NULL.
 pub async fn update_order(
-    state: &AppState,
+    tx: &mut sqlx::PgTransaction<'_>,
     order_id: Uuid,
     production_location_id: Option<Uuid>,
 ) -> Result<Option<Uuid>, sqlx::Error> {
-    let mut tx = state.db().begin().await?;
-    let invoice_id: Option<Uuid> = sqlx::query_scalar("SELECT invoice_id FROM orders WHERE id=$1")
-        .bind(order_id)
-        .fetch_optional(&mut *tx)
-        .await?;
-    if let Some(invoice_id) = invoice_id {
-        sqlx::query("SELECT id FROM invoices WHERE id=$1 FOR UPDATE")
-            .bind(invoice_id)
-            .execute(&mut *tx)
-            .await?;
-    }
-    let result = sqlx::query_scalar!(
+    sqlx::query_scalar!(
         r#"
         UPDATE orders
         SET production_branch_id = COALESCE($2, production_branch_id)
@@ -679,10 +663,8 @@ pub async fn update_order(
         order_id,
         production_location_id,
     )
-    .fetch_optional(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(result)
+    .fetch_optional(&mut **tx)
+    .await
 }
 
 /// Records a stage as done or skipped. The upsert leans on the unique index,
@@ -769,16 +751,6 @@ pub async fn create_repair(
     charge: f64,
     notes: Option<&str>,
 ) -> Result<Uuid, sqlx::Error> {
-    let invoice_id: Option<Uuid> = sqlx::query_scalar("SELECT invoice_id FROM orders WHERE id=$1")
-        .bind(order_id)
-        .fetch_optional(&mut **tx)
-        .await?;
-    if let Some(invoice_id) = invoice_id {
-        sqlx::query("SELECT id FROM invoices WHERE id=$1 FOR UPDATE")
-            .bind(invoice_id)
-            .execute(&mut **tx)
-            .await?;
-    }
     sqlx::query_scalar!(
         r#"
         INSERT INTO order_repairs (order_id, reason, charge, notes)

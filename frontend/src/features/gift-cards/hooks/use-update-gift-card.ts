@@ -2,11 +2,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import type { GiftCard } from '../types/gift-card'
 
-// Voiding is the one edit that makes sense once a card is in a customer's
-// hands — its balance changes only by being spent on an invoice.
+// Recipient details and active status are editable. Balance changes through redemption.
 export interface UpdateGiftCardInput {
   id: string
-  isActive: boolean
+  isActive?: boolean
+  boughtFor?: string
+  recipientPhone?: string
 }
 
 async function updateGiftCard({

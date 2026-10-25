@@ -29,8 +29,8 @@
                 label, x, y, size. The front shoulder slot reads the drop and
                 the back one the plain shoulder width.
     thob_values — every recorded measurement as a display string, keyed by
-                camelCase field name; unrecorded fields are absent, so their
-                slots render nothing.
+                camelCase field name, shared by the diagram and tables;
+                unrecorded fields are absent, so their slots render nothing.
     thob_front_paths / thob_back_paths — silhouette strokes: d, grey (faint
                 stitch), dashed.
     thob_front_ellipses / thob_back_ellipses — collar, cuffs and yoke:
@@ -79,7 +79,7 @@
 {# Measurement pairs: each pair renders as one row with fixed columns, so
    related fields (neck | neck width) stay side by side even when a field
    further up the list wasn't recorded. A single-element pair is padded
-   with "" — `order.measurement[""]` is undefined and renders as a blank
+   with "" — `thob_values[""]` is undefined and renders as a blank
    cell that holds the column. #}
 {%- set body_pairs = [["frontHeight", "backHeight"], ["shoulder", "shoulderDown"], ["chest", "chestUp"], ["waist", "hip"], ["sleeveLength", "sleeveHalf"], ["neckSize", "neckWidth"], ["openHand", ""], ["cuffWidth", "cuffSize"], ["armhole", "bottom"], ["bottomFold", "fullBody"], ["openFold", ""]] -%}
 {%- set pocket_pairs = [["frontPocketLength", "frontPocketLengthByWidth"], ["sidePocket", "sidePocketLengthByWidth"], ["mobilePocketLengthByWidth", ""]] -%}
@@ -619,7 +619,11 @@
             <dt>Order status</dt>
             <dd>
               {%- set status = order_status_labels[order.status] -%}
-              {% if status %}
+              {% if order.outcome == "cancelled" %}
+                Cancelled
+              {% elif order.outcome == "returned" %}
+                Returned
+              {% elif status %}
                 {{ status }}
               {% else %}
                 {{ order.status }}
@@ -630,6 +634,12 @@
           <div class="row">
             <dt>Priority</dt>
             <dd>Urgent</dd>
+          </div>
+          {% endif %}
+          {% if order.closureReason %}
+          <div class="row">
+            <dt>Closure reason</dt>
+            <dd>{{ order.closureReason }}</dd>
           </div>
           {% endif %}
         </dl>
@@ -721,7 +731,7 @@
               <path class="thob-arrow" d="{{ d }}" />
             {%- endfor %}
           </g>
-          <g font-family="Arial, sans-serif">
+          <g font-family="Arial, sans-serif" direction="ltr">
             {%- for slot in thob_slots %}
               {% set value = thob_values[slot.key] %}
               {% if value is defined and value is not none and value != '' %}
@@ -752,8 +762,8 @@
         <h3>Body dimensions</h3>
         <div class="measurement-grid">
           {% for pair in body_pairs %}
-            {% set m0 = order.measurement[pair[0]] %}
-            {% set m1 = order.measurement[pair[1]] %}
+            {% set m0 = thob_values[pair[0]] %}
+            {% set m1 = thob_values[pair[1]] %}
             {% if (m0 is defined and m0 is not none and m0 != '') or (m1 is defined and m1 is not none and m1 != '') %}
               <div class="m-row">
                 {{ m_cell(m0, measurement_labels[pair[0]]) }}
@@ -768,8 +778,8 @@
         <h3>Pockets</h3>
         <div class="measurement-grid">
           {% for pair in pocket_pairs %}
-            {% set m0 = order.measurement[pair[0]] %}
-            {% set m1 = order.measurement[pair[1]] %}
+            {% set m0 = thob_values[pair[0]] %}
+            {% set m1 = thob_values[pair[1]] %}
             {% if (m0 is defined and m0 is not none and m0 != '') or (m1 is defined and m1 is not none and m1 != '') %}
               <div class="m-row">
                 {{ m_cell(m0, measurement_labels[pair[0]]) }}
@@ -783,8 +793,8 @@
         <h3>Style & finishing</h3>
         <div class="measurement-grid">
           {% for pair in style_pairs %}
-            {% set m0 = order.measurement[pair[0]] %}
-            {% set m1 = order.measurement[pair[1]] %}
+            {% set m0 = thob_values[pair[0]] %}
+            {% set m1 = thob_values[pair[1]] %}
             {% if (m0 is defined and m0 is not none and m0 != '') or (m1 is defined and m1 is not none and m1 != '') %}
               <div class="m-row">
                 {{ m_cell(m0, measurement_labels[pair[0]]) }}

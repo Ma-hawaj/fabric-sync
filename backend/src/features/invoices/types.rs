@@ -44,7 +44,7 @@ impl DiscountUnit {
 // of payments — advances at creation, per-pickup payments as orders are
 // collected, till payments in between — each recording its own `PaymentType`
 // as a row in `invoice_payments`.
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PaymentType {
     Benefit,
@@ -141,8 +141,13 @@ pub struct CreateMaterialLineInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateGiftCardLineInput {
+    #[serde(default)]
     pub code: String,
     pub amount: f64,
+    #[serde(default)]
+    pub bought_for: Option<String>,
+    #[serde(default)]
+    pub recipient_phone: String,
     #[serde(default)]
     pub expires_on: Option<NaiveDate>,
 }
@@ -231,12 +236,21 @@ pub struct CreateInvoiceInput {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct IssuedGiftCard {
+    pub id: Uuid,
+    pub code: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreatedInvoice {
     pub id: Uuid,
     pub total_price: f64,
     // Echoed back so the client can confirm how much gift card tender was
     // actually applied against the total.
     pub gift_card_redeemed: f64,
+    /// Cards sold on this invoice, ready for recipient/image preview after save.
+    pub gift_cards: Vec<IssuedGiftCard>,
 }
 
 /// One tailoring line as it was entered, not as it prints: ids rather than
@@ -317,6 +331,8 @@ pub struct InvoiceEditMaterialLine {
 pub struct InvoiceEditGiftCardLine {
     pub code: String,
     pub amount: f64,
+    pub bought_for: Option<String>,
+    pub recipient_phone: Option<String>,
     pub expires_on: Option<NaiveDate>,
 }
 
@@ -337,6 +353,7 @@ pub struct InvoicePayment {
     pub payment_type: Option<String>,
     pub paid_at: DateTime<Utc>,
     pub order_id: Option<Uuid>,
+    pub recorded_by: Option<String>,
 }
 
 /// Shape of `GET /invoices/:id/edit`: the invoice as input values rather than
@@ -411,9 +428,10 @@ pub struct CollectedInvoice {
 /// collecting anything: an extra advance, or the remainder paid after every
 /// order was already collected. `order_id` attributes it to a pickup when it
 /// was taken at one; it must belong to this invoice.
-#[derive(Clone, Copy, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RecordPaymentInput {
+    pub request_id: Uuid,
     pub amount: f64,
     pub payment_type: PaymentType,
     #[serde(default)]
@@ -540,6 +558,13 @@ pub struct InvoiceTotalsBreakdown {
     pub total: f64,
     pub gift_card_redeemed: f64,
     pub amount_paid: f64,
+    pub amount_credited: f64,
+    pub cash_refunded: f64,
+    pub gift_card_refunded: f64,
+    pub net_total: f64,
+    pub net_amount_paid: f64,
+    pub net_gift_card_redeemed: f64,
+    pub refund_due: f64,
     /// What the customer still owes: the total less everything already
     /// settled, whether in cash or in gift card tender.
     pub balance_due: f64,
@@ -552,6 +577,7 @@ pub struct InvoiceTotalsBreakdown {
 /// the table no longer stores them.
 #[derive(Clone, Debug)]
 pub struct InvoiceRecord {
+    pub created_by: Option<String>,
     pub urgent_charge: f64,
     pub collection_method: String,
     pub id: Uuid,
@@ -581,6 +607,15 @@ pub struct InvoiceRecord {
     /// collected (and on retail-only invoices, which have no orders).
     pub last_collected_at: Option<DateTime<Utc>>,
     pub gift_card_redeemed: f64,
+    pub amount_credited: f64,
+    pub cash_refunded: f64,
+    pub gift_card_refunded: f64,
+    pub net_total: f64,
+    pub net_amount_paid: f64,
+    pub net_gift_card_redeemed: f64,
+    pub balance_due: f64,
+    pub refund_due: f64,
+    pub has_adjustments: bool,
 }
 
 /// Shape of `GET /invoices/:id`, and the context the invoice document template
@@ -588,6 +623,7 @@ pub struct InvoiceRecord {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceDetail {
+    pub created_by: Option<String>,
     #[serde(flatten)]
     pub readiness: crate::features::orders::readiness::Summary,
     pub collection_method: String,
@@ -621,12 +657,14 @@ pub struct InvoiceDetail {
     pub lines: Vec<InvoiceDetailLine>,
     pub redemptions: Vec<InvoiceRedemptionLine>,
     pub payments: Vec<InvoicePayment>,
+    pub has_adjustments: bool,
     pub totals: InvoiceTotalsBreakdown,
 }
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceListItem {
+    pub created_by: Option<String>,
     #[sqlx(flatten)]
     #[serde(flatten)]
     pub readiness: crate::features::orders::readiness::Summary,
@@ -643,11 +681,17 @@ pub struct InvoiceListItem {
     pub item_count: i64,
     #[sqlx(json)]
     pub materials: Vec<String>,
+    /// Original invoice total; credits and payouts never rewrite this value.
     pub total_price: f64,
+    /// Original sale total, less separately recorded credits.
+    pub net_total: f64,
+    pub amount_credited: f64,
+    pub amount_refunded: f64,
+    pub refund_due: f64,
     pub payment_status: String,
+    /// External payments less external refunds; gift card tender is separate.
     pub amount_paid: f64,
-    /// What the customer still owes: the total less gift card tender and
-    /// every payment. Display-only — the dialogs collect against it.
+    /// What the customer still owes after credits and refunded tender.
     pub balance_due: f64,
     /// The method of the most recent payment, backing the list's payment
     /// method column.

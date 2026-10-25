@@ -96,6 +96,8 @@ export interface InvoiceEditMaterialLine {
 export interface InvoiceEditGiftCardLine {
   code: string
   amount: number
+  boughtFor: string | null
+  recipientPhone: string | null
   expiresOn: string | null
 }
 

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COUNT(*) FILTER (WHERE o.status <> 'collected' AND oc.outcome = 'active') = 0\n        FROM orders o JOIN order_outcomes oc ON oc.order_id = o.id\n        WHERE o.invoice_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "?column?",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "82107f920fdb57ff2a2711252f991cc6bae309ae351b28ff55a5abb9be902255"
+}

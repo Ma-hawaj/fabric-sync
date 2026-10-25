@@ -14,7 +14,9 @@ use serde::Serialize;
 
 use crate::{
     config::InvoiceBranding,
-    document::{format_amount, format_date, format_datetime, format_quantity, CURRENCY},
+    document::{
+        format_amount, format_date, format_datetime, format_measurement, format_quantity, CURRENCY,
+    },
     error::AppError,
     features::design_options::{service as design_catalog, types::DesignAsset as CatalogAsset},
     state::AppState,
@@ -269,9 +271,7 @@ fn formatted_amounts(detail: &OrderDetail) -> BTreeMap<String, String> {
 
 fn push_number(values: &mut BTreeMap<String, String>, key: &str, value: Option<f64>) {
     if let Some(value) = value {
-        // Trims the trailing ".0" off a whole number: 120 inches reads "120",
-        // not "120.00".
-        values.insert(key.to_string(), format_quantity(value));
+        values.insert(key.to_string(), format_measurement(value));
     }
 }
 
@@ -726,16 +726,21 @@ mod tests {
 
     #[test]
     fn measurements_are_formatted_for_the_sheet_slots() {
+        let mut measurement = tests_support::measurement();
+        measurement.shoulder = Some(17.625);
+        measurement.neck_width = Some(7.123);
         let detail = OrderDetail {
             order: services_order(),
             invoice_number: 7,
-            measurement: tests_support::measurement(),
+            measurement,
         };
 
         let values = formatted_measurement(&detail);
         assert_eq!(values["frontHeight"], "120");
         assert_eq!(values["chest"], "50");
         assert_eq!(values["sleeveLength"], "60");
+        assert_eq!(values["shoulder"], "17 ⅝");
+        assert_eq!(values["neckWidth"], "7.123");
         // Everything the fixture didn't capture stays off the sheet.
         assert!(!values.contains_key("waist"));
         assert!(!values.contains_key("backHeight"));
@@ -789,6 +794,37 @@ mod tests {
     }
 
     #[test]
+    fn fraction_values_match_between_diagram_and_measurement_tables() {
+        let mut measurement = tests_support::measurement();
+        measurement.waist = Some(38.5);
+        measurement.front_pocket_length = Some(6.125);
+        measurement.fo_width = Some(3.75);
+        measurement.chest_up = Some(7.13);
+        measurement.neck_width = Some(0.0);
+        measurement.front_pocket_length_by_width = Some("No <16x14>".to_string());
+        let detail = OrderDetail {
+            order: services_order(),
+            invoice_number: 7,
+            measurement,
+        };
+        let html = test_render(&detail, &branding());
+        let (diagram, tables) = html.split_once("<div class=\"measurements\">").unwrap();
+
+        for value in ["38 ½", "6 ⅛", "3 ¾", "7.13", "0", "No &lt;16x14&gt;"] {
+            assert!(
+                diagram.contains(&format!(">{value}</text>")),
+                "diagram: {value}"
+            );
+            assert!(
+                tables.contains(&format!("<span class=\"num\">{value}</span>")),
+                "table: {value}"
+            );
+        }
+        assert!(tables.contains("<span class=\"num\">body</span>"));
+        assert!(tables.contains("<span class=\"num\">medium</span>"));
+    }
+
+    #[test]
     fn the_template_renders_the_thobe_sheet() {
         let mut measurement = tests_support::measurement();
         measurement.back_height = Some(124.0);
@@ -821,7 +857,7 @@ mod tests {
         assert!(html.contains(">120</text>"));
         assert!(html.contains(">124</text>"));
         assert!(html.contains(">60</text>"));
-        assert!(html.contains(">38.5</text>"));
+        assert!(html.contains(">38 ½</text>"));
         assert!(html.contains("No 16x14"));
         // No units ride the slots.
         assert!(!html.contains("inch"));
@@ -1085,6 +1121,13 @@ mod tests {
 fn services_order() -> crate::features::orders::types::OrderListItem {
     use crate::features::orders::types::OrderListItem;
     OrderListItem {
+        outcome: "active".into(),
+        closure_reason: None,
+        closed_at: None,
+        closed_by: None,
+        credit_amount: None,
+        retained_charge: 0.0,
+        restored_material_quantity: 0.0,
         id: uuid::Uuid::nil(),
         order_number: 12,
         invoice_id: uuid::Uuid::nil(),

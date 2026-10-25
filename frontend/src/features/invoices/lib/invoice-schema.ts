@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { recipientPhoneSchema } from '@/features/gift-cards/lib/gift-card-schema'
 import { customerIdentitySchema } from '@/features/customers/lib/customer-schema'
 import { measurementPayload } from '@/features/customers/hooks/use-create-customer'
 import { isMoney } from '@/lib/money'
@@ -198,17 +199,12 @@ const giftCardLineDraftSchema = z
   .object({
     key: z.string(),
     code: z.string(),
+    boughtFor: z.string(),
+    recipientPhone: recipientPhoneSchema,
     amount: numberInputSchema,
     expiresOn: z.string(),
   })
   .superRefine((line, ctx) => {
-    if (!line.code.trim()) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Enter a gift card code.',
-        path: ['code'],
-      })
-    }
     if (line.amount === '' || line.amount <= 0) {
       ctx.addIssue({
         code: 'custom',

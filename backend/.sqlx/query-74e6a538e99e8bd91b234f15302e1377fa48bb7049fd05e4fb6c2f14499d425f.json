@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT (i.total_price - i.urgent_charge - COALESCE((\n            SELECT SUM(line_total) FROM invoice_items\n            WHERE invoice_id = i.id AND kind = 'gift_card'\n        ), 0))::float8 AS \"total!\" FROM invoices i WHERE i.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "74e6a538e99e8bd91b234f15302e1377fa48bb7049fd05e4fb6c2f14499d425f"
+}

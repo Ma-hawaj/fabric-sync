@@ -4,6 +4,7 @@ import {
   createEmptyInvoiceForm,
   createEmptyCustomer,
   createEmptyOrder,
+  createEmptyGiftCardLine,
 } from '../types/invoice-form'
 
 describe('invoice material payload', () => {
@@ -36,6 +37,27 @@ describe('invoice material payload', () => {
     )
     expect(invoicePayload(values)).not.toHaveProperty('isUrgent')
     expect(invoicePayload(values)).not.toHaveProperty('urgentCharge')
+  })
+
+  it('includes gift card recipient details without requiring a manual code', () => {
+    const values = createEmptyInvoiceForm()
+    values.giftCards = [
+      {
+        ...createEmptyGiftCardLine(),
+        amount: 50,
+        boughtFor: ' Recipient ',
+        recipientPhone: '+97333112233',
+      },
+    ]
+    expect(invoicePayload(values).giftCards).toEqual([
+      {
+        code: '',
+        amount: 50,
+        boughtFor: 'Recipient',
+        recipientPhone: '+97333112233',
+        expiresOn: null,
+      },
+    ])
   })
   it('sends only the details belonging to each material source', () => {
     const values = createEmptyInvoiceForm()

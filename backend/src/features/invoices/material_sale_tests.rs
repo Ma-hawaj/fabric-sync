@@ -81,9 +81,10 @@ async fn material_sales_database() {
         .unwrap();
     }
 
-    let created = service::create_invoice(&state, sale(material, branch, 2.5))
-        .await
-        .unwrap();
+    let created =
+        service::create_invoice(&state, sale(material, branch, 2.5), "material-sale-test")
+            .await
+            .unwrap();
     assert_eq!(created.total_price, 27.5);
     assert_eq!(stock(&pool, material, branch).await, 7.5);
     for table in ["orders", "measurements"] {
@@ -145,7 +146,11 @@ async fn material_sales_database() {
     // Failed create and failed edit must return every earlier decrement.
     let mut duplicate = sale(material, branch, 4.0);
     duplicate.materials.push(duplicate.materials[0].clone());
-    assert!(service::create_invoice(&state, duplicate).await.is_err());
+    assert!(
+        service::create_invoice(&state, duplicate, "material-sale-test")
+            .await
+            .is_err()
+    );
     assert_eq!(stock(&pool, material, branch).await, 7.5);
     assert!(
         service::update_invoice(&state, created.id, sale(material, branch, 11.0))
@@ -173,9 +178,11 @@ async fn material_sales_database() {
         .execute(&pool)
         .await
         .unwrap();
-    assert!(service::create_invoice(&state, sale(material, branch, 1.0))
-        .await
-        .is_err());
+    assert!(
+        service::create_invoice(&state, sale(material, branch, 1.0), "material-sale-test")
+            .await
+            .is_err()
+    );
     assert_eq!(stock(&pool, material, branch).await, 10.0);
     sqlx::query("UPDATE branch SET is_active = true WHERE id = $1")
         .bind(branch)
@@ -185,8 +192,8 @@ async fn material_sales_database() {
 
     // Concurrent invoices cannot sell the same stock twice.
     let (a, b) = tokio::join!(
-        service::create_invoice(&state, sale(material, branch, 6.0)),
-        service::create_invoice(&state, sale(material, branch, 6.0))
+        service::create_invoice(&state, sale(material, branch, 6.0), "material-sale-test"),
+        service::create_invoice(&state, sale(material, branch, 6.0), "material-sale-test")
     );
     assert_ne!(a.is_ok(), b.is_ok());
     assert_eq!(stock(&pool, material, branch).await, 4.0);
@@ -212,12 +219,16 @@ async fn material_sales_database() {
         "measurement": { "date": "2026-10-21", "type": "body", "fit": "medium" },
         "orders": [{ "materialId": material, "materialAmount": 2.0, "productionLocationId": branch, "price": 22.0 }]
     }])).unwrap();
-    assert!(service::create_invoice(&state, mixed.clone())
-        .await
-        .is_err());
+    assert!(
+        service::create_invoice(&state, mixed.clone(), "material-sale-test")
+            .await
+            .is_err()
+    );
     assert_eq!(stock(&pool, material, branch).await, 4.0);
     mixed.materials[0].quantity = 2.0;
-    let mixed_created = service::create_invoice(&state, mixed).await.unwrap();
+    let mixed_created = service::create_invoice(&state, mixed, "material-sale-test")
+        .await
+        .unwrap();
     assert_eq!(mixed_created.total_price, 44.0);
     assert_eq!(stock(&pool, material, branch).await, 0.0);
     assert_eq!(
@@ -230,7 +241,7 @@ async fn material_sales_database() {
 
     // Removing every material line returns the stock; the invoice still needs
     // a line of another kind, here a gift card.
-    let replacement: CreateInvoiceInput = serde_json::from_value(json!({ "discountUnit": "amount", "giftCards": [{ "code": "MATERIAL-TEST", "amount": 10 }] })).unwrap();
+    let replacement: CreateInvoiceInput = serde_json::from_value(json!({ "discountUnit": "amount", "giftCards": [{ "amount": 10, "recipientPhone": "+97333112233" }] })).unwrap();
     service::update_invoice(&state, created.id, replacement)
         .await
         .unwrap();
@@ -245,7 +256,7 @@ async fn material_sales_database() {
     // rounding the float multiplication in SQL can yield a different cent.
     let mut rounding_sale = sale(material, other, 1.15);
     rounding_sale.materials[0].unit_price = 0.1;
-    let rounding_created = service::create_invoice(&state, rounding_sale)
+    let rounding_created = service::create_invoice(&state, rounding_sale, "material-sale-test")
         .await
         .unwrap();
     let rounding_detail = service::get_invoice(&state, rounding_created.id)

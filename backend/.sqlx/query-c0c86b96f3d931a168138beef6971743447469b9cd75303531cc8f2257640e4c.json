@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT r.id, r.reason, r.kind, r.amount::float8 AS \"amount!\", r.created_at, r.created_by,\n               (SELECT jsonb_agg(jsonb_build_object(\n                   'lineId', COALESCE(l.order_id, l.item_id), 'description', l.description, 'quantity', l.quantity::float8,\n                   'amount', l.amount::float8, 'restocked', l.restocked,\n                   'originalLocationId', sold.branch_id, 'originalLocationName', origin.name,\n                   'restockLocationId', l.restock_location_id, 'restockLocationName', destination.name\n               ) ORDER BY l.id) FROM invoice_return_lines l\n                 LEFT JOIN invoice_items sold ON sold.id = l.item_id\n                 LEFT JOIN branch origin ON origin.id = sold.branch_id\n                 LEFT JOIN branch destination ON destination.id = l.restock_location_id\n                 WHERE l.return_id = r.id)\n               AS \"lines!: sqlx::types::Json<Vec<ReturnedLine>>\"\n        FROM invoice_returns r WHERE r.invoice_id = $1 ORDER BY r.created_at, r.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "lines!: sqlx::types::Json<Vec<ReturnedLine>>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "c0c86b96f3d931a168138beef6971743447469b9cd75303531cc8f2257640e4c"
+}

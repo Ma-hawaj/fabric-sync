@@ -74,7 +74,7 @@ pub async fn get_product(state: &AppState, product_id: Uuid) -> Result<Option<Pr
     list::fetch_by_id(state.db(), &SPEC, product_id).await
 }
 
-async fn upsert_stock(
+pub(crate) async fn upsert_stock(
     tx: &mut sqlx::PgTransaction<'_>,
     product_id: Uuid,
     entries: &[StockEntryInput],

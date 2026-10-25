@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT o.id AS order_id, o.invoice_id, o.status, oc.outcome AS \"outcome!\",\n               (EXISTS(SELECT 1 FROM order_stage_progress p JOIN order_stages s ON s.id = p.stage_id\n                       WHERE p.order_id = o.id AND p.status = 'done' AND NOT s.requires_delivery)\n                OR EXISTS(SELECT 1 FROM order_repairs WHERE order_id = o.id)) AS \"production_started!\",\n               o.material_source, o.material_amount::float8 AS \"material_amount!\",\n               COALESCE(o.material_source = 'shop' AND b.is_active AND b.holds_stock, false) AS \"can_restore_material!\",\n               b.name AS \"stock_location?\", o.material_id, o.material_stock_branch_id AS stock_branch_id\n        FROM orders o JOIN order_outcomes oc ON oc.order_id = o.id\n        LEFT JOIN branch b ON b.id = o.material_stock_branch_id\n        WHERE o.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "order_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "invoice_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "outcome!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "production_started!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "material_source",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "material_amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "can_restore_material!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "stock_location?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "material_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
+        "name": "stock_branch_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null,
+      false,
+      null,
+      null,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "c68997c72b6391ea624b355a93d87e5af4aa92ded2649b0ab70bf4a158740501"
+}
