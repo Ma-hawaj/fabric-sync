@@ -10,7 +10,7 @@ export function createEmptyRecordPaymentForm(): RecordPaymentFormValues {
   return { amount: '', paymentType: '' }
 }
 
-// The cap is the invoice's live balance, so the schema is built per invoice —
+// The cap is the invoice balance when this dialog opened —
 // a payment bigger than what's left would overpay it. The backend enforces
 // the same cap, so this is the early, inline refusal.
 export function recordPaymentSchema(balanceDue: number) {

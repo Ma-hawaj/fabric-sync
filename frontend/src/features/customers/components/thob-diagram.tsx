@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
 import type { MeasurementFieldName } from '../data/measurement-fields'
+import { formatMeasurement } from '../lib/format-measurement'
 
 export type MeasurementValues = Partial<
   Record<MeasurementFieldName, string | number | null | undefined>
@@ -490,7 +491,7 @@ export function ThobDiagram({
       </g>
 
       {/* ===================== NUMBERS ===================== */}
-      <g fontFamily="Arial, sans-serif">
+      <g fontFamily="Arial, sans-serif" direction="ltr">
         {THOBE_VALUE_SLOTS.map((f) => {
           const v = m[f.key]
           const has = v !== undefined && v !== null && v !== ''
@@ -520,7 +521,7 @@ export function ThobDiagram({
               str: f.label,
             })
           }
-          const text = has ? String(v) : placeholder
+          const text = has ? formatMeasurement(v) : placeholder
           if (text != null) {
             items.push({
               x: f.x,

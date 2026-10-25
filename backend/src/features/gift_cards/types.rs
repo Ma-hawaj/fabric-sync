@@ -13,6 +13,10 @@ pub struct GiftCard {
     pub balance: f64,
     pub customer_id: Option<Uuid>,
     pub customer_name: Option<String>,
+    pub bought_for: Option<String>,
+    pub recipient_phone: Option<String>,
+    pub delivery_status: Option<String>,
+    pub delivery_error: Option<String>,
     pub expires_on: Option<NaiveDate>,
     pub is_active: bool,
 }
@@ -30,18 +34,21 @@ pub struct GiftCardBalance {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateGiftCardInput {
-    pub code: String,
     pub amount: f64,
+    #[serde(default)]
+    pub bought_for: Option<String>,
+    pub recipient_phone: String,
     #[serde(default)]
     pub customer_id: Option<Uuid>,
     #[serde(default)]
     pub expires_on: Option<NaiveDate>,
 }
 
-/// Only `isActive` for now — voiding a card is the one edit that makes sense
-/// once it is in a customer's hands.
+/// Recipient details can be corrected without changing the card's code or value.
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateGiftCardInput {
     pub is_active: Option<bool>,
+    pub bought_for: Option<String>,
+    pub recipient_phone: Option<String>,
 }

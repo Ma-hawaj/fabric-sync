@@ -5,7 +5,8 @@ import type { GiftCardFormValues } from '../types/gift-card-form'
 
 async function createGiftCard(values: GiftCardFormValues): Promise<GiftCard> {
   const response = await apiClient.post<GiftCard>('/gift-cards', {
-    code: values.code,
+    boughtFor: values.boughtFor.trim() || null,
+    recipientPhone: values.recipientPhone,
     amount: values.amount === '' ? 0 : values.amount,
     customerId: values.customerId || null,
     expiresOn: values.expiresOn || null,

@@ -51,10 +51,11 @@ pub async fn invoice_document(
 
 pub async fn create_invoice(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(input): Json<CreateInvoiceInput>,
 ) -> Result<Json<CreatedInvoice>, AppError> {
-    Ok(Json(service::create_invoice(&state, input).await?))
+    let actor = financial_actor(&user)?;
+    Ok(Json(service::create_invoice(&state, input, actor).await?))
 }
 
 /// The invoice as it was entered, for the edit form. Separate from the display
@@ -84,12 +85,13 @@ pub async fn update_invoice(
 
 pub async fn collect_invoice(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(invoice_id): Path<Uuid>,
     Json(input): Json<CollectInvoiceInput>,
 ) -> Result<Json<CollectedInvoice>, AppError> {
+    let actor = financial_actor(&user)?;
     Ok(Json(
-        service::collect_invoice(&state, invoice_id, input.payment_type).await?,
+        service::collect_invoice(&state, invoice_id, input.payment_type, actor).await?,
     ))
 }
 
@@ -97,20 +99,24 @@ pub async fn collect_invoice(
 /// service::record_payment.
 pub async fn record_payment(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(invoice_id): Path<Uuid>,
     Json(input): Json<RecordPaymentInput>,
 ) -> Result<Json<RecordedPayment>, AppError> {
+    let actor = financial_actor(&user)?;
     Ok(Json(
-        service::record_payment(
-            &state,
-            invoice_id,
-            input.amount,
-            input.payment_type,
-            input.order_id,
-        )
-        .await?,
+        service::record_payment(&state, invoice_id, input, actor).await?,
     ))
+}
+
+fn financial_actor(user: &AuthenticatedUser) -> Result<&str, AppError> {
+    user.subject()
+        .filter(|subject| !subject.trim().is_empty())
+        .ok_or_else(|| {
+            AppError::Unauthorized(
+                "a user identity is required to record financial activity".into(),
+            )
+        })
 }
 
 pub async fn mark_ready(

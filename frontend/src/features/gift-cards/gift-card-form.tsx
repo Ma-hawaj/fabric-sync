@@ -3,9 +3,13 @@ import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
-import { NumberField, TextField } from '@/components/form/fields'
+import {
+  DateField,
+  NumberField,
+  PhoneField,
+  TextField,
+} from '@/components/form/fields'
 import { AsyncCombobox } from '@/components/form/async-combobox'
-import { ApiError } from '@/lib/api'
 import { CURRENCY } from '@/lib/currency'
 import { useCreateGiftCard } from './hooks/use-create-gift-card'
 import { giftCardFormSchema } from './lib/gift-card-schema'
@@ -26,10 +30,7 @@ export function GiftCardFormPage() {
         loading: 'Issuing gift card...',
         success: (card) =>
           `${card.code} was issued for ${CURRENCY} ${card.initialAmount.toFixed(2)}.`,
-        error: (error) =>
-          error instanceof ApiError && error.status === 409
-            ? 'A gift card with this code already exists.'
-            : 'Could not issue this gift card. Please try again.',
+        error: 'Could not issue this gift card. Please try again.',
       })
 
       try {
@@ -61,7 +62,6 @@ export function GiftCardFormPage() {
       >
         <div className="space-y-4 rounded-xl border border-border/60 bg-card p-5">
           <div className="grid gap-3 sm:grid-cols-2">
-            <TextField form={form} name="code" label="Code" />
             <NumberField
               form={form}
               name="amount"
@@ -69,12 +69,29 @@ export function GiftCardFormPage() {
               unit={CURRENCY}
             />
           </div>
+          <p className="text-xs text-muted-foreground">
+            A unique code is generated automatically when you save.
+          </p>
+          <TextField
+            form={form}
+            name="boughtFor"
+            label="Bought for (optional)"
+          />
+          <PhoneField
+            form={form}
+            name="recipientPhone"
+            label="Recipient phone"
+            defaultCountry="BH"
+          />
+          <p className="text-xs text-muted-foreground">
+            Send the gift card to this number via WhatsApp after saving.
+          </p>
 
           <form.Field name="customerId">
             {(field) => (
               <Field data-invalid={field.state.meta.errors.length > 0}>
                 <FieldLabel htmlFor={field.name}>
-                  Customer (optional)
+                  Bought by (optional)
                 </FieldLabel>
                 <AsyncCombobox<Customer>
                   id={field.name}
@@ -97,7 +114,7 @@ export function GiftCardFormPage() {
             )}
           </form.Field>
 
-          <TextField
+          <DateField
             form={form}
             name="expiresOn"
             label="Expires On (optional)"

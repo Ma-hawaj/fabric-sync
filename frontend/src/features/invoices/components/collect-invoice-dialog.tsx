@@ -99,6 +99,16 @@ export function CollectInvoiceDialog({
                 <span className="text-muted-foreground">Invoice Total</span>
                 <span>{currencyFormatter.format(invoice.totalPrice)}</span>
               </div>
+              {invoice.amountCredited > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Return / cancellation credits
+                  </span>
+                  <span>
+                    {currencyFormatter.format(-invoice.amountCredited)}
+                  </span>
+                </div>
+              )}
               {invoice.giftCardRedeemed > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">
@@ -110,7 +120,7 @@ export function CollectInvoiceDialog({
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Already Paid</span>
+                <span className="text-muted-foreground">Net paid</span>
                 <span>{currencyFormatter.format(invoice.amountPaid)}</span>
               </div>
               <div className="flex justify-between font-semibold">

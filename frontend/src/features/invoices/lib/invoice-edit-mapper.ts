@@ -219,10 +219,49 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
     }
   })
 
+  const materials = edit.materials.map((line) => {
+    if (line.materialId) {
+      const material = seeds.materials.get(line.materialId) ?? {
+        id: line.materialId,
+        name: line.materialName,
+        sku: null,
+        family: null,
+        juniorPrice: null,
+        normalPrice: null,
+        largePrice: null,
+        unit: line.unit,
+        locations: [],
+      }
+      if (
+        line.branchId &&
+        !material.locations.some((stock) => stock.locationId === line.branchId)
+      ) {
+        material.locations.push({
+          locationId: line.branchId,
+          location: line.branchName ?? '',
+          quantity: line.stockQuantity ?? 0,
+        })
+      }
+      seeds.materials.set(line.materialId, material)
+      seeds.materialLabels.set(line.materialId, line.materialName)
+    }
+    if (line.branchId)
+      seeds.locationLabels.set(line.branchId, line.branchName ?? '')
+    return {
+      key: crypto.randomUUID(),
+      materialId: line.materialId ?? '',
+      branchId: line.branchId ?? '',
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+    }
+  })
+
   const giftCards: InvoiceGiftCardDraft[] = edit.giftCards.map((line) => ({
     key: crypto.randomUUID(),
     code: line.code,
     amount: line.amount,
+    boughtFor: line.boughtFor ?? '',
+    recipientPhone: line.recipientPhone ?? '',
     expiresOn: line.expiresOn ?? '',
   }))
 
@@ -255,6 +294,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
     payments,
     customers,
     products,
+    materials,
     giftCards,
     redemptions,
   }

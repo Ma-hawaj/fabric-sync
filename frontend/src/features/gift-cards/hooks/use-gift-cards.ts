@@ -6,5 +6,6 @@ export function useGiftCards(searchParams: URLSearchParams) {
     endpoint: '/gift-cards',
     queryKey: 'gift-cards',
     searchParams,
+    refetchInterval: 10000,
   })
 }

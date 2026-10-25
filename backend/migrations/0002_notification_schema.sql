@@ -101,3 +101,33 @@ CREATE TABLE whatsapp_webhook_events (
 CREATE INDEX whatsapp_webhook_pending
     ON whatsapp_webhook_events (id)
     WHERE NOT processed;
+
+-- Approved gift card messages and their durable delivery queue.
+CREATE TABLE gift_card_deliveries (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    gift_card_id UUID NOT NULL REFERENCES gift_cards(id),
+    request_id UUID NOT NULL UNIQUE,
+    approved_by TEXT NOT NULL,
+    source_hash TEXT NOT NULL,
+    normalized_mobile TEXT NOT NULL,
+    body TEXT NOT NULL,
+    parameters JSONB NOT NULL,
+    template_name TEXT NOT NULL,
+    language TEXT NOT NULL,
+    image_png BYTEA NOT NULL CHECK (octet_length(image_png) BETWEEN 1 AND 5242880),
+    image_filename TEXT NOT NULL,
+    image_sha256 TEXT NOT NULL CHECK (image_sha256 ~ '^[0-9a-f]{64}$'),
+    state TEXT NOT NULL DEFAULT 'queued' CHECK (state IN
+        ('queued', 'sending', 'accepted', 'delivered', 'read', 'failed', 'uncertain', 'cancelled')),
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    lease_until TIMESTAMPTZ,
+    provider_message_id TEXT UNIQUE,
+    last_error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX gift_card_delivery_pending ON gift_card_deliveries(gift_card_id)
+    WHERE state IN ('queued', 'sending');
+CREATE INDEX gift_card_delivery_history ON gift_card_deliveries(gift_card_id, created_at DESC, id DESC);
+CREATE INDEX gift_card_delivery_queue ON gift_card_deliveries(available_at) WHERE state = 'queued';

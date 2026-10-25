@@ -13,6 +13,7 @@ export interface CreatedInvoice {
   id: string
   totalPrice: number
   giftCardRedeemed: number
+  giftCards: Array<{ id: string; code: string }>
 }
 
 function numberOrZero(value: NumberInput): number {
@@ -79,6 +80,8 @@ function giftCardPayload(line: InvoiceGiftCardDraft) {
   return {
     code: line.code,
     amount: numberOrZero(line.amount),
+    boughtFor: blankToNull(line.boughtFor.trim()),
+    recipientPhone: line.recipientPhone,
     expiresOn: blankToNull(line.expiresOn),
   }
 }
@@ -111,6 +114,12 @@ export function invoicePayload(values: InvoiceFormValues) {
     // it is left blank otherwise.
     customerId: values.customerId || null,
     customers: values.customers.map(customerPayload),
+    materials: values.materials.map((line) => ({
+      materialId: line.materialId,
+      branchId: line.branchId,
+      quantity: numberOrZero(line.quantity),
+      unitPrice: numberOrZero(line.unitPrice),
+    })),
     products: values.products.map((line) =>
       productPayload(line, values.productBranch),
     ),

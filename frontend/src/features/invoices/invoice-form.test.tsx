@@ -277,3 +277,87 @@ describe('Invoice workspace', () => {
     expect(save).not.toHaveBeenCalled()
   })
 })
+
+it('adds direct material lines after removing the tailoring customer block', async () => {
+  renderPage()
+  fireEvent.click(screen.getByRole('button', { name: 'Remove customer 1' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Add Material' }))
+  expect(screen.getByLabelText('Material')).toBeTruthy()
+  expect(screen.getByLabelText('Sold From')).toBeTruthy()
+  expect(screen.queryByText('Pick where this order is made.')).toBeNull()
+  fireEvent.change(screen.getByLabelText('Quantity'), {
+    target: { value: '2.5' },
+  })
+  fireEvent.change(screen.getByLabelText(/Price per unit/), {
+    target: { value: '11' },
+  })
+  expect(await screen.findByText(/Line total:.*27\.50/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+  expect(await screen.findByText('Pick a material.')).toBeTruthy()
+  expect(
+    screen.queryByText(
+      'Pick an existing customer or switch to "+ New Customer".',
+    ),
+  ).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Remove material' }))
+  expect(screen.queryByLabelText('Material')).toBeNull()
+})
+
+it('saves material and gift-card sales together and includes materials in both invoice totals', async () => {
+  const values = validInvoice()
+  values.customers = []
+  values.materials = [
+    {
+      key: 'material-sale',
+      materialId: 'material-1',
+      branchId: 'store-1',
+      quantity: 2.5,
+      unitPrice: 11,
+    },
+  ]
+  values.giftCards = [
+    {
+      key: 'card-sale',
+      code: '',
+      amount: 50,
+      boughtFor: 'Gift recipient',
+      recipientPhone: '+97333112233',
+      expiresOn: '',
+    },
+  ]
+  values.discount = 10
+  values.discountUnit = 'percent'
+  values.payments = [
+    { key: 'opening-payment', amount: 10, paymentType: 'cash' },
+  ]
+  const save = renderInvoice(values)
+  save.mockResolvedValue({
+    id: 'saved-invoice',
+    totalPrice: 74.75,
+    giftCards: [],
+  })
+  expect(
+    screen.getByText('Subtotal (incl. VAT)').parentElement?.textContent,
+  ).toContain('27.50')
+  expect(
+    screen.getByText('VAT (10%, incl.)').parentElement?.textContent,
+  ).toContain('2.25')
+  expect(screen.getByText('Total').parentElement?.textContent).toContain(
+    '74.75',
+  )
+  expect(screen.getByText('Balance Due').parentElement?.textContent).toContain(
+    '64.75',
+  )
+  expect(screen.getByLabelText('Invoice total').textContent).toContain('74.75')
+  expect(screen.queryByLabelText('Code')).toBeNull()
+  expect(
+    screen.getByText(/A unique code is generated automatically/),
+  ).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+  await waitFor(() => expect(save).toHaveBeenCalledOnce())
+  const saved = save.mock.calls[0][0] as InvoiceFormValues
+  expect(saved.customers).toEqual([])
+  expect(saved.materials).toEqual(values.materials)
+  expect(saved.giftCards).toEqual(values.giftCards)
+  expect(saved.payments).toEqual(values.payments)
+})

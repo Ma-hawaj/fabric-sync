@@ -284,6 +284,31 @@ export function getOrderColumns(
       },
     },
     {
+      accessorKey: 'outcome',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Outcome" />
+      ),
+      cell: ({ row }) => (
+        <Badge
+          variant={row.original.outcome === 'active' ? 'outline' : 'secondary'}
+          className="capitalize"
+        >
+          {row.original.outcome}
+        </Badge>
+      ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Outcome',
+        variant: 'multiSelect',
+        options: [
+          { label: 'Active', value: 'active' },
+          { label: 'Cancelled', value: 'cancelled' },
+          { label: 'Returned', value: 'returned' },
+        ],
+      },
+    },
+    {
       accessorKey: 'collectedAt',
       meta: { label: 'Collected At', variant: 'dateRange' },
       header: ({ column }) => (
@@ -436,7 +461,10 @@ export function getOrderColumns(
                 label:
                   order.status === 'collected' ? 'Collected' : 'Mark Collected',
                 icon: CheckIcon,
-                disabled: order.status === 'collected',
+                disabled:
+                  order.status === 'collected' ||
+                  order.outcome === 'cancelled' ||
+                  order.outcome === 'returned',
                 onClick: () => onCollect(order),
                 separatorBefore: true,
               },

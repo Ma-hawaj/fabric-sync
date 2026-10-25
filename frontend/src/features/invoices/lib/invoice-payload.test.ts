@@ -4,6 +4,7 @@ import {
   createEmptyInvoiceForm,
   createEmptyCustomer,
   createEmptyOrder,
+  createEmptyGiftCardLine,
 } from '../types/invoice-form'
 
 describe('invoice material payload', () => {
@@ -36,6 +37,27 @@ describe('invoice material payload', () => {
     )
     expect(invoicePayload(values)).not.toHaveProperty('isUrgent')
     expect(invoicePayload(values)).not.toHaveProperty('urgentCharge')
+  })
+
+  it('includes gift card recipient details without requiring a manual code', () => {
+    const values = createEmptyInvoiceForm()
+    values.giftCards = [
+      {
+        ...createEmptyGiftCardLine(),
+        amount: 50,
+        boughtFor: ' Recipient ',
+        recipientPhone: '+97333112233',
+      },
+    ]
+    expect(invoicePayload(values).giftCards).toEqual([
+      {
+        code: '',
+        amount: 50,
+        boughtFor: 'Recipient',
+        recipientPhone: '+97333112233',
+        expiresOn: null,
+      },
+    ])
   })
   it('sends only the details belonging to each material source', () => {
     const values = createEmptyInvoiceForm()
@@ -79,4 +101,23 @@ describe('invoice material payload', () => {
     expect(orders[0]).not.toHaveProperty('customerBasePrice')
     expect(orders[1]).not.toHaveProperty('customerBasePrice')
   })
+})
+
+it('sends direct material sales without customer or order payloads', () => {
+  const values = createEmptyInvoiceForm()
+  values.customers = []
+  values.materials = [
+    {
+      key: 'draft',
+      materialId: 'mat-1',
+      branchId: 'loc-1',
+      quantity: 2.5,
+      unitPrice: 11,
+    },
+  ]
+  const payload = invoicePayload(values)
+  expect(payload.customers).toEqual([])
+  expect(payload.materials).toEqual([
+    { materialId: 'mat-1', branchId: 'loc-1', quantity: 2.5, unitPrice: 11 },
+  ])
 })

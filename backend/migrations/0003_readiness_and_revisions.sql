@@ -12,6 +12,7 @@ SELECT i.id AS invoice_id, i.readiness_generation,
             WHEN count(o.id) FILTER (WHERE o.status = 'ready') > 0 THEN 'partially_ready'
             ELSE 'in_progress' END AS readiness_status
 FROM invoices i LEFT JOIN orders o ON o.invoice_id = i.id
+    AND NOT EXISTS (SELECT 1 FROM invoice_return_lines l WHERE l.order_id = o.id)
 GROUP BY i.id;
 
 -- All eligibility-changing writes serialize on the invoice, including existing
@@ -76,6 +77,13 @@ BEGIN
     RETURN NEW;
 END $$;
 CREATE TRIGGER payments_notification_revision BEFORE INSERT OR UPDATE OR DELETE ON invoice_payments FOR EACH ROW EXECUTE FUNCTION payment_notification_revision();
+
+-- Credit/refund writes change rendered invoice figures just as payments do.
+-- Reuse the existing invoice lock/revision trigger to invalidate old previews.
+CREATE TRIGGER returns_notification_revision AFTER INSERT ON invoice_returns
+    FOR EACH ROW EXECUTE FUNCTION payment_notification_revision();
+CREATE TRIGGER refunds_notification_revision AFTER INSERT ON invoice_refunds
+    FOR EACH ROW EXECUTE FUNCTION payment_notification_revision();
 
 CREATE FUNCTION customer_notification_revision() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE invoice_key UUID;

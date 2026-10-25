@@ -31,6 +31,11 @@ export function useUpdateInvoice(invoiceId: string) {
       void queryClient.invalidateQueries({ queryKey: ['invoices'] })
       void queryClient.invalidateQueries({ queryKey: ['orders'] })
       void queryClient.invalidateQueries({ queryKey: ['products'] })
+      void queryClient.invalidateQueries({ queryKey: ['materials'] })
+      void queryClient.invalidateQueries({ queryKey: ['invoice-material'] })
+      void queryClient.invalidateQueries({
+        queryKey: ['invoice-order-material'],
+      })
       void queryClient.invalidateQueries({ queryKey: ['gift-cards'] })
     },
   })

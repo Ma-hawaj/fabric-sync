@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   InputGroup,
   InputGroupAddon,
+  InputGroupButton,
   InputGroupInput,
   InputGroupText,
 } from '@/components/ui/input-group'
@@ -26,7 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { CalendarIcon, XIcon } from 'lucide-react'
+import { CalendarIcon, MinusIcon, PlusIcon, XIcon } from 'lucide-react'
 
 // TanStack Form's extended API type has 11 validator generic params beyond
 // the form data itself; pinning them all to `any` collapses several method
@@ -123,13 +124,26 @@ export function NumberField({
   name,
   label,
   unit,
-}: FieldProps & { unit?: string }) {
+  min,
+  max,
+  step,
+  format,
+  showControls = false,
+}: FieldProps &
+  Pick<NumberFieldPrimitive.Root.Props, 'min' | 'max' | 'step' | 'format'> & {
+    unit?: string
+    showControls?: boolean
+  }) {
   return (
     <form.Field name={name as never}>
       {(field: any) => (
         <Field data-invalid={field.state.meta.errors.length > 0}>
           <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
           <NumberFieldPrimitive.Root
+            min={min}
+            max={max}
+            step={step}
+            format={format}
             value={
               field.state.value === '' || field.state.value == null
                 ? null
@@ -138,6 +152,16 @@ export function NumberField({
             onValueChange={(value) => field.handleChange(value ?? '')}
           >
             <NumberFieldPrimitive.Group render={<InputGroup />}>
+              {showControls && (
+                <InputGroupAddon>
+                  <NumberFieldPrimitive.Decrement
+                    aria-label={`Decrease ${label}`}
+                    render={<InputGroupButton size="icon-xs" />}
+                  >
+                    <MinusIcon />
+                  </NumberFieldPrimitive.Decrement>
+                </InputGroupAddon>
+              )}
               <NumberFieldPrimitive.Input
                 render={<InputGroupInput />}
                 id={field.name}
@@ -147,6 +171,16 @@ export function NumberField({
               {unit && (
                 <InputGroupAddon align="inline-end">
                   <InputGroupText>{unit}</InputGroupText>
+                </InputGroupAddon>
+              )}
+              {showControls && (
+                <InputGroupAddon align="inline-end">
+                  <NumberFieldPrimitive.Increment
+                    aria-label={`Increase ${label}`}
+                    render={<InputGroupButton size="icon-xs" />}
+                  >
+                    <PlusIcon />
+                  </NumberFieldPrimitive.Increment>
                 </InputGroupAddon>
               )}
             </NumberFieldPrimitive.Group>

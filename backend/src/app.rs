@@ -8,7 +8,7 @@ use crate::{
     auth,
     features::{
         customers, design_options, gift_cards, health, invoices, locations, materials,
-        notifications, order_stages, orders, preferences, pricing, products, users,
+        notifications, order_stages, orders, preferences, pricing, products, returns, users,
     },
     request_log,
     state::AppState,
@@ -34,6 +34,12 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .merge(
             pricing::router().route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::require_auth,
+            )),
+        )
+        .merge(
+            returns::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
                 auth::require_auth,
             )),

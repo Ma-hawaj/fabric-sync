@@ -1,3 +1,4 @@
+import { SendGiftCardDialog } from '@/features/gift-cards/components/send-gift-card-dialog'
 import { NotificationDialog } from '@/features/notifications/notification-dialog'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useForm } from '@tanstack/react-form'
@@ -33,6 +34,8 @@ import {
   InvoiceWorkspaceContext,
 } from './components/invoice-form/invoice-workspace'
 import type { InvoiceValidationTarget } from './components/invoice-form/invoice-workspace'
+import { MaterialBlock } from './components/invoice-form/material-block'
+import type { Material } from './types/materials'
 import { ProductBlock } from './components/invoice-form/product-block'
 import { useCreateInvoice } from './hooks/use-create-invoice'
 import type { CreatedInvoice } from './lib/invoice-payload'
@@ -44,6 +47,7 @@ import {
   createEmptyGiftCardLine,
   createEmptyInvoiceForm,
   createEmptyProductLine,
+  createEmptyMaterialLine,
 } from './types/invoice-form'
 import type { InvoiceFormValues } from './types/invoice-form'
 
@@ -98,6 +102,10 @@ export function InvoiceForm({
   // correctly before anything is re-picked.
   const pickedCustomersRef = useRef(new Map<string, Customer>(seeds?.customers))
   const pickedProductsRef = useRef(new Map<string, Product>(seeds?.products))
+  const pickedMaterialsRef = useRef(new Map<string, Material>(seeds?.materials))
+  const rememberMaterial = useCallback((material: Material | null) => {
+    if (material) pickedMaterialsRef.current.set(material.id, material)
+  }, [])
   const rememberCustomer = useCallback((customer: Customer | null) => {
     if (customer) {
       pickedCustomersRef.current.set(customer.id, customer)
@@ -122,9 +130,10 @@ export function InvoiceForm({
   // Which of the two submit buttons was pressed. A ref rather than state
   // because it is read once inside onSubmit and must not re-render the form.
   const exportAfterSave = useRef(false)
-  const [notificationInvoiceId, setNotificationInvoiceId] = useState<
-    string | null
-  >(null)
+  const [savedInvoice, setSavedInvoice] = useState<CreatedInvoice | null>(null)
+  const [giftCardIndex, setGiftCardIndex] = useState(0)
+  const giftCards = editing ? [] : (savedInvoice?.giftCards ?? [])
+  const giftCardToSend = giftCards.at(giftCardIndex)
 
   // The user's default location pre-fills the two branch pickers below —
   // receiving when it takes orders, sold-from when it holds stock. Only empty
@@ -160,6 +169,7 @@ export function InvoiceForm({
       }))
     },
     onSubmit: async ({ value }) => {
+      if (savedInvoice) return
       const pending = mutation.mutateAsync(value)
       toast.promise(pending, {
         loading: `${saveVerb} invoice...`,
@@ -178,6 +188,9 @@ export function InvoiceForm({
         return
       }
 
+      setGiftCardIndex(0)
+      setSavedInvoice(saved)
+
       // The old Print button here printed the form itself — inputs, sidebar
       // and all — because before this there was no invoice document to print.
       // There is now, but only once the invoice has an id, which is why this
@@ -192,8 +205,6 @@ export function InvoiceForm({
           )
         }
       }
-
-      setNotificationInvoiceId(saved.id)
     },
   })
 
@@ -227,14 +238,25 @@ export function InvoiceForm({
       value={{ activeOrderKey, setActiveOrderKey, validationTarget }}
     >
       <div className="space-y-6 pb-24 xl:pb-0">
-        <NotificationDialog
-          invoiceId={notificationInvoiceId}
-          kind={editing ? 'invoice_updated' : 'invoice_created'}
-          onClose={() => {
-            setNotificationInvoiceId(null)
-            void navigate({ to: '/invoices' })
-          }}
-        />
+        {giftCardToSend ? (
+          <SendGiftCardDialog
+            key={giftCardToSend.id}
+            card={giftCardToSend}
+            description={`Invoice saved. Gift card ${giftCardIndex + 1} of ${giftCards.length}. Check the recipient, image, and message before sending.`}
+            cancelLabel="Skip"
+            onClose={() => setGiftCardIndex((index) => index + 1)}
+          />
+        ) : (
+          <NotificationDialog
+            invoiceId={savedInvoice?.id ?? null}
+            kind={editing ? 'invoice_updated' : 'invoice_created'}
+            onClose={() => {
+              setSavedInvoice(null)
+              void navigate({ to: '/invoices' })
+            }}
+          />
+        )}
+
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
@@ -243,7 +265,7 @@ export function InvoiceForm({
           <Button
             type="button"
             variant="outline"
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || savedInvoice !== null}
             onClick={() => {
               void navigate({ to: '/invoices' })
             }}
@@ -255,7 +277,7 @@ export function InvoiceForm({
           onSubmit={(event) => {
             event.preventDefault()
             event.stopPropagation()
-            if (mutation.isPending) return
+            if (mutation.isPending || savedInvoice !== null) return
             const submitter = event.nativeEvent.submitter
             exportAfterSave.current =
               submitter instanceof HTMLButtonElement &&
@@ -296,6 +318,38 @@ export function InvoiceForm({
                   ))}
                 </div>
               )}
+            </form.Field>
+
+            <form.Field name="materials" mode="array">
+              {(materialsField) =>
+                materialsField.state.value.length > 0 && (
+                  <section
+                    className="space-y-4 rounded-xl border border-border/60 bg-card p-4"
+                    aria-label="Material sales"
+                  >
+                    <h2 className="text-sm font-semibold">Materials</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Sell fabric directly by quantity, without a tailoring
+                      order.
+                    </p>
+                    {materialsField.state.value.map((line, index) => (
+                      <MaterialBlock
+                        key={line.key}
+                        form={form as never}
+                        lineIndex={index}
+                        onMaterialPicked={rememberMaterial}
+                        initialMaterialForId={(id) =>
+                          seeds?.materials.get(id) ?? null
+                        }
+                        materialLabelForId={(id) =>
+                          seeds?.materialLabels.get(id) ?? null
+                        }
+                        onRemove={() => materialsField.removeValue(index)}
+                      />
+                    ))}
+                  </section>
+                )
+              }
             </form.Field>
 
             <form.Field name="products" mode="array">
@@ -415,6 +469,16 @@ export function InvoiceForm({
                 variant="outline"
                 type="button"
                 onClick={() =>
+                  form.pushFieldValue('materials', createEmptyMaterialLine())
+                }
+              >
+                <PlusIcon className="size-4" />
+                Add Material
+              </Button>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() =>
                   form.pushFieldValue('products', createEmptyProductLine())
                 }
               >
@@ -441,6 +505,7 @@ export function InvoiceForm({
               form={form as never}
               customerNames={pickedCustomersRef}
               productNames={pickedProductsRef}
+              materialNames={pickedMaterialsRef}
               locationLabelForId={(id) => seeds?.locationLabels.get(id) ?? null}
               customerLabelForId={(id) => seeds?.customerLabels.get(id) ?? null}
               paymentsLocked={editing}
@@ -469,7 +534,7 @@ export function InvoiceForm({
                   name="invoiceAction"
                   value="save"
                   className="w-full"
-                  disabled={mutation.isPending}
+                  disabled={mutation.isPending || savedInvoice !== null}
                 >
                   {mutation.isPending ? 'Saving...' : 'Save invoice'}
                 </Button>
@@ -479,7 +544,7 @@ export function InvoiceForm({
                   value="export"
                   variant="outline"
                   className="w-full"
-                  disabled={mutation.isPending}
+                  disabled={mutation.isPending || savedInvoice !== null}
                 >
                   <FileDownIcon className="size-4" />
                   Save &amp; Export PDF
@@ -506,7 +571,7 @@ export function InvoiceFormPage() {
     <InvoiceForm
       defaultValues={defaultValues}
       title="New Invoice"
-      subtitle="Build the order, then review and save."
+      subtitle="Build an invoice for tailoring, materials, products, or gift cards."
       saveVerb="Saving"
       savedVerb="saved"
       mutation={createInvoice}

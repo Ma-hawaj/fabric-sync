@@ -10,6 +10,16 @@ import { MEASUREMENT_FIELDS } from '../data/measurement-fields'
 import { createEmptyMeasurement } from '../types/measurement-form'
 
 describe('ThobDiagram', () => {
+  it('renders fraction symbols in the diagram without rounding other decimals', () => {
+    render(
+      <ThobDiagram values={{ chest: 42.5, waist: 30.375, neckWidth: 7.13 }} />,
+    )
+
+    expect(screen.queryAllByText('42 ½').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('30 ⅜').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('7.13').length).toBeGreaterThan(0)
+  })
+
   it('draws front and back together in one sheet', () => {
     const { container } = render(<ThobDiagram />)
     const svg = container.querySelector('svg')

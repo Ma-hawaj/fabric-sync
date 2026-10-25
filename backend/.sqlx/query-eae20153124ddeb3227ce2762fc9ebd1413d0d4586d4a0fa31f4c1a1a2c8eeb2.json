@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT r.id, r.reason, r.amount::float8 AS \"amount!\", r.payment_type,\n               g.code AS \"gift_card_code?\", r.created_at, r.created_by, r.adjustment_id\n        FROM invoice_refunds r LEFT JOIN gift_cards g ON g.id = r.gift_card_id\n        WHERE r.invoice_id = $1 ORDER BY r.created_at, r.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 3,
+        "name": "payment_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "gift_card_code?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "adjustment_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "eae20153124ddeb3227ce2762fc9ebd1413d0d4586d4a0fa31f4c1a1a2c8eeb2"
+}

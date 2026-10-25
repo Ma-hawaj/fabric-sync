@@ -98,6 +98,10 @@ Invoice PDF exports and notification attachments share stored, server-rendered
 Chromium PDFs. See [notification setup and verification](docs/whatsapp-notifications.md)
 for sender templates, renderer configuration, delivery history, and retries.
 
+Staff can cancel orders and record returns with their refunds in one action. See
+[Cancellations, returns and refunds](docs/returns-and-refunds.md) for the workflow, refund
+limits, stock behavior, and API examples.
+
 The backend reads configuration from environment variables (`backend/.env`
 via `dotenvy` when running locally — copy `backend/.env.example` there
 first).
@@ -167,6 +171,7 @@ Copy `frontend/.env.example` to `frontend/.env` and set the OIDC vars for your i
 - `VITE_OIDC_CLIENT_ID` — the frontend SPA client's ID (see "Local Infrastructure" above)
 - `VITE_OIDC_REDIRECT_URI` / `VITE_OIDC_POST_LOGOUT_REDIRECT_URI`, default `http://localhost:3000/`
 - `VITE_OIDC_SCOPE`, default `openid profile email`
+- `VITE_ACCOUNT_URL` — optional override for the user menu's Account settings link. Root issuers default to Zitadel's `/ui/console/users/me`; legacy Authentik issuers use `/if/user/`. Other issuer layouts require an explicit account URL. For Docker builds, set this as a build argument or repository Actions variable and rebuild the image.
 
 API calls are same-origin in dev: `VITE_API_BASE_URL=/api` sends them through the Vite dev-server proxy (`/api` → the backend as-is, since the backend serves the API nested under `/api` — see `BACKEND_URL` in `frontend/vite.config.ts`), so frontend and backend share one URL with no CORS involved. The IdP is hit directly. To bypass the proxy and hit the backend directly instead:
 
@@ -174,6 +179,32 @@ API calls are same-origin in dev: `VITE_API_BASE_URL=/api` sends them through th
 cd frontend
 VITE_API_BASE_URL=http://localhost:8000 pnpm run dev
 ```
+
+## Direct material sales
+
+On **New Invoice**, remove the tailoring customer block for a material-only
+sale, then select **Add Material**. Pick the material and **Sold From** stock
+location, enter a quantity and VAT-inclusive price per unit, and save. Materials
+can also share an invoice with tailoring orders, products, and gift cards.
+Quantities and unit prices support two decimal places. The buyer is optional
+for a sale without tailoring orders.
+
+Invoice create/update requests accept an optional `materials` array containing
+`materialId`, `branchId`, `quantity`, and `unitPrice`. Saving deducts stock in the
+invoice transaction; editing restores the previous material lines before applying
+the replacements. Material lines do not create orders or measurements. Direct material sales also
+support fractional returns, discounted credits, cash or original gift-card refunds,
+and optional restocking at an active stock location.
+
+Run the PostgreSQL regression test against a local PostgreSQL 18+ database:
+
+```bash
+cd backend
+TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/fabric_sync cargo test material_sales_database -- --ignored
+```
+
+This opt-in test creates and removes its own schema. Ordinary backend tests do
+not need a database when the committed SQLx offline metadata is used.
 
 ## Garment pricing
 

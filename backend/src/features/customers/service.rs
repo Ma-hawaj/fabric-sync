@@ -125,6 +125,31 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn measurement_eighths_survive_save_and_reload(pool: sqlx::PgPool) {
+        let state = crate::test_support::state(pool, None, None).await;
+        let customer = create_customer(
+            &state,
+            serde_json::from_value(serde_json::json!({
+                "name": "Fraction customer", "mobileNo": "33112233",
+                "measurement": {
+                    "date": "2026-10-24", "type": "body", "fit": "medium",
+                    "frontHeight": 55.125, "chest": 42.375, "shoulder": 17.625,
+                    "bottomFold": 3.875,
+                },
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+        let reloaded = get_customer(&state, customer.id).await.unwrap();
+        let measurement = &reloaded.measurements[0];
+        assert_eq!(measurement.front_height, Some(55.125));
+        assert_eq!(measurement.chest, Some(42.375));
+        assert_eq!(measurement.shoulder, Some(17.625));
+        assert_eq!(measurement.bottom_fold, Some(3.875));
+    }
+
+    #[sqlx::test]
     async fn multiline_addresses_are_trimmed_and_blank_addresses_clear(pool: sqlx::PgPool) {
         let state = crate::test_support::state(pool, None, None).await;
         for (index, blank) in ["", "   ", "\r\n\t", "\u{2003}\u{a0}\t\n"]

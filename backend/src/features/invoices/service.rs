@@ -12,6 +12,7 @@ use crate::{
         gift_cards::{repository as gift_cards_repository, service as gift_cards_service},
         materials::repository as materials_repository,
         products::repository as products_repository,
+        returns::repository as returns_repository,
     },
     list::{self, ListParams},
     state::AppState,
@@ -22,10 +23,11 @@ use uuid::Uuid;
 use super::{
     repository,
     types::{
-        CollectedInvoice, CreateGiftCardLineInput, CreateInvoiceInput, CreateOrderInput,
-        CreateProductLineInput, CreatedInvoice, DiscountUnit, GiftCardRedemptionInput,
-        InvoiceCustomerInput, InvoiceDetail, InvoiceEdit, InvoiceListItem, InvoiceTotalsBreakdown,
-        MaterialSource, PaymentSummary, PaymentType, RecordedPayment,
+        CollectedInvoice, CreateGiftCardLineInput, CreateInvoiceInput, CreateMaterialLineInput,
+        CreateOrderInput, CreateProductLineInput, CreatedInvoice, DiscountUnit,
+        GiftCardRedemptionInput, InvoiceCustomerInput, InvoiceDetail, InvoiceEdit, InvoiceListItem,
+        InvoiceTotalsBreakdown, IssuedGiftCard, MaterialSource, PaymentSummary, PaymentType,
+        RecordPaymentInput, RecordedPayment,
     },
 };
 use crate::features::customers::types::{normalize_customer_identity, CreateMeasurementInput};
@@ -84,6 +86,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         date: invoice.date,
         target_date: invoice.target_date,
         created_at: invoice.created_at,
+        created_by: invoice.created_by,
         branch_name: invoice.branch_name,
         buyer: invoice.buyer,
         payment_status: invoice.payment_status,
@@ -95,6 +98,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         lines: rows.lines,
         redemptions: rows.redemptions,
         payments,
+        has_adjustments: invoice.has_adjustments,
         totals: InvoiceTotalsBreakdown {
             urgent_charge: invoice.urgent_charge,
             subtotal: totals.subtotal,
@@ -111,9 +115,14 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
             total: invoice.total_price,
             gift_card_redeemed: invoice.gift_card_redeemed,
             amount_paid: invoice.amount_paid,
-            balance_due: round2(
-                (invoice.total_price - invoice.gift_card_redeemed - invoice.amount_paid).max(0.0),
-            ),
+            amount_credited: invoice.amount_credited,
+            cash_refunded: invoice.cash_refunded,
+            gift_card_refunded: invoice.gift_card_refunded,
+            net_total: invoice.net_total,
+            net_amount_paid: invoice.net_amount_paid,
+            net_gift_card_redeemed: invoice.net_gift_card_redeemed,
+            refund_due: invoice.refund_due,
+            balance_due: invoice.balance_due,
         },
     })
 }
@@ -153,7 +162,7 @@ pub fn validate_payment_amount(
     gift_card_redeemed: f64,
     amount_paid: f64,
 ) -> Result<(), AppError> {
-    if round2(amount) <= 0.0 {
+    if !amount.is_finite() || round2(amount) <= 0.0 {
         return Err(AppError::BadRequest(
             "a payment has to be greater than zero".to_string(),
         ));
@@ -194,46 +203,61 @@ fn validate_kept_payments(paid: f64, total: f64, redeemed: f64) -> Result<(), Ap
 pub async fn record_payment(
     state: &AppState,
     invoice_id: Uuid,
-    amount: f64,
-    payment_type: PaymentType,
-    order_id: Option<Uuid>,
+    input: RecordPaymentInput,
+    actor: &str,
 ) -> Result<RecordedPayment, AppError> {
-    let mut tx = state.db().begin().await?;
+    use crate::idempotency::{request_hash, verify_request_hash};
 
-    let locked = repository::lock_invoice(&mut tx, invoice_id)
+    let hash = request_hash("invoice.payment.v1", invoice_id, &input);
+    let mut tx = state.db().begin().await?;
+    repository::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
 
-    if let Some(order_id) = order_id {
-        if !repository::order_belongs_to_invoice(&mut tx, order_id, invoice_id).await? {
-            return Err(AppError::NotFound(format!(
-                "order {order_id} not found on invoice {invoice_id}"
-            )));
+    // Replay before checking today's balance or order eligibility: the first
+    // attempt may have settled the invoice, or the order may now be closed.
+    let previous =
+        repository::previous_payment_request(&mut tx, invoice_id, input.request_id).await?;
+    let is_replay = previous.is_some();
+    let payment = if let Some((payment, stored)) = previous {
+        verify_request_hash(&stored, &hash)?;
+        payment
+    } else {
+        if let Some(order_id) = input.order_id {
+            if !repository::order_belongs_to_invoice(&mut tx, order_id, invoice_id).await? {
+                return Err(AppError::NotFound(format!(
+                    "order {order_id} not found on invoice {invoice_id}"
+                )));
+            }
+            crate::features::returns::service::ensure_order_active(&mut tx, order_id).await?;
         }
-    }
+        let balance = returns_repository::settlement(&mut tx, invoice_id).await?;
+        validate_payment_amount(
+            input.amount,
+            balance.net_total,
+            balance.net_gift_card_redeemed,
+            balance.net_amount_paid,
+        )?;
+        repository::insert_requested_payment(&mut tx, invoice_id, &input, &hash, actor).await?
+    };
 
-    let paid = repository::sum_payments(&mut tx, invoice_id).await?;
-    validate_payment_amount(amount, locked.total_price, locked.gift_card_redeemed, paid)?;
-
-    let payment = repository::insert_payment(
-        &mut tx,
-        invoice_id,
-        order_id,
-        amount,
-        Some(payment_type.as_str()),
-    )
-    .await?;
-
+    // Use persisted cents for both first writes and replays. The original
+    // payment is returned alongside the current, transaction-consistent balance.
+    let balance = returns_repository::settlement(&mut tx, invoice_id).await?;
+    let summary = PaymentSummary {
+        payment_status: balance.payment_status,
+        amount_paid: balance.amount_paid,
+        balance_due: balance.balance_due,
+    };
     tx.commit().await?;
-
-    tracing::info!(
-        invoice_id = %invoice_id,
-        amount,
-        payment_type = payment_type.as_str(),
-        "payment recorded"
-    );
-
-    let summary = payment_summary(locked.total_price, locked.gift_card_redeemed, paid + amount);
+    if !is_replay {
+        tracing::info!(
+            invoice_id = %invoice_id,
+            amount = payment.amount,
+            payment_type = input.payment_type.as_str(),
+            "payment recorded"
+        );
+    }
     Ok(RecordedPayment { payment, summary })
 }
 
@@ -245,17 +269,22 @@ pub async fn collect_invoice(
     state: &AppState,
     invoice_id: Uuid,
     payment_type: Option<PaymentType>,
+    actor: &str,
 ) -> Result<CollectedInvoice, AppError> {
     let mut tx = state.db().begin().await?;
 
-    let locked = repository::lock_invoice(&mut tx, invoice_id)
+    repository::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
 
     repository::mark_orders_collected(&mut tx, invoice_id).await?;
 
-    let paid = repository::sum_payments(&mut tx, invoice_id).await?;
-    let summary = payment_summary(locked.total_price, locked.gift_card_redeemed, paid);
+    let balance = returns_repository::settlement(&mut tx, invoice_id).await?;
+    let summary = PaymentSummary {
+        payment_status: balance.payment_status,
+        amount_paid: balance.amount_paid,
+        balance_due: balance.balance_due,
+    };
 
     let payment_method = if summary.balance_due > 0.0 {
         let payment_type = payment_type.ok_or_else(|| {
@@ -267,6 +296,7 @@ pub async fn collect_invoice(
             None,
             summary.balance_due,
             Some(payment_type.as_str()),
+            actor,
         )
         .await?;
         Some(payment_type.as_str().to_string())
@@ -281,11 +311,11 @@ pub async fn collect_invoice(
 
     tx.commit().await?;
 
-    let summary = payment_summary(
-        locked.total_price,
-        locked.gift_card_redeemed,
-        paid + summary.balance_due,
-    );
+    let summary = PaymentSummary {
+        payment_status: "paid".into(),
+        amount_paid: round2(balance.amount_paid + summary.balance_due),
+        balance_due: 0.0,
+    };
 
     tracing::info!(
         invoice_id = %invoice_id,
@@ -318,6 +348,10 @@ fn round2(value: f64) -> f64 {
 // Unlike an order, whose price is the whole line, a product line is priced per
 // unit and multiplied out.
 fn product_line_total(line: &CreateProductLineInput) -> f64 {
+    round2(line.quantity * line.unit_price)
+}
+
+fn material_line_total(line: &CreateMaterialLineInput) -> f64 {
     round2(line.quantity * line.unit_price)
 }
 
@@ -411,7 +445,9 @@ fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
     let gift_card_sales: f64 = input.gift_cards.iter().map(|card| card.amount).sum();
 
     let totals = breakdown(
-        order_subtotal + product_subtotal,
+        order_subtotal
+            + product_subtotal
+            + input.materials.iter().map(material_line_total).sum::<f64>(),
         gift_card_sales,
         input.discount,
         input.discount_unit,
@@ -614,9 +650,13 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
         .iter()
         .any(|customer| !customer.orders.is_empty());
 
-    if !has_orders && input.products.is_empty() && input.gift_cards.is_empty() {
+    if !has_orders
+        && input.products.is_empty()
+        && input.gift_cards.is_empty()
+        && input.materials.is_empty()
+    {
         return Err(AppError::BadRequest(
-            "an invoice needs at least one order, product, or gift card".to_string(),
+            "an invoice needs at least one order, material, product, or gift card".to_string(),
         ));
     }
 
@@ -698,8 +738,32 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
         }
     }
 
+    for line in &input.materials {
+        if !line.quantity.is_finite() || line.quantity < 0.01 {
+            return Err(AppError::BadRequest(
+                "a material line needs a quantity of at least 0.01".into(),
+            ));
+        }
+        if !line.unit_price.is_finite()
+            || line.unit_price < 0.0
+            || !(line.quantity * line.unit_price).is_finite()
+        {
+            return Err(AppError::BadRequest(
+                "a material price must be finite and nonnegative".into(),
+            ));
+        }
+        // Stock and prices are stored at two decimal places. Reject excess
+        // precision so saved totals and stock always match the submitted sale.
+        if (round2(line.quantity) - line.quantity).abs() > 1e-9
+            || (round2(line.unit_price) - line.unit_price).abs() > 1e-9
+        {
+            return Err(AppError::BadRequest(
+                "material quantities and prices support at most two decimal places".into(),
+            ));
+        }
+    }
+
     for card in &input.gift_cards {
-        gift_cards_service::normalize_code(&card.code)?;
         gift_cards_service::validate_amount(card.amount)?;
     }
 
@@ -937,7 +1001,7 @@ mod tests {
     }
 
     fn gift_card(amount: f64) -> serde_json::Value {
-        serde_json::json!({ "code": "GC-1", "amount": amount })
+        serde_json::json!({ "code": "GC-7KMP-4RWT-9DXH", "amount": amount })
     }
 
     fn invoice(
@@ -1132,13 +1196,15 @@ mod tests {
         }))
         .unwrap()];
         assert!(matches!(
-            create_invoice(&state, overpaid).await,
+            create_invoice(&state, overpaid, "staff").await,
             Err(AppError::BadRequest(_))
         ));
 
         // Only the first order is urgent. Client-submitted charges are ignored.
         // (10 + 2.5 + 15 + 3.5) * 90% + 5 = 32.90.
-        let created = create_invoice(&state, input.clone()).await.unwrap();
+        let created = create_invoice(&state, input.clone(), "staff")
+            .await
+            .unwrap();
         assert_eq!(created.total_price, 32.9);
         let editing = get_invoice_for_edit(&state, created.id).await.unwrap();
         let customer = &editing.customers[0];
@@ -1409,7 +1475,7 @@ mod tests {
     fn redeeming_a_gift_card_does_not_change_the_invoice_total() {
         let input = retail_invoice(serde_json::json!({
             "products": [product(1.0, 100.0)],
-            "giftCardRedemptions": [{ "code": "GC-1", "amount": 50.0 }],
+            "giftCardRedemptions": [{ "code": "GC-7KMP-4RWT-9DXH", "amount": 50.0 }],
         }));
         let totals = compute_totals(&input);
         assert_eq!(totals.total, 100.0);
@@ -1548,6 +1614,67 @@ mod tests {
         assert!(validate(&invoice).is_err());
     }
 
+    fn material(quantity: f64, unit_price: f64) -> serde_json::Value {
+        serde_json::json!({
+            "materialId": "0197fdd2-6a67-7000-8000-000000000001",
+            "branchId": "0197fdd2-6a67-7000-8000-000000000005",
+            "quantity": quantity, "unitPrice": unit_price,
+        })
+    }
+
+    #[test]
+    fn material_only_sale_needs_no_customer_or_measurements() {
+        let invoice = retail_invoice(serde_json::json!({ "materials": [material(2.5, 11.0)] }));
+        assert!(validate(&invoice).is_ok());
+        assert!(invoice.customers.is_empty());
+        assert_eq!(compute_totals(&invoice).total, 27.5);
+        assert!(
+            retail_invoice(serde_json::json!({ "products": [product(1.0, 10.0)] }))
+                .materials
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn material_sales_share_discount_and_payment_rules_with_other_goods() {
+        let mut invoice = retail_invoice(serde_json::json!({
+            "materials": [material(2.5, 11.0)], "products": [product(1.0, 22.0)],
+            "discount": 10.0, "discountUnit": "percent", "giftCards": [gift_card(10.0)],
+            "payments": [{ "amount": 54.55, "paymentType": "cash" }],
+        }));
+        assert_eq!(compute_totals(&invoice).total, 54.55);
+        assert!(validate(&invoice).is_ok());
+        invoice.payments[0].amount = 54.56;
+        assert!(validate(&invoice).is_err());
+    }
+
+    #[test]
+    fn material_sales_and_urgent_orders_share_discounts_but_not_urgent_charges() {
+        let mut input = invoice(10.0, "percent", vec![customer(vec![order(100.0)])]);
+        input.materials = serde_json::from_value(serde_json::json!([material(2.5, 11.0)])).unwrap();
+        input.customers[0].orders[0].is_urgent = true;
+        input.customers[0].orders[0].urgent_charge = 5.0;
+        assert!(validate(&input).is_ok());
+        assert_eq!(compute_totals(&input).total, 119.75);
+        assert_eq!(compute_totals(&input).urgent_charge, 5.0);
+    }
+
+    #[test]
+    fn material_sales_reject_invalid_numbers() {
+        let mut invoice = retail_invoice(serde_json::json!({ "materials": [material(2.5, 11.0)] }));
+        for quantity in [0.0, -1.0, 0.001, 1.234, f64::INFINITY, f64::NAN] {
+            invoice.materials[0].quantity = quantity;
+            assert!(validate(&invoice).is_err());
+        }
+        invoice.materials[0].quantity = 2.5;
+        for price in [-1.0, 1.234, f64::INFINITY, f64::NAN] {
+            invoice.materials[0].unit_price = price;
+            assert!(validate(&invoice).is_err());
+        }
+        invoice.materials[0].unit_price = 0.0;
+        assert!(validate(&invoice).is_ok());
+    }
+
     #[test]
     fn accepts_an_invoice_of_only_products() {
         let invoice = retail_invoice(serde_json::json!({ "products": [product(2.0, 30.0)] }));
@@ -1582,19 +1709,21 @@ mod tests {
         let invoice = retail_invoice(serde_json::json!({
             "products": [product(1.0, 500.0)],
             "giftCardRedemptions": [
-                { "code": "GC-1", "amount": 50.0 },
-                { "code": " gc-1 ", "amount": 25.0 },
+                { "code": "GC-7KMP-4RWT-9DXH", "amount": 50.0 },
+                { "code": " 7kmp4rwt9dxh ", "amount": 25.0 },
             ],
         }));
         let error = validate(&invoice).unwrap_err();
-        assert!(matches!(error, AppError::BadRequest(_)));
+        assert!(
+            matches!(error, AppError::BadRequest(message) if message.contains("same gift card"))
+        );
     }
 
     #[test]
     fn rejects_redemptions_worth_more_than_the_invoice() {
         let invoice = retail_invoice(serde_json::json!({
             "products": [product(1.0, 100.0)],
-            "giftCardRedemptions": [{ "code": "GC-1", "amount": 200.0 }],
+            "giftCardRedemptions": [{ "code": "GC-7KMP-4RWT-9DXH", "amount": 200.0 }],
         }));
         let error = validate(&invoice).unwrap_err();
         assert!(matches!(error, AppError::BadRequest(_)));
@@ -1604,7 +1733,7 @@ mod tests {
     fn accepts_a_redemption_that_settles_the_invoice_exactly() {
         let invoice = retail_invoice(serde_json::json!({
             "products": [product(1.0, 100.0)],
-            "giftCardRedemptions": [{ "code": "GC-1", "amount": 100.0 }],
+            "giftCardRedemptions": [{ "code": "GC-7KMP-4RWT-9DXH", "amount": 100.0 }],
         }));
         assert!(validate(&invoice).is_ok());
     }
@@ -1798,6 +1927,36 @@ async fn write_customer_orders(
     Ok(())
 }
 
+async fn write_material_lines(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    materials: &[CreateMaterialLineInput],
+) -> Result<(), AppError> {
+    for line in materials {
+        if !repository::is_production_location(tx, line.branch_id).await? {
+            return Err(AppError::BadRequest(
+                "pick an active stock-holding location for material sales".into(),
+            ));
+        }
+        // The same guarded decrement used by tailoring orders runs in the
+        // invoice transaction, so repeated and mixed lines share availability.
+        if !materials_repository::decrement_stock(
+            tx,
+            line.material_id,
+            line.branch_id,
+            line.quantity,
+        )
+        .await?
+        {
+            return Err(AppError::BadRequest(
+                "not enough material in stock at the selected location".into(),
+            ));
+        }
+        repository::insert_material_item(tx, invoice_id, line, material_line_total(line)).await?;
+    }
+    Ok(())
+}
+
 async fn write_product_lines(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
@@ -1845,20 +2004,35 @@ async fn write_gift_card_sales(
     invoice_id: Uuid,
     customer_id: Option<Uuid>,
     gift_cards: &[CreateGiftCardLineInput],
-) -> Result<(), AppError> {
+    region: &str,
+) -> Result<Vec<IssuedGiftCard>, AppError> {
+    let mut issued = Vec::with_capacity(gift_cards.len());
     for card in gift_cards {
-        let code = gift_cards_service::normalize_code(&card.code)?;
-
-        let gift_card_id = gift_cards_repository::insert_gift_card(
-            tx,
-            &code,
-            card.amount,
-            // The card belongs to whoever the invoice is billed to, when the
-            // sale names someone at all.
-            customer_id,
-            card.expires_on,
-        )
-        .await?;
+        let (gift_card_id, code) = if card.code.trim().is_empty() {
+            let input = crate::features::gift_cards::types::CreateGiftCardInput {
+                amount: card.amount,
+                customer_id,
+                expires_on: card.expires_on,
+                bought_for: card.bought_for.clone(),
+                recipient_phone: card.recipient_phone.clone(),
+            };
+            gift_cards_service::issue_gift_card(tx, &input, region).await?
+        } else {
+            // Existing invoice lines retain their issued code when rebuilt.
+            let code = gift_cards_service::normalize_code(&card.code)?;
+            let phone = gift_cards_service::recipient_phone(&card.recipient_phone, region)?;
+            let id = gift_cards_repository::insert_gift_card(
+                tx,
+                &code,
+                card.amount,
+                customer_id,
+                card.expires_on,
+                card.bought_for.as_deref(),
+                Some(&phone),
+            )
+            .await?;
+            (id, code)
+        };
 
         repository::insert_gift_card_item(
             tx,
@@ -1868,9 +2042,13 @@ async fn write_gift_card_sales(
             card.amount,
         )
         .await?;
+        issued.push(IssuedGiftCard {
+            id: gift_card_id,
+            code,
+        });
     }
 
-    Ok(())
+    Ok(issued)
 }
 
 async fn write_redemptions(
@@ -1893,7 +2071,11 @@ async fn write_redemptions(
 pub async fn create_invoice(
     state: &AppState,
     mut input: CreateInvoiceInput,
+    actor: &str,
 ) -> Result<CreatedInvoice, AppError> {
+    for card in &mut input.gift_cards {
+        card.code.clear();
+    }
     let mut tx = state.db().begin().await?;
     resolve_order_prices(
         &mut tx,
@@ -1915,6 +2097,7 @@ pub async fn create_invoice(
         totals.total,
         totals.redeemed,
         totals.urgent_charge,
+        actor,
     )
     .await?;
 
@@ -1925,6 +2108,7 @@ pub async fn create_invoice(
             None,
             payment.amount,
             Some(payment.payment_type.as_str()),
+            actor,
         )
         .await?;
     }
@@ -1937,8 +2121,16 @@ pub async fn create_invoice(
     }
 
     write_product_lines(&mut tx, invoice_id, &input.products).await?;
+    write_material_lines(&mut tx, invoice_id, &input.materials).await?;
 
-    write_gift_card_sales(&mut tx, invoice_id, input.customer_id, &input.gift_cards).await?;
+    let gift_cards = write_gift_card_sales(
+        &mut tx,
+        invoice_id,
+        input.customer_id,
+        &input.gift_cards,
+        &state.notifications().default_region,
+    )
+    .await?;
 
     write_redemptions(
         &mut tx,
@@ -1966,6 +2158,7 @@ pub async fn create_invoice(
         id: invoice_id,
         total_price: totals.total,
         gift_card_redeemed: totals.redeemed,
+        gift_cards,
     })
 }
 
@@ -1974,6 +2167,14 @@ pub async fn get_invoice_for_edit(
     state: &AppState,
     invoice_id: Uuid,
 ) -> Result<InvoiceEdit, AppError> {
+    let mut tx = state.db().begin().await?;
+    let adjusted = returns_repository::has_adjustments(&mut tx, invoice_id).await?;
+    tx.commit().await?;
+    if adjusted {
+        return Err(AppError::BadRequest(
+            "an invoice with returns or refunds cannot be edited".into(),
+        ));
+    }
     repository::fetch_invoice_edit(state, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))
@@ -2024,6 +2225,11 @@ pub async fn update_invoice(
     // The money already taken has to fit the rebuilt total: shrinking the
     // lines below what the customer already paid would leave the ledger
     // overpaying the invoice, with no payment row to blame for it.
+    if returns_repository::has_adjustments(&mut tx, invoice_id).await? {
+        return Err(AppError::BadRequest(
+            "an invoice with returns or refunds cannot be edited".into(),
+        ));
+    }
     let kept = repository::sum_payments(&mut tx, invoice_id).await?;
     validate_kept_payments(kept, totals.total, totals.redeemed)?;
 
@@ -2042,6 +2248,7 @@ pub async fn update_invoice(
     // Everything the rebuild is about to tear down.
     let order_lines = repository::old_order_lines(&mut tx, invoice_id).await?;
     let product_lines = repository::old_product_lines(&mut tx, invoice_id).await?;
+    let material_lines = repository::old_material_lines(&mut tx, invoice_id).await?;
     let gift_sales = repository::old_gift_card_sales(&mut tx, invoice_id).await?;
     let redemptions = repository::old_redemptions(&mut tx, invoice_id).await?;
     let measurement_refs = repository::old_measurement_refs(&mut tx, invoice_id).await?;
@@ -2059,6 +2266,13 @@ pub async fn update_invoice(
         repository::lock_gift_cards(&mut tx, &card_ids).await?;
     }
     for sale in &gift_sales {
+        let sent = repository::sold_card_has_deliveries(&mut tx, sale.gift_card_id).await?;
+        if sent {
+            return Err(AppError::BadRequest(format!(
+                "gift card {} has been approved for delivery and the invoice cannot be rebuilt",
+                sale.code
+            )));
+        }
         if repository::sold_card_was_used(&mut tx, sale.gift_card_id).await? {
             return Err(AppError::BadRequest(format!(
                 "gift card {} has already been used and the invoice cannot be edited",
@@ -2083,6 +2297,12 @@ pub async fn update_invoice(
                 line.material_amount,
             )
             .await?;
+        }
+    }
+    for line in &material_lines {
+        if let (Some(material_id), Some(branch_id)) = (line.material_id, line.branch_id) {
+            repository::restore_material_stock(&mut tx, material_id, branch_id, line.quantity)
+                .await?;
         }
     }
     for line in &product_lines {
@@ -2118,8 +2338,24 @@ pub async fn update_invoice(
     }
 
     write_product_lines(&mut tx, invoice_id, &input.products).await?;
+    write_material_lines(&mut tx, invoice_id, &input.materials).await?;
 
-    write_gift_card_sales(&mut tx, invoice_id, input.customer_id, &input.gift_cards).await?;
+    // Only this invoice's previously issued codes can survive an edit.
+    for card in &mut input.gift_cards {
+        card.code = gift_cards_service::normalize_code(&card.code)
+            .ok()
+            .and_then(|code| gift_sales.iter().find(|sale| sale.code == code))
+            .map(|sale| sale.code.clone())
+            .unwrap_or_default();
+    }
+    let gift_cards = write_gift_card_sales(
+        &mut tx,
+        invoice_id,
+        input.customer_id,
+        &input.gift_cards,
+        &state.notifications().default_region,
+    )
+    .await?;
 
     write_redemptions(
         &mut tx,
@@ -2156,5 +2392,6 @@ pub async fn update_invoice(
         id: invoice_id,
         total_price: totals.total,
         gift_card_redeemed: totals.redeemed,
+        gift_cards,
     })
 }

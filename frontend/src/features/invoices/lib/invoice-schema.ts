@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { recipientPhoneSchema } from '@/features/gift-cards/lib/gift-card-schema'
 import { customerIdentitySchema } from '@/features/customers/lib/customer-schema'
 import { measurementPayload } from '@/features/customers/hooks/use-create-customer'
 import { isMoney } from '@/lib/money'
@@ -198,17 +199,12 @@ const giftCardLineDraftSchema = z
   .object({
     key: z.string(),
     code: z.string(),
+    boughtFor: z.string(),
+    recipientPhone: recipientPhoneSchema,
     amount: numberInputSchema,
     expiresOn: z.string(),
   })
   .superRefine((line, ctx) => {
-    if (!line.code.trim()) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Enter a gift card code.',
-        path: ['code'],
-      })
-    }
     if (line.amount === '' || line.amount <= 0) {
       ctx.addIssue({
         code: 'custom',
@@ -301,6 +297,29 @@ export const invoiceFormSchema = z
     payments: z.array(paymentDraftSchema),
     customers: customersArraySchema,
     products: z.array(productLineDraftSchema),
+    materials: z.array(
+      z.object({
+        key: z.string(),
+        materialId: z.string().min(1, 'Pick a material.'),
+        branchId: z.string().min(1, 'Pick where this material is sold from.'),
+        quantity: z
+          .number({ error: 'Enter a quantity of at least 0.01.' })
+          .finite()
+          .min(0.01, 'Enter a quantity of at least 0.01.')
+          .refine(
+            (n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-7,
+            'Use at most two decimal places.',
+          ),
+        unitPrice: z
+          .number({ error: 'Enter a unit price.' })
+          .finite()
+          .min(0, 'Enter a nonnegative price.')
+          .refine(
+            (n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-7,
+            'Use at most two decimal places.',
+          ),
+      }),
+    ),
     giftCards: z.array(giftCardLineDraftSchema),
     redemptions: z.array(redemptionDraftSchema),
   })
@@ -340,10 +359,15 @@ export const invoiceFormSchema = z
     const hasOrders = value.customers.some(
       (customer) => customer.orders.length > 0,
     )
-    if (!hasOrders && !value.products.length && !value.giftCards.length) {
+    if (
+      !hasOrders &&
+      !value.products.length &&
+      !value.giftCards.length &&
+      !value.materials.length
+    ) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Add at least one order, product, or gift card.',
+        message: 'Add at least one order, material, product, or gift card.',
         path: ['customers'],
       })
     }
@@ -420,7 +444,7 @@ export const invoiceFormSchema = z
     )
     const totals = computeInvoiceTotals({
       orderTotal,
-      productTotal: value.products.reduce(
+      productTotal: [...value.products, ...value.materials].reduce(
         (sum, line) => sum + computeProductLineTotal(line),
         0,
       ),

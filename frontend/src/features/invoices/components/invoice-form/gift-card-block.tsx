@@ -1,6 +1,11 @@
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { NumberField, TextField } from '@/components/form/fields'
+import {
+  DateField,
+  NumberField,
+  PhoneField,
+  TextField,
+} from '@/components/form/fields'
 import { CURRENCY } from '@/lib/currency'
 import type { InvoiceFormApi } from '../../types/invoice-form'
 
@@ -18,25 +23,47 @@ export function GiftCardBlock({
   const base = `giftCards[${lineIndex}]`
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_9rem_auto]">
-      <div className="min-w-0">
-        <TextField form={form} name={`${base}.code`} label="Code" />
-      </div>
-
-      <div className="col-start-1 min-w-0 sm:col-start-auto">
-        <NumberField
-          form={form}
-          name={`${base}.amount`}
-          label={`Amount (${CURRENCY})`}
-        />
-      </div>
-
-      <div className="col-start-1 min-w-0 sm:col-start-auto">
+    <div className="flex items-start gap-3">
+      <div className="grid flex-1 gap-3 sm:grid-cols-2">
         <TextField
           form={form}
-          name={`${base}.expiresOn`}
-          label="Expires (optional)"
+          name={`${base}.boughtFor`}
+          label="Bought for (optional)"
         />
+        <PhoneField
+          form={form}
+          name={`${base}.recipientPhone`}
+          label="Recipient phone"
+          defaultCountry="BH"
+        />
+
+        <div>
+          <NumberField
+            form={form}
+            name={`${base}.amount`}
+            label={`Amount (${CURRENCY})`}
+          />
+        </div>
+
+        <div>
+          <DateField
+            form={form}
+            name={`${base}.expiresOn`}
+            label="Expires (optional)"
+          />
+        </div>
+        <form.Subscribe
+          selector={(state) => state.values.giftCards[lineIndex].code}
+        >
+          {(code) => (
+            <p className="text-xs text-muted-foreground sm:col-span-2">
+              {code
+                ? `Code: ${code}`
+                : 'A unique code is generated automatically when you save.'}{' '}
+              You can also send the card later from Gift Cards.
+            </p>
+          )}
+        </form.Subscribe>
       </div>
 
       <Button
@@ -44,7 +71,7 @@ export function GiftCardBlock({
         size="icon"
         type="button"
         onClick={onRemove}
-        className="col-start-2 row-start-1 mt-6 sm:col-start-4"
+        className="mt-6"
         aria-label="Remove gift card"
       >
         <XIcon className="h-3.5 w-3.5" />

@@ -18,6 +18,7 @@ import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
 import { ORDER_RECEIVING_FILTERS } from '@/features/locations/lib/location-filters'
 import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
+import type { Material } from '../../types/materials'
 import type { Product } from '@/features/products/types/product'
 import { CURRENCY } from '@/lib/currency'
 import {
@@ -60,7 +61,7 @@ function invoiceTotals(values: InvoiceFormValues) {
         ),
       0,
     ),
-    productTotal: values.products.reduce(
+    productTotal: [...values.products, ...values.materials].reduce(
       (sum, line) => sum + computeProductLineTotal(line),
       0,
     ),
@@ -87,6 +88,7 @@ interface InvoiceSummaryProps {
   form: InvoiceFormApi
   customerNames: MutableRefObject<Map<string, Customer>>
   productNames: MutableRefObject<Map<string, Product>>
+  materialNames?: MutableRefObject<Map<string, Material>>
   locationLabelForId?: (id: string) => string | null
   customerLabelForId?: (id: string) => string | null
   paymentsLocked?: boolean
@@ -98,6 +100,7 @@ export function InvoiceSummary({
   form,
   customerNames,
   productNames,
+  materialNames,
   locationLabelForId,
   customerLabelForId,
   paymentsLocked = false,
@@ -106,20 +109,7 @@ export function InvoiceSummary({
 }: InvoiceSummaryProps) {
   const values = useStore(form.store, (state) => state.values)
   const totals = invoiceTotals(values)
-  const subtotal =
-    values.customers.reduce(
-      (sum, customer) =>
-        sum +
-        customer.orders.reduce(
-          (total, order) => total + computeOrderLineTotal(order),
-          0,
-        ),
-      0,
-    ) +
-    values.products.reduce(
-      (sum, line) => sum + computeProductLineTotal(line),
-      0,
-    )
+  const subtotal = totals.grossSubtotal
   const receivingDefault = useApplicableDefaultLocation('receiving')
   const workspace = useInvoiceWorkspace()
   const [discountOpen, setDiscountOpen] = useState(values.discount !== '')
@@ -196,11 +186,26 @@ export function InvoiceSummary({
               </span>
             </div>
           ))}
+          {values.materials.map((line, index) => (
+            <div
+              key={line.key}
+              className="flex justify-between gap-3 text-sm text-muted-foreground"
+            >
+              <span className="min-w-0 break-words">
+                {materialNames?.current.get(line.materialId)?.name ??
+                  `Material ${index + 1}`}
+              </span>
+              <span className="shrink-0 tabular-nums">
+                {CURRENCY} {computeProductLineTotal(line).toFixed(2)}
+              </span>
+            </div>
+          ))}
           {!hasOrders &&
             !values.products.length &&
+            !values.materials.length &&
             !values.giftCards.length && (
               <p className="text-muted-foreground">
-                Add an order, product, or gift card to get started.
+                Add an order, material, product, or gift card to get started.
               </p>
             )}
         </div>

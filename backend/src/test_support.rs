@@ -32,6 +32,12 @@ pub async fn invoice(
     separate_pickup: bool,
 ) -> (Uuid, Vec<Uuid>, Uuid, Uuid) {
     crate::seed::run_reference_data(db).await.unwrap();
+    if separate_pickup {
+        sqlx::query("INSERT INTO order_stages(name,sort_order,requires_delivery) VALUES('Test delivery',7,true) ON CONFLICT(name) DO NOTHING")
+            .execute(db)
+            .await
+            .unwrap();
+    }
     let production: Uuid = sqlx::query_scalar("INSERT INTO branch(name) VALUES($1) RETURNING id")
         .bind(format!("Production {}", Uuid::new_v4()))
         .fetch_one(db)
