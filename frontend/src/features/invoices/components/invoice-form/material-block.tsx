@@ -4,12 +4,18 @@ import { AsyncCombobox } from '@/components/form/async-combobox'
 import { NumberField } from '@/components/form/fields'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
-import type { Location } from '@/features/locations/types/location'
-import { STOCK_FILTERS } from '@/features/locations/lib/location-filters'
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox'
 import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
 import { CURRENCY } from '@/lib/currency'
 import type { InvoiceFormApi } from '../../types/invoice-form'
-import type { Material } from '../../types/materials'
+import type { Material, MaterialLocationStock } from '../../types/materials'
 import { computeProductLineTotal } from '../../lib/invoice-pricing'
 import { GrossVatHint } from './gross-vat-hint'
 
@@ -19,7 +25,6 @@ interface MaterialBlockProps {
   onMaterialPicked: (material: Material | null) => void
   initialMaterialForId: (id: string) => Material | null
   materialLabelForId: (id: string) => string | null
-  locationLabelForId: (id: string) => string | null
   onRemove: () => void
 }
 
@@ -29,7 +34,6 @@ export function MaterialBlock({
   onMaterialPicked,
   initialMaterialForId,
   materialLabelForId,
-  locationLabelForId,
   onRemove,
 }: MaterialBlockProps) {
   const base = `materials[${lineIndex}]`
@@ -39,10 +43,16 @@ export function MaterialBlock({
   )
   const stockDefault = useApplicableDefaultLocation('stock')
   useEffect(() => {
-    if (stockDefault && !form.state.values.materials[lineIndex]?.branchId) {
+    if (
+      stockDefault &&
+      picked?.locations.some(
+        (stock) => stock.locationId === stockDefault.id && stock.quantity > 0,
+      ) &&
+      !form.state.values.materials[lineIndex]?.branchId
+    ) {
       form.setFieldValue(`${base}.branchId` as never, stockDefault.id as never)
     }
-  }, [stockDefault, form, lineIndex, base])
+  }, [stockDefault, picked, form, lineIndex, base])
 
   return (
     <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -61,7 +71,10 @@ export function MaterialBlock({
               })}
               getValueLabel={materialLabelForId}
               value={field.state.value || null}
-              onValueChange={(id) => field.handleChange(id ?? '')}
+              onValueChange={(id) => {
+                field.handleChange(id ?? '')
+                form.setFieldValue(`${base}.branchId` as never, '' as never)
+              }}
               onSelectRow={(material) => {
                 setPicked(material)
                 onMaterialPicked(material)
@@ -74,40 +87,63 @@ export function MaterialBlock({
         )}
       </form.Field>
       <form.Field name={`${base}.branchId` as never}>
-        {(field: any) => (
-          <Field data-invalid={field.state.meta.errors.length > 0}>
-            <FieldLabel htmlFor={field.name}>Sold From</FieldLabel>
-            <AsyncCombobox<Location>
-              id={field.name}
-              endpoint="/locations"
-              queryKey="invoice-material-location"
-              searchField="name"
-              filters={STOCK_FILTERS}
-              toOption={(location) => ({
-                value: location.id,
-                label: location.name,
-              })}
-              getValueLabel={(id) =>
-                locationLabelForId(id) ??
-                (id === stockDefault?.id ? stockDefault.name : null)
-              }
-              value={field.state.value || null}
-              onValueChange={(id) => field.handleChange(id ?? '')}
-              placeholder="Search location..."
-              emptyMessage="No locations found."
-            />
-            {picked && field.state.value && (
-              <p className="text-xs text-muted-foreground">
-                Available:{' '}
-                {picked.locations.find(
-                  (stock) => stock.locationId === field.state.value,
-                )?.quantity ?? 0}{' '}
-                {picked.unit}
-              </p>
-            )}
-            <FieldError errors={field.state.meta.errors} />
-          </Field>
-        )}
+        {(field: any) => {
+          // Preserve a saved location even when this sale exhausted its stock.
+          const locations =
+            picked?.locations.filter(
+              (stock) =>
+                stock.quantity > 0 || stock.locationId === field.state.value,
+            ) ?? []
+          const selected =
+            locations.find((stock) => stock.locationId === field.state.value) ??
+            null
+          const locationLabel = (stock: MaterialLocationStock) =>
+            `${stock.location} — ${stock.quantity} ${picked?.unit ?? ''}`
+          return (
+            <Field data-invalid={field.state.meta.errors.length > 0}>
+              <FieldLabel htmlFor={field.name}>Sold From</FieldLabel>
+              <Combobox
+                items={locations}
+                itemToStringLabel={locationLabel}
+                isItemEqualToValue={(
+                  a: MaterialLocationStock,
+                  b: MaterialLocationStock,
+                ) => a.locationId === b.locationId}
+                value={selected}
+                onValueChange={(location: MaterialLocationStock | null) =>
+                  field.handleChange(location?.locationId ?? '')
+                }
+              >
+                <ComboboxInput
+                  id={field.name}
+                  placeholder="Search location..."
+                  className="w-full"
+                  showClear
+                />
+                <ComboboxContent>
+                  <ComboboxEmpty>
+                    {picked
+                      ? 'This material has no stock available.'
+                      : 'Pick a material first.'}
+                  </ComboboxEmpty>
+                  <ComboboxList>
+                    {(stock: MaterialLocationStock) => (
+                      <ComboboxItem key={stock.locationId} value={stock}>
+                        {locationLabel(stock)}
+                      </ComboboxItem>
+                    )}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
+              {picked && selected && (
+                <p className="text-xs text-muted-foreground">
+                  Available: {selected.quantity} {picked.unit}
+                </p>
+              )}
+              <FieldError errors={field.state.meta.errors} />
+            </Field>
+          )
+        }}
       </form.Field>
       <NumberField
         form={form}

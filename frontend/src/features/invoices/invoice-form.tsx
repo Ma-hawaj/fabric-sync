@@ -281,9 +281,6 @@ export function InvoiceForm({
                     materialLabelForId={(id) =>
                       seeds?.materialLabels.get(id) ?? null
                     }
-                    locationLabelForId={(id) =>
-                      seeds?.locationLabels.get(id) ?? null
-                    }
                     onRemove={() => materialsField.removeValue(index)}
                   />
                 ))}
@@ -292,10 +289,7 @@ export function InvoiceForm({
                   size="sm"
                   type="button"
                   onClick={() =>
-                    materialsField.pushValue({
-                      ...createEmptyMaterialLine(),
-                      branchId: stockDefault?.id ?? '',
-                    })
+                    materialsField.pushValue(createEmptyMaterialLine())
                   }
                   className="w-full border-dashed"
                 >
