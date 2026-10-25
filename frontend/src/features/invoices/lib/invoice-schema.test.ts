@@ -651,6 +651,17 @@ describe('direct material sales', () => {
     }
   })
   it('rejects invalid quantities and prices', () => {
+    const blankQuantity = firstErrorFor(
+      values({ materials: [{ ...material, quantity: '' }] }),
+    )
+    expect(blankQuantity?.path).toEqual(['materials', 0, 'quantity'])
+    expect(blankQuantity?.message).toBe('Enter a quantity of at least 0.01.')
+    const blankPrice = firstErrorFor(
+      values({ materials: [{ ...material, unitPrice: '' }] }),
+    )
+    expect(blankPrice?.path).toEqual(['materials', 0, 'unitPrice'])
+    expect(blankPrice?.message).toBe('Enter a unit price.')
+
     for (const quantity of [0, -1, '', Infinity, NaN, 0.001, 1.234] as const) {
       expect(
         invoiceFormSchema.safeParse(

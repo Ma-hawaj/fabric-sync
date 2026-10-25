@@ -303,7 +303,7 @@ export const invoiceFormSchema = z
         materialId: z.string().min(1, 'Pick a material.'),
         branchId: z.string().min(1, 'Pick where this material is sold from.'),
         quantity: z
-          .number()
+          .number({ error: 'Enter a quantity of at least 0.01.' })
           .finite()
           .min(0.01, 'Enter a quantity of at least 0.01.')
           .refine(
@@ -311,7 +311,7 @@ export const invoiceFormSchema = z
             'Use at most two decimal places.',
           ),
         unitPrice: z
-          .number()
+          .number({ error: 'Enter a unit price.' })
           .finite()
           .min(0, 'Enter a nonnegative price.')
           .refine(
