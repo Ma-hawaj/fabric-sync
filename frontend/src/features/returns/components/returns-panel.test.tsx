@@ -369,3 +369,55 @@ describe('ReturnsPanel', () => {
     expect(screen.queryByRole('dialog')).toBeTruthy()
   })
 })
+
+it('returns fractional material in its sold unit and restocks the chosen location', async () => {
+  const post = vi
+    .spyOn(apiClient, 'post')
+    .mockResolvedValue({ data: { id: 'material-return' } })
+  renderPanel({
+    ...CONTEXT,
+    lines: [
+      {
+        ...PRODUCT,
+        lineId: 'material-1',
+        kind: 'material',
+        description: 'Linen',
+        unit: 'meters',
+        quantity: 2.5,
+        lineTotal: 27.5,
+        creditLimit: 27.5,
+      },
+    ],
+    settlement: {
+      ...CONTEXT.settlement,
+      amountPaid: 0,
+      amountCredited: 0,
+      netTotal: 27.5,
+      netAmountPaid: 0,
+      netGiftCardRedeemed: 0,
+      balanceDue: 27.5,
+      refundDue: 0,
+    },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Return & Refund' }))
+  expect(screen.getByText(/2.5 meters/)).toBeTruthy()
+  fireEvent.change(screen.getByLabelText('Reason for return'), {
+    target: { value: 'Unused linen' },
+  })
+  fireEvent.change(screen.getByLabelText('Quantity to return — Linen'), {
+    target: { value: '1.25' },
+  })
+  fireEvent.click(screen.getByLabelText('Restock Linen'))
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm Return' }))
+  await waitFor(() => expect(post).toHaveBeenCalledOnce())
+  expect(post.mock.calls[0][1]).toMatchObject({
+    lines: [
+      {
+        lineId: 'material-1',
+        quantity: 1.25,
+        restock: true,
+        restockLocationId: 'location-original',
+      },
+    ],
+  })
+})

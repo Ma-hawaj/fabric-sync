@@ -46,6 +46,8 @@ function useAdjustment<T>(path: string) {
           'orders',
           'products',
           'materials',
+          'invoice-material',
+          'invoice-order-material',
           'gift-cards',
           'gift-card',
         ].map((key) => client.invalidateQueries({ queryKey: [key] })),

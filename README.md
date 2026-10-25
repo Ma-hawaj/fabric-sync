@@ -192,7 +192,9 @@ for a sale without tailoring orders.
 Invoice create/update requests accept an optional `materials` array containing
 `materialId`, `branchId`, `quantity`, and `unitPrice`. Saving deducts stock in the
 invoice transaction; editing restores the previous material lines before applying
-the replacements. Material lines do not create orders or measurements.
+the replacements. Material lines do not create orders or measurements. Direct material sales also
+support fractional returns, discounted credits, cash or original gift-card refunds,
+and optional restocking at an active stock location.
 
 Run the PostgreSQL regression test against a local PostgreSQL 18+ database:
 
