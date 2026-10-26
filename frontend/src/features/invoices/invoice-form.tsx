@@ -237,7 +237,10 @@ export function InvoiceForm({
     <InvoiceWorkspaceContext.Provider
       value={{ activeOrderKey, setActiveOrderKey, validationTarget }}
     >
-      <div className="space-y-6 pb-24 xl:pb-0">
+      <div
+        data-slot="workspace-page"
+        className="w-full max-w-[100rem] space-y-6 pb-24 xl:pb-0"
+      >
         {giftCardToSend ? (
           <SendGiftCardDialog
             key={giftCardToSend.id}
