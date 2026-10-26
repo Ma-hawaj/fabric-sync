@@ -91,6 +91,9 @@ pub async fn fetch_invoice_detail(
             -- (see the list query's `agg` lateral for the same derivation).
             collection.last_collected_at AS "last_collected_at?",
             i.total_price::float8 AS "total_price!",
+            i.vat_rate::float8 AS "vat_rate!",
+            i.taxable_amount::float8 AS "taxable_amount!",
+            i.vat_amount::float8 AS "vat_amount!",
             i.gift_card_redeemed::float8 AS "gift_card_redeemed!",
             balance.amount_credited::float8 AS "amount_credited!",
             balance.cash_refunded::float8 AS "cash_refunded!",
@@ -302,6 +305,9 @@ pub async fn fetch_invoice_detail(
             discount_unit: invoice.discount_unit,
             payment_status: invoice.payment_status,
             total_price: invoice.total_price,
+            vat_rate: invoice.vat_rate,
+            taxable_amount: invoice.taxable_amount,
+            vat_amount: invoice.vat_amount,
             amount_paid: invoice.amount_paid,
             payment_method: invoice.payment_method,
             collected: invoice.collected,
@@ -533,6 +539,9 @@ pub async fn insert_invoice(
     gift_card_redeemed: f64,
     urgent_charge: f64,
     actor: &str,
+    vat_rate: f64,
+    taxable_amount: f64,
+    vat_amount: f64,
 ) -> Result<(Uuid, chrono::DateTime<chrono::Utc>), sqlx::Error> {
     // invoice_date is server-set (DEFAULT now()) and never taken from
     // input — staff promise a target_date instead. Returned so gift card
@@ -542,11 +551,11 @@ pub async fn insert_invoice(
         INSERT INTO invoices (
             target_date, branch_id, discount, discount_unit,
             total_price, customer_id, gift_card_redeemed,
-            urgent_charge, collection_method, created_by
+            urgent_charge, collection_method, created_by, vat_rate, taxable_amount, vat_amount
         )
         VALUES (
             $1, $2, $3::float8, $4, $5::float8, $6, $7::float8,
-            $8::float8, $9, $10
+            $8::float8, $9, $10, $11::float8, $12::float8, $13::float8
         )
         RETURNING id, invoice_date
         "#,
@@ -560,6 +569,9 @@ pub async fn insert_invoice(
         urgent_charge,
         input.collection_method.as_str(),
         actor,
+        vat_rate,
+        taxable_amount,
+        vat_amount,
     )
     .fetch_one(&mut **tx)
     .await
@@ -570,6 +582,7 @@ pub async fn insert_invoice(
 /// That later read observes any changes committed while lock acquisition
 /// waited. `None` means the invoice does not exist.
 pub struct LockedInvoice {
+    pub vat_rate: f64,
     /// The server-set creation date. Gift card expiry on an edit is checked
     /// against this — the date the sale happened — not the editable target.
     pub invoice_date: chrono::DateTime<chrono::Utc>,
@@ -581,7 +594,7 @@ pub async fn lock_invoice(
 ) -> Result<Option<LockedInvoice>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT invoice_date
+        SELECT invoice_date, vat_rate::float8 AS "vat_rate!"
         FROM invoices
         WHERE id = $1
         FOR UPDATE
@@ -592,6 +605,7 @@ pub async fn lock_invoice(
     .await?;
 
     Ok(row.map(|row| LockedInvoice {
+        vat_rate: row.vat_rate,
         invoice_date: row.invoice_date,
     }))
 }
@@ -940,6 +954,7 @@ pub async fn fetch_invoice_edit(
         r#"
         SELECT
             i.invoice_number,
+            i.vat_rate::float8 AS "vat_rate!",
             i.invoice_date,
             i.target_date,
             i.urgent_charge::float8 AS "urgent_charge!",
@@ -966,6 +981,7 @@ pub async fn fetch_invoice_edit(
     let order_rows = sqlx::query!(
         r#"
         SELECT
+            o.id AS original_order_id,
             m.customer_id,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile_no,
@@ -1075,6 +1091,7 @@ pub async fn fetch_invoice_edit(
             mobile_pocket_length_by_width: row.mobile_pocket_length_by_width,
         };
         let order = InvoiceEditOrder {
+            original_order_id: row.original_order_id,
             base_price: row.base_price,
             material_id: row.material_id,
             material_source: row.material_source,
@@ -1118,6 +1135,7 @@ pub async fn fetch_invoice_edit(
     let product_rows = sqlx::query!(
         r#"
         SELECT
+            ii.id AS original_item_id,
             ii.product_id,
             ii.description,
             ii.quantity::float8 AS "quantity!",
@@ -1170,6 +1188,7 @@ pub async fn fetch_invoice_edit(
     let payments = list_payments(state, invoice_id).await?;
 
     Ok(Some(InvoiceEdit {
+        vat_rate: header.vat_rate,
         id: invoice_id,
         invoice_number: header.invoice_number,
         date: header.invoice_date,
@@ -1187,6 +1206,7 @@ pub async fn fetch_invoice_edit(
         products: product_rows
             .into_iter()
             .map(|row| InvoiceEditProductLine {
+                original_item_id: row.original_item_id,
                 product_id: row.product_id,
                 product_name: row.description,
                 quantity: row.quantity,
@@ -1518,6 +1538,8 @@ pub async fn update_invoice_header(
     total_price: f64,
     gift_card_redeemed: f64,
     urgent_charge: f64,
+    taxable_amount: f64,
+    vat_amount: f64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
@@ -1530,7 +1552,9 @@ pub async fn update_invoice_header(
             total_price = $7::float8,
             gift_card_redeemed = $8::float8,
             urgent_charge = $9::float8,
-            collection_method = $10
+            collection_method = $10,
+            taxable_amount = $11::float8,
+            vat_amount = $12::float8
         WHERE id = $1
         "#,
         invoice_id,
@@ -1543,6 +1567,8 @@ pub async fn update_invoice_header(
         gift_card_redeemed,
         urgent_charge,
         input.collection_method.as_str(),
+        taxable_amount,
+        vat_amount,
     )
     .execute(&mut **tx)
     .await?;
@@ -1583,7 +1609,7 @@ async fn material_lines(
     invoice_id: Uuid,
 ) -> Result<Vec<InvoiceEditMaterialLine>, sqlx::Error> {
     sqlx::query_as!(InvoiceEditMaterialLine,
-        r#"SELECT ii.material_id, ii.description AS material_name, ii.unit AS "unit!",
+        r#"SELECT ii.id AS original_item_id, ii.material_id, ii.description AS material_name, ii.unit AS "unit!",
             ii.branch_id, b.name AS branch_name, ii.quantity::float8 AS "quantity!",
             ii.unit_price::float8 AS "unit_price!", ms.quantity::float8 AS stock_quantity
         FROM invoice_items ii
@@ -1624,4 +1650,37 @@ pub async fn sold_card_has_deliveries(
     .bind(id)
     .fetch_one(&mut **tx)
     .await?)
+}
+
+/// The invoice lock held by the caller protects these original pricing inputs.
+pub async fn saved_order_prices(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<super::types::SavedOrderPricing>, sqlx::Error> {
+    sqlx::query_as!(
+        super::types::SavedOrderPricing,
+        r#"SELECT id, material_source, material_id, material_amount::float8 AS "material_amount!",
+            is_urgent, thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd,
+            base_price::float8 AS "base_price!", price::float8 AS "price!",
+            urgent_charge::float8 AS "urgent_charge!"
+        FROM orders WHERE invoice_id = $1"#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+pub async fn original_item_ids(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<(Uuid, String)>, sqlx::Error> {
+    Ok(sqlx::query!(
+        "SELECT id, kind FROM invoice_items WHERE invoice_id = $1",
+        invoice_id
+    )
+    .fetch_all(&mut **tx)
+    .await?
+    .into_iter()
+    .map(|row| (row.id, row.kind))
+    .collect())
 }

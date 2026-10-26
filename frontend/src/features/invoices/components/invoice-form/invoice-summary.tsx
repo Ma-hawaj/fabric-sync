@@ -24,12 +24,12 @@ import { CURRENCY } from '@/lib/currency'
 import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
+  formatVatPercent,
   computeOrderLineTotal,
   computeOrderUrgentCharge,
   computeUrgentCharges,
   computeProductLineTotal,
   computeRedemptionTotal,
-  VAT_RATE,
 } from '../../lib/invoice-pricing'
 import type {
   InvoiceFormApi,
@@ -51,7 +51,9 @@ const PAYMENT_TYPE_OPTIONS: { value: PaymentType; label: string }[] = [
 ]
 
 function invoiceTotals(values: InvoiceFormValues) {
+  if (typeof values.expectedVatRate !== 'number') return null
   return computeInvoiceTotals({
+    vatRate: values.expectedVatRate,
     orderTotal: values.customers.reduce(
       (sum, customer) =>
         sum +
@@ -109,7 +111,7 @@ export function InvoiceSummary({
 }: InvoiceSummaryProps) {
   const values = useStore(form.store, (state) => state.values)
   const totals = invoiceTotals(values)
-  const subtotal = totals.grossSubtotal
+  const subtotal = totals?.grossSubtotal
   const receivingDefault = useApplicableDefaultLocation('receiving')
   const workspace = useInvoiceWorkspace()
   const [discountOpen, setDiscountOpen] = useState(values.discount !== '')
@@ -212,7 +214,7 @@ export function InvoiceSummary({
         <div className="flex justify-between gap-3 border-t pt-4 text-sm">
           <span className="text-muted-foreground">Subtotal (incl. VAT)</span>
           <span className="shrink-0 tabular-nums">
-            {CURRENCY} {subtotal.toFixed(2)}
+            {subtotal == null ? '—' : `${CURRENCY} ${subtotal.toFixed(2)}`}
           </span>
         </div>
         {discountOpen ? (
@@ -257,14 +259,20 @@ export function InvoiceSummary({
             </span>
           </div>
         )}
-        <div className="flex justify-between gap-3 text-sm">
-          <span className="text-muted-foreground">
-            VAT ({Math.round(VAT_RATE * 100)}%, incl.)
-          </span>
-          <span className="shrink-0 tabular-nums">
-            {CURRENCY} {totals.vat.toFixed(2)}
-          </span>
-        </div>
+        {totals ? (
+          <div className="flex justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">
+              VAT ({formatVatPercent(values.expectedVatRate as number)}%, incl.)
+            </span>
+            <span className="shrink-0 tabular-nums">
+              {CURRENCY} {totals.vat.toFixed(2)}
+            </span>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Loading VAT pricing...
+          </p>
+        )}
         {values.giftCards.map((line, index) => (
           <div
             key={line.key}
@@ -282,7 +290,7 @@ export function InvoiceSummary({
         <div className="flex justify-between gap-3 rounded-lg bg-primary/5 p-3 font-semibold">
           <span>Total</span>
           <span className="shrink-0 tabular-nums">
-            {CURRENCY} {totals.total.toFixed(2)}
+            {totals ? `${CURRENCY} ${totals.total.toFixed(2)}` : '—'}
           </span>
         </div>
       </section>
@@ -388,7 +396,7 @@ export function InvoiceSummary({
         aria-label="Payment"
       >
         <h3 className="text-sm font-semibold">Payment</h3>
-        {totals.redeemed > 0 && (
+        {totals && totals.redeemed > 0 && (
           <div className="flex justify-between gap-3 text-sm">
             <span className="text-muted-foreground">Gift Card Redeemed</span>
             <span className="shrink-0 tabular-nums">
@@ -483,6 +491,15 @@ export function InvoiceSummary({
                                   <SelectTrigger
                                     id={field.name}
                                     className="w-full"
+                                    aria-invalid={
+                                      field.state.meta.errors.length > 0
+                                    }
+                                    aria-describedby={
+                                      field.state.meta.errors.length > 0
+                                        ? `${field.name}-error`
+                                        : undefined
+                                    }
+                                    onBlur={field.handleBlur}
                                   >
                                     <SelectValue placeholder="Method..." />
                                   </SelectTrigger>
@@ -497,7 +514,10 @@ export function InvoiceSummary({
                                     ))}
                                   </SelectContent>
                                 </Select>
-                                <FieldError errors={field.state.meta.errors} />
+                                <FieldError
+                                  id={`${field.name}-error`}
+                                  errors={field.state.meta.errors}
+                                />
                               </Field>
                             )}
                           </form.Field>
@@ -557,7 +577,7 @@ export function InvoiceSummary({
         <div className="flex justify-between gap-3 border-t pt-4 font-semibold">
           <span>Balance Due</span>
           <span className="shrink-0 tabular-nums">
-            {CURRENCY} {totals.balanceDue.toFixed(2)}
+            {totals ? `${CURRENCY} ${totals.balanceDue.toFixed(2)}` : '—'}
           </span>
         </div>
       </section>
@@ -577,7 +597,9 @@ export function InvoiceMobileSummary({ form }: { form: InvoiceFormApi }) {
       <div>
         <p className="text-xs text-muted-foreground">Invoice total</p>
         <p className="font-semibold tabular-nums">
-          {CURRENCY} {totals.total.toFixed(2)}
+          {totals
+            ? `${CURRENCY} ${totals.total.toFixed(2)}`
+            : 'Loading VAT pricing...'}
         </p>
       </div>
       <Button

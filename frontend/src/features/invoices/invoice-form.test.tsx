@@ -41,6 +41,7 @@ function clientForForm() {
     pageCount: 1,
   })
   client.setQueryData(['pricing'], {
+    vatRate: 0.1,
     urgentCharge: { amount: 5, unit: 'amount' },
     customerMaterialBasePrice: 20,
   })
@@ -103,6 +104,33 @@ function renderInvoice(values = validInvoice()) {
 }
 
 describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
+  it('highlights a missing payment method and clears the error after choosing one', async () => {
+    renderInvoice()
+    fireEvent.click(screen.getByRole('button', { name: 'Record payment' }))
+    fireEvent.change(screen.getByLabelText('Amount'), {
+      target: { value: '10' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+
+    expect(
+      await screen.findByText('Pick how this payment was made.'),
+    ).toBeTruthy()
+    const method = screen.getByRole('combobox', { name: 'Method' })
+    expect(method.getAttribute('aria-invalid')).toBe('true')
+
+    fireEvent.click(method)
+    fireEvent.pointerDown(screen.getByRole('option', { name: 'Cash' }), {
+      pointerType: 'mouse',
+    })
+    fireEvent.click(screen.getByRole('option', { name: 'Cash' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('Pick how this payment was made.')).toBeNull()
+      expect(method.getAttribute('aria-invalid')).toBe('false')
+    })
+  })
+
   it('requires a target date for an urgent order and clears the error when that order becomes regular', async () => {
     const values = validInvoice()
     values.customers[0].orders.push({
@@ -204,8 +232,16 @@ describe('Invoice workspace', () => {
     ).toBeTruthy()
   })
 
-  it('duplicates an order, opens only its editor, and preserves both lines on save', async () => {
+  it('duplicates a saved order as a new line, opens only its editor, and preserves both lines on save', async () => {
     const values = validInvoice()
+    const originalOrder = values.customers[0].orders[0]
+    originalOrder.originalOrderId = 'saved-order'
+    originalOrder.originalPricing = {
+      inputs: { ...originalOrder },
+      basePrice: 20,
+      price: 20,
+      urgentCharge: 0,
+    }
     const originalKey = values.customers[0].orders[0].key
     const save = renderInvoice(values)
     fireEvent.click(screen.getByRole('button', { name: 'Duplicate order 1' }))
@@ -231,7 +267,10 @@ describe('Invoice workspace', () => {
     const saved = save.mock.calls[0][0] as InvoiceFormValues
     expect(saved.customers[0].orders).toHaveLength(2)
     expect(saved.customers[0].orders[0].key).toBe(originalKey)
+    expect(saved.customers[0].orders[0].originalOrderId).toBe('saved-order')
     expect(saved.customers[0].orders[1].key).not.toBe(originalKey)
+    expect(saved.customers[0].orders[1].originalOrderId).toBeUndefined()
+    expect(saved.customers[0].orders[1].originalPricing).toBeUndefined()
     expect(saved.customers[0].orders[1]).toMatchObject({
       customerMaterialDescription: 'White linen',
       materialAmount: 3.5,

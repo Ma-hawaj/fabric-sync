@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 fn sale(material: Uuid, branch: Uuid, quantity: f64) -> CreateInvoiceInput {
     serde_json::from_value(json!({
-        "discountUnit": "amount",
+        "expectedVatRate": 0.1, "discountUnit": "amount",
         "materials": [{ "materialId": material, "branchId": branch, "quantity": quantity, "unitPrice": 11.0 }],
     })).unwrap()
 }
@@ -241,7 +241,7 @@ async fn material_sales_database() {
 
     // Removing every material line returns the stock; the invoice still needs
     // a line of another kind, here a gift card.
-    let replacement: CreateInvoiceInput = serde_json::from_value(json!({ "discountUnit": "amount", "giftCards": [{ "amount": 10, "recipientPhone": "+97333112233" }] })).unwrap();
+    let replacement: CreateInvoiceInput = serde_json::from_value(json!({ "expectedVatRate": 0.1, "discountUnit": "amount", "giftCards": [{ "amount": 10, "recipientPhone": "+97333112233" }] })).unwrap();
     service::update_invoice(&state, created.id, replacement)
         .await
         .unwrap();

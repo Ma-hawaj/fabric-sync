@@ -32,6 +32,34 @@ mod urgent_pricing_tests {
     use super::*;
 
     #[test]
+    fn vat_rate_requires_a_finite_fraction_that_fits_the_saved_precision() {
+        let mut config = Config::from_env();
+        for (raw, expected) in [
+            ("0", 0.0),
+            ("0.10", 0.1),
+            ("0.15", 0.15),
+            ("1", 1.0),
+            ("0.123456", 0.123456),
+        ] {
+            config.vat_rate = raw.into();
+            assert_eq!(config.vat_rate().unwrap(), expected);
+        }
+        for raw in [
+            "-0.1",
+            "1.01",
+            "NaN",
+            "inf",
+            "invalid",
+            "",
+            "0.1234567",
+            "1e-20",
+        ] {
+            config.vat_rate = raw.into();
+            assert!(config.vat_rate().is_err(), "{raw}");
+        }
+    }
+
+    #[test]
     fn customer_material_price_must_be_explicit_positive_money() {
         let mut config = Config::from_env();
         config.customer_material_base_price = None;
@@ -105,6 +133,7 @@ pub struct Config {
     pub urgent_charge_amount: Option<String>,
     pub urgent_charge_unit: String,
     pub customer_material_base_price: Option<String>,
+    pub vat_rate: String,
 }
 
 impl InvoiceBranding {
@@ -136,6 +165,23 @@ impl InvoiceBranding {
 }
 
 impl Config {
+    pub fn vat_rate(&self) -> Result<f64, String> {
+        let rate: f64 = self
+            .vat_rate
+            .parse()
+            .map_err(|_| "VAT_RATE must be a decimal fraction between 0 and 1".to_string())?;
+        if !rate.is_finite() || !(0.0..=1.0).contains(&rate) {
+            return Err("VAT_RATE must be a finite decimal fraction between 0 and 1".into());
+        }
+        let scaled = rate * 1_000_000.0;
+        if (scaled - scaled.round()).abs() > f64::EPSILON * scaled.abs() * 4.0 {
+            return Err("VAT_RATE must have at most six decimal places".into());
+        }
+        // Match the precision of invoices.vat_rate, including its canonical
+        // floating-point representation when it is read back from NUMERIC.
+        Ok(scaled.round() / 1_000_000.0)
+    }
+
     pub fn customer_material_base_price(&self) -> Result<Option<f64>, String> {
         let Some(raw) = &self.customer_material_base_price else {
             return Ok(None);
@@ -237,6 +283,7 @@ impl Config {
 
         Self {
             port,
+            vat_rate: env::var("VAT_RATE").unwrap_or_else(|_| "0.10".into()),
             urgent_charge_amount: env::var("URGENT_ORDER_CHARGE")
                 .ok()
                 .filter(|value| !value.trim().is_empty()),

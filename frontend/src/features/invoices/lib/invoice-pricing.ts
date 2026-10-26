@@ -7,11 +7,6 @@ import type {
   NumberInput,
 } from '../types/invoice-form'
 
-// Keep in step with VAT_RATE in the backend's invoices service: line prices
-// are entered gross (VAT included) and the tax is extracted from the
-// discounted gross rather than added on top.
-export const VAT_RATE = 0.1
-
 export function numberOrZero(value: NumberInput): number {
   return value === '' ? 0 : value
 }
@@ -77,12 +72,12 @@ export function computeRedemptionTotal(
 // The net (taxable) part inside a gross figure, and the VAT inside it. The
 // VAT is the remainder — gross minus net — so the two always add back to the
 // gross the customer was quoted, to the fils.
-export function extractNet(gross: number): number {
-  return Math.round((gross / (1 + VAT_RATE)) * 100) / 100
+export function extractNet(gross: number, vatRate: number): number {
+  return Math.round((gross / (1 + vatRate)) * 100) / 100
 }
 
-export function extractVat(gross: number): number {
-  return Math.round((gross - extractNet(gross)) * 100) / 100
+export function extractVat(gross: number, vatRate: number): number {
+  return Math.round((gross - extractNet(gross, vatRate)) * 100) / 100
 }
 
 export interface InvoiceGrossTotals {
@@ -114,6 +109,7 @@ function discountOf(
 // discount off the gross, VAT extracted from the discounted gross, gift
 // cards joining the total untaxed, tender netted off the balance.
 export function computeInvoiceTotals(input: {
+  vatRate: number
   orderTotal: number
   productTotal: number
   giftCardSales: number
@@ -133,8 +129,8 @@ export function computeInvoiceTotals(input: {
   const urgentCharge = Math.round((input.urgentCharge ?? 0) * 100) / 100
   const gross =
     Math.round((grossSubtotal - discountAmount + urgentCharge) * 100) / 100
-  const taxable = extractNet(gross)
-  const vat = extractVat(gross)
+  const taxable = extractNet(gross, input.vatRate)
+  const vat = extractVat(gross, input.vatRate)
   const giftCardSales = Math.round(input.giftCardSales * 100) / 100
   const total = Math.round((gross + giftCardSales) * 100) / 100
   const redeemed = Math.min(input.redeemed, total)
@@ -153,4 +149,8 @@ export function computeInvoiceTotals(input: {
     paid,
     balanceDue,
   }
+}
+
+export function formatVatPercent(vatRate: number): string {
+  return Number((vatRate * 100).toFixed(4)).toString()
 }

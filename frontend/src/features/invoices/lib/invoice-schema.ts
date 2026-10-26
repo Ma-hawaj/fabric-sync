@@ -289,6 +289,11 @@ export const invoiceFormSchema = z
         },
       ),
     receivingBranch: z.string(),
+    expectedVatRate: z
+      .number()
+      .finite()
+      .min(0)
+      .max(1, 'VAT pricing is unavailable. Reload to try again.'),
     collectionMethod: z.enum(['delivery', 'pickup']),
     customerId: z.string(),
     productBranch: z.string(),
@@ -443,6 +448,7 @@ export const invoiceFormSchema = z
       0,
     )
     const totals = computeInvoiceTotals({
+      vatRate: value.expectedVatRate,
       orderTotal,
       productTotal: [...value.products, ...value.materials].reduce(
         (sum, line) => sum + computeProductLineTotal(line),

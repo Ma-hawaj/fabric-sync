@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT invoice_date, vat_rate::float8 AS \"vat_rate!\"\n        FROM invoices\n        WHERE id = $1\n        FOR UPDATE\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "invoice_date",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "vat_rate!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "5b5875efd7f2aacfdf65fd536fbe226b78360df09cb732e7fadd8381de74e38b"
+}

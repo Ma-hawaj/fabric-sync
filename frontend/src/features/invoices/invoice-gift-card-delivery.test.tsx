@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { apiClient } from '@/lib/api'
+import { apiClient, ApiError } from '@/lib/api'
+import { toast } from 'sonner'
 import type * as ApiModule from '@/lib/api'
 import { InvoiceForm } from './invoice-form'
 import { downloadInvoicePdf } from './lib/print-invoice'
@@ -83,7 +84,21 @@ beforeEach(() => {
   vi.mocked(apiClient.post).mockResolvedValue({ data: { state: 'queued' } })
 })
 
-function renderForm({ count = 2, editing = false } = {}) {
+function renderForm({
+  count = 2,
+  editing = false,
+  pricingState = 'ready',
+} = {}) {
+  if (pricingState !== 'ready') {
+    const originalGet = vi.mocked(apiClient.get).getMockImplementation()!
+    vi.mocked(apiClient.get).mockImplementation((url, ...args) => {
+      if (url === '/pricing')
+        return pricingState === 'loading'
+          ? new Promise(() => {})
+          : Promise.reject(new Error('Pricing unavailable'))
+      return originalGet(url, ...args)
+    })
+  }
   const issued = cards.slice(0, count)
   const result: CreatedInvoice = {
     id: 'invoice-1',
@@ -95,6 +110,12 @@ function renderForm({ count = 2, editing = false } = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
+  if (pricingState === 'ready')
+    client.setQueryData(['pricing'], {
+      vatRate: 0.1,
+      urgentCharge: null,
+      customerMaterialBasePrice: null,
+    })
   client.setQueryData(['default-location'], {
     defaultLocation: null,
     defaultLocationId: null,
@@ -104,6 +125,7 @@ function renderForm({ count = 2, editing = false } = {}) {
       <InvoiceForm
         defaultValues={{
           ...createEmptyInvoiceForm(),
+          expectedVatRate: 0.1,
           customers: [],
           giftCards: issued.map((_, index) => ({
             ...createEmptyGiftCardLine(),
@@ -250,4 +272,61 @@ describe('gift card delivery after creating an invoice', () => {
     ).toBe(false)
     expect(apiClient.post).not.toHaveBeenCalled()
   })
+})
+
+it('blocks saving while the VAT rate is loading', () => {
+  const save = renderForm({ pricingState: 'loading' })
+  expect(screen.getAllByText('Loading VAT pricing...').length).toBeGreaterThan(
+    0,
+  )
+  const button = screen.getByRole('button', {
+    name: 'Save invoice',
+  })
+  expect(button.disabled).toBe(true)
+  fireEvent.click(button)
+  expect(save).not.toHaveBeenCalled()
+})
+
+it('blocks saving when the VAT rate cannot be loaded', async () => {
+  const save = renderForm({ pricingState: 'error' })
+  expect(await screen.findByRole('alert')).toHaveProperty(
+    'textContent',
+    'Could not load VAT pricing. Reload to try again.',
+  )
+  expect(screen.getByRole('button', { name: 'Save invoice' }).disabled).toBe(
+    true,
+  )
+  expect(save).not.toHaveBeenCalled()
+})
+
+it('keeps saving blocked after a VAT conflict when cached pricing cannot refresh', async () => {
+  const save = renderForm({ count: 1 })
+  save.mockRejectedValueOnce(
+    new ApiError(
+      'VAT rate has changed. Refresh pricing and review the invoice before saving.',
+      409,
+    ),
+  )
+  const originalGet = vi.mocked(apiClient.get).getMockImplementation()!
+  vi.mocked(apiClient.get).mockImplementation((url, ...args) =>
+    url === '/pricing'
+      ? Promise.reject(new Error('Pricing unavailable'))
+      : originalGet(url, ...args),
+  )
+  vi.mocked(toast.promise).mockImplementation((pending, options) => {
+    void Promise.resolve(pending).catch((error: unknown) => {
+      if (typeof options?.error === 'function') options.error(error)
+    })
+    return 'vat-conflict'
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+  await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith('/pricing'))
+  expect(await screen.findByRole('alert')).toHaveProperty(
+    'textContent',
+    'VAT pricing needs refreshing. Reload this invoice if pricing could not be refreshed.',
+  )
+  const button = screen.getByRole('button', { name: 'Save invoice' })
+  expect(button.disabled).toBe(true)
+  fireEvent.click(button)
+  expect(save).toHaveBeenCalledOnce()
 })

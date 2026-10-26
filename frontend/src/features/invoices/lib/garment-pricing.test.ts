@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { createEmptyOrder } from '../types/invoice-form'
 import {
   calculateGarmentPrice,
+  preservesOriginalOrderPricing,
   calculateUrgentCharge,
   JUNIOR_BELOW_METRES,
   LARGE_ABOVE_METRES,
@@ -151,5 +152,54 @@ describe('garment pricing', () => {
     expect(
       Number(backend.match(/pub const LARGE_ABOVE: f64 = ([\d.]+)/)?.[1]),
     ).toBe(LARGE_ABOVE_METRES)
+  })
+})
+
+describe('saved order pricing', () => {
+  const saved = () => {
+    const order = draft()
+    const inputs = {
+      materialSource: order.materialSource,
+      materialId: order.materialId,
+      materialAmount: order.materialAmount,
+      thobeType: order.thobeType,
+      fPocket: order.fPocket,
+      sPocket: order.sPocket,
+      collar: order.collar,
+      sleeve: order.sleeve,
+      patti: order.patti,
+      emd: order.emd,
+      isUrgent: order.isUrgent,
+    }
+    return {
+      ...order,
+      originalOrderId: 'saved-order',
+      originalPricing: { inputs, basePrice: 10, price: 10, urgentCharge: 0 },
+    }
+  }
+  it('preserves notes, descriptions and location edits without repricing', () => {
+    expect(
+      preservesOriginalOrderPricing({
+        ...saved(),
+        moreDetails: 'Longer cuff',
+        productionLocationId: 'other',
+        customerMaterialDescription: 'Linen',
+      }),
+    ).toBe(true)
+  })
+  it.each([
+    { materialId: 'different' },
+    { materialAmount: 4.01 },
+    { collar: 'same' },
+    { isUrgent: true },
+    { materialSource: 'customer' as const },
+  ])('reprices when a pricing input changes: %o', (change) => {
+    expect(preservesOriginalOrderPricing({ ...saved(), ...change })).toBe(false)
+  })
+  it('requires an original server line reference', () => {
+    expect(preservesOriginalOrderPricing(draft())).toBe(false)
+    expect(
+      preservesOriginalOrderPricing({ ...saved(), originalOrderId: undefined }),
+    ).toBe(false)
   })
 })

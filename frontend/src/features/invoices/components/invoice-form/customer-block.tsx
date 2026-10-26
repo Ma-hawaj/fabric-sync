@@ -368,7 +368,12 @@ export function CustomerBlock({
                 removable={ordersField.state.value.length > 1}
                 onRemove={() => ordersField.removeValue(orderIndex)}
                 onDuplicate={() => {
-                  const duplicate = { ...order, key: crypto.randomUUID() }
+                  const duplicate = {
+                    ...order,
+                    key: crypto.randomUUID(),
+                    originalOrderId: undefined,
+                    originalPricing: undefined,
+                  }
                   ordersField.pushValue(duplicate)
                   workspace?.setActiveOrderKey(duplicate.key)
                 }}

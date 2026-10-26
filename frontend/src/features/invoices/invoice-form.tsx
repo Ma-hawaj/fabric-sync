@@ -38,6 +38,8 @@ import { MaterialBlock } from './components/invoice-form/material-block'
 import type { Material } from './types/materials'
 import { ProductBlock } from './components/invoice-form/product-block'
 import { useCreateInvoice } from './hooks/use-create-invoice'
+import { usePricing } from './hooks/use-pricing'
+import { InvoiceVatRateContext } from './components/invoice-form/vat-rate-context'
 import type { CreatedInvoice } from './lib/invoice-payload'
 import type { InvoiceEditSeeds } from './lib/invoice-edit-mapper'
 import { invoiceFormSchema } from './lib/invoice-schema'
@@ -88,6 +90,18 @@ export function InvoiceForm({
   invoiceDate,
 }: InvoiceFormProps) {
   const navigate = useNavigate()
+  const pricing = usePricing()
+  const [pricingNeedsRefresh, setPricingNeedsRefresh] = useState(false)
+  const candidateRate = editing
+    ? defaultValues.expectedVatRate
+    : pricing.data?.vatRate
+  const vatRate =
+    typeof candidateRate === 'number' &&
+    Number.isFinite(candidateRate) &&
+    candidateRate >= 0 &&
+    candidateRate <= 1
+      ? candidateRate
+      : null
   const [activeOrderKey, setActiveOrderKey] = useState<string | null>(
     defaultValues.customers[0]?.orders[0]?.key ?? null,
   )
@@ -169,16 +183,32 @@ export function InvoiceForm({
       }))
     },
     onSubmit: async ({ value }) => {
-      if (savedInvoice) return
-      const pending = mutation.mutateAsync(value)
+      if (savedInvoice || vatRate == null || pricingNeedsRefresh) return
+      const pending = mutation.mutateAsync({
+        ...value,
+        expectedVatRate: vatRate,
+      })
       toast.promise(pending, {
         loading: `${saveVerb} invoice...`,
         success: (invoice) =>
           `Invoice ${savedVerb} — total ${CURRENCY} ${invoice.totalPrice.toFixed(2)}.`,
-        error: (error) =>
-          error instanceof ApiError && error.status === 409
-            ? 'A customer with this name and phone number already exists. Select Existing Customer instead.'
-            : `Could not ${saveVerb.toLowerCase()} this invoice. Please try again.`,
+        error: (error) => {
+          if (error instanceof ApiError && error.status === 409) {
+            if (error.message.startsWith('VAT rate has changed')) {
+              setPricingNeedsRefresh(true)
+              if (!editing) {
+                void pricing.refetch().then((result) => {
+                  if (!result.isError) setPricingNeedsRefresh(false)
+                })
+              }
+              return editing
+                ? 'Invoice VAT pricing changed. Reload this invoice before saving again.'
+                : 'VAT pricing changed. Review the refreshed totals before saving again.'
+            }
+            return error.message
+          }
+          return `Could not ${saveVerb.toLowerCase()} this invoice. Please try again.`
+        },
       })
 
       let saved
@@ -209,6 +239,10 @@ export function InvoiceForm({
   })
 
   useEffect(() => {
+    form.setFieldValue('expectedVatRate', vatRate ?? '')
+  }, [form, vatRate])
+
+  useEffect(() => {
     if (receivingDefault && form.state.values.receivingBranch === '') {
       form.setFieldValue(
         'receivingBranch' as never,
@@ -234,331 +268,371 @@ export function InvoiceForm({
   }, [validationTarget])
 
   return (
-    <InvoiceWorkspaceContext.Provider
-      value={{ activeOrderKey, setActiveOrderKey, validationTarget }}
-    >
-      <div
-        data-slot="workspace-page"
-        className="w-full max-w-[100rem] space-y-6 pb-24 xl:pb-0"
+    <InvoiceVatRateContext value={vatRate}>
+      <InvoiceWorkspaceContext.Provider
+        value={{ activeOrderKey, setActiveOrderKey, validationTarget }}
       >
-        {giftCardToSend ? (
-          <SendGiftCardDialog
-            key={giftCardToSend.id}
-            card={giftCardToSend}
-            description={`Invoice saved. Gift card ${giftCardIndex + 1} of ${giftCards.length}. Check the recipient, image, and message before sending.`}
-            cancelLabel="Skip"
-            onClose={() => setGiftCardIndex((index) => index + 1)}
-          />
-        ) : (
-          <NotificationDialog
-            invoiceId={savedInvoice?.id ?? null}
-            kind={editing ? 'invoice_updated' : 'invoice_created'}
-            onClose={() => {
-              setSavedInvoice(null)
-              void navigate({ to: '/invoices' })
-            }}
-          />
-        )}
-
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
-            <p className="text-muted-foreground">{subtitle}</p>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={mutation.isPending || savedInvoice !== null}
-            onClick={() => {
-              void navigate({ to: '/invoices' })
-            }}
-          >
-            Cancel
-          </Button>
-        </div>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            if (mutation.isPending || savedInvoice !== null) return
-            const submitter = event.nativeEvent.submitter
-            exportAfterSave.current =
-              submitter instanceof HTMLButtonElement &&
-              submitter.value === 'export'
-            void form.handleSubmit()
-          }}
-          className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]"
+        <div
+          data-slot="workspace-page"
+          className="w-full max-w-[100rem] space-y-6 pb-24 xl:pb-0"
         >
-          <div className="min-w-0 space-y-5">
-            <form.Field name="customers" mode="array">
-              {(customersField) => (
-                <div className="space-y-5">
-                  {customersField.state.value.map((customer, index) => (
-                    <CustomerBlock
-                      key={customer.key}
-                      form={form as never}
-                      customerIndex={index}
-                      customerNumber={index + 1}
-                      onCustomerPicked={rememberCustomer}
-                      initialCustomerForId={(id) =>
-                        seeds?.customers.get(id) ?? null
-                      }
-                      customerLabelForId={(id) =>
-                        seeds?.customerLabels.get(id) ?? null
-                      }
-                      initialMaterialForId={(id) =>
-                        seeds?.materials.get(id) ?? null
-                      }
-                      locationLabelForId={(id) =>
-                        seeds?.locationLabels.get(id) ?? null
-                      }
-                      materialLabelForId={(id) =>
-                        seeds?.materialLabels.get(id) ?? null
-                      }
-                      removable
-                      onRemove={() => customersField.removeValue(index)}
-                    />
-                  ))}
-                </div>
-              )}
-            </form.Field>
+          {giftCardToSend ? (
+            <SendGiftCardDialog
+              key={giftCardToSend.id}
+              card={giftCardToSend}
+              description={`Invoice saved. Gift card ${giftCardIndex + 1} of ${giftCards.length}. Check the recipient, image, and message before sending.`}
+              cancelLabel="Skip"
+              onClose={() => setGiftCardIndex((index) => index + 1)}
+            />
+          ) : (
+            <NotificationDialog
+              invoiceId={savedInvoice?.id ?? null}
+              kind={editing ? 'invoice_updated' : 'invoice_created'}
+              onClose={() => {
+                setSavedInvoice(null)
+                void navigate({ to: '/invoices' })
+              }}
+            />
+          )}
 
-            <form.Field name="materials" mode="array">
-              {(materialsField) =>
-                materialsField.state.value.length > 0 && (
-                  <section
-                    className="space-y-4 rounded-xl border border-border/60 bg-card p-4"
-                    aria-label="Material sales"
-                  >
-                    <h2 className="text-sm font-semibold">Materials</h2>
-                    <p className="text-xs text-muted-foreground">
-                      Sell fabric directly by quantity, without a tailoring
-                      order.
-                    </p>
-                    {materialsField.state.value.map((line, index) => (
-                      <MaterialBlock
-                        key={line.key}
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+              <p className="text-muted-foreground">{subtitle}</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={mutation.isPending || savedInvoice !== null}
+              onClick={() => {
+                void navigate({ to: '/invoices' })
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+          {pricingNeedsRefresh && (
+            <p role="alert" className="text-sm text-destructive">
+              VAT pricing needs refreshing. Reload this invoice if pricing could
+              not be refreshed.
+            </p>
+          )}
+          {vatRate == null && (
+            <p
+              role={pricing.isError ? 'alert' : 'status'}
+              className="text-sm text-muted-foreground"
+            >
+              {pricing.isError
+                ? 'Could not load VAT pricing. Reload to try again.'
+                : 'Loading VAT pricing...'}
+            </p>
+          )}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              if (
+                mutation.isPending ||
+                savedInvoice !== null ||
+                vatRate == null ||
+                pricingNeedsRefresh
+              )
+                return
+              const submitter = event.nativeEvent.submitter
+              exportAfterSave.current =
+                submitter instanceof HTMLButtonElement &&
+                submitter.value === 'export'
+              void form.handleSubmit()
+            }}
+            className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]"
+          >
+            <div className="min-w-0 space-y-5">
+              <form.Field name="customers" mode="array">
+                {(customersField) => (
+                  <div className="space-y-5">
+                    {customersField.state.value.map((customer, index) => (
+                      <CustomerBlock
+                        key={customer.key}
                         form={form as never}
-                        lineIndex={index}
-                        onMaterialPicked={rememberMaterial}
+                        customerIndex={index}
+                        customerNumber={index + 1}
+                        onCustomerPicked={rememberCustomer}
+                        initialCustomerForId={(id) =>
+                          seeds?.customers.get(id) ?? null
+                        }
+                        customerLabelForId={(id) =>
+                          seeds?.customerLabels.get(id) ?? null
+                        }
                         initialMaterialForId={(id) =>
                           seeds?.materials.get(id) ?? null
+                        }
+                        locationLabelForId={(id) =>
+                          seeds?.locationLabels.get(id) ?? null
                         }
                         materialLabelForId={(id) =>
                           seeds?.materialLabels.get(id) ?? null
                         }
-                        onRemove={() => materialsField.removeValue(index)}
+                        removable
+                        onRemove={() => customersField.removeValue(index)}
                       />
                     ))}
-                  </section>
-                )
-              }
-            </form.Field>
+                  </div>
+                )}
+              </form.Field>
 
-            <form.Field name="products" mode="array">
-              {(productsField) =>
-                productsField.state.value.length > 0 && (
-                  <section
-                    className="space-y-4 rounded-xl border border-border/60 bg-card p-4"
-                    aria-label="Products"
-                  >
-                    <h2 className="flex items-center gap-2 text-sm font-semibold">
-                      <ShoppingBagIcon className="size-4" />
-                      Products
-                    </h2>
-                    <form.Field name="productBranch">
-                      {(field) => (
-                        <div className="space-y-2">
-                          <Label htmlFor={field.name}>Sold From</Label>
-                          <AsyncCombobox<Location>
-                            id={field.name}
-                            endpoint="/locations"
-                            queryKey="invoice-sold-from"
-                            searchField="name"
-                            filters={STOCK_FILTERS}
-                            toOption={(location) => ({
-                              value: location.id,
-                              label: location.name,
-                            })}
-                            getValueLabel={(id) =>
-                              seeds?.locationLabels.get(id) ??
-                              (id === stockDefault?.id
-                                ? stockDefault.name
-                                : null)
-                            }
-                            value={field.state.value}
-                            onValueChange={(value) =>
-                              field.handleChange(value ?? '')
-                            }
-                            onSelectRow={(location) =>
-                              setSoldFromBranchName(location?.name ?? '')
-                            }
-                            placeholder="Search location..."
-                            emptyMessage="No locations found."
-                          />
-                          <FieldError errors={field.state.meta.errors} />
-                        </div>
-                      )}
-                    </form.Field>
-                    <form.Subscribe
-                      selector={(state) => state.values.productBranch}
+              <form.Field name="materials" mode="array">
+                {(materialsField) =>
+                  materialsField.state.value.length > 0 && (
+                    <section
+                      className="space-y-4 rounded-xl border border-border/60 bg-card p-4"
+                      aria-label="Material sales"
                     >
-                      {(productBranch) => (
-                        <div className="space-y-3">
-                          {productsField.state.value.map((line, index) => (
-                            <ProductBlock
-                              key={line.key}
-                              form={form as never}
-                              lineIndex={index}
-                              onProductPicked={rememberProduct}
-                              initialProductForId={(id) =>
-                                seeds?.products.get(id) ?? null
-                              }
-                              productLabelForId={(id) =>
-                                seeds?.productLabels.get(id) ?? null
-                              }
-                              branchId={productBranch}
-                              branchName={soldFromBranchName}
-                              onRemove={() => productsField.removeValue(index)}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </form.Subscribe>
-                  </section>
-                )
-              }
-            </form.Field>
-
-            <form.Field name="giftCards" mode="array">
-              {(giftCardsField) =>
-                giftCardsField.state.value.length > 0 && (
-                  <section
-                    className="space-y-4 rounded-xl border border-border/60 bg-card p-4"
-                    aria-label="Gift cards for sale"
-                  >
-                    <h2 className="flex items-center gap-2 text-sm font-semibold">
-                      <GiftIcon className="size-4" />
-                      Gift Cards
-                    </h2>
-                    {giftCardsField.state.value.map((line, index) => (
-                      <GiftCardBlock
-                        key={line.key}
-                        form={form as never}
-                        lineIndex={index}
-                        onRemove={() => giftCardsField.removeValue(index)}
-                      />
-                    ))}
-                  </section>
-                )
-              }
-            </form.Field>
-
-            <div className="flex flex-wrap gap-2 rounded-xl border border-dashed border-border/80 p-3">
-              <Button
-                id="customers"
-                variant="outline"
-                type="button"
-                onClick={() => {
-                  const customer = createEmptyCustomer()
-                  form.pushFieldValue('customers', customer)
-                  setActiveOrderKey(customer.orders[0].key)
-                }}
-              >
-                <UserPlusIcon className="size-4" />
-                Add Customer
-              </Button>
-              <Button
-                variant="outline"
-                type="button"
-                onClick={() =>
-                  form.pushFieldValue('materials', createEmptyMaterialLine())
-                }
-              >
-                <PlusIcon className="size-4" />
-                Add Material
-              </Button>
-              <Button
-                variant="outline"
-                type="button"
-                onClick={() =>
-                  form.pushFieldValue('products', createEmptyProductLine())
-                }
-              >
-                <PlusIcon className="size-4" />
-                Add Product
-              </Button>
-              <Button
-                variant="outline"
-                type="button"
-                onClick={() =>
-                  form.pushFieldValue('giftCards', createEmptyGiftCardLine())
-                }
-              >
-                <GiftIcon className="size-4" />
-                Sell a Gift Card
-              </Button>
-            </div>
-          </div>
-          <aside
-            className="min-w-0 xl:sticky xl:top-6 xl:max-h-[calc(100dvh-3rem)] xl:overflow-y-auto xl:overscroll-contain xl:pe-1"
-            aria-label="Invoice review"
-          >
-            <InvoiceSummary
-              form={form as never}
-              customerNames={pickedCustomersRef}
-              productNames={pickedProductsRef}
-              materialNames={pickedMaterialsRef}
-              locationLabelForId={(id) => seeds?.locationLabels.get(id) ?? null}
-              customerLabelForId={(id) => seeds?.customerLabels.get(id) ?? null}
-              paymentsLocked={editing}
-              redemptionDate={redemptionDate}
-            >
-              <form.Subscribe
-                selector={(state) =>
-                  [state.submissionAttempts, state.isValid] as const
-                }
-              >
-                {([submissionAttempts, isValid]) =>
-                  submissionAttempts > 0 &&
-                  !isValid && (
-                    <p
-                      role="alert"
-                      className="text-sm font-medium text-destructive"
-                    >
-                      Please fix the highlighted fields before saving.
-                    </p>
+                      <h2 className="text-sm font-semibold">Materials</h2>
+                      <p className="text-xs text-muted-foreground">
+                        Sell fabric directly by quantity, without a tailoring
+                        order.
+                      </p>
+                      {materialsField.state.value.map((line, index) => (
+                        <MaterialBlock
+                          key={line.key}
+                          form={form as never}
+                          lineIndex={index}
+                          onMaterialPicked={rememberMaterial}
+                          initialMaterialForId={(id) =>
+                            seeds?.materials.get(id) ?? null
+                          }
+                          materialLabelForId={(id) =>
+                            seeds?.materialLabels.get(id) ?? null
+                          }
+                          onRemove={() => materialsField.removeValue(index)}
+                        />
+                      ))}
+                    </section>
                   )
                 }
-              </form.Subscribe>
-              <div className="space-y-2">
+              </form.Field>
+
+              <form.Field name="products" mode="array">
+                {(productsField) =>
+                  productsField.state.value.length > 0 && (
+                    <section
+                      className="space-y-4 rounded-xl border border-border/60 bg-card p-4"
+                      aria-label="Products"
+                    >
+                      <h2 className="flex items-center gap-2 text-sm font-semibold">
+                        <ShoppingBagIcon className="size-4" />
+                        Products
+                      </h2>
+                      <form.Field name="productBranch">
+                        {(field) => (
+                          <div className="space-y-2">
+                            <Label htmlFor={field.name}>Sold From</Label>
+                            <AsyncCombobox<Location>
+                              id={field.name}
+                              endpoint="/locations"
+                              queryKey="invoice-sold-from"
+                              searchField="name"
+                              filters={STOCK_FILTERS}
+                              toOption={(location) => ({
+                                value: location.id,
+                                label: location.name,
+                              })}
+                              getValueLabel={(id) =>
+                                seeds?.locationLabels.get(id) ??
+                                (id === stockDefault?.id
+                                  ? stockDefault.name
+                                  : null)
+                              }
+                              value={field.state.value}
+                              onValueChange={(value) =>
+                                field.handleChange(value ?? '')
+                              }
+                              onSelectRow={(location) =>
+                                setSoldFromBranchName(location?.name ?? '')
+                              }
+                              placeholder="Search location..."
+                              emptyMessage="No locations found."
+                            />
+                            <FieldError errors={field.state.meta.errors} />
+                          </div>
+                        )}
+                      </form.Field>
+                      <form.Subscribe
+                        selector={(state) => state.values.productBranch}
+                      >
+                        {(productBranch) => (
+                          <div className="space-y-3">
+                            {productsField.state.value.map((line, index) => (
+                              <ProductBlock
+                                key={line.key}
+                                form={form as never}
+                                lineIndex={index}
+                                onProductPicked={rememberProduct}
+                                initialProductForId={(id) =>
+                                  seeds?.products.get(id) ?? null
+                                }
+                                productLabelForId={(id) =>
+                                  seeds?.productLabels.get(id) ?? null
+                                }
+                                branchId={productBranch}
+                                branchName={soldFromBranchName}
+                                onRemove={() =>
+                                  productsField.removeValue(index)
+                                }
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </form.Subscribe>
+                    </section>
+                  )
+                }
+              </form.Field>
+
+              <form.Field name="giftCards" mode="array">
+                {(giftCardsField) =>
+                  giftCardsField.state.value.length > 0 && (
+                    <section
+                      className="space-y-4 rounded-xl border border-border/60 bg-card p-4"
+                      aria-label="Gift cards for sale"
+                    >
+                      <h2 className="flex items-center gap-2 text-sm font-semibold">
+                        <GiftIcon className="size-4" />
+                        Gift Cards
+                      </h2>
+                      {giftCardsField.state.value.map((line, index) => (
+                        <GiftCardBlock
+                          key={line.key}
+                          form={form as never}
+                          lineIndex={index}
+                          onRemove={() => giftCardsField.removeValue(index)}
+                        />
+                      ))}
+                    </section>
+                  )
+                }
+              </form.Field>
+
+              <div className="flex flex-wrap gap-2 rounded-xl border border-dashed border-border/80 p-3">
                 <Button
-                  type="submit"
-                  name="invoiceAction"
-                  value="save"
-                  className="w-full"
-                  disabled={mutation.isPending || savedInvoice !== null}
+                  id="customers"
+                  variant="outline"
+                  type="button"
+                  onClick={() => {
+                    const customer = createEmptyCustomer()
+                    form.pushFieldValue('customers', customer)
+                    setActiveOrderKey(customer.orders[0].key)
+                  }}
                 >
-                  {mutation.isPending ? 'Saving...' : 'Save invoice'}
+                  <UserPlusIcon className="size-4" />
+                  Add Customer
                 </Button>
                 <Button
-                  type="submit"
-                  name="invoiceAction"
-                  value="export"
                   variant="outline"
-                  className="w-full"
-                  disabled={mutation.isPending || savedInvoice !== null}
+                  type="button"
+                  onClick={() =>
+                    form.pushFieldValue('materials', createEmptyMaterialLine())
+                  }
                 >
-                  <FileDownIcon className="size-4" />
-                  Save &amp; Export PDF
+                  <PlusIcon className="size-4" />
+                  Add Material
+                </Button>
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={() =>
+                    form.pushFieldValue('products', createEmptyProductLine())
+                  }
+                >
+                  <PlusIcon className="size-4" />
+                  Add Product
+                </Button>
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={() =>
+                    form.pushFieldValue('giftCards', createEmptyGiftCardLine())
+                  }
+                >
+                  <GiftIcon className="size-4" />
+                  Sell a Gift Card
                 </Button>
               </div>
-            </InvoiceSummary>
-          </aside>
-          <InvoiceMobileSummary form={form as never} />
-        </form>
-      </div>
-    </InvoiceWorkspaceContext.Provider>
+            </div>
+            <aside
+              className="min-w-0 xl:sticky xl:top-6 xl:max-h-[calc(100dvh-3rem)] xl:overflow-y-auto xl:overscroll-contain xl:pe-1"
+              aria-label="Invoice review"
+            >
+              <InvoiceSummary
+                form={form as never}
+                customerNames={pickedCustomersRef}
+                productNames={pickedProductsRef}
+                materialNames={pickedMaterialsRef}
+                locationLabelForId={(id) =>
+                  seeds?.locationLabels.get(id) ?? null
+                }
+                customerLabelForId={(id) =>
+                  seeds?.customerLabels.get(id) ?? null
+                }
+                paymentsLocked={editing}
+                redemptionDate={redemptionDate}
+              >
+                <form.Subscribe
+                  selector={(state) =>
+                    [state.submissionAttempts, state.isValid] as const
+                  }
+                >
+                  {([submissionAttempts, isValid]) =>
+                    submissionAttempts > 0 &&
+                    !isValid && (
+                      <p
+                        role="alert"
+                        className="text-sm font-medium text-destructive"
+                      >
+                        Please fix the highlighted fields before saving.
+                      </p>
+                    )
+                  }
+                </form.Subscribe>
+                <div className="space-y-2">
+                  <Button
+                    type="submit"
+                    name="invoiceAction"
+                    value="save"
+                    className="w-full"
+                    disabled={
+                      mutation.isPending ||
+                      savedInvoice !== null ||
+                      vatRate == null ||
+                      pricingNeedsRefresh
+                    }
+                  >
+                    {mutation.isPending ? 'Saving...' : 'Save invoice'}
+                  </Button>
+                  <Button
+                    type="submit"
+                    name="invoiceAction"
+                    value="export"
+                    variant="outline"
+                    className="w-full"
+                    disabled={
+                      mutation.isPending ||
+                      savedInvoice !== null ||
+                      vatRate == null ||
+                      pricingNeedsRefresh
+                    }
+                  >
+                    <FileDownIcon className="size-4" />
+                    Save &amp; Export PDF
+                  </Button>
+                </div>
+              </InvoiceSummary>
+            </aside>
+            <InvoiceMobileSummary form={form as never} />
+          </form>
+        </div>
+      </InvoiceWorkspaceContext.Provider>
+    </InvoiceVatRateContext>
   )
 }
 

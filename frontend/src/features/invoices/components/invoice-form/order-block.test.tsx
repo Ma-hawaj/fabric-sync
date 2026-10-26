@@ -92,6 +92,7 @@ function Harness({
     if (new URL(url, 'http://localhost').pathname === '/pricing')
       return {
         data: {
+          vatRate: 0.1,
           urgentCharge: { amount: 5, unit: 'amount' },
           customerMaterialBasePrice: 15,
         },
@@ -156,6 +157,59 @@ async function pickMaterial(name: RegExp | string) {
 }
 
 describe('OrderBlock', () => {
+  it('preserves saved charges until a pricing input changes, then uses current prices', async () => {
+    const inputs = {
+      materialSource: 'shop' as const,
+      thobeType: '',
+      fPocket: '',
+      sPocket: '',
+      collar: '',
+      sleeve: '',
+      patti: '',
+      materialId: 'mat-1',
+      materialAmount: 3,
+      emd: '6',
+      isUrgent: true,
+    }
+    render(
+      <Harness
+        order={{
+          ...inputs,
+          originalOrderId: 'saved-order',
+          price: 12,
+          urgentCharge: 2,
+          originalPricing: {
+            inputs,
+            basePrice: 10,
+            price: 12,
+            urgentCharge: 2,
+          },
+        }}
+      />,
+    )
+    const price = screen.getByLabelText(`Price incl. VAT (${CURRENCY})`)
+    await waitFor(() => expect(price.textContent).toContain('12.00'))
+    await waitFor(() => expect(apiGet).toHaveBeenCalled())
+    expect(screen.queryByText('Current pricing applies.')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Quantity (m)'), {
+      target: { value: '4.01' },
+    })
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order).toMatchObject({ price: 32.5, urgentCharge: 5 })
+    })
+    expect(screen.getByText('Current pricing applies.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Quantity (m)'), {
+      target: { value: '3' },
+    })
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order).toMatchObject({ price: 12, urgentCharge: 2 })
+    })
+  })
+
   it('applies a read-only urgent charge and clears it only for this order when made regular', async () => {
     render(
       <Harness

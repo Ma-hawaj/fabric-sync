@@ -75,6 +75,7 @@ function baseValues(
 ): InvoiceFormValues {
   return {
     ...createEmptyInvoiceForm(),
+    expectedVatRate: 0.1,
     targetDate: '2026-07-25',
     customers: [],
     ...overrides,
@@ -117,6 +118,18 @@ function rowValue(label: string) {
 // Line prices are gross (VAT included): a 90 order holds 81.82 of net and
 // 8.18 of VAT, and the total is the 90 quoted — never 90 plus tax.
 describe('InvoiceSummary', () => {
+  it('uses the saved invoice rate rather than a new configured rate', () => {
+    render(
+      <Harness
+        defaultValues={baseValues({
+          expectedVatRate: 0.15,
+          customers: [customerWithOrder(110)],
+        })}
+      />,
+    )
+    expect(rowValue('VAT (15%, incl.)')).toBe(`${CURRENCY} 14.35`)
+  })
+
   it('shows order urgency totals without an invoice priority control', () => {
     render(
       <Harness

@@ -7,6 +7,7 @@ function editFixture(): InvoiceEdit {
   return {
     id: '0197fdd2-6a67-7000-8000-000000000001',
     invoiceNumber: 42,
+    vatRate: 0.1,
     collectionMethod: 'pickup',
     urgentCharge: 0,
     date: '2026-07-19',
@@ -58,6 +59,7 @@ function editFixture(): InvoiceEdit {
         },
         orders: [
           {
+            originalOrderId: 'order-1',
             materialSource: 'shop',
             customerMaterialDescription: null,
             materialId: '0197fdd2-6a67-7000-8000-000000000003',
@@ -85,6 +87,7 @@ function editFixture(): InvoiceEdit {
     ],
     products: [
       {
+        originalItemId: 'item-product',
         productId: '0197fdd2-6a67-7000-8000-000000000004',
         productName: 'Musk',
         quantity: 1,
@@ -120,6 +123,19 @@ describe('mapInvoiceEditToForm', () => {
     const { values } = mapInvoiceEditToForm(editFixture())
 
     expect(values.targetDate).toBe('2026-07-26')
+    expect(values.expectedVatRate).toBe(0.1)
+    expect(values.customers[0].orders[0].originalOrderId).toBe('order-1')
+    expect(values.products[0].originalItemId).toBe('item-product')
+    expect(invoicePayload(values).expectedVatRate).toBe(0.1)
+    expect(invoicePayload(values).products[0].originalItemId).toBe(
+      'item-product',
+    )
+    expect(invoicePayload(values).customers[0].orders[0]).not.toHaveProperty(
+      'originalPricing',
+    )
+    expect(invoicePayload(values).customers[0].orders[0].originalOrderId).toBe(
+      'order-1',
+    )
     expect(values.receivingBranch).toBe('0197fdd2-6a67-7000-8000-000000000005')
     expect(values.productBranch).toBe('0197fdd2-6a67-7000-8000-000000000005')
     // Zeros read as blank, the way a fresh form does — the payload maps
@@ -266,6 +282,7 @@ it('round trips direct material sales and seeds multiple stock locations', () =>
   edit.products = []
   edit.materials = [
     {
+      originalItemId: 'item-material-1',
       materialId: 'mat-1',
       materialName: 'Linen',
       unit: 'meters',
@@ -276,6 +293,7 @@ it('round trips direct material sales and seeds multiple stock locations', () =>
       stockQuantity: 7.5,
     },
     {
+      originalItemId: 'item-material-2',
       materialId: 'mat-1',
       materialName: 'Linen',
       unit: 'meters',
