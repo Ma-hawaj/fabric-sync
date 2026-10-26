@@ -25,9 +25,9 @@
                    titleAr/titleEn, the catalog label, and an optional image (a
                    data: URI); a stored value that matches no catalog asset has
                    no image — see document.rs line_designs. The block below
-                    renders them as one bordered "Design" panel of cells, one
-                    per slot (Thobe / Collar / Sleeve / Front Pocket / Side Pocket / Patti / EMD
-                    in that order)
+                    renders them in a single row across the full item width,
+                    one cell per slot (Thobe / Collar / Sleeve / Front Pocket /
+                    Side Pocket / Patti / EMD, in that order)
     line_notes — per line, the free-text more-details note, or empty
 
   Amount keys: subtotal, urgentCharge, discountAmount, discountPercent, taxable,
@@ -172,15 +172,15 @@
 
       .panels {
         display: flex;
-        gap: 10px;
-        margin-top: 10px;
+        gap: 8px;
+        margin-top: 8px;
       }
 
       .panel {
         flex: 1;
         border: 1px solid var(--rule);
         border-radius: 6px;
-        padding: 8px 10px;
+        padding: 6px 8px;
         background: var(--tint);
       }
 
@@ -214,6 +214,22 @@
         text-align: left;
       }
 
+      .panels .row {
+        line-height: 1.35;
+      }
+
+      .panels .en {
+        display: inline;
+        margin-inline-start: 3px;
+      }
+
+      .panels .en::before,
+      .summary .en::before,
+      .price-breakdown .en::before,
+      .design-title .en::before {
+        content: ' · ';
+      }
+
       dl {
         margin: 0;
       }
@@ -239,12 +255,13 @@
         display: table-header-group;
       }
 
-      tbody tr {
+      tbody tr,
+      .invoice-item {
         break-inside: avoid;
       }
 
       tbody td {
-        padding: 5px 8px;
+        padding: 4px 8px;
         border-bottom: 1px solid var(--rule);
         vertical-align: top;
       }
@@ -262,48 +279,40 @@
 
       .line-note {
         display: block;
-        margin-top: 1px;
         color: var(--muted);
         font-size: 9.5px;
+        line-height: 1.3;
       }
 
-      /* One bordered "Design" panel per line: a heading and then a grid of
-         cells, one per slot (Thobe / Collar / Sleeve / Front Pocket / Side
-         Pocket / Patti / EMD). A
-         catalog match fills its cell with a raster; a legacy value that
-         matches nothing fills the label only, so every line reads the same
-         shape. The panel never splits across pages. */
+      /* The design row spans the item table so all seven slots fit on one
+         row. Each item's amounts and designs stay together when printing. */
+      .design-row td {
+        padding: 0 8px 4px;
+      }
+
       .design-panel {
-        margin-top: 5px;
         border: 1px solid var(--rule);
-        border-radius: 6px;
-        padding: 5px 6px 6px;
+        border-radius: 4px;
+        padding: 3px;
         background: var(--tint);
         break-inside: avoid;
       }
 
-      .design-heading {
-        margin: 0 0 4px;
-        font-size: 8.5px;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-        color: var(--muted);
-      }
-
       .design-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
         gap: 4px;
       }
 
       .design-cell {
+        min-width: 0;
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 2px;
-        padding: 3px 2px;
-        border: 1px solid var(--rule);
-        border-radius: 4px;
+        padding: 2px;
+        border-radius: 2px;
         background: #fff;
         text-align: center;
       }
@@ -311,19 +320,28 @@
       .design-cell img,
       .design-cell-empty {
         width: 100%;
-        height: 52px;
+        max-width: 48px;
+        height: 30px;
         object-fit: contain;
       }
 
       .design-copy {
+        min-width: 0;
         display: flex;
         flex-direction: column;
         line-height: 1.15;
+        overflow-wrap: anywhere;
       }
 
       .design-title {
         font-size: 7.5px;
         color: var(--muted);
+      }
+
+      .design-title .en {
+        display: inline;
+        margin-inline-start: 2px;
+        font-size: inherit;
       }
 
       .design-name {
@@ -353,23 +371,29 @@
 
       .summary {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 108px;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 92px;
         align-items: start;
-        gap: 12px;
-        margin-top: 10px;
+        gap: 8px;
+        margin-top: 6px;
       }
 
       .summary-card {
         min-width: 0;
-        padding: 8px;
+        padding: 5px 6px;
         border: 1px solid var(--rule);
         border-radius: 6px;
       }
 
       .summary-heading {
-        margin: 0 0 6px;
-        font-size: 11px;
+        margin: 0 0 3px;
+        font-size: 9px;
         font-weight: 700;
+      }
+
+      .summary .en,
+      .price-breakdown .en {
+        display: inline;
+        margin-inline-start: 3px;
       }
 
       .qr {
@@ -378,8 +402,8 @@
       }
 
       .qr svg {
-        width: 108px;
-        height: 108px;
+        width: 92px;
+        height: 92px;
         display: block;
       }
 
@@ -387,23 +411,24 @@
         margin-top: 3px;
         font-size: 8.5px;
         color: var(--muted);
-        max-width: 108px;
+        max-width: 92px;
       }
 
       .totals {
         width: 100%;
         border-collapse: collapse;
         margin: 0;
-        font-size: 11px;
+        font-size: 9.5px;
+        line-height: 1.35;
       }
 
       .totals td {
-        padding: 3px 0;
+        padding: 2px 0;
         border: none;
       }
 
       .totals .num {
-        padding-inline-start: 8px;
+        padding-inline-start: 6px;
       }
 
       .totals .label {
@@ -412,28 +437,53 @@
 
       .totals .grand td {
         border-top: 2px solid var(--ink);
-        font-size: 12px;
+        font-size: 10.5px;
         font-weight: 700;
-        padding-top: 6px;
+        padding-top: 4px;
       }
 
       .totals .due td {
         border-top: 1px solid var(--rule);
-        padding: 6px;
+        padding: 4px;
         background: var(--tint);
         font-weight: 700;
         color: var(--accent);
       }
 
       .price-breakdown {
-        margin-top: 8px;
-        padding-top: 6px;
+        display: flex;
+        align-items: baseline;
+        gap: 4px 10px;
+        margin-top: 5px;
+        padding-top: 4px;
         border-top: 1px solid var(--rule);
+        font-size: 8.5px;
+        line-height: 1.35;
       }
 
-      .price-breakdown .summary-heading,
-      .price-breakdown .totals {
-        font-size: 9.5px;
+      .price-breakdown .summary-heading {
+        flex-shrink: 0;
+      }
+
+      .breakdown-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 12px;
+        min-width: 0;
+      }
+
+      .breakdown-items > div {
+        display: flex;
+        align-items: baseline;
+        gap: 4px;
+      }
+
+      .breakdown-items dt {
+        color: var(--muted);
+      }
+
+      .breakdown-items dd {
+        margin: 0;
       }
 
       @media screen and (max-width: 600px) {
@@ -447,8 +497,8 @@
       }
 
       footer {
-        margin-top: 10px;
-        padding-top: 8px;
+        margin-top: 5px;
+        padding-top: 4px;
         border-top: 1px solid var(--rule);
         text-align: center;
         color: var(--muted);
@@ -572,7 +622,7 @@
       </div>
     </section>
 
-    <table>
+    <table class="invoice-lines" aria-label="Invoice items">
       <thead>
         <tr>
           <th style="width: 4%">#</th>
@@ -588,39 +638,14 @@
           </th>
         </tr>
       </thead>
-      <tbody>
-        {% for line in invoice.lines %}
+      {% for line in invoice.lines %}
+        <tbody class="invoice-item">
           <tr>
             <td class="num">{{ loop.index }}</td>
             <td>
               <span class="line-desc">{{ line.description }}</span>
               {% if line.customer %}
                 <span class="line-note">{{ line.customer.name }}</span>
-              {% endif %}
-              {% if line_designs[loop.index0] %}
-                <div class="design-panel">
-                  <p class="design-heading">
-                    تصميم <span class="en">Design</span>
-                  </p>
-                  <div class="design-grid">
-                    {% for chip in line_designs[loop.index0] %}
-                      <div class="design-cell">
-                        {% if chip.image %}
-                          <img src="{{ chip.image }}" alt="{{ chip.label }}" />
-                        {% else %}
-                          <span class="design-cell-empty"></span>
-                        {% endif %}
-                        <span class="design-copy">
-                          <span class="design-title"
-                            >{{ chip.titleAr
-                            }}<span class="en">{{ chip.titleEn }}</span></span
-                          >
-                          <span class="design-name" dir="ltr">{{ chip.label }}</span>
-                        </span>
-                      </div>
-                    {% endfor %}
-                  </div>
-                </div>
               {% endif %}
               {% if line.isUrgent %}
                 <span class="line-note">عاجل · Urgent order</span>
@@ -646,8 +671,34 @@
             </td>
             <td class="num">{{ amounts["line" ~ loop.index0 ~ "Total"] }}</td>
           </tr>
-        {% endfor %}
-      </tbody>
+          {% if line_designs[loop.index0] %}
+            <tr class="design-row">
+              <td colspan="5">
+                <div class="design-panel">
+                  <div class="design-grid">
+                    {% for chip in line_designs[loop.index0] %}
+                      <div class="design-cell">
+                        {% if chip.image %}
+                          <img src="{{ chip.image }}" alt="{{ chip.label }}" />
+                        {% else %}
+                          <span class="design-cell-empty"></span>
+                        {% endif %}
+                        <span class="design-copy">
+                          <span class="design-title">
+                            {{ chip.titleAr }}
+                            {% if chip.titleEn != chip.titleAr %}<span class="en">{{ chip.titleEn }}</span>{% endif %}
+                          </span>
+                          <span class="design-name" dir="ltr">{{ chip.label }}</span>
+                        </span>
+                      </div>
+                    {% endfor %}
+                  </div>
+                </div>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      {% endfor %}
     </table>
 
     <div class="closing">
@@ -675,52 +726,6 @@
               <td class="num">{{ currency }} {{ amounts.total }}</td>
             </tr>
           </table>
-
-          {% if invoice.totals.discountAmount > 0 or invoice.totals.urgentCharge > 0 or invoice.totals.giftCardSales > 0 %}
-            <div class="price-breakdown">
-              <h4 class="summary-heading">تفاصيل السعر <span class="en">Price breakdown</span></h4>
-              <table class="totals" aria-label="Price breakdown">
-                <tr>
-                  <td class="label">
-                    المجموع الفرعي شامل الضريبة <span class="en">Subtotal (incl. VAT)</span>
-                  </td>
-                  <td class="num">{{ currency }} {{ amounts.subtotal }}</td>
-                </tr>
-                {% if invoice.totals.discountAmount > 0 %}
-                  <tr>
-                    <td class="label">
-                      الخصم
-                      {%- if invoice.totals.discountUnit == "percent" %}
-                      ({{ amounts.discountPercent }}%)
-                      {%- endif %}
-                      <span class="en">Discount</span>
-                    </td>
-                    <td class="num">− {{ currency }} {{ amounts.discountAmount }}</td>
-                  </tr>
-                {% endif %}
-                {% if invoice.totals.urgentCharge > 0 %}
-                  <tr>
-                    <td class="label">رسوم الاستعجال <span class="en">Urgent charges (incl. VAT)</span></td>
-                    <td class="num">{{ currency }} {{ amounts.urgentCharge }}</td>
-                  </tr>
-                {% endif %}
-                {% if invoice.totals.giftCardSales > 0 %}
-                  <tr>
-                    <td class="label">
-                      بطاقات الهدايا (غير خاضعة للضريبة) <span class="en">Gift cards sold (not taxed)</span>
-                    </td>
-                    <td class="num">{{ currency }} {{ amounts.giftCardSales }}</td>
-                  </tr>
-                  {% if invoice.totals.taxable > 0 %}
-                    <tr>
-                      <td class="label">الوعاء الضريبي <span class="en">Taxable amount</span></td>
-                      <td class="num">{{ currency }} {{ amounts.taxable }}</td>
-                    </tr>
-                  {% endif %}
-                {% endif %}
-              </table>
-            </div>
-          {% endif %}
         </div>
 
         <div class="summary-card">
@@ -783,6 +788,48 @@
           <figcaption>امسح للتحقق · Scan to verify</figcaption>
         </figure>
       </section>
+
+      {% if invoice.totals.discountAmount > 0 or invoice.totals.urgentCharge > 0 or invoice.totals.giftCardSales > 0 %}
+        <section class="price-breakdown" aria-label="Price breakdown">
+          <h4 class="summary-heading">تفاصيل السعر <span class="en">Price breakdown</span></h4>
+          <dl class="breakdown-items">
+            <div>
+              <dt>المجموع الفرعي شامل الضريبة <span class="en">Subtotal (incl. VAT)</span></dt>
+              <dd class="num">{{ currency }} {{ amounts.subtotal }}</dd>
+            </div>
+            {% if invoice.totals.discountAmount > 0 %}
+              <div>
+                <dt>
+                  الخصم
+                  {%- if invoice.totals.discountUnit == "percent" %}
+                  ({{ amounts.discountPercent }}%)
+                  {%- endif %}
+                  <span class="en">Discount</span>
+                </dt>
+                <dd class="num">− {{ currency }} {{ amounts.discountAmount }}</dd>
+              </div>
+            {% endif %}
+            {% if invoice.totals.urgentCharge > 0 %}
+              <div>
+                <dt>رسوم الاستعجال <span class="en">Urgent charges (incl. VAT)</span></dt>
+                <dd class="num">{{ currency }} {{ amounts.urgentCharge }}</dd>
+              </div>
+            {% endif %}
+            {% if invoice.totals.giftCardSales > 0 %}
+              <div>
+                <dt>بطاقات الهدايا (غير خاضعة للضريبة) <span class="en">Gift cards sold (not taxed)</span></dt>
+                <dd class="num">{{ currency }} {{ amounts.giftCardSales }}</dd>
+              </div>
+              {% if invoice.totals.taxable > 0 %}
+                <div>
+                  <dt>الوعاء الضريبي <span class="en">Taxable amount</span></dt>
+                  <dd class="num">{{ currency }} {{ amounts.taxable }}</dd>
+                </div>
+              {% endif %}
+            {% endif %}
+          </dl>
+        </section>
+      {% endif %}
 
       <footer>
         شكراً لتعاملكم معنا · Thank you for your business
