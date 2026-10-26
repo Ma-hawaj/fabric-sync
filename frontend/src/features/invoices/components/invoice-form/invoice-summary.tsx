@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { DateField, NumberField } from '@/components/form/fields'
 import { AsyncCombobox } from '@/components/form/async-combobox'
-import { Field, FieldLabel } from '@/components/ui/field'
+import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import {
   Select,
   SelectContent,
@@ -510,7 +510,13 @@ export function InvoiceSummary({
                                         }
                                       >
                                         {(methodField: any) => (
-                                          <Field className="w-36">
+                                          <Field
+                                            className="w-36"
+                                            data-invalid={
+                                              methodField.state.meta.errors
+                                                .length > 0
+                                            }
+                                          >
                                             {index === 0 && (
                                               <FieldLabel
                                                 htmlFor={methodField.name}
@@ -530,6 +536,17 @@ export function InvoiceSummary({
                                               <SelectTrigger
                                                 id={methodField.name}
                                                 className="w-full"
+                                                aria-invalid={
+                                                  methodField.state.meta.errors
+                                                    .length > 0
+                                                }
+                                                aria-describedby={
+                                                  methodField.state.meta.errors
+                                                    .length > 0
+                                                    ? `${methodField.name}-error`
+                                                    : undefined
+                                                }
+                                                onBlur={methodField.handleBlur}
                                               >
                                                 <SelectValue placeholder="Method..." />
                                               </SelectTrigger>
@@ -546,6 +563,12 @@ export function InvoiceSummary({
                                                 )}
                                               </SelectContent>
                                             </Select>
+                                            <FieldError
+                                              id={`${methodField.name}-error`}
+                                              errors={
+                                                methodField.state.meta.errors
+                                              }
+                                            />
                                           </Field>
                                         )}
                                       </form.Field>
