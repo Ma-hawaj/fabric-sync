@@ -299,7 +299,12 @@ it('blocks saving when the VAT rate cannot be loaded', async () => {
 
 it('keeps saving blocked after a VAT conflict when cached pricing cannot refresh', async () => {
   const save = renderForm({ count: 1 })
-  save.mockRejectedValueOnce(new ApiError('VAT rate changed', 409))
+  save.mockRejectedValueOnce(
+    new ApiError(
+      'VAT rate has changed. Refresh pricing and review the invoice before saving.',
+      409,
+    ),
+  )
   const originalGet = vi.mocked(apiClient.get).getMockImplementation()!
   vi.mocked(apiClient.get).mockImplementation((url, ...args) =>
     url === '/pricing'
