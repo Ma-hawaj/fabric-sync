@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Trash2Icon } from 'lucide-react'
+import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface InvoiceLineItemProps {
@@ -26,14 +26,14 @@ export function InvoiceLineItem({
         <h3 className="text-sm font-medium">{title}</h3>
         <Button
           type="button"
-          variant="outline"
-          size="sm"
-          className="min-h-8 shrink-0 px-2.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          variant="ghost"
+          size="icon-lg"
+          className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
           aria-label={`Remove ${kind}`}
+          title={`Remove ${kind}`}
           onClick={onRemove}
         >
-          <Trash2Icon className="size-3.5" />
-          Remove
+          <XIcon className="size-4" />
         </Button>
       </div>
       {children}
