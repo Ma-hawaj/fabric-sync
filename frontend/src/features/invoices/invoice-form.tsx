@@ -154,7 +154,7 @@ export function InvoiceForm({
           `Invoice ${savedVerb} — total ${CURRENCY} ${invoice.totalPrice.toFixed(2)}.`,
         error: (error) => {
           if (error instanceof ApiError && error.status === 409) {
-            if (error.message.toLowerCase().includes('vat')) {
+            if (error.message.startsWith('VAT rate has changed')) {
               setPricingNeedsRefresh(true)
               if (!editing) {
                 void pricing.refetch().then((result) => {
