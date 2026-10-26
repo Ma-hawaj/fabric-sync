@@ -206,6 +206,24 @@ TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/fabric_sync cargo 
 This opt-in test creates and removes its own schema. Ordinary backend tests do
 not need a database when the committed SQLx offline metadata is used.
 
+## Invoice VAT
+
+Prices include VAT. Set backend `VAT_RATE` to a decimal fraction (`0.10` for
+10%, the default); the server validates it at startup and exposes it through
+`GET /api/pricing`. The frontend has no independent rate setting. Every invoice
+saves its applied rate and rounded net/VAT amounts. Configuration changes apply
+to new invoices; viewing, printing, or editing existing invoices keeps their
+original rate. Gift card sales are outside the VAT base.
+
+Create and update requests include `expectedVatRate`; a mismatch returns 409
+without saving, so staff can refresh and review pricing. Edit requests carry
+`originalOrderId`/`originalItemId` for existing lines; these references are checked
+against the locked invoice before preserving any original prices.
+
+The original schema migration now includes the tax snapshots. Recreate existing
+local development databases rather than applying the changed migration over an
+older checksum. No historical data backfill is provided.
+
 ## Garment pricing
 
 Urgency is selected separately for each tailoring order. The server applies a
@@ -232,9 +250,12 @@ Customer-supplied fabric uses the fixed VAT-inclusive tailoring base configured
 by `CUSTOMER_MATERIAL_BASE_PRICE`, plus design costs. This is one price per order,
 independent of metres used. The form displays the price read-only; client-supplied
 price overrides are ignored. No amount is assumed, so customer-material orders
-cannot be saved until the fixed price is configured. Editing an invoice
-recalculates prices using the current pricing configuration and catalog; viewing
-or printing keeps the saved prices. Imported materials without tier prices must
+cannot be saved until the fixed price is configured. Editing an invoice keeps the saved prices and urgency charge on unchanged
+orders. Changing fabric source, material, quantity, designs, or urgency reprices
+that order using the current catalog and configuration; new orders also use
+current prices. Notes, measurements, locations, and delivery details do not
+trigger repricing. Retail and direct-material unit prices remain editable and
+are retained when quantities or stock locations change. Imported materials without tier prices must
 be configured before creating garment lines.
 
 Each material’s Actions menu includes Add Stock with that material already selected,

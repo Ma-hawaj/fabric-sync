@@ -47,10 +47,9 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
 
     let invoice = rows.invoice;
 
-    // The stored row keeps only the total, the discount and its unit, so the
-    // figures in between are rebuilt from the lines. Splitting them by
-    // `taxable` is what keeps gift card sales out of the VAT base, exactly as
-    // compute_totals does on the way in.
+    // Rebuild the line and discount summaries, keeping gift card sales outside
+    // the VAT base. The tax figures themselves are read from the issued invoice
+    // snapshot below so a configuration change cannot rewrite its history.
     let taxable_subtotal: f64 = rows
         .lines
         .iter()
@@ -74,6 +73,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         invoice.discount,
         discount_unit,
         invoice.urgent_charge,
+        invoice.vat_rate,
     );
 
     let payments = repository::list_payments(state, invoice_id).await?;
@@ -105,9 +105,9 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
             discount: invoice.discount,
             discount_unit: invoice.discount_unit,
             discount_amount: totals.discount_amount,
-            taxable: totals.taxable,
-            vat_rate: VAT_RATE,
-            vat: totals.vat,
+            taxable: invoice.taxable_amount,
+            vat_rate: invoice.vat_rate,
+            vat: invoice.vat_amount,
             gift_card_sales: totals.gift_card_sales,
             // The recomputed total and the stored one agree by construction —
             // same function, same inputs — but the stored figure is what was
@@ -336,7 +336,6 @@ pub async fn collect_invoice(
 // Matches the frontend's invoice summary. Line prices are entered gross —
 // VAT included — so the stored total is (gross - discount), with VAT
 // extracted from the discounted gross rather than added on top.
-const VAT_RATE: f64 = 0.1;
 
 fn round2(value: f64) -> f64 {
     // The trailing `+ 0.0` normalizes negative zero: std's `Sum` for floats
@@ -385,6 +384,7 @@ fn breakdown(
     discount: f64,
     discount_unit: DiscountUnit,
     urgent_charge: f64,
+    vat_rate: f64,
 ) -> Breakdown {
     let subtotal = round2(taxable_gross);
 
@@ -397,7 +397,7 @@ fn breakdown(
 
     // Urgency is an extra VAT-inclusive service charge, added after discounts.
     let gross = round2(subtotal - discount_amount + round2(urgent_charge));
-    let taxable = round2(gross / (1.0 + VAT_RATE));
+    let taxable = round2(gross / (1.0 + vat_rate));
     let vat = round2(gross - taxable);
     let gift_card_sales = round2(gift_card_sales);
 
@@ -416,12 +416,14 @@ fn breakdown(
 /// so `total_price` keeps meaning "what this sale was worth" regardless of how
 /// it was paid for.
 struct InvoiceTotals {
+    taxable: f64,
+    vat: f64,
     total: f64,
     redeemed: f64,
     urgent_charge: f64,
 }
 
-fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
+fn compute_totals(input: &CreateInvoiceInput, vat_rate: f64) -> InvoiceTotals {
     let urgent_charge = round2(
         input
             .customers
@@ -452,9 +454,12 @@ fn compute_totals(input: &CreateInvoiceInput) -> InvoiceTotals {
         input.discount,
         input.discount_unit,
         urgent_charge,
+        vat_rate,
     );
 
     InvoiceTotals {
+        taxable: totals.taxable,
+        vat: totals.vat,
         total: totals.total,
         urgent_charge,
         redeemed: round2(
@@ -478,6 +483,66 @@ fn selected_designs(order: &CreateOrderInput) -> [(&str, Option<&str>); 7] {
         ("patti", order.patti.as_deref()),
         ("emd", order.emd.as_deref()),
     ]
+}
+
+fn validate_expected_vat(expected: f64, applicable: f64) -> Result<(), AppError> {
+    if !expected.is_finite() || expected != applicable {
+        return Err(AppError::Conflict(
+            "VAT rate has changed. Refresh pricing and review the invoice before saving.".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn same_order_pricing(order: &CreateOrderInput, old: &super::types::SavedOrderPricing) -> bool {
+    let normalized = |value: &Option<String>| value.as_deref().unwrap_or("").to_string();
+    order.material_source.as_str() == old.material_source
+        && order.material_id == old.material_id
+        && order.material_amount == old.material_amount
+        && order.is_urgent == old.is_urgent
+        && normalized(&order.thobe_type) == normalized(&old.thobe_type)
+        && normalized(&order.f_pocket) == normalized(&old.f_pocket)
+        && normalized(&order.s_pocket) == normalized(&old.s_pocket)
+        && normalized(&order.collar) == normalized(&old.collar)
+        && normalized(&order.sleeve) == normalized(&old.sleeve)
+        && normalized(&order.patti) == normalized(&old.patti)
+        && normalized(&order.emd) == normalized(&old.emd)
+}
+
+fn validate_original_ids(
+    input: &CreateInvoiceInput,
+    orders: &HashMap<Uuid, super::types::SavedOrderPricing>,
+    items: &HashMap<Uuid, String>,
+) -> Result<(), AppError> {
+    let mut seen = HashSet::new();
+    for id in input
+        .customers
+        .iter()
+        .flat_map(|customer| &customer.orders)
+        .filter_map(|order| order.original_order_id)
+    {
+        if !orders.contains_key(&id) || !seen.insert(id) {
+            return Err(AppError::BadRequest(
+                "original order must belong to this invoice and occur only once".into(),
+            ));
+        }
+    }
+    for (id, kind) in input
+        .products
+        .iter()
+        .filter_map(|line| line.original_item_id.map(|id| (id, "product")))
+        .chain(
+            input
+                .materials
+                .iter()
+                .filter_map(|line| line.original_item_id.map(|id| (id, "material"))),
+        )
+    {
+        if items.get(&id).map(String::as_str) != Some(kind) || !seen.insert(id) {
+            return Err(AppError::BadRequest("original item must belong to this invoice, match its line kind, and occur only once".into()));
+        }
+    }
+    Ok(())
 }
 
 fn price_order(
@@ -529,11 +594,31 @@ async fn resolve_order_prices(
     input: &mut CreateInvoiceInput,
     urgent_rule: Option<crate::features::pricing::types::UrgentChargeRule>,
     customer_material_base_price: Option<f64>,
+    saved: &HashMap<Uuid, super::types::SavedOrderPricing>,
 ) -> Result<(), AppError> {
+    for order in input
+        .customers
+        .iter_mut()
+        .flat_map(|customer| &mut customer.orders)
+    {
+        if let Some(old) = order.original_order_id.and_then(|id| saved.get(&id)) {
+            if same_order_pricing(order, old) {
+                order.base_price = old.base_price;
+                order.price = old.price;
+                order.urgent_charge = old.urgent_charge;
+            }
+        }
+    }
     let orders: Vec<&CreateOrderInput> = input
         .customers
         .iter()
         .flat_map(|customer| &customer.orders)
+        .filter(|order| {
+            !order
+                .original_order_id
+                .and_then(|id| saved.get(&id))
+                .is_some_and(|old| same_order_pricing(order, old))
+        })
         .collect();
     if orders.is_empty() {
         return Ok(());
@@ -589,6 +674,13 @@ async fn resolve_order_prices(
         .iter_mut()
         .flat_map(|customer| &mut customer.orders)
     {
+        if order
+            .original_order_id
+            .and_then(|id| saved.get(&id))
+            .is_some_and(|old| same_order_pricing(order, old))
+        {
+            continue;
+        }
         price_order(order, &materials, &designs, customer_material_base_price)?;
         order.urgent_charge = crate::features::pricing::service::urgent_charge(
             order.price,
@@ -781,7 +873,7 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
 
     // Gift cards are tender, so they can settle an invoice but never overpay
     // it — the excess would be change the card can't give back.
-    let totals = compute_totals(input);
+    let totals = compute_totals(input, input.expected_vat_rate);
     if totals.redeemed > totals.total {
         return Err(AppError::BadRequest(
             "gift cards cover more than the invoice total".to_string(),
@@ -835,6 +927,18 @@ async fn resolve_customer_id(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn tax_rate_changes_split_but_not_gross_total() {
+        let zero = super::breakdown(110.0, 50.0, 10.0, super::DiscountUnit::Amount, 10.0, 0.0);
+        assert_eq!(zero.taxable, 110.0);
+        assert_eq!(zero.vat, 0.0);
+        assert_eq!(zero.total, 160.0);
+        let fifteen = super::breakdown(110.0, 50.0, 10.0, super::DiscountUnit::Amount, 10.0, 0.15);
+        assert_eq!(fifteen.taxable, 95.65);
+        assert_eq!(fifteen.vat, 14.35);
+        assert_eq!(fifteen.total, zero.total);
+    }
+
     use super::*;
 
     fn input(json: serde_json::Value) -> CreateInvoiceInput {
@@ -1012,7 +1116,7 @@ mod tests {
         input(serde_json::json!({
             "targetDate": "2026-07-26",
             "discount": discount,
-            "discountUnit": discount_unit,
+            "expectedVatRate": 0.1, "discountUnit": discount_unit,
             "paymentStatus": "unpaid",
             "customers": customers,
         }))
@@ -1023,7 +1127,7 @@ mod tests {
     fn retail_invoice(extra: serde_json::Value) -> CreateInvoiceInput {
         let mut base = serde_json::json!({
             "targetDate": "2026-07-26",
-            "discountUnit": "amount",
+            "expectedVatRate": 0.1, "discountUnit": "amount",
             "paymentStatus": "unpaid",
         });
 
@@ -1131,8 +1235,8 @@ mod tests {
         invoice.customers[0].orders[0].is_urgent = true;
         invoice.customers[0].orders[0].urgent_charge = 20.0;
         assert!(validate(&invoice).is_ok());
-        assert_eq!(compute_totals(&invoice).total, 110.0);
-        let totals = breakdown(100.0, 50.0, 10.0, DiscountUnit::Percent, 20.0);
+        assert_eq!(compute_totals(&invoice, 0.1).total, 110.0);
+        let totals = breakdown(100.0, 50.0, 10.0, DiscountUnit::Percent, 20.0, 0.1);
         assert_eq!(totals.taxable, 100.0);
         assert_eq!(totals.vat, 10.0);
         assert_eq!(totals.total, 160.0);
@@ -1177,7 +1281,7 @@ mod tests {
         let mut input: CreateInvoiceInput = serde_json::from_value(serde_json::json!({
             "targetDate": "2026-11-01",
             "discount": 10.0,
-            "discountUnit": "percent",
+            "expectedVatRate": 0.1, "discountUnit": "percent",
             "customers": [{
                 "newCustomer": {
                     "name": "  Family customer  ",
@@ -1343,7 +1447,7 @@ mod tests {
         invoice.products = vec![serde_json::from_value(product(1.0, 50.0)).unwrap()];
         invoice.gift_cards = vec![serde_json::from_value(gift_card(25.0)).unwrap()];
         assert!(validate(&invoice).is_ok());
-        let totals = compute_totals(&invoice);
+        let totals = compute_totals(&invoice, 0.1);
         assert_eq!(totals.urgent_charge, 30.03);
         assert_eq!(totals.total, 280.03);
         invoice.customers[1].orders[0].urgent_charge = 0.0;
@@ -1400,45 +1504,45 @@ mod tests {
             "amount",
             vec![customer(vec![order(100.0), order(100.0)])],
         );
-        assert_eq!(compute_totals(&input).total, 200.0);
+        assert_eq!(compute_totals(&input, 0.1).total, 200.0);
     }
 
     #[test]
     fn flat_discount_comes_off_the_gross() {
         let input = invoice(50.0, "amount", vec![customer(vec![order(150.0)])]);
-        assert_eq!(compute_totals(&input).total, 100.0);
+        assert_eq!(compute_totals(&input, 0.1).total, 100.0);
     }
 
     #[test]
     fn percentage_discount_applies_to_the_gross() {
         let input = invoice(10.0, "percent", vec![customer(vec![order(200.0)])]);
-        assert_eq!(compute_totals(&input).total, 180.0);
+        assert_eq!(compute_totals(&input, 0.1).total, 180.0);
     }
 
     #[test]
     fn discount_larger_than_subtotal_floors_at_zero() {
         let input = invoice(500.0, "amount", vec![customer(vec![order(100.0)])]);
-        assert_eq!(compute_totals(&input).total, 0.0);
+        assert_eq!(compute_totals(&input, 0.1).total, 0.0);
     }
 
     #[test]
     fn a_product_line_is_priced_per_unit_and_gross_like_an_order() {
         let input = retail_invoice(serde_json::json!({ "products": [product(3.0, 40.0)] }));
         // 3 × 40 = 120 gross, VAT extracted rather than added
-        assert_eq!(compute_totals(&input).total, 120.0);
+        assert_eq!(compute_totals(&input, 0.1).total, 120.0);
     }
 
     #[test]
     fn products_and_orders_share_one_gross_subtotal() {
         let mut input = invoice(0.0, "amount", vec![customer(vec![order(100.0)])]);
         input.products = serde_json::from_value(serde_json::json!([product(1.0, 100.0)])).unwrap();
-        assert_eq!(compute_totals(&input).total, 200.0);
+        assert_eq!(compute_totals(&input, 0.1).total, 200.0);
     }
 
     #[test]
     fn a_gift_card_sale_is_added_at_face_value_without_vat() {
         let input = retail_invoice(serde_json::json!({ "giftCards": [gift_card(200.0)] }));
-        assert_eq!(compute_totals(&input).total, 200.0);
+        assert_eq!(compute_totals(&input, 0.1).total, 200.0);
     }
 
     #[test]
@@ -1448,7 +1552,7 @@ mod tests {
             "giftCards": [gift_card(200.0)],
         }));
         // 100 gross plus the card's untaxed 200
-        assert_eq!(compute_totals(&input).total, 300.0);
+        assert_eq!(compute_totals(&input, 0.1).total, 300.0);
     }
 
     #[test]
@@ -1460,7 +1564,7 @@ mod tests {
         input.discount = 10.0;
         input.discount_unit = DiscountUnit::Percent;
         // 10% off the 100 of gross goods only: 90, plus 200
-        assert_eq!(compute_totals(&input).total, 290.0);
+        assert_eq!(compute_totals(&input, 0.1).total, 290.0);
     }
 
     #[test]
@@ -1468,7 +1572,7 @@ mod tests {
         let input = retail_invoice(serde_json::json!({ "products": [product(1.0, 100.0)] }));
         // -0.0 == 0.0, so this checks the sign bit rather than the value: a
         // negative zero would reach the client as "-0.0".
-        assert!(compute_totals(&input).redeemed.is_sign_positive());
+        assert!(compute_totals(&input, 0.1).redeemed.is_sign_positive());
     }
 
     #[test]
@@ -1477,7 +1581,7 @@ mod tests {
             "products": [product(1.0, 100.0)],
             "giftCardRedemptions": [{ "code": "GC-7KMP-4RWT-9DXH", "amount": 50.0 }],
         }));
-        let totals = compute_totals(&input);
+        let totals = compute_totals(&input, 0.1);
         assert_eq!(totals.total, 100.0);
         assert_eq!(totals.redeemed, 50.0);
     }
@@ -1487,7 +1591,7 @@ mod tests {
     // the extracted VAT always sum back to the discounted gross.
     #[test]
     fn the_breakdown_splits_the_discounted_gross_into_net_and_vat() {
-        let totals = breakdown(133.33, 0.0, 7.5, DiscountUnit::Percent, 0.0);
+        let totals = breakdown(133.33, 0.0, 7.5, DiscountUnit::Percent, 0.0, 0.1);
         assert_eq!(totals.subtotal, 133.33);
         assert_eq!(totals.discount_amount, 10.0);
         // 123.33 gross deflates to a 112.12 net with 11.21 of VAT inside it.
@@ -1505,7 +1609,7 @@ mod tests {
     fn the_breakdown_reports_the_discount_it_actually_applied() {
         // Asking for 500 off a 100 sale discounts 100, not 500 — otherwise the
         // document would print a discount line that overshoots the subtotal.
-        let totals = breakdown(100.0, 0.0, 500.0, DiscountUnit::Amount, 0.0);
+        let totals = breakdown(100.0, 0.0, 500.0, DiscountUnit::Amount, 0.0, 0.1);
         assert_eq!(totals.discount_amount, 100.0);
         assert_eq!(totals.taxable, 0.0);
         assert_eq!(totals.vat, 0.0);
@@ -1514,7 +1618,7 @@ mod tests {
 
     #[test]
     fn gift_card_sales_stay_out_of_the_vat_base_but_inside_the_total() {
-        let totals = breakdown(100.0, 200.0, 0.0, DiscountUnit::Amount, 0.0);
+        let totals = breakdown(100.0, 200.0, 0.0, DiscountUnit::Amount, 0.0, 0.1);
         // 100 gross holds 90.91 of net and 9.09 of VAT; the card joins
         // the total untaxed.
         assert_eq!(totals.taxable, 90.91);
@@ -1627,7 +1731,7 @@ mod tests {
         let invoice = retail_invoice(serde_json::json!({ "materials": [material(2.5, 11.0)] }));
         assert!(validate(&invoice).is_ok());
         assert!(invoice.customers.is_empty());
-        assert_eq!(compute_totals(&invoice).total, 27.5);
+        assert_eq!(compute_totals(&invoice, 0.1).total, 27.5);
         assert!(
             retail_invoice(serde_json::json!({ "products": [product(1.0, 10.0)] }))
                 .materials
@@ -1639,10 +1743,10 @@ mod tests {
     fn material_sales_share_discount_and_payment_rules_with_other_goods() {
         let mut invoice = retail_invoice(serde_json::json!({
             "materials": [material(2.5, 11.0)], "products": [product(1.0, 22.0)],
-            "discount": 10.0, "discountUnit": "percent", "giftCards": [gift_card(10.0)],
+            "discount": 10.0, "expectedVatRate": 0.1, "discountUnit": "percent", "giftCards": [gift_card(10.0)],
             "payments": [{ "amount": 54.55, "paymentType": "cash" }],
         }));
-        assert_eq!(compute_totals(&invoice).total, 54.55);
+        assert_eq!(compute_totals(&invoice, 0.1).total, 54.55);
         assert!(validate(&invoice).is_ok());
         invoice.payments[0].amount = 54.56;
         assert!(validate(&invoice).is_err());
@@ -1655,8 +1759,8 @@ mod tests {
         input.customers[0].orders[0].is_urgent = true;
         input.customers[0].orders[0].urgent_charge = 5.0;
         assert!(validate(&input).is_ok());
-        assert_eq!(compute_totals(&input).total, 119.75);
-        assert_eq!(compute_totals(&input).urgent_charge, 5.0);
+        assert_eq!(compute_totals(&input, 0.1).total, 119.75);
+        assert_eq!(compute_totals(&input, 0.1).urgent_charge, 5.0);
     }
 
     #[test]
@@ -2073,6 +2177,9 @@ pub async fn create_invoice(
     mut input: CreateInvoiceInput,
     actor: &str,
 ) -> Result<CreatedInvoice, AppError> {
+    let vat_rate = state.vat_rate()?;
+    validate_expected_vat(input.expected_vat_rate, vat_rate)?;
+    validate_original_ids(&input, &HashMap::new(), &HashMap::new())?;
     for card in &mut input.gift_cards {
         card.code.clear();
     }
@@ -2082,11 +2189,12 @@ pub async fn create_invoice(
         &mut input,
         state.urgent_charge_rule()?,
         state.customer_material_base_price()?,
+        &HashMap::new(),
     )
     .await?;
     validate(&input)?;
 
-    let totals = compute_totals(&input);
+    let totals = compute_totals(&input, vat_rate);
 
     // invoice_date is server-set (DEFAULT now()) — the only date staff enter
     // is the promised target_date. Its actual value comes back here so gift
@@ -2098,6 +2206,9 @@ pub async fn create_invoice(
         totals.redeemed,
         totals.urgent_charge,
         actor,
+        vat_rate,
+        totals.taxable,
+        totals.vat,
     )
     .await?;
 
@@ -2203,24 +2314,36 @@ pub async fn update_invoice(
     // already legitimately held.
     input.payments = Vec::new();
     let mut tx = state.db().begin().await?;
+    let locked = repository::lock_invoice(&mut tx, invoice_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
+    validate_expected_vat(input.expected_vat_rate, locked.vat_rate)?;
+    let saved: HashMap<_, _> = repository::saved_order_prices(&mut tx, invoice_id)
+        .await?
+        .into_iter()
+        .map(|line| (line.id, line))
+        .collect();
+    let items: HashMap<_, _> = repository::original_item_ids(&mut tx, invoice_id)
+        .await?
+        .into_iter()
+        .collect();
+    validate_original_ids(&input, &saved, &items)?;
     resolve_order_prices(
         &mut tx,
         &mut input,
         state.urgent_charge_rule()?,
         state.customer_material_base_price()?,
+        &saved,
     )
     .await?;
     validate(&input)?;
 
-    let totals = compute_totals(&input);
+    let totals = compute_totals(&input, locked.vat_rate);
 
     // invoice_date stays immutable — only target_date (inside input) is
     // rewritten by update_invoice_header. Expiry is re-checked against the
     // original creation date, so an edit days later doesn't fail on a card
     // that was valid at sale time.
-    let locked = repository::lock_invoice(&mut tx, invoice_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
 
     // The money already taken has to fit the rebuilt total: shrinking the
     // lines below what the customer already paid would leave the ledger
@@ -2372,6 +2495,8 @@ pub async fn update_invoice(
         totals.total,
         totals.redeemed,
         totals.urgent_charge,
+        totals.taxable,
+        totals.vat,
     )
     .await?;
 

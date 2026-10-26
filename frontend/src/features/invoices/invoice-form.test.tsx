@@ -10,6 +10,11 @@ vi.mock('@tanstack/react-router', () => ({
 
 function renderPage() {
   const client = new QueryClient()
+  client.setQueryData(['pricing'], {
+    vatRate: 0.1,
+    urgentCharge: null,
+    customerMaterialBasePrice: null,
+  })
   return render(
     <QueryClientProvider client={client}>
       <InvoiceFormPage />

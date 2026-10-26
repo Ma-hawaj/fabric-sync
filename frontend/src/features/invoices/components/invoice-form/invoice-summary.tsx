@@ -23,12 +23,12 @@ import { Button } from '@/components/ui/button'
 import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
+  formatVatPercent,
   computeOrderLineTotal,
   computeOrderUrgentCharge,
   computeUrgentCharges,
   computeProductLineTotal,
   computeRedemptionTotal,
-  VAT_RATE,
 } from '../../lib/invoice-pricing'
 import type {
   DiscountUnit,
@@ -358,23 +358,37 @@ export function InvoiceSummary({
                 selector={(state: any) => [
                   state.values.discount,
                   state.values.discountUnit,
+                  state.values.expectedVatRate,
                   state.values.payments,
                   state.values.redemptions,
                 ]}
               >
                 {(subscribed: any) => {
-                  const [discount, discountUnit, payments, redemptions] =
-                    subscribed as [
-                      number | '',
-                      DiscountUnit,
-                      PaymentDraft[],
-                      GiftCardRedemptionDraft[],
-                    ]
+                  const [
+                    discount,
+                    discountUnit,
+                    vatRate,
+                    payments,
+                    redemptions,
+                  ] = subscribed as [
+                    number | '',
+                    DiscountUnit,
+                    number | '',
+                    PaymentDraft[],
+                    GiftCardRedemptionDraft[],
+                  ]
                   // Line prices are gross (VAT included): the discount comes
                   // off the gross and VAT is extracted from it — the shared
                   // computeInvoiceTotals keeps this in step with the backend's
                   // breakdown.
+                  if (typeof vatRate !== 'number')
+                    return (
+                      <p className="text-sm text-muted-foreground">
+                        Loading VAT pricing...
+                      </p>
+                    )
                   const totals = computeInvoiceTotals({
+                    vatRate,
                     orderTotal: subtotal,
                     productTotal: 0,
                     giftCardSales,
@@ -410,7 +424,7 @@ export function InvoiceSummary({
                       )}
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">
-                          VAT ({Math.round(VAT_RATE * 100)}%, incl.)
+                          VAT ({formatVatPercent(vatRate)}%, incl.)
                         </span>
                         <span>
                           {CURRENCY} {totals.vat.toFixed(2)}

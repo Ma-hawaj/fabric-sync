@@ -16,6 +16,7 @@ pub struct UrgentChargeRule {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Pricing {
+    pub vat_rate: f64,
     pub urgent_charge: Option<UrgentChargeRule>,
     pub customer_material_base_price: Option<f64>,
 }

@@ -7,6 +7,7 @@ import {
   computeProductLineTotal,
   extractNet,
   extractVat,
+  formatVatPercent,
 } from './invoice-pricing'
 import {
   createEmptyGiftCardLine,
@@ -75,13 +76,37 @@ describe('computeProductLineTotal', () => {
 
 describe('extractNet / extractVat', () => {
   it('splits a gross figure so net and VAT add back to it', () => {
-    expect(extractNet(100)).toBe(90.91)
-    expect(extractVat(100)).toBe(9.09)
-    expect(extractNet(100) + extractVat(100)).toBe(100)
+    expect(extractNet(100, 0.1)).toBe(90.91)
+    expect(extractVat(100, 0.1)).toBe(9.09)
+    expect(extractNet(100, 0.1) + extractVat(100, 0.1)).toBe(100)
   })
 })
 
 describe('computeInvoiceTotals', () => {
+  it.each([
+    [0, 110, 0],
+    [0.1, 100, 10],
+    [0.15, 95.65, 14.35],
+  ])(
+    'extracts rate %s without changing the quoted gross',
+    (vatRate, taxable, vat) => {
+      const totals = computeInvoiceTotals({
+        vatRate,
+        orderTotal: 110,
+        productTotal: 0,
+        giftCardSales: 0,
+        discount: 0,
+        discountUnit: 'amount',
+        redeemed: 0,
+        paid: 0,
+      })
+      expect(totals.total).toBe(110)
+      expect(totals.taxable).toBe(taxable)
+      expect(totals.vat).toBe(vat)
+      expect(totals.taxable + totals.vat).toBe(110)
+    },
+  )
+
   it('rounds each order charge before summing across customers', () => {
     const customers = [
       {
@@ -100,6 +125,7 @@ describe('computeInvoiceTotals', () => {
     expect(computeUrgentCharges(customers)).toBe(0.02)
   })
   const base = {
+    vatRate: 0.1,
     orderTotal: 100,
     productTotal: 100,
     giftCardSales: 0,
@@ -182,4 +208,9 @@ describe('computeGiftCardLineTotal', () => {
       computeGiftCardLineTotal({ ...createEmptyGiftCardLine(), amount: 0 }),
     ).toBe(0)
   })
+})
+
+it('formats fractional VAT percentages without rounding to whole percent', () => {
+  expect(formatVatPercent(0.125)).toBe('12.5')
+  expect(formatVatPercent(0.1)).toBe('10')
 })

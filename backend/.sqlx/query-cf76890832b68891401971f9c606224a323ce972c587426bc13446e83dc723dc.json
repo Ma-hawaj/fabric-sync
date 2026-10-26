@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT ii.id AS original_item_id, ii.material_id, ii.description AS material_name, ii.unit AS \"unit!\",\n            ii.branch_id, b.name AS branch_name, ii.quantity::float8 AS \"quantity!\",\n            ii.unit_price::float8 AS \"unit_price!\", ms.quantity::float8 AS stock_quantity\n        FROM invoice_items ii\n        LEFT JOIN branch b ON b.id = ii.branch_id\n        LEFT JOIN material_stock ms ON ms.material_id = ii.material_id AND ms.branch_id = ii.branch_id\n        WHERE ii.invoice_id = $1 AND ii.kind = 'material' ORDER BY ii.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "original_item_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "material_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "material_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "unit!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "branch_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "branch_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "quantity!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "unit_price!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 8,
+        "name": "stock_quantity",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "cf76890832b68891401971f9c606224a323ce972c587426bc13446e83dc723dc"
+}

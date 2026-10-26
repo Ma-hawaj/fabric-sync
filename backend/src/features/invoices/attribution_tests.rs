@@ -20,7 +20,7 @@ async fn invoice_creator_and_initial_payment_actor_survive_edits(pool: PgPool) {
         .await
         .unwrap();
     let mut payload = json!({
-        "discountUnit":"amount", "createdBy":"forged-client-creator",
+        "expectedVatRate":0.1,"discountUnit":"amount", "createdBy":"forged-client-creator",
         "products":[{"productId":product,"branchId":branch,"quantity":1,"unitPrice":100}],
         "payments":[{"amount":25,"paymentType":"cash","recordedBy":"forged-client-recorder"}]
     });

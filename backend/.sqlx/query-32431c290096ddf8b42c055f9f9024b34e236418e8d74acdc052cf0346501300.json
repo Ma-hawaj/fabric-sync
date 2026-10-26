@@ -1,0 +1,106 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, material_source, material_id, material_amount::float8 AS \"material_amount!\",\n            is_urgent, thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd,\n            base_price::float8 AS \"base_price!\", price::float8 AS \"price!\",\n            urgent_charge::float8 AS \"urgent_charge!\"\n        FROM orders WHERE invoice_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "material_source",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "material_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "material_amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_urgent",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "thobe_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "f_pocket",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "s_pocket",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "collar",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "sleeve",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "patti",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "emd",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "base_price!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 13,
+        "name": "price!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 14,
+        "name": "urgent_charge!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "32431c290096ddf8b42c055f9f9024b34e236418e8d74acdc052cf0346501300"
+}

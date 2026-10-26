@@ -83,6 +83,8 @@ impl MaterialSource {
 #[serde(rename_all = "camelCase")]
 pub struct CreateOrderInput {
     #[serde(default)]
+    pub original_order_id: Option<Uuid>,
+    #[serde(default)]
     pub is_urgent: bool,
     #[serde(skip_deserializing)]
     pub urgent_charge: f64,
@@ -116,6 +118,8 @@ pub struct CreateOrderInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateProductLineInput {
+    #[serde(default)]
+    pub original_item_id: Option<Uuid>,
     pub product_id: Uuid,
     pub quantity: f64,
     // Snapshot of the product's list price at the time of sale; the client
@@ -129,6 +133,8 @@ pub struct CreateProductLineInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateMaterialLineInput {
+    #[serde(default)]
+    pub original_item_id: Option<Uuid>,
     pub material_id: Uuid,
     pub branch_id: Uuid,
     pub quantity: f64,
@@ -197,6 +203,7 @@ pub struct CreatePaymentInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateInvoiceInput {
+    pub expected_vat_rate: f64,
     #[serde(default)]
     pub collection_method: CollectionMethod,
     /// When the garment is promised for. Required when any order is urgent,
@@ -258,6 +265,7 @@ pub struct CreatedInvoice {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEditOrder {
+    pub original_order_id: Uuid,
     pub is_urgent: bool,
     pub base_price: f64,
     pub urgent_charge: f64,
@@ -303,6 +311,7 @@ pub struct InvoiceEditCustomer {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEditProductLine {
+    pub original_item_id: Uuid,
     pub product_id: Option<Uuid>,
     pub product_name: String,
     pub quantity: f64,
@@ -316,6 +325,7 @@ pub struct InvoiceEditProductLine {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEditMaterialLine {
+    pub original_item_id: Uuid,
     pub material_id: Option<Uuid>,
     pub material_name: String,
     pub unit: String,
@@ -366,6 +376,7 @@ pub struct InvoicePayment {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEdit {
+    pub vat_rate: f64,
     pub urgent_charge: f64,
     pub collection_method: String,
     pub id: Uuid,
@@ -577,6 +588,9 @@ pub struct InvoiceTotalsBreakdown {
 /// the table no longer stores them.
 #[derive(Clone, Debug)]
 pub struct InvoiceRecord {
+    pub vat_rate: f64,
+    pub taxable_amount: f64,
+    pub vat_amount: f64,
     pub created_by: Option<String>,
     pub urgent_charge: f64,
     pub collection_method: String,
@@ -717,4 +731,24 @@ pub struct InvoiceListItem {
     /// on a retail-only invoice, which has no orders.
     #[sqlx(json)]
     pub production_locations: Vec<String>,
+}
+
+/// Persisted prices and their inputs, loaded under the invoice lock before rebuilding.
+#[derive(Clone, Debug, sqlx::FromRow)]
+pub struct SavedOrderPricing {
+    pub id: Uuid,
+    pub material_source: String,
+    pub material_id: Option<Uuid>,
+    pub material_amount: f64,
+    pub is_urgent: bool,
+    pub thobe_type: Option<String>,
+    pub f_pocket: Option<String>,
+    pub s_pocket: Option<String>,
+    pub collar: Option<String>,
+    pub sleeve: Option<String>,
+    pub patti: Option<String>,
+    pub emd: Option<String>,
+    pub base_price: f64,
+    pub price: f64,
+    pub urgent_charge: f64,
 }

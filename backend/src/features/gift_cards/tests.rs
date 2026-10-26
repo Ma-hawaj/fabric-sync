@@ -527,7 +527,7 @@ async fn image_download_works_without_whatsapp_setup(pool: PgPool) {
 async fn invoice_creation_returns_cards_ready_for_individual_delivery(pool: PgPool) {
     let (url, mock) = mock_server().await;
     let state = test_support::state(pool.clone(), None, Some(url)).await;
-    let input = json!({"discountUnit":"amount","giftCards":[
+    let input = json!({"expectedVatRate":0.1,"discountUnit":"amount","giftCards":[
         {"amount":50,"boughtFor":"First recipient","recipientPhone":"33112233"},
         {"amount":75,"boughtFor":"Second recipient","recipientPhone":"33998877"}
     ]});
@@ -594,7 +594,7 @@ async fn invoice_creation_returns_cards_ready_for_individual_delivery(pool: PgPo
 #[sqlx::test]
 async fn invalid_invoice_recipient_rolls_back_all_cards_without_delivery(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
-    let input = json!({"discountUnit":"amount","giftCards":[
+    let input = json!({"expectedVatRate":0.1,"discountUnit":"amount","giftCards":[
         {"amount":50,"recipientPhone":"33112233"},
         {"amount":75,"recipientPhone":"invalid"}
     ]});
@@ -619,7 +619,7 @@ async fn invalid_invoice_recipient_rolls_back_all_cards_without_delivery(pool: P
 #[sqlx::test]
 async fn invoice_sales_generate_codes_and_keep_them_on_edit_until_delivery(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
-    let input = json!({"discountUnit":"amount","giftCards":[{"amount":50,"recipientPhone":"33112233","boughtFor":"Gift Recipient","code":"MANUAL"}]});
+    let input = json!({"expectedVatRate":0.1,"discountUnit":"amount","giftCards":[{"amount":50,"recipientPhone":"33112233","boughtFor":"Gift Recipient","code":"MANUAL"}]});
     let invoice = invoices::service::create_invoice(
         &state,
         serde_json::from_value(input.clone()).unwrap(),
@@ -684,7 +684,7 @@ async fn invoice_sales_generate_codes_and_keep_them_on_edit_until_delivery(pool:
 async fn invoice_edits_generate_new_codes_for_foreign_or_invalid_submissions(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
     let foreign = service::create_gift_card(&state, input()).await.unwrap();
-    let mut sale = json!({"discountUnit":"amount","giftCards":[
+    let mut sale = json!({"expectedVatRate":0.1,"discountUnit":"amount","giftCards":[
         {"amount":50,"recipientPhone":"33112233"},
         {"amount":75,"recipientPhone":"33998877"}
     ]});

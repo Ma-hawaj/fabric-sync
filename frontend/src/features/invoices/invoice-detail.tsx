@@ -1,3 +1,4 @@
+import { formatVatPercent } from './lib/invoice-pricing'
 import { NotificationDialog } from '@/features/notifications/notification-dialog'
 import { NotificationHistory } from '@/features/notifications/notification-history'
 import {
@@ -308,7 +309,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
             />
           )}
           <TotalRow
-            label={`VAT (${Math.round(detail.totals.vatRate * 100)}%)`}
+            label={`VAT (${formatVatPercent(detail.totals.vatRate)}%)`}
             value={detail.totals.vat}
           />
           {detail.totals.giftCardSales > 0 && (
