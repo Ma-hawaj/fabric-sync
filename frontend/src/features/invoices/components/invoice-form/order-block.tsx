@@ -6,6 +6,8 @@ import { Switch } from '@base-ui/react/switch'
 import { apiClient } from '@/lib/api'
 import {
   calculateGarmentPrice,
+  preservesOriginalOrderPricing,
+  pricingTier,
   calculateUrgentCharge,
 } from '../../lib/garment-pricing'
 import { usePricing } from '../../hooks/use-pricing'
@@ -237,6 +239,7 @@ export function OrderBlock({
     (state): InvoiceOrderDraft | undefined =>
       state.values.customers[customerIndex]?.orders[orderIndex],
   )
+  const preservePricing = !!draft && preservesOriginalOrderPricing(draft)
   const selectedId = draft?.materialId ?? ''
   const pickedMatches = pickedMaterial?.id === selectedId
   const hasPickedPrices =
@@ -249,7 +252,11 @@ export function OrderBlock({
     queryKey: ['materials', 'pricing', selectedId],
     queryFn: async () =>
       (await apiClient.get<Material>(`/materials/${selectedId}`)).data,
-    enabled: materialSource === 'shop' && !!selectedId && !hasPickedPrices,
+    enabled:
+      !preservePricing &&
+      materialSource === 'shop' &&
+      !!selectedId &&
+      !hasPickedPrices,
     staleTime: 5 * 60 * 1000,
     retry: false,
   })
@@ -257,11 +264,22 @@ export function OrderBlock({
     ? pickedMaterial
     : (currentMaterial ?? null)
   const { data: pricingRules } = usePricing()
-  const pricing =
-    draft &&
-    !designLoading &&
-    !designError &&
-    !(materialError && !hasPickedPrices)
+  const savedPricing = preservePricing ? draft.originalPricing : undefined
+  const pricing = savedPricing
+    ? {
+        tier:
+          draft?.materialSource === 'shop'
+            ? pricingTier(Number(draft.materialAmount))
+            : null,
+        base: savedPricing.basePrice,
+        designCost:
+          Math.round((savedPricing.price - savedPricing.basePrice) * 100) / 100,
+        total: savedPricing.price,
+      }
+    : draft &&
+        !designLoading &&
+        !designError &&
+        !(materialError && !hasPickedPrices)
       ? calculateGarmentPrice(
           draft,
           pricingMaterial,
@@ -270,9 +288,11 @@ export function OrderBlock({
         )
       : null
   const computedPrice = pricing?.total ?? ''
-  const computedUrgentCharge = draft?.isUrgent
-    ? calculateUrgentCharge(computedPrice, pricingRules?.urgentCharge)
-    : 0
+  const computedUrgentCharge = savedPricing
+    ? savedPricing.urgentCharge
+    : draft?.isUrgent
+      ? calculateUrgentCharge(computedPrice, pricingRules?.urgentCharge)
+      : 0
   React.useEffect(() => {
     if (draft && draft.urgentCharge !== computedUrgentCharge) {
       form.setFieldValue(
@@ -617,6 +637,11 @@ export function OrderBlock({
                 </Field>
               )}
             </form.Field>
+            {draft?.originalOrderId && !preservePricing && (
+              <p className="text-xs text-muted-foreground">
+                Current pricing applies.
+              </p>
+            )}
             <GrossVatHint gross={computedPrice} />
           </div>
           {draft?.isUrgent && (

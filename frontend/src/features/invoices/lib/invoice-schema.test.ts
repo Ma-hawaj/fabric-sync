@@ -42,6 +42,7 @@ function values(overrides: Partial<InvoiceFormValues> = {}): InvoiceFormValues {
     .slice(0, 10)
   return {
     ...createEmptyInvoiceForm(),
+    expectedVatRate: 0.1,
     targetDate: tomorrow,
     customers: [],
     ...overrides,

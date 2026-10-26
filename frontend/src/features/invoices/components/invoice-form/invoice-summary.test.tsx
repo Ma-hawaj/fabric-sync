@@ -75,6 +75,7 @@ function baseValues(
 ): InvoiceFormValues {
   return {
     ...createEmptyInvoiceForm(),
+    expectedVatRate: 0.1,
     targetDate: '2026-07-25',
     customers: [],
     ...overrides,
@@ -135,6 +136,26 @@ describe('InvoiceSummary', () => {
       expect(rowValue('Total incl. VAT')).toBe(
         `${CURRENCY} ${amount.toFixed(2)}`,
       )
+    },
+  )
+
+  it.each([
+    [0.15, '15', '14.35', '95.65'],
+    [0.125, '12.5', '12.22', '97.78'],
+  ] as const)(
+    'uses the saved invoice rate %s rather than a new configured rate',
+    (rate, percent, vat, withoutVat) => {
+      render(
+        <Harness
+          defaultValues={baseValues({
+            expectedVatRate: rate,
+            customers: [customerWithOrder(110)],
+          })}
+        />,
+      )
+      expect(rowValue(`VAT (${percent}%)`)).toBe(`${CURRENCY} ${vat}`)
+      expect(rowValue('Total without VAT')).toBe(`${CURRENCY} ${withoutVat}`)
+      expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 110.00`)
     },
   )
 

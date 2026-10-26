@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { ChevronDownIcon } from 'lucide-react'
 import { CURRENCY } from '@/lib/currency'
+import { formatVatPercent } from '../lib/invoice-pricing'
 
 const formatCurrency = (amount: number) => `${CURRENCY} ${amount.toFixed(2)}`
 
@@ -31,7 +32,7 @@ export function InvoicePriceSummary({
         </div>
         <div className="flex items-baseline justify-between gap-4">
           <dt className="text-muted-foreground">
-            VAT ({Math.round(vatRate * 100)}%)
+            VAT ({formatVatPercent(vatRate)}%)
           </dt>
           <dd className="shrink-0">{formatAmount(vat)}</dd>
         </div>

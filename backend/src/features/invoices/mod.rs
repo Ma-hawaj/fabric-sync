@@ -19,3 +19,6 @@ mod material_sale_tests;
 mod payment_idempotency_tests;
 #[cfg(test)]
 mod payment_response_tests;
+
+#[cfg(test)]
+mod vat_snapshot_tests;

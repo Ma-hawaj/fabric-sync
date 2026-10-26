@@ -36,6 +36,7 @@ export interface InvoiceEditMeasurement {
 }
 
 export interface InvoiceEditOrder {
+  originalOrderId: string
   isUrgent: boolean
   materialSource: 'shop' | 'customer'
   customerMaterialDescription: string | null
@@ -72,6 +73,7 @@ export interface InvoiceEditCustomer {
 }
 
 export interface InvoiceEditProductLine {
+  originalItemId: string
   productId: string | null
   productName: string
   quantity: number
@@ -83,6 +85,7 @@ export interface InvoiceEditProductLine {
 }
 
 export interface InvoiceEditMaterialLine {
+  originalItemId: string
   materialId: string | null
   materialName: string
   unit: string
@@ -108,6 +111,7 @@ export interface InvoiceEditRedemption {
 
 /** Shape of GET /invoices/:id/edit — the invoice as entered, not as printed. */
 export interface InvoiceEdit {
+  vatRate: number
   urgentCharge: number
   collectionMethod: 'delivery' | 'pickup'
   id: string

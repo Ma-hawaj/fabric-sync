@@ -118,6 +118,12 @@ it('sends direct material sales without customer or order payloads', () => {
   const payload = invoicePayload(values)
   expect(payload.customers).toEqual([])
   expect(payload.materials).toEqual([
-    { materialId: 'mat-1', branchId: 'loc-1', quantity: 2.5, unitPrice: 11 },
+    {
+      originalItemId: null,
+      materialId: 'mat-1',
+      branchId: 'loc-1',
+      quantity: 2.5,
+      unitPrice: 11,
+    },
   ])
 })

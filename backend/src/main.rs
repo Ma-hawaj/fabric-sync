@@ -45,6 +45,7 @@ async fn main() -> Result<(), error::AppError> {
 
 async fn run() -> Result<(), error::AppError> {
     let config = Config::from_env();
+    config.vat_rate().map_err(error::AppError::Config)?;
     // A misspelled TIMEZONE must refuse to boot rather than silently print
     // UTC on every document.
     config.timezone().map_err(error::AppError::Config)?;

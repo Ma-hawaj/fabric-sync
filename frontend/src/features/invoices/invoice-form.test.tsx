@@ -10,6 +10,11 @@ vi.mock('@tanstack/react-router', () => ({
 
 function renderPage() {
   const client = new QueryClient()
+  client.setQueryData(['pricing'], {
+    vatRate: 0.1,
+    urgentCharge: null,
+    customerMaterialBasePrice: null,
+  })
   return render(
     <QueryClientProvider client={client}>
       <InvoiceFormPage />
@@ -18,6 +23,32 @@ function renderPage() {
 }
 
 describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
+  it('highlights a missing payment method and clears the error after choosing one', async () => {
+    renderPage()
+    fireEvent.change(screen.getByLabelText('Amount'), {
+      target: { value: '10' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(
+      await screen.findByText('Pick how this payment was made.'),
+    ).toBeTruthy()
+    const method = screen.getByRole('combobox', { name: 'Method' })
+    expect(method.getAttribute('aria-invalid')).toBe('true')
+
+    fireEvent.click(method)
+    fireEvent.pointerDown(screen.getByRole('option', { name: 'Cash' }), {
+      pointerType: 'mouse',
+    })
+    fireEvent.click(screen.getByRole('option', { name: 'Cash' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('Pick how this payment was made.')).toBeNull()
+      expect(method.getAttribute('aria-invalid')).toBe('false')
+    })
+  })
+
   it('requires a target date for an urgent order and clears the error when that order becomes regular', async () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'Add Another Order' }))

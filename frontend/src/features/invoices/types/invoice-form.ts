@@ -15,6 +15,26 @@ export type NumberInput = number | ''
 
 export interface InvoiceOrderDraft {
   key: string
+  originalOrderId?: string
+  originalPricing?: {
+    inputs: Pick<
+      InvoiceOrderDraft,
+      | 'materialSource'
+      | 'materialId'
+      | 'materialAmount'
+      | 'thobeType'
+      | 'fPocket'
+      | 'sPocket'
+      | 'collar'
+      | 'sleeve'
+      | 'patti'
+      | 'emd'
+      | 'isUrgent'
+    >
+    basePrice: number
+    price: number
+    urgentCharge: number
+  }
 
   thobeType: string
   fPocket: string
@@ -58,6 +78,7 @@ export interface InvoiceCustomerDraft {
 // out, since products carry a list price the picker prefills.
 export interface InvoiceProductDraft {
   key: string
+  originalItemId?: string
   productId: string
   quantity: NumberInput
   unitPrice: NumberInput
@@ -67,6 +88,7 @@ export interface InvoiceProductDraft {
 // supply, so its amount is added to the total outside the VAT base.
 export interface InvoiceMaterialDraft {
   key: string
+  originalItemId?: string
   materialId: string
   branchId: string
   quantity: NumberInput
@@ -100,6 +122,7 @@ export interface PaymentDraft {
 }
 
 export interface InvoiceFormValues {
+  expectedVatRate: NumberInput
   collectionMethod: CollectionMethod
   // When the garment is promised for, if at all — blank means no committed
   // pickup. Required when any order is urgent. Staff-editable; the invoice's own
@@ -180,6 +203,7 @@ export function createEmptyCustomer(): InvoiceCustomerDraft {
 // can't be added to InvoiceFormValues without both picking it up.
 export function createEmptyInvoiceForm(): InvoiceFormValues {
   return {
+    expectedVatRate: '',
     // Blank: a target date is promised explicitly, not assumed. The form
     // never records when the invoice was opened (the backend stamps that
     // itself).

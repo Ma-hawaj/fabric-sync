@@ -65,7 +65,7 @@ pub async fn invoice(
             .await
             .unwrap();
     let invoice: Uuid = sqlx::query_scalar(
-        "INSERT INTO invoices(branch_id,total_price) VALUES($1,$2::float8) RETURNING id",
+        "INSERT INTO invoices(branch_id,total_price,vat_rate,taxable_amount,vat_amount) VALUES($1,$2::float8,0.10,round($2::numeric / 1.1,2),$2::numeric - round($2::numeric / 1.1,2)) RETURNING id",
     )
     .bind(pickup)
     .bind(count as f64 * 100.0)

@@ -310,7 +310,7 @@ pub(crate) async fn render_snapshot(
         amounts => minijinja::Value::from_serialize(formatted_amounts(&detail)),
         qr_svg => qr_svg(&payload)?,
         // The VAT rate is printed as a percentage, e.g. "10".
-        vat_percent => format!("{}", (detail.totals.vat_rate * 100.0).round()),
+        vat_percent => format_vat_percent(detail.totals.vat_rate),
         // Design chips and free-text notes per line, in the same order as
         // invoice.lines (see the doc comment at the top of the template).
         line_designs => minijinja::Value::from_serialize(&line_designs),
@@ -338,6 +338,13 @@ fn billed_customers(detail: &InvoiceDetail) -> Vec<&InvoiceParty> {
 
 /// Every amount on the document, written out once. Keyed by the name the
 /// template refers to it by.
+fn format_vat_percent(rate: f64) -> String {
+    format!("{:.4}", rate * 100.0)
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .to_string()
+}
+
 fn formatted_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<String, String> {
     let totals = &detail.totals;
     let mut amounts = std::collections::BTreeMap::new();
@@ -396,6 +403,15 @@ fn formatted_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<Strin
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn vat_percent_keeps_fractional_rates() {
+        assert_eq!(super::format_vat_percent(0.1), "10");
+        assert_eq!(super::format_vat_percent(0.125), "12.5");
+        assert_eq!(super::format_vat_percent(0.123456), "12.3456");
+        assert_eq!(super::format_vat_percent(0.0), "0");
+        assert_eq!(super::format_vat_percent(1.0), "100");
+    }
+
     use super::*;
     use crate::features::invoices::types::OrderDesignValues;
 

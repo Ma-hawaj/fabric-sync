@@ -46,6 +46,12 @@ impl AppState {
         &self.db
     }
 
+    pub fn vat_rate(&self) -> Result<f64, crate::error::AppError> {
+        self.config
+            .vat_rate()
+            .map_err(crate::error::AppError::Config)
+    }
+
     pub fn urgent_charge_rule(
         &self,
     ) -> Result<Option<crate::features::pricing::types::UrgentChargeRule>, crate::error::AppError>
