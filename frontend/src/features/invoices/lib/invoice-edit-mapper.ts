@@ -143,8 +143,28 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
         )
       }
 
+      const inputs = {
+        materialSource: line.materialSource,
+        materialId: line.materialId ?? '',
+        materialAmount: line.materialAmount,
+        thobeType: nullToBlank(line.thobeType),
+        fPocket: nullToBlank(line.fPocket),
+        sPocket: nullToBlank(line.sPocket),
+        collar: nullToBlank(line.collar),
+        sleeve: nullToBlank(line.sleeve),
+        patti: nullToBlank(line.patti),
+        emd: nullToBlank(line.emd),
+        isUrgent: line.isUrgent,
+      }
       return {
         key: crypto.randomUUID(),
+        originalOrderId: line.originalOrderId,
+        originalPricing: {
+          inputs,
+          basePrice: line.basePrice,
+          price: line.price,
+          urgentCharge: line.urgentCharge,
+        },
         thobeType: nullToBlank(line.thobeType),
         fPocket: nullToBlank(line.fPocket),
         sPocket: nullToBlank(line.sPocket),
@@ -213,6 +233,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
 
     return {
       key: crypto.randomUUID(),
+      originalItemId: line.originalItemId,
       productId: line.productId ?? '',
       quantity: line.quantity,
       unitPrice: line.unitPrice,
@@ -249,6 +270,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
       seeds.locationLabels.set(line.branchId, line.branchName ?? '')
     return {
       key: crypto.randomUUID(),
+      originalItemId: line.originalItemId,
       materialId: line.materialId ?? '',
       branchId: line.branchId ?? '',
       quantity: line.quantity,
@@ -282,6 +304,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
   }))
 
   const values: InvoiceFormValues = {
+    expectedVatRate: edit.vatRate,
     targetDate: edit.targetDate ?? '',
     collectionMethod: edit.collectionMethod,
     receivingBranch: edit.branchId ?? '',

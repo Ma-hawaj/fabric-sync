@@ -28,6 +28,7 @@ function blankToNull(value: string): string | null {
 
 function orderPayload(order: InvoiceOrderDraft) {
   return {
+    originalOrderId: order.originalOrderId ?? null,
     materialSource: order.materialSource,
     materialId: order.materialSource === 'shop' ? order.materialId : null,
     customerMaterialDescription:
@@ -69,6 +70,7 @@ function customerPayload(customer: InvoiceCustomerDraft) {
 // since the backend records it per line for the stock it came off.
 function productPayload(line: InvoiceProductDraft, branchId: string) {
   return {
+    originalItemId: line.originalItemId ?? null,
     productId: line.productId,
     quantity: numberOrZero(line.quantity),
     unitPrice: numberOrZero(line.unitPrice),
@@ -97,6 +99,7 @@ function redemptionPayload(redemption: GiftCardRedemptionDraft) {
 // and the backend rebuilds the invoice from it.
 export function invoicePayload(values: InvoiceFormValues) {
   return {
+    expectedVatRate: values.expectedVatRate,
     targetDate: values.targetDate || null,
     collectionMethod: values.collectionMethod,
     branchId: values.receivingBranch || null,
@@ -115,6 +118,7 @@ export function invoicePayload(values: InvoiceFormValues) {
     customerId: values.customerId || null,
     customers: values.customers.map(customerPayload),
     materials: values.materials.map((line) => ({
+      originalItemId: line.originalItemId ?? null,
       materialId: line.materialId,
       branchId: line.branchId,
       quantity: numberOrZero(line.quantity),

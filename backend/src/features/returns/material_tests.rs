@@ -39,7 +39,7 @@ async fn sale(pool: &PgPool, mixed: bool, paid: bool) -> Sale {
         .execute(pool)
         .await
         .unwrap();
-    let mut input = json!({"discountUnit":"percent","discount":if mixed {10} else {0},
+    let mut input = json!({"expectedVatRate":0.1,"discountUnit":"percent","discount":if mixed {10} else {0},
         "materials":[{"materialId":material,"branchId":origin,"quantity":2.5,"unitPrice":11}]});
     if mixed {
         let product: Uuid = sqlx::query_scalar(
@@ -151,7 +151,7 @@ async fn mixed_material_and_product_returns_allocate_discount_and_restock_fracti
         after.returns.iter().map(|entry| entry.amount).sum::<f64>(),
         51.75
     );
-    let input: CreateInvoiceInput = serde_json::from_value(json!({"discountUnit":"amount","materials":[{"materialId":sale.material,"branchId":sale.origin,"quantity":1,"unitPrice":11}]})).unwrap();
+    let input: CreateInvoiceInput = serde_json::from_value(json!({"expectedVatRate":0.1,"discountUnit":"amount","materials":[{"materialId":sale.material,"branchId":sale.origin,"quantity":1,"unitPrice":11}]})).unwrap();
     assert!(invoices::update_invoice(&sale.state, sale.invoice, input)
         .await
         .is_err());
@@ -268,7 +268,7 @@ async fn cancelling_an_urgent_order_does_not_consume_the_material_sale_credit(po
     .fetch_one(&pool)
     .await
     .unwrap();
-    let input = json!({"targetDate":"2099-01-01","discount":10,"discountUnit":"percent",
+    let input = json!({"targetDate":"2099-01-01","discount":10,"expectedVatRate":0.1,"discountUnit":"percent",
         "materials":[{"materialId":sale.material,"branchId":sale.origin,"quantity":2.5,"unitPrice":11}],
         "customers":[{"existingCustomerId":customer,"measurement":{"date":"2026-10-25","type":"body","fit":"medium"},
             "orders":[{"materialId":sale.material,"productionLocationId":sale.origin,"materialAmount":2,"isUrgent":true}]}]});

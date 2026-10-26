@@ -8,6 +8,7 @@ export function usePricing() {
     queryFn: async () =>
       (
         await apiClient.get<{
+          vatRate: number
           urgentCharge: UrgentChargeRule | null
           customerMaterialBasePrice: number | null
         }>('/pricing')

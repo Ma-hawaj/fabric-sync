@@ -88,3 +88,17 @@ export function calculateGarmentPrice(
   const total = Math.round((base + designCost) * 100) / 100
   return isMoney(total) ? { tier, base, designCost, total } : null
 }
+
+// Compare only inputs that determine the automatic charge. Notes, measurements,
+// descriptions and stock locations can change without repricing the order.
+export function preservesOriginalOrderPricing(
+  order: InvoiceOrderDraft,
+): boolean {
+  if (!order.originalOrderId || !order.originalPricing) return false
+  const original = order.originalPricing.inputs
+  return Object.keys(original).every((field) => {
+    const key = field as keyof typeof original
+    if (key === 'materialId' && order.materialSource === 'customer') return true
+    return order[key] === original[key]
+  })
+}
