@@ -344,7 +344,7 @@ it('adds direct material lines after removing the tailoring customer block', asy
       'Pick an existing customer or switch to "+ New Customer".',
     ),
   ).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: 'Remove material' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Remove material 1' }))
   expect(screen.queryByLabelText('Material')).toBeNull()
 })
 

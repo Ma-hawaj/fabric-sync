@@ -29,8 +29,8 @@ export function InvoiceLineItem({
           variant="ghost"
           size="icon-lg"
           className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          aria-label={`Remove ${kind}`}
-          title={`Remove ${kind}`}
+          aria-label={`Remove ${title.toLowerCase()}`}
+          title={`Remove ${title.toLowerCase()}`}
           onClick={onRemove}
         >
           <XIcon className="size-4" />
