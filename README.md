@@ -268,3 +268,10 @@ Material details are read-only. Use the inventory row actions to edit a material
 transfers a quantity from one location to another in one transaction; it refuses
 insufficient source stock and inactive or non-stock-holding destinations. Moves
 keep total material stock unchanged and can create a destination stock row.
+
+### Application roles
+
+Role-based access is enforced by the API and frontend guards. Configure the five
+Zitadel project roles and matching project/organization IDs before running the
+application; see [roles and access](docs/roles.md) for setup, permissions, and form
+lookup dependencies.

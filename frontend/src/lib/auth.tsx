@@ -5,12 +5,16 @@ import {
   useAuth as useOidcAuth,
 } from 'react-oidc-context'
 import type { User } from 'oidc-client-ts'
+import { rolesFromProfile } from './permissions'
+import type { Role } from './permissions'
 import { oidcConfigError, oidcUserManager } from './oidc'
 
 export type AuthUser = {
+  id: string
   name: string
   email: string
   avatarUrl?: string
+  roles: Role[]
 }
 
 export type AuthState = {
@@ -42,6 +46,7 @@ function AuthBridge({ children }: { children: ReactNode }) {
       isLoading: configError ? false : oidc.isLoading,
       user: profile
         ? {
+            id: profile.sub,
             name:
               profile.name ??
               profile.preferred_username ??
@@ -49,6 +54,7 @@ function AuthBridge({ children }: { children: ReactNode }) {
               'Unknown',
             email: profile.email ?? '',
             avatarUrl: profile.picture,
+            roles: rolesFromProfile(profile),
           }
         : null,
       error: configError ? new Error(configError) : (oidc.error ?? null),

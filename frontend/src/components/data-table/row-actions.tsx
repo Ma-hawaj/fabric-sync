@@ -1,3 +1,5 @@
+import { useAuth } from '@/lib/auth'
+import { canAccess } from '@/lib/permissions'
 import type { ComponentType } from 'react'
 import { MoreHorizontalIcon } from 'lucide-react'
 import type { Menu } from '@base-ui/react/menu'
@@ -11,6 +13,7 @@ import {
 import { cn } from '@/lib/utils'
 
 export interface RowActionItem {
+  permission?: { method: string; path: string }
   label: string
   icon?: ComponentType<{ className?: string }>
   onClick?: () => void
@@ -29,6 +32,13 @@ export function RowActions({
   className?: string
   align?: 'start' | 'end' | 'center'
 }) {
+  const { user } = useAuth()
+  const allowedItems = items.filter(
+    (item) =>
+      !item.permission ||
+      canAccess(user, item.permission.method, item.permission.path),
+  )
+  if (!allowedItems.length) return null
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -41,7 +51,7 @@ export function RowActions({
         <MoreHorizontalIcon className="h-4 w-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="w-44">
-        {items.map((item, index) => {
+        {allowedItems.map((item, index) => {
           const Icon = item.icon
           return (
             <div key={index}>

@@ -1,3 +1,4 @@
+import { PermissionGuard } from '@/components/permission-guard'
 import { Link } from '@tanstack/react-router'
 import { PencilIcon, PowerIcon } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -48,13 +49,19 @@ export const getOrderStageColumns = (
       <DataTableColumnHeader column={column} label="Stage" />
     ),
     cell: ({ row }) => (
-      <Link
-        to="/order-stages/$stageId/edit"
-        params={{ stageId: row.original.id }}
-        className="font-medium text-info hover:underline"
+      <PermissionGuard
+        method="PATCH"
+        path="/order-stages/:id"
+        fallback={<span>{row.getValue('name')}</span>}
       >
-        {row.getValue('name')}
-      </Link>
+        <Link
+          to="/order-stages/$stageId/edit"
+          params={{ stageId: row.original.id }}
+          className="font-medium text-info hover:underline"
+        >
+          {row.getValue('name')}
+        </Link>
+      </PermissionGuard>
     ),
     enableSorting: true,
     enableColumnFilter: true,
@@ -129,26 +136,28 @@ export const getOrderStageColumns = (
     cell: ({ row }) => {
       const stage = row.original
       return (
-        <RowActions
-          items={[
-            {
-              label: 'Edit',
-              icon: PencilIcon,
-              render: (
-                <Link
-                  to="/order-stages/$stageId/edit"
-                  params={{ stageId: stage.id }}
-                />
-              ),
-            },
-            {
-              label: stage.isActive ? 'Retire' : 'Restore',
-              icon: PowerIcon,
-              disabled: isToggling,
-              onClick: () => onToggleActive(stage),
-            },
-          ]}
-        />
+        <PermissionGuard method="PATCH" path="/order-stages/:id">
+          <RowActions
+            items={[
+              {
+                label: 'Edit',
+                icon: PencilIcon,
+                render: (
+                  <Link
+                    to="/order-stages/$stageId/edit"
+                    params={{ stageId: stage.id }}
+                  />
+                ),
+              },
+              {
+                label: stage.isActive ? 'Retire' : 'Restore',
+                icon: PowerIcon,
+                disabled: isToggling,
+                onClick: () => onToggleActive(stage),
+              },
+            ]}
+          />
+        </PermissionGuard>
       )
     },
   },

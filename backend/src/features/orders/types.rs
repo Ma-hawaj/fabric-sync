@@ -325,7 +325,7 @@ pub struct CollectOrderInput {
 /// Only the production location is editable on an order; everything else is
 /// fixed by the invoice that created it.
 #[derive(Clone, Copy, Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateOrderInput {
     pub production_location_id: Option<Uuid>,
 }
@@ -360,7 +360,7 @@ pub struct CreateRepairInput {
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateRepairInput {
     pub reason: Option<String>,
     pub charge: Option<f64>,

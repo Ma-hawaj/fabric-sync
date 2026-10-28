@@ -12,11 +12,17 @@ export function oidcConfigError(): string | null {
   if (!import.meta.env.VITE_OIDC_CLIENT_ID) {
     return 'VITE_OIDC_CLIENT_ID is not set. Create an SPA client in the identity provider console and copy its client ID into frontend/.env (see README "Local Infrastructure").'
   }
+  if (
+    !import.meta.env.VITE_ZITADEL_PROJECT_ID ||
+    !import.meta.env.VITE_ZITADEL_ORGANIZATION_ID
+  ) {
+    return 'VITE_ZITADEL_PROJECT_ID and VITE_ZITADEL_ORGANIZATION_ID are required for role authorization.'
+  }
   return null
 }
 
-// Generic/OIDC-standard env vars — swapping the IdP (Zitadel locally,
-// Keycloak, etc.) is a config change only, nothing here is provider-specific.
+// OIDC login requests the configured Zitadel project audience and role claims
+// used by both the frontend guards and backend authorization.
 export const oidcUserManager = new UserManager({
   authority: import.meta.env.VITE_OIDC_AUTHORITY,
   client_id: import.meta.env.VITE_OIDC_CLIENT_ID,
@@ -25,7 +31,11 @@ export const oidcUserManager = new UserManager({
   post_logout_redirect_uri:
     import.meta.env.VITE_OIDC_POST_LOGOUT_REDIRECT_URI ??
     `${window.location.origin}/`,
-  scope: import.meta.env.VITE_OIDC_SCOPE ?? 'openid profile email',
+  scope: [
+    import.meta.env.VITE_OIDC_SCOPE ?? 'openid profile email',
+    `urn:zitadel:iam:org:project:id:${import.meta.env.VITE_ZITADEL_PROJECT_ID}:aud`,
+    'urn:zitadel:iam:org:projects:roles',
+  ].join(' '),
   // oidc-client-ts defaults this to false, so `profile` would otherwise only
   // reflect whatever claims the IdP chose to embed in the ID token itself
   // (Zitadel, notably, omits name/email there by default) rather than

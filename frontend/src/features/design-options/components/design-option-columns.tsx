@@ -1,3 +1,4 @@
+import { PermissionGuard } from '@/components/permission-guard'
 import { Link } from '@tanstack/react-router'
 import { PencilIcon, PowerIcon } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -88,13 +89,19 @@ export const getDesignOptionColumns = (
       <DataTableColumnHeader column={column} label="Label" />
     ),
     cell: ({ row }) => (
-      <Link
-        to="/design-options/$designOptionId/edit"
-        params={{ designOptionId: row.original.id }}
-        className="font-medium text-info hover:underline"
+      <PermissionGuard
+        method="PATCH"
+        path="/design-options/:id"
+        fallback={<span>{row.getValue('label')}</span>}
       >
-        {row.getValue('label')}
-      </Link>
+        <Link
+          to="/design-options/$designOptionId/edit"
+          params={{ designOptionId: row.original.id }}
+          className="font-medium text-info hover:underline"
+        >
+          {row.getValue('label')}
+        </Link>
+      </PermissionGuard>
     ),
     enableSorting: true,
     enableColumnFilter: true,
@@ -178,26 +185,28 @@ export const getDesignOptionColumns = (
     cell: ({ row }) => {
       const option = row.original
       return (
-        <RowActions
-          items={[
-            {
-              label: 'Edit',
-              icon: PencilIcon,
-              render: (
-                <Link
-                  to="/design-options/$designOptionId/edit"
-                  params={{ designOptionId: option.id }}
-                />
-              ),
-            },
-            {
-              label: option.isActive ? 'Retire' : 'Restore',
-              icon: PowerIcon,
-              disabled: isToggling,
-              onClick: () => onToggleActive(option),
-            },
-          ]}
-        />
+        <PermissionGuard method="PATCH" path="/design-options/:id">
+          <RowActions
+            items={[
+              {
+                label: 'Edit',
+                icon: PencilIcon,
+                render: (
+                  <Link
+                    to="/design-options/$designOptionId/edit"
+                    params={{ designOptionId: option.id }}
+                  />
+                ),
+              },
+              {
+                label: option.isActive ? 'Retire' : 'Restore',
+                icon: PowerIcon,
+                disabled: isToggling,
+                onClick: () => onToggleActive(option),
+              },
+            ]}
+          />
+        </PermissionGuard>
       )
     },
   },

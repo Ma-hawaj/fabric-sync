@@ -11,6 +11,7 @@ on:
       # backend/src/features/invoices/designs.rs) — asset or generator changes
       # rebuild it.
       - "frontend/public/designs/**"
+      - "frontend/src/lib/access-policy.json"
       - "scripts/fabric-designs/**"
   pull_request:
     branches: [main]
@@ -18,6 +19,7 @@ on:
       - "backend/**"
       - ".github/workflows/backend.yml"
       - "frontend/public/designs/**"
+      - "frontend/src/lib/access-policy.json"
       - "scripts/fabric-designs/**"
 
 concurrency:

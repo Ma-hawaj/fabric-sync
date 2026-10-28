@@ -1,5 +1,6 @@
 mod app;
 mod auth;
+mod authorization;
 mod config;
 mod document;
 mod error;

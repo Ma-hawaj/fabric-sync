@@ -109,10 +109,11 @@ pub async fn create_repair(
 
 pub async fn update_repair(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path((order_id, repair_id)): Path<(Uuid, Uuid)>,
     Json(input): Json<UpdateRepairInput>,
 ) -> Result<Json<OrderListItem>, AppError> {
+    crate::authorization::authorize_repair_update(user.roles(), &input)?;
     Ok(Json(
         service::update_repair(&state, order_id, repair_id, input).await?,
     ))

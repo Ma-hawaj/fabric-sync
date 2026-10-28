@@ -84,7 +84,10 @@ services:
       # Only set if Zitadel uses a non-standard introspection endpoint —
       # otherwise discovery advertises it.
       OAUTH_INTROSPECTION_URL: ${OAUTH_INTROSPECTION_URL:-}
-      # Leave unset unless verified (see backend/.env.example).
+      # Required project and grant organization for application roles.
+      ZITADEL_PROJECT_ID: ${ZITADEL_PROJECT_ID:?set ZITADEL_PROJECT_ID}
+      ZITADEL_ORGANIZATION_ID: ${ZITADEL_ORGANIZATION_ID:?set ZITADEL_ORGANIZATION_ID}
+      # Optional additional audience check (see backend/.env.example).
       OAUTH_RESOURCE_AUDIENCE: ${OAUTH_RESOURCE_AUDIENCE:-}
       # Dedicated Zitadel machine user backing GET /users (see
       # backend/.env.example). Required — the app refuses to boot without both.

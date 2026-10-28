@@ -10,6 +10,8 @@ use uuid::Uuid;
 
 async fn state(pool: &PgPool, rate: &str, urgency: &str) -> AppState {
     let mut config = Config::from_env();
+    config.zitadel_project_id = Some("test-project".into());
+    config.zitadel_organization_id = Some("test-org".into());
     config.vat_rate = rate.into();
     config.urgent_charge_amount = Some(urgency.into());
     config.urgent_charge_unit = "amount".into();

@@ -1,3 +1,4 @@
+import { PermissionGuard } from '@/components/permission-guard'
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
@@ -74,10 +75,12 @@ export function LocationsPage() {
             Branches, stock locations and capabilities.
           </p>
         </div>
-        <Button nativeButton={false} render={<Link to="/locations/new" />}>
-          <PlusIcon className="h-4 w-4" />
-          Add Location
-        </Button>
+        <PermissionGuard method="POST" path="/locations">
+          <Button nativeButton={false} render={<Link to="/locations/new" />}>
+            <PlusIcon className="h-4 w-4" />
+            Add Location
+          </Button>
+        </PermissionGuard>
       </div>
 
       <DataTable isLoading={isLoading} table={table}>

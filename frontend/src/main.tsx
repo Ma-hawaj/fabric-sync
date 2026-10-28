@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider } from '@tanstack/react-router'
 import { AuthProvider, useAuth } from '@/lib/auth'
@@ -33,12 +34,20 @@ function AuthErrorScreen({ error }: { error: Error }) {
 
 function App() {
   const auth = useAuth()
+  const identity = JSON.stringify([auth.user?.id, auth.user?.roles])
+  const [cacheIdentity, setCacheIdentity] = useState(identity)
+  useEffect(() => {
+    if (cacheIdentity !== identity) {
+      queryClient.clear()
+      setCacheIdentity(identity)
+    }
+  }, [identity, cacheIdentity])
 
   if (auth.error) {
     return <AuthErrorScreen error={auth.error} />
   }
 
-  if (auth.isLoading) {
+  if (auth.isLoading || cacheIdentity !== identity) {
     return null
   }
 

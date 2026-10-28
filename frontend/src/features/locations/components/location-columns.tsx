@@ -1,3 +1,4 @@
+import { PermissionGuard } from '@/components/permission-guard'
 import { Link } from '@tanstack/react-router'
 import { PencilIcon, PowerIcon } from 'lucide-react'
 import { defineColumns } from '@/lib/define-columns'
@@ -28,13 +29,19 @@ export const getLocationColumns = (
         <DataTableColumnHeader column={column} label="Name" />
       ),
       cell: ({ row }) => (
-        <Link
-          to="/locations/$locationId/edit"
-          params={{ locationId: row.original.id }}
-          className="font-medium text-info hover:underline"
+        <PermissionGuard
+          method="PATCH"
+          path="/locations/:id"
+          fallback={<span>{row.getValue('name')}</span>}
         >
-          {row.getValue('name')}
-        </Link>
+          <Link
+            to="/locations/$locationId/edit"
+            params={{ locationId: row.original.id }}
+            className="font-medium text-info hover:underline"
+          >
+            {row.getValue('name')}
+          </Link>
+        </PermissionGuard>
       ),
       enableSorting: true,
       enableColumnFilter: true,
@@ -107,26 +114,28 @@ export const getLocationColumns = (
       cell: ({ row }) => {
         const location = row.original
         return (
-          <RowActions
-            items={[
-              {
-                label: 'Edit',
-                icon: PencilIcon,
-                render: (
-                  <Link
-                    to="/locations/$locationId/edit"
-                    params={{ locationId: location.id }}
-                  />
-                ),
-              },
-              {
-                label: location.isActive ? 'Deactivate' : 'Activate',
-                icon: PowerIcon,
-                disabled: isToggling,
-                onClick: () => onToggleActive(location),
-              },
-            ]}
-          />
+          <PermissionGuard method="PATCH" path="/locations/:id">
+            <RowActions
+              items={[
+                {
+                  label: 'Edit',
+                  icon: PencilIcon,
+                  render: (
+                    <Link
+                      to="/locations/$locationId/edit"
+                      params={{ locationId: location.id }}
+                    />
+                  ),
+                },
+                {
+                  label: location.isActive ? 'Deactivate' : 'Activate',
+                  icon: PowerIcon,
+                  disabled: isToggling,
+                  onClick: () => onToggleActive(location),
+                },
+              ]}
+            />
+          </PermissionGuard>
         )
       },
     },

@@ -1,3 +1,5 @@
+import { canVisit, homePath } from '@/lib/permissions'
+import { PermissionGuard } from '@/components/permission-guard'
 import { Link, useLocation } from '@tanstack/react-router'
 import {
   Sidebar,
@@ -129,7 +131,9 @@ function UserMenu() {
             <ThemeMenuItems />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        <DefaultLocationMenu />
+        <PermissionGuard method="GET" path="/locations">
+          <DefaultLocationMenu />
+        </PermissionGuard>
         {accountUrl && (
           <DropdownMenuItem
             render={
@@ -152,13 +156,14 @@ function UserMenu() {
 
 export function AppSidebar() {
   const { pathname } = useLocation()
+  const { user } = useAuth()
 
   return (
     <Sidebar collapsible="icon" variant="inset">
       <SidebarContent>
         <SidebarHeader className="px-2">
           <Link
-            to="/invoices"
+            to={homePath(user)}
             className="flex items-center gap-2 rounded-xl px-1 py-1.5 group-data-[collapsible=icon]:justify-center"
           >
             <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
@@ -176,21 +181,23 @@ export function AppSidebar() {
         </SidebarHeader>
         <SidebarSeparator />
         <SidebarMenu>
-          {navItems.map(({ to, label, icon: Icon }) => {
-            const isActive = pathname === to || pathname.startsWith(`${to}/`)
+          {navItems
+            .filter(({ to }) => canVisit(user, to))
+            .map(({ to, label, icon: Icon }) => {
+              const isActive = pathname === to || pathname.startsWith(`${to}/`)
 
-            return (
-              <SidebarMenuItem key={to}>
-                <SidebarMenuButton
-                  isActive={isActive}
-                  render={<Link to={to} />}
-                >
-                  <Icon />
-                  <span>{label}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            )
-          })}
+              return (
+                <SidebarMenuItem key={to}>
+                  <SidebarMenuButton
+                    isActive={isActive}
+                    render={<Link to={to} />}
+                  >
+                    <Icon />
+                    <span>{label}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )
+            })}
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>

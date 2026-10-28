@@ -1,3 +1,4 @@
+import { PermissionGuard } from '@/components/permission-guard'
 import { useMemo, useState } from 'react'
 import { PlusIcon } from 'lucide-react'
 import { useDataTable } from '@/hooks/use-data-table'
@@ -83,15 +84,17 @@ export function InventoryPage() {
             Material availability across all locations.
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setAddStockMaterial(null)
-            setAddStockOpen(true)
-          }}
-        >
-          <PlusIcon className="h-4 w-4" />
-          Add Stock
-        </Button>
+        <PermissionGuard method="POST" path="/materials">
+          <Button
+            onClick={() => {
+              setAddStockMaterial(null)
+              setAddStockOpen(true)
+            }}
+          >
+            <PlusIcon className="h-4 w-4" />
+            Add Stock
+          </Button>
+        </PermissionGuard>
       </div>
 
       <DataTable isLoading={isLoading} table={table}>

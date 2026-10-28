@@ -1,3 +1,5 @@
+import { useAuth } from '@/lib/auth'
+import { canAccess } from '@/lib/permissions'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -63,12 +65,18 @@ export function ReadinessControls({
   readyAt,
   readyBy,
 }: Props) {
+  const { user } = useAuth()
+  const canNotify = canAccess(user, 'POST', '/invoices/:id/notifications')
   const [open, setOpen] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const [reason, setReason] = useState('')
   const [notify, setNotify] = useState(false)
   const reopening = scope === 'orders' && status === 'ready'
   const mutation = useChangeReadiness()
+  if (
+    !canAccess(user, 'POST', `/${scope}/:id/${reopening ? 'reopen' : 'ready'}`)
+  )
+    return null
   if (status === 'collected' || status === 'not_applicable') return null
   const notificationDialog = (
     <NotificationDialog
@@ -78,6 +86,7 @@ export function ReadinessControls({
       onClose={() => setNotify(false)}
     />
   )
+  if (scope === 'invoices' && status === 'ready' && !canNotify) return null
   if (scope === 'invoices' && status === 'ready')
     return (
       <>
@@ -182,7 +191,7 @@ export function ReadinessControls({
                     onSuccess: (result) => {
                       setOpen(false)
                       setConfirmed(false)
-                      if (result.becameReady) setNotify(true)
+                      if (result.becameReady && canNotify) setNotify(true)
                     },
                   },
                 )
