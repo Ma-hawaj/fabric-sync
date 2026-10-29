@@ -81,7 +81,7 @@ describe('InvoiceEditPage', () => {
   it('offers an updated-invoice preview after saving and keeps the edit when skipped', async () => {
     save.mockResolvedValue({ id: EDIT_FIXTURE.id, totalPrice: 140 })
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save invoice' }))
     expect(await screen.findByText('invoice_updated')).toBeTruthy()
     expect(save).toHaveBeenCalledOnce()
     expect(navigate).not.toHaveBeenCalled()
@@ -94,7 +94,7 @@ describe('InvoiceEditPage', () => {
   it('keeps a failed edit open without offering to resend it', async () => {
     save.mockRejectedValue(new Error('Save failed'))
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save invoice' }))
     await waitFor(() => expect(save).toHaveBeenCalledOnce())
     expect(screen.queryByText('invoice_updated')).toBeNull()
     expect(navigate).not.toHaveBeenCalled()
@@ -112,7 +112,7 @@ describe('InvoiceEditPage', () => {
     expect(
       screen.getByRole('textbox', { name: 'Recipient phone' }),
     ).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Save invoice' })).toBeTruthy()
   })
 
   it('waits for the invoice rather than rendering an empty form', () => {
@@ -124,6 +124,6 @@ describe('InvoiceEditPage', () => {
     )
 
     expect(screen.queryByText('Loading invoice...')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Save invoice' })).toBeNull()
   })
 })

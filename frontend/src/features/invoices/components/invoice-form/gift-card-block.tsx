@@ -1,5 +1,3 @@
-import { XIcon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import {
   DateField,
   NumberField,
@@ -8,6 +6,7 @@ import {
 } from '@/components/form/fields'
 import { CURRENCY } from '@/lib/currency'
 import type { InvoiceFormApi } from '../../types/invoice-form'
+import { InvoiceLineItem } from './invoice-line-item'
 
 interface GiftCardBlockProps {
   form: InvoiceFormApi
@@ -23,8 +22,8 @@ export function GiftCardBlock({
   const base = `giftCards[${lineIndex}]`
 
   return (
-    <div className="flex items-start gap-3">
-      <div className="grid flex-1 gap-3 sm:grid-cols-2">
+    <InvoiceLineItem kind="gift card" lineIndex={lineIndex} onRemove={onRemove}>
+      <div className="grid min-w-0 gap-3 @md/invoice-line:grid-cols-2">
         <TextField
           form={form}
           name={`${base}.boughtFor`}
@@ -56,7 +55,7 @@ export function GiftCardBlock({
           selector={(state) => state.values.giftCards[lineIndex].code}
         >
           {(code) => (
-            <p className="text-xs text-muted-foreground sm:col-span-2">
+            <p className="text-xs text-muted-foreground @md/invoice-line:col-span-2">
               {code
                 ? `Code: ${code}`
                 : 'A unique code is generated automatically when you save.'}{' '}
@@ -65,17 +64,6 @@ export function GiftCardBlock({
           )}
         </form.Subscribe>
       </div>
-
-      <Button
-        variant="ghost"
-        size="icon"
-        type="button"
-        onClick={onRemove}
-        className="mt-6"
-        aria-label="Remove gift card"
-      >
-        <XIcon className="h-3.5 w-3.5" />
-      </Button>
-    </div>
+    </InvoiceLineItem>
   )
 }

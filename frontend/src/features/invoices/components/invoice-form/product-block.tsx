@@ -1,6 +1,4 @@
 import { useState } from 'react'
-import { XIcon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { NumberField } from '@/components/form/fields'
@@ -12,6 +10,7 @@ import type { Product } from '@/features/products/types/product'
 import type { PickerFilter } from '@/lib/async-combobox'
 import { CURRENCY } from '@/lib/currency'
 import { GrossVatHint } from './gross-vat-hint'
+import { InvoiceLineItem } from './invoice-line-item'
 import type { InvoiceFormApi } from '../../types/invoice-form'
 
 // Products come off the shelf only while they are on sale. A single search
@@ -62,94 +61,85 @@ export function ProductBlock({
   )
 
   return (
-    <div className="flex items-start gap-3">
-      <form.Field name={`${base}.productId` as never}>
-        {(field: any) => {
-          const available = picked ? productStockAt(picked, branchId) : null
+    <InvoiceLineItem kind="product" lineIndex={lineIndex} onRemove={onRemove}>
+      <div className="grid min-w-0 grid-cols-2 items-start gap-3 @2xl/invoice-line:grid-cols-[minmax(0,1fr)_6rem_12rem]">
+        <form.Field name={`${base}.productId` as never}>
+          {(field: any) => {
+            const available = picked ? productStockAt(picked, branchId) : null
 
-          return (
-            <Field
-              data-invalid={field.state.meta.errors.length > 0}
-              className="flex-1"
-            >
-              <FieldLabel htmlFor={field.name}>Product</FieldLabel>
-              <AsyncCombobox<Product>
-                id={field.name}
-                endpoint="/products"
-                queryKey="invoice-product"
-                searchField="name"
-                filters={ACTIVE_PRODUCT_FILTER}
-                toOption={(product) => ({
-                  value: product.id,
-                  label: productOptionLabel(product),
-                })}
-                getValueLabel={productLabelForId}
-                value={field.state.value || null}
-                onValueChange={(id) => field.handleChange(id ?? '')}
-                onSelectRow={(product) => {
-                  setPicked(product)
-                  onProductPicked(product)
-                  // Prefill the price from the catalog; staff can still
-                  // override it on the line.
-                  form.setFieldValue(
-                    `${base}.unitPrice` as never,
-                    (product?.unitPrice ?? '') as never,
-                  )
-                }}
-                placeholder="Search product by name..."
-                emptyMessage="No products found."
-              />
-              {picked && branchId && (
-                <p className="text-xs text-muted-foreground">
-                  Available: {available} at {branchName}
-                </p>
-              )}
-              <FieldError errors={field.state.meta.errors} />
-            </Field>
-          )
-        }}
-      </form.Field>
-
-      <div className="w-28">
-        <NumberField form={form} name={`${base}.quantity`} label="Qty" />
-      </div>
-
-      <div className="w-36">
-        <NumberField
-          form={form}
-          name={`${base}.unitPrice`}
-          label={`Unit Price, incl. VAT (${CURRENCY})`}
-        />
-        {/* The unit price is gross — the hint splits the line's total into
-            net and VAT so staff see both while pricing. */}
-        <form.Subscribe
-          selector={(state: any) => {
-            const line = (
-              state.values.products as
-                | { quantity?: number | ''; unitPrice?: number | '' }[]
-                | undefined
-            )?.[lineIndex]
-            const quantity =
-              typeof line?.quantity === 'number' ? line.quantity : 0
-            const unitPrice =
-              typeof line?.unitPrice === 'number' ? line.unitPrice : 0
-            return quantity > 0 && unitPrice > 0 ? quantity * unitPrice : ''
+            return (
+              <Field
+                data-invalid={field.state.meta.errors.length > 0}
+                className="col-span-2 min-w-0 @2xl/invoice-line:col-span-1"
+              >
+                <FieldLabel htmlFor={field.name}>Product</FieldLabel>
+                <AsyncCombobox<Product>
+                  id={field.name}
+                  endpoint="/products"
+                  queryKey="invoice-product"
+                  searchField="name"
+                  filters={ACTIVE_PRODUCT_FILTER}
+                  toOption={(product) => ({
+                    value: product.id,
+                    label: productOptionLabel(product),
+                  })}
+                  getValueLabel={productLabelForId}
+                  value={field.state.value || null}
+                  onValueChange={(id) => field.handleChange(id ?? '')}
+                  onSelectRow={(product) => {
+                    setPicked(product)
+                    onProductPicked(product)
+                    // Prefill the price from the catalog; staff can still
+                    // override it on the line.
+                    form.setFieldValue(
+                      `${base}.unitPrice` as never,
+                      (product?.unitPrice ?? '') as never,
+                    )
+                  }}
+                  placeholder="Search product by name..."
+                  emptyMessage="No products found."
+                />
+                {picked && branchId && (
+                  <p className="text-xs text-muted-foreground">
+                    Available: {available} at {branchName}
+                  </p>
+                )}
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
+            )
           }}
-        >
-          {(lineTotal: number | '') => <GrossVatHint gross={lineTotal} />}
-        </form.Subscribe>
-      </div>
+        </form.Field>
 
-      <Button
-        variant="ghost"
-        size="icon"
-        type="button"
-        onClick={onRemove}
-        className="mt-6"
-        aria-label="Remove product"
-      >
-        <XIcon className="h-3.5 w-3.5" />
-      </Button>
-    </div>
+        <div className="min-w-0">
+          <NumberField form={form} name={`${base}.quantity`} label="Qty" />
+        </div>
+
+        <div className="min-w-0">
+          <NumberField
+            form={form}
+            name={`${base}.unitPrice`}
+            label={`Unit Price, incl. VAT (${CURRENCY})`}
+          />
+          {/* The unit price is gross — the hint splits the line's total into
+            net and VAT so staff see both while pricing. */}
+          <form.Subscribe
+            selector={(state: any) => {
+              const line = (
+                state.values.products as
+                  | { quantity?: number | ''; unitPrice?: number | '' }[]
+                  | undefined
+              )?.[lineIndex]
+              const quantity =
+                typeof line?.quantity === 'number' ? line.quantity : 0
+              const unitPrice =
+                typeof line?.unitPrice === 'number' ? line.unitPrice : 0
+              return quantity > 0 && unitPrice > 0 ? quantity * unitPrice : ''
+            }}
+          >
+            {(lineTotal: number | '') => <GrossVatHint gross={lineTotal} />}
+          </form.Subscribe>
+        </div>
+      </div>
+    </InvoiceLineItem>
   )
 }
