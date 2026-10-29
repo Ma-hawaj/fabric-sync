@@ -1,7 +1,8 @@
+import { homePath } from '@/lib/permissions'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/')({
-  beforeLoad: () => {
-    throw redirect({ to: '/invoices' })
+  beforeLoad: ({ context }) => {
+    throw redirect({ to: homePath(context.auth.user) })
   },
 })

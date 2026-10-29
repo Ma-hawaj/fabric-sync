@@ -13,7 +13,12 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/lib/auth', () => ({
   useAuth: () => ({
     isAuthenticated: true,
-    user: { name: 'Test User', email: 'user@example.com' },
+    user: {
+      id: 'test-user',
+      name: 'Test User',
+      email: 'user@example.com',
+      roles: ['admin'],
+    },
     signOut: vi.fn(),
   }),
 }))

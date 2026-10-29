@@ -6,6 +6,6 @@ mod repair_document;
 pub(crate) mod repository;
 mod routes;
 mod service;
-mod types;
+pub(crate) mod types;
 
 pub use routes::router;

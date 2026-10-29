@@ -104,6 +104,10 @@ pub struct Config {
     pub oauth_client_secret: Option<String>,
     pub oauth_introspection_url: Option<String>,
     pub oauth_resource_audience: Option<String>,
+    pub zitadel_project_id: Option<String>,
+    pub zitadel_organization_id: Option<String>,
+    /// Optional comma-separated organization IDs trusted for external project grants.
+    pub zitadel_trusted_organization_ids: Option<String>,
     /// IANA timezone the printed documents write dates in (e.g.
     /// `Asia/Bahrain`) — the database stores UTC, and a date printed in the
     /// wrong zone is a wrong date on the paper. Unset means Bahrain.
@@ -298,6 +302,13 @@ impl Config {
             oauth_client_secret,
             oauth_introspection_url,
             oauth_resource_audience,
+            zitadel_project_id: env::var("ZITADEL_PROJECT_ID")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
+            zitadel_organization_id: env::var("ZITADEL_ORGANIZATION_ID")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
+            zitadel_trusted_organization_ids: env::var("ZITADEL_TRUSTED_ORGANIZATION_IDS").ok(),
             zitadel_users_client_id,
             zitadel_users_client_secret,
             seed_dev_data,

@@ -1,3 +1,5 @@
+import { RoleGuard } from '@/components/role-guard'
+import { PermissionGuard } from '@/components/permission-guard'
 import * as React from 'react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -313,49 +315,71 @@ function StageRow({ order, stage }: { order: Order; stage: OrderStageEntry }) {
 
         {stage.applicable && (
           <div className="flex shrink-0 items-center gap-1">
-            <AssigneePicker order={order} stage={stage} />
+            <PermissionGuard
+              method="PUT"
+              path="/orders/:id/stages/:stageId/assignee"
+              fallback={
+                <span className="text-xs text-muted-foreground">
+                  {stage.assigneeName ?? 'Unassigned'}
+                </span>
+              }
+            >
+              <AssigneePicker order={order} stage={stage} />
+            </PermissionGuard>
             {stage.status === 'pending' ? (
               <>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 w-auto px-2"
-                  disabled={
-                    setStage.isPending ||
-                    locked ||
-                    (needsDestination && !destinationId)
-                  }
-                  onClick={() =>
-                    void record(
-                      'done',
-                      needsDestination
-                        ? (destinationId ?? undefined)
-                        : undefined,
-                    )
-                  }
+                <PermissionGuard
+                  method="POST"
+                  path="/orders/:id/stages/:stageId"
                 >
-                  Done
-                </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-auto px-2"
+                    disabled={
+                      setStage.isPending ||
+                      locked ||
+                      (needsDestination && !destinationId)
+                    }
+                    onClick={() =>
+                      void record(
+                        'done',
+                        needsDestination
+                          ? (destinationId ?? undefined)
+                          : undefined,
+                      )
+                    }
+                  >
+                    Done
+                  </Button>
+                </PermissionGuard>
+                <PermissionGuard
+                  method="POST"
+                  path="/orders/:id/stages/:stageId"
+                >
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-auto px-2"
+                    disabled={setStage.isPending || locked}
+                    onClick={() => void record('skipped')}
+                  >
+                    Skip
+                  </Button>
+                </PermissionGuard>
+              </>
+            ) : (
+              <PermissionGuard method="POST" path="/orders/:id/stages/:stageId">
                 <Button
                   size="sm"
                   variant="ghost"
                   className="h-8 w-auto px-2"
                   disabled={setStage.isPending || locked}
-                  onClick={() => void record('skipped')}
+                  onClick={() => void record('pending')}
                 >
-                  Skip
+                  Undo
                 </Button>
-              </>
-            ) : (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 w-auto px-2"
-                disabled={setStage.isPending || locked}
-                onClick={() => void record('pending')}
-              >
-                Undo
-              </Button>
+              </PermissionGuard>
             )}
           </div>
         )}
@@ -459,9 +483,15 @@ function RepairsSection({
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">Repairs</h3>
-        <Button size="sm" variant="outline" onClick={() => onLogRepair(order)}>
-          Log Repair
-        </Button>
+        <PermissionGuard method="POST" path="/orders/:id/repairs">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onLogRepair(order)}
+          >
+            Log Repair
+          </Button>
+        </PermissionGuard>
       </div>
 
       {order.repairs.length === 0 ? (
@@ -575,46 +605,55 @@ function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
       <div className="flex flex-wrap justify-end gap-1">
         {!finished && (
           <>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 w-auto px-2"
-              disabled={updateRepair.isPending}
-              onClick={() => void setStatus('cancelled')}
-            >
-              Cancel Repair
-            </Button>
-            {repair.status === 'open' && (
+            <RoleGuard role="sales">
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-8 w-auto px-2"
                 disabled={updateRepair.isPending}
-                onClick={() => void setStatus('in_progress')}
+                onClick={() => void setStatus('cancelled')}
               >
-                Start
+                Cancel Repair
               </Button>
-            )}
+            </RoleGuard>
+            <RoleGuard role="production">
+              {repair.status === 'open' && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-auto px-2"
+                  disabled={updateRepair.isPending}
+                  onClick={() => void setStatus('in_progress')}
+                >
+                  Start
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-auto px-2"
+                disabled={updateRepair.isPending}
+                onClick={() => void setStatus('completed')}
+              >
+                Mark Ready
+              </Button>
+            </RoleGuard>
+          </>
+        )}
+        {repair.status === 'completed' && (
+          <PermissionGuard
+            method="POST"
+            path="/orders/:id/repairs/:repairId/receive"
+          >
             <Button
               size="sm"
               variant="ghost"
               className="h-8 w-auto px-2"
-              disabled={updateRepair.isPending}
-              onClick={() => void setStatus('completed')}
+              onClick={() => setReceiveOpen(true)}
             >
-              Mark Ready
+              Mark as Collected
             </Button>
-          </>
-        )}
-        {repair.status === 'completed' && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 w-auto px-2"
-            onClick={() => setReceiveOpen(true)}
-          >
-            Mark as Collected
-          </Button>
+          </PermissionGuard>
         )}
         <Button
           size="sm"

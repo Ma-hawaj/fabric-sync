@@ -1,3 +1,4 @@
+import { PermissionGuard } from '@/components/permission-guard'
 import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import { PlusIcon } from 'lucide-react'
@@ -65,10 +66,15 @@ export function DesignOptionsPage() {
             already used it.
           </p>
         </div>
-        <Button nativeButton={false} render={<Link to="/design-options/new" />}>
-          <PlusIcon className="h-4 w-4" />
-          Add Option
-        </Button>
+        <PermissionGuard method="POST" path="/design-options">
+          <Button
+            nativeButton={false}
+            render={<Link to="/design-options/new" />}
+          >
+            <PlusIcon className="h-4 w-4" />
+            Add Option
+          </Button>
+        </PermissionGuard>
       </div>
 
       <DataTable isLoading={isLoading} table={table}>

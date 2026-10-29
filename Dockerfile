@@ -33,6 +33,9 @@ WORKDIR /app/frontend
 ARG VITE_API_BASE_URL=/api
 ARG VITE_OIDC_AUTHORITY=""
 ARG VITE_OIDC_CLIENT_ID=""
+ARG VITE_ZITADEL_PROJECT_ID=""
+ARG VITE_ZITADEL_ORGANIZATION_ID=""
+ARG VITE_ZITADEL_TRUSTED_ORGANIZATION_IDS=""
 ARG VITE_OIDC_REDIRECT_URI=""
 ARG VITE_OIDC_POST_LOGOUT_REDIRECT_URI=""
 ARG VITE_OIDC_SCOPE="openid profile email offline_access"
@@ -40,6 +43,9 @@ ARG VITE_ACCOUNT_URL=""
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL \
     VITE_OIDC_AUTHORITY=$VITE_OIDC_AUTHORITY \
     VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID \
+    VITE_ZITADEL_PROJECT_ID=$VITE_ZITADEL_PROJECT_ID \
+    VITE_ZITADEL_ORGANIZATION_ID=$VITE_ZITADEL_ORGANIZATION_ID \
+    VITE_ZITADEL_TRUSTED_ORGANIZATION_IDS=$VITE_ZITADEL_TRUSTED_ORGANIZATION_IDS \
     VITE_OIDC_REDIRECT_URI=$VITE_OIDC_REDIRECT_URI \
     VITE_OIDC_POST_LOGOUT_REDIRECT_URI=$VITE_OIDC_POST_LOGOUT_REDIRECT_URI \
     VITE_OIDC_SCOPE=$VITE_OIDC_SCOPE \
@@ -59,6 +65,7 @@ ENV SQLX_OFFLINE=true
 # (include_bytes! in backend/src/features/invoices/designs.rs), so the
 # design assets must exist at this relative path at compile time.
 COPY --from=frontend /app/frontend/public/designs ./frontend/public/designs
+COPY --from=frontend /app/frontend/src/lib/access-policy.json ./frontend/src/lib/access-policy.json
 COPY backend/Cargo.toml backend/Cargo.lock ./backend/
 COPY backend/migrations ./backend/migrations
 COPY backend/.sqlx ./backend/.sqlx

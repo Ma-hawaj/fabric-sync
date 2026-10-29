@@ -1,3 +1,4 @@
+import { PermissionGuard } from '@/components/permission-guard'
 import { useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { toast } from 'sonner'
@@ -44,13 +45,15 @@ export function ReturnsPanel({ invoiceId }: { invoiceId: string }) {
         </h2>
         {data && (
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              disabled={eligibleLines(data.lines).length === 0}
-              onClick={() => setDialog('return')}
-            >
-              Return & Refund
-            </Button>
+            <PermissionGuard method="POST" path="/invoices/:id/returns">
+              <Button
+                variant="outline"
+                disabled={eligibleLines(data.lines).length === 0}
+                onClick={() => setDialog('return')}
+              >
+                Return & Refund
+              </Button>
+            </PermissionGuard>
           </div>
         )}
       </div>
@@ -149,13 +152,15 @@ export function RefundPendingCreditAction({
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Button
-        variant="outline"
-        disabled={!context || context.settlement.refundDue <= 0}
-        onClick={() => setOpen(true)}
-      >
-        Refund Pending Credit
-      </Button>
+      <PermissionGuard method="POST" path="/invoices/:id/refunds">
+        <Button
+          variant="outline"
+          disabled={!context || context.settlement.refundDue <= 0}
+          onClick={() => setOpen(true)}
+        >
+          Refund Pending Credit
+        </Button>
+      </PermissionGuard>
       {open && context && (
         <RefundDialog
           invoiceId={invoiceId}
