@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useForm } from '@tanstack/react-form'
 import { DesignPicker } from './design-picker'
 import type { DesignOption } from '@/features/design-options/types/design-option'
@@ -63,22 +63,24 @@ function openPicker() {
 }
 
 describe('DesignPicker', () => {
-  it('reveals one category and only commits a selection when applied', () => {
+  it('updates the design immediately and closes the picker when an option is selected', async () => {
     render(<Harness />)
     expect(screen.queryByRole('radiogroup')).toBeNull()
     openPicker()
+    expect(screen.queryByRole('button', { name: 'Apply design' })).toBeNull()
     fireEvent.click(screen.getByRole('radio', { name: /Rounded/ }))
-    expect(screen.getByTestId('collar').textContent).toBe('classic')
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByTestId('collar').textContent).toBe('classic')
+    expect(screen.getByTestId('collar').textContent).toBe('round')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(
+      screen.getByRole('button', { name: 'Choose Collar' }).textContent,
+    ).toContain('Rounded')
     openPicker()
     expect(
       screen
-        .getByRole('radio', { name: /Classic/ })
+        .getByRole('radio', { name: /Rounded/ })
         .getAttribute('aria-checked'),
     ).toBe('true')
-    fireEvent.click(screen.getByRole('radio', { name: /Rounded/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.getByTestId('collar').textContent).toBe('round')
   })
 
@@ -94,7 +96,7 @@ describe('DesignPicker', () => {
       target: { value: 'missing' },
     })
     expect(screen.getByText('No designs match your search.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.getByTestId('collar').textContent).toBe('classic')
   })
 
@@ -103,7 +105,7 @@ describe('DesignPicker', () => {
     openPicker()
     expect(screen.getByText(/Saved option Old collar is retired/)).toBeTruthy()
     expect(screen.queryByRole('radio', { name: /Old collar/ })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.getByTestId('collar').textContent).toBe('retired')
   })
 
@@ -113,11 +115,10 @@ describe('DesignPicker', () => {
     expect(
       screen.getByText(/Saved value “legacy” is not in the catalog/),
     ).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.getByTestId('collar').textContent).toBe('legacy')
     openPicker()
     fireEvent.click(screen.getByRole('radio', { name: 'Not specified' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
     expect(screen.getByTestId('collar').textContent).toBe('')
   })
 })

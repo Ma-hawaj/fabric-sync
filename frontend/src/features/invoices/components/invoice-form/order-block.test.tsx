@@ -426,7 +426,6 @@ describe('OrderBlock', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Choose EMD' }))
     fireEvent.click(await screen.findByRole('radio', { name: /6 \(\+/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
     await waitFor(() =>
       expect(
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
@@ -442,7 +441,6 @@ describe('OrderBlock', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Choose EMD' }))
     fireEvent.click(screen.getByRole('radio', { name: 'None' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
     await waitFor(() =>
       expect(
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
@@ -475,7 +473,6 @@ describe('OrderBlock', () => {
     ).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Choose EMD' }))
     fireEvent.click(await screen.findByRole('radio', { name: /6 \(\+/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
     await waitFor(() =>
       expect(
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
@@ -494,7 +491,6 @@ describe('OrderBlock', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Choose EMD' }))
     fireEvent.click(screen.getByRole('radio', { name: 'None' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
     await waitFor(() =>
       expect(
         screen.getByLabelText(`Price incl. VAT (${CURRENCY})`).textContent,
@@ -512,7 +508,6 @@ describe('OrderBlock', () => {
     )
 
     fireEvent.click(none)
-    fireEvent.click(screen.getByRole('button', { name: 'Apply design' }))
 
     await waitFor(() => {
       const order = JSON.parse(screen.getByTestId('draft').textContent)

@@ -6,7 +6,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -34,7 +33,6 @@ export function DesignPicker({
   options: DesignOption[]
 }) {
   const [open, setOpen] = useState(false)
-  const [selection, setSelection] = useState('')
   const [search, setSearch] = useState('')
   const choices = selectCategoryOptions(options, category)
   return (
@@ -45,9 +43,6 @@ export function DesignPicker({
           (option) => option.category === category && option.slug === stored,
         )
         const image = saved ? designOptionImageSrc(saved) : null
-        const selected = options.find(
-          (option) => option.category === category && option.slug === selection,
-        )
         const items = [
           {
             id: '',
@@ -67,7 +62,6 @@ export function DesignPicker({
             open={open}
             onOpenChange={(nextOpen) => {
               if (nextOpen) {
-                setSelection(stored)
                 setSearch('')
               }
               setOpen(nextOpen)
@@ -153,8 +147,11 @@ export function DesignPicker({
               {items.length ? (
                 <DesignOptionGrid
                   options={items}
-                  value={selection}
-                  onChange={setSelection}
+                  value={stored}
+                  onChange={(value) => {
+                    field.handleChange(value)
+                    setOpen(false)
+                  }}
                   columns={3}
                   density="comfortable"
                 />
@@ -163,29 +160,6 @@ export function DesignPicker({
                   No designs match your search.
                 </p>
               )}
-              <div className="border-t pt-4">
-                <DialogFooter>
-                  <p className="me-auto self-center text-sm text-muted-foreground">
-                    Selected: {selected?.label ?? (selection || 'None')}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      field.handleChange(selection)
-                      setOpen(false)
-                    }}
-                  >
-                    Apply design
-                  </Button>
-                </DialogFooter>
-              </div>
             </DialogContent>
           </Dialog>
         )
