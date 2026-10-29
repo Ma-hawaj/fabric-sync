@@ -1,3 +1,4 @@
+import { PermissionGuard } from '@/components/permission-guard'
 import { Link } from '@tanstack/react-router'
 import { PencilIcon, PowerIcon } from 'lucide-react'
 import { defineColumns } from '@/lib/define-columns'
@@ -27,13 +28,19 @@ export const getProductColumns = (
         <DataTableColumnHeader column={column} label="Name" />
       ),
       cell: ({ row }) => (
-        <Link
-          to="/products/$productId/edit"
-          params={{ productId: row.original.id }}
-          className="font-medium text-info hover:underline"
+        <PermissionGuard
+          method="PATCH"
+          path="/products/:id"
+          fallback={<span>{row.getValue('name')}</span>}
         >
-          {row.getValue('name')}
-        </Link>
+          <Link
+            to="/products/$productId/edit"
+            params={{ productId: row.original.id }}
+            className="font-medium text-info hover:underline"
+          >
+            {row.getValue('name')}
+          </Link>
+        </PermissionGuard>
       ),
       enableSorting: true,
       enableColumnFilter: true,
@@ -156,26 +163,28 @@ export const getProductColumns = (
       cell: ({ row }) => {
         const product = row.original
         return (
-          <RowActions
-            items={[
-              {
-                label: 'Edit',
-                icon: PencilIcon,
-                render: (
-                  <Link
-                    to="/products/$productId/edit"
-                    params={{ productId: product.id }}
-                  />
-                ),
-              },
-              {
-                label: product.isActive ? 'Deactivate' : 'Activate',
-                icon: PowerIcon,
-                disabled: isToggling,
-                onClick: () => onToggleActive(product),
-              },
-            ]}
-          />
+          <PermissionGuard method="PATCH" path="/products/:id">
+            <RowActions
+              items={[
+                {
+                  label: 'Edit',
+                  icon: PencilIcon,
+                  render: (
+                    <Link
+                      to="/products/$productId/edit"
+                      params={{ productId: product.id }}
+                    />
+                  ),
+                },
+                {
+                  label: product.isActive ? 'Deactivate' : 'Activate',
+                  icon: PowerIcon,
+                  disabled: isToggling,
+                  onClick: () => onToggleActive(product),
+                },
+              ]}
+            />
+          </PermissionGuard>
         )
       },
     },

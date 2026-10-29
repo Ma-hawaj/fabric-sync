@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
+import { useAuth } from '@/lib/auth'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { OrderDetailPage } from './order-detail'
@@ -377,5 +378,41 @@ describe('OrderDetailPage', () => {
 
     const done = screen.getByRole('button', { name: 'Done' })
     expect((done as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+describe('order workflow role boundaries', () => {
+  const defaultSession = vi.mocked(useAuth).getMockImplementation()!
+  afterEach(() => vi.mocked(useAuth).mockImplementation(defaultSession))
+
+  it('lets production record stages while hiding financial and assignment actions', () => {
+    const session = defaultSession()
+    vi.mocked(useAuth).mockReturnValue({
+      ...session,
+      user: { ...session.user!, roles: ['production'] },
+    })
+    renderDeliveryOrder({
+      stages: [{ ...DELIVERY_STAGE, assigneeName: 'Assigned Tailor' }],
+    })
+    expect(screen.getByRole('button', { name: 'Done' })).toBeTruthy()
+    expect(screen.getByText('Assigned Tailor')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Mark Collected' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cancel Order' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Log Repair' })).toBeNull()
+    expect(screen.queryByRole('link', { name: /View invoice/ })).toBeNull()
+  })
+
+  it('lets sales collect orders and log repairs while keeping production stages read-only', () => {
+    const session = defaultSession()
+    vi.mocked(useAuth).mockReturnValue({
+      ...session,
+      user: { ...session.user!, roles: ['sales'] },
+    })
+    renderDeliveryOrder()
+    expect(screen.getByRole('button', { name: 'Mark Collected' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Log Repair' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cancel Order' })).toBeNull()
   })
 })

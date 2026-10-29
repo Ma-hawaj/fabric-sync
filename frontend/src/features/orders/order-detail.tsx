@@ -1,3 +1,4 @@
+import { PermissionGuard } from '@/components/permission-guard'
 import { ReadinessControls } from '@/features/notifications/readiness-controls'
 import * as React from 'react'
 import { useState } from 'react'
@@ -139,15 +140,19 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               readyBy={order.readyBy}
             />
           )}
-          <OrderResolutionActions order={order} />
-          <Button
-            variant="outline"
-            className="text-info hover:text-info/80 hover:bg-info/5 dark:hover:bg-info/10"
-            disabled={closed || order.status === 'collected'}
-            onClick={() => setCollectOpen(true)}
-          >
-            {order.status === 'collected' ? 'Collected' : 'Mark Collected'}
-          </Button>
+          <PermissionGuard method="POST" path="/orders/:id/cancel">
+            <OrderResolutionActions order={order} />
+          </PermissionGuard>
+          <PermissionGuard method="POST" path="/orders/:id/collect">
+            <Button
+              variant="outline"
+              className="text-info hover:text-info/80 hover:bg-info/5 dark:hover:bg-info/10"
+              disabled={closed || order.status === 'collected'}
+              onClick={() => setCollectOpen(true)}
+            >
+              {order.status === 'collected' ? 'Collected' : 'Mark Collected'}
+            </Button>
+          </PermissionGuard>
         </div>
       </div>
 
@@ -177,13 +182,19 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               </>
             )}
           </p>
-          <Link
-            to="/invoices/$invoiceId"
-            params={{ invoiceId: order.invoiceId }}
-            className="text-info hover:underline"
+          <PermissionGuard
+            method="GET"
+            path="/invoices/:id"
+            fallback={<span>View invoice credit and refund history</span>}
           >
-            View invoice credit and refund history
-          </Link>
+            <Link
+              to="/invoices/$invoiceId"
+              params={{ invoiceId: order.invoiceId }}
+              className="text-info hover:underline"
+            >
+              View invoice credit and refund history
+            </Link>
+          </PermissionGuard>
         </section>
       )}
 

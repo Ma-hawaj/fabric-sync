@@ -5,8 +5,10 @@ use axum::{
     response::Response,
 };
 use oauth2::{
-    basic::BasicClient, reqwest, AccessToken, ClientId, ClientSecret, EndpointNotSet, EndpointSet,
-    IntrospectionUrl, TokenIntrospectionResponse,
+    basic::{BasicErrorResponse, BasicRevocationErrorResponse, BasicTokenResponse, BasicTokenType},
+    reqwest, AccessToken, Client, ClientId, ClientSecret, EndpointNotSet, EndpointSet,
+    ExtraTokenFields, IntrospectionUrl, StandardRevocableToken, StandardTokenIntrospectionResponse,
+    TokenIntrospectionResponse,
 };
 use openidconnect::{
     core::{
@@ -20,7 +22,26 @@ use serde::{Deserialize, Serialize};
 
 use crate::{config::Config, error::AppError, state::AppState};
 
-type IntrospectionClient = BasicClient<EndpointNotSet, EndpointNotSet, EndpointSet>;
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct ZitadelClaims {
+    #[serde(flatten)]
+    claims: std::collections::HashMap<String, serde_json::Value>,
+}
+impl ExtraTokenFields for ZitadelClaims {}
+type RoleIntrospectionResponse = StandardTokenIntrospectionResponse<ZitadelClaims, BasicTokenType>;
+type IntrospectionClient = Client<
+    BasicErrorResponse,
+    BasicTokenResponse,
+    RoleIntrospectionResponse,
+    StandardRevocableToken,
+    BasicRevocationErrorResponse,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointSet,
+    EndpointNotSet,
+    EndpointNotSet,
+>;
+
 type DiscoveryMetadata = ProviderMetadata<
     OAuthDiscoveryMetadata,
     CoreAuthDisplay,
@@ -48,17 +69,36 @@ pub struct AuthenticatedUser {
     subject: Option<String>,
     client_id: Option<String>,
     scopes: Vec<String>,
+    roles: Vec<crate::authorization::Role>,
 }
 
 #[derive(Clone, Debug)]
 pub struct TokenIntrospection {
     client: IntrospectionClient,
     expected_audience: Option<String>,
+    project_id: String,
+    organization_ids: Vec<String>,
     http_client: reqwest::Client,
 }
 
 impl TokenIntrospection {
     pub async fn discover(config: &Config) -> Result<Self, String> {
+        let project_id = config
+            .zitadel_project_id
+            .clone()
+            .ok_or("ZITADEL_PROJECT_ID is required for role authorization")?;
+        let primary_organization = config
+            .zitadel_organization_id
+            .as_deref()
+            .filter(|id| !id.trim().is_empty())
+            .ok_or("ZITADEL_ORGANIZATION_ID is required for role authorization")?;
+        let organization_ids = crate::authorization::trusted_organization_ids(
+            primary_organization,
+            config
+                .zitadel_trusted_organization_ids
+                .as_deref()
+                .unwrap_or_default(),
+        );
         let http_client = reqwest::ClientBuilder::new()
             .redirect(reqwest::redirect::Policy::none())
             .build()
@@ -86,7 +126,13 @@ impl TokenIntrospection {
             }
         };
 
-        let mut client = BasicClient::new(ClientId::new(config.oauth_client_id.clone()));
+        let mut client = Client::<
+            BasicErrorResponse,
+            BasicTokenResponse,
+            RoleIntrospectionResponse,
+            StandardRevocableToken,
+            BasicRevocationErrorResponse,
+        >::new(ClientId::new(config.oauth_client_id.clone()));
         if let Some(client_secret) = &config.oauth_client_secret {
             client = client.set_client_secret(ClientSecret::new(client_secret.clone()));
         }
@@ -95,6 +141,8 @@ impl TokenIntrospection {
 
         Ok(Self {
             client,
+            project_id,
+            organization_ids,
             expected_audience: config.oauth_resource_audience.clone(),
             http_client,
         })
@@ -113,6 +161,14 @@ impl TokenIntrospection {
             return Err("access token is inactive".to_string());
         }
 
+        if !response
+            .aud()
+            .is_some_and(|audiences| audiences.iter().any(|aud| aud == &self.project_id))
+        {
+            return Err(
+                "access token audience does not include the configured Zitadel project".into(),
+            );
+        }
         if let Some(expected_audience) = &self.expected_audience {
             let audiences = response.aud().ok_or_else(|| {
                 format!("introspection response is missing audience `{expected_audience}`")
@@ -128,7 +184,13 @@ impl TokenIntrospection {
             }
         }
 
+        let roles = crate::authorization::roles_from_claims(
+            &response.extra_fields().claims,
+            &self.project_id,
+            &self.organization_ids,
+        );
         Ok(AuthenticatedUser {
+            roles,
             subject: response.sub().map(ToOwned::to_owned),
             client_id: response.client_id().map(|client_id| (**client_id).clone()),
             scopes: response
@@ -142,6 +204,13 @@ impl TokenIntrospection {
 }
 
 impl AuthenticatedUser {
+    pub fn roles(&self) -> &[crate::authorization::Role] {
+        &self.roles
+    }
+    pub fn has_any_role(&self, roles: &[crate::authorization::Role]) -> bool {
+        crate::authorization::has_any_role(&self.roles, roles)
+    }
+
     pub fn subject(&self) -> Option<&str> {
         self.subject.as_deref()
     }
@@ -184,7 +253,170 @@ pub async fn require_auth(
         span.record("client_id", client_id);
     }
 
+    let path = request
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map(|path| path.as_str())
+        .unwrap_or("");
+    crate::authorization::authorize(user.roles(), request.method().as_str(), path)?;
     request.extensions_mut().insert(user);
 
     Ok(next.run(request).await)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{
+        routing::{get, post},
+        Json, Router,
+    };
+    use serde_json::json;
+
+    // Exercise the real OAuth response decoder, matched nested path, and auth
+    // middleware together. No database or real identity provider is contacted.
+    #[tokio::test]
+    async fn introspection_and_route_authorization() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let provider = Router::new().route("/introspect", post(|axum::Form(form): axum::Form<std::collections::HashMap<String, String>>| async move {
+            let token = form.get("token").map(String::as_str).unwrap_or("");
+            let audience = if matches!(token, "wrong-project" | "external-wrong-project") { "other" } else { "app" };
+            let organization = if token == "wrong-org" { "other" } else if token.starts_with("external-") { "external-org" } else { "org" };
+            let role = match token { "production" | "external-production" => "production", "no-role" | "external-no-role" => "unknown", _ => "sales" };
+            Json(json!({"active": token != "inactive", "sub": "person", "aud": [audience],
+                "urn:zitadel:iam:org:project:app:roles": {role: {organization: "domain"}}
+            }))
+        }));
+        let provider_task =
+            tokio::spawn(async move { axum::serve(listener, provider).await.unwrap() });
+        let mut config = Config::from_env();
+        config.oauth_introspection_url = Some(format!("http://{address}/introspect"));
+        config.oauth_resource_audience = None;
+        config.zitadel_project_id = Some("app".into());
+        config.zitadel_organization_id = Some("org".into());
+        config.zitadel_trusted_organization_ids =
+            Some(" external-org, second-org, external-org, ,".into());
+        config.zitadel_users_client_id = Some("test".into());
+        config.zitadel_users_client_secret = Some("test".into());
+        let introspection = TokenIntrospection::discover(&config).await.unwrap();
+        let users = crate::features::users::zitadel::ZitadelUserDirectory::discover(&config)
+            .await
+            .unwrap();
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://test:test@127.0.0.1:1/test")
+            .unwrap();
+        let state = AppState::new(config, pool, introspection, users);
+        let api = Router::new()
+            .route(
+                "/invoices",
+                get(|| async { "allowed" }).post(|| async { "saved" }),
+            )
+            .route(
+                "/orders/:id/stages/:stageId",
+                post(|| async { "stage saved" }),
+            )
+            .route_layer(axum::middleware::from_fn_with_state(
+                state.clone(),
+                require_auth,
+            ));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let app_address = listener.local_addr().unwrap();
+        let app_task = tokio::spawn(async move {
+            axum::serve(listener, Router::new().nest("/api", api))
+                .await
+                .unwrap()
+        });
+        let client = reqwest::Client::new();
+        for (token, expected) in [
+            ("sales", 200),
+            ("external-sales", 200),
+            ("external-production", 403),
+            ("external-wrong-project", 401),
+            ("external-no-role", 403),
+            ("production", 403),
+            ("wrong-project", 401),
+            ("wrong-org", 403),
+            ("inactive", 401),
+        ] {
+            let response = client
+                .get(format!("http://{app_address}/api/invoices"))
+                .bearer_auth(token)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status().as_u16(), expected, "{token}");
+        }
+        let response = client
+            .get(format!("http://{app_address}/api/invoices"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status().as_u16(), 401);
+        let response = client
+            .post(format!("http://{app_address}/api/invoices"))
+            .bearer_auth("sales")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status().as_u16(), 200);
+        for (token, expected) in [("external-production", 200), ("external-sales", 403)] {
+            let response = client
+                .post(format!(
+                    "http://{app_address}/api/orders/order/stages/stage"
+                ))
+                .bearer_auth(token)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status().as_u16(), expected, "{token}");
+        }
+        // Verify auth is installed on every actual feature route, before
+        // payload extraction or any database work can take place.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let actual_address = listener.local_addr().unwrap();
+        let actual_app = crate::app::router(state);
+        let actual_task =
+            tokio::spawn(async move { axum::serve(listener, actual_app).await.unwrap() });
+        let rules: Vec<serde_json::Value> =
+            serde_json::from_str(include_str!("../../frontend/src/lib/access-policy.json"))
+                .unwrap();
+        for rule in rules {
+            let path = rule["path"].as_str().unwrap();
+            if path == "/me/preferences" {
+                continue;
+            }
+            let path = path
+                .split('/')
+                .map(|part| {
+                    if part.starts_with(':') {
+                        "00000000-0000-0000-0000-000000000001"
+                    } else {
+                        part
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("/");
+            let method = rule["method"].as_str().unwrap();
+            let response = client
+                .request(
+                    reqwest::Method::from_bytes(method.as_bytes()).unwrap(),
+                    format!("http://{actual_address}/api{path}"),
+                )
+                .bearer_auth("no-role")
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status().as_u16(), 403, "{method} {path}");
+        }
+        let health = client
+            .get(format!("http://{actual_address}/health"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(health.status().as_u16(), 200);
+        actual_task.abort();
+        provider_task.abort();
+        app_task.abort();
+    }
 }

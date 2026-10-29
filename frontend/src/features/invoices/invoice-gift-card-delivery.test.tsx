@@ -149,7 +149,7 @@ function renderForm({
 describe('gift card delivery after creating an invoice', () => {
   it('previews and sends each purchased card before offering the invoice notification', async () => {
     const save = renderForm()
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
     expect(await screen.findByText(preview(0).body)).toBeTruthy()
     expect(screen.getByText(/Invoice saved\. Gift card 1 of 2/)).toBeTruthy()
     expect(screen.getByText(/Recipient 1 · \+97333112233/)).toBeTruthy()
@@ -198,14 +198,14 @@ describe('gift card delivery after creating an invoice', () => {
       new Error('Delivery unavailable'),
     )
     const save = renderForm({ count: 1 })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
     await screen.findByText(preview(0).body)
     fireEvent.click(screen.getByRole('button', { name: 'Send via WhatsApp' }))
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',
       'Delivery unavailable',
     )
-    expect(screen.getByText('Save')).toHaveProperty('disabled', true)
+    expect(screen.getByText('Save invoice')).toHaveProperty('disabled', true)
     expect(screen.queryByText('invoice_created notification')).toBeNull()
     const first = vi.mocked(apiClient.post).mock.calls[0][1]
     fireEvent.click(screen.getByRole('button', { name: 'Send via WhatsApp' }))
@@ -217,7 +217,7 @@ describe('gift card delivery after creating an invoice', () => {
   it('can skip an unavailable card and still send the next card', async () => {
     firstCardUnavailable = true
     renderForm()
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',
       'Card unavailable',
@@ -239,7 +239,7 @@ describe('gift card delivery after creating an invoice', () => {
   it('does not offer delivery when invoice creation fails', async () => {
     const save = renderForm({ count: 1 })
     save.mockRejectedValueOnce(new Error('Could not save'))
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
     await waitFor(() => expect(save).toHaveBeenCalledOnce())
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(screen.queryByText('invoice_created notification')).toBeNull()
@@ -262,7 +262,7 @@ describe('gift card delivery after creating an invoice', () => {
 
   it('keeps invoice edits on the updated-invoice notification flow', async () => {
     renderForm({ count: 1, editing: true })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
     await screen.findByText('invoice_updated notification')
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(
@@ -280,7 +280,7 @@ it('blocks saving while the VAT rate is loading', () => {
     0,
   )
   const button = screen.getByRole('button', {
-    name: 'Save',
+    name: 'Save invoice',
   })
   expect(button.disabled).toBe(true)
   fireEvent.click(button)
@@ -293,7 +293,9 @@ it('blocks saving when the VAT rate cannot be loaded', async () => {
     'textContent',
     'Could not load VAT pricing. Reload to try again.',
   )
-  expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true)
+  expect(screen.getByRole('button', { name: 'Save invoice' }).disabled).toBe(
+    true,
+  )
   expect(save).not.toHaveBeenCalled()
 })
 
@@ -317,13 +319,13 @@ it('keeps saving blocked after a VAT conflict when cached pricing cannot refresh
     })
     return 'vat-conflict'
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
   await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith('/pricing'))
   expect(await screen.findByRole('alert')).toHaveProperty(
     'textContent',
     'VAT pricing needs refreshing. Reload this invoice if pricing could not be refreshed.',
   )
-  const button = screen.getByRole('button', { name: 'Save' })
+  const button = screen.getByRole('button', { name: 'Save invoice' })
   expect(button.disabled).toBe(true)
   fireEvent.click(button)
   expect(save).toHaveBeenCalledOnce()

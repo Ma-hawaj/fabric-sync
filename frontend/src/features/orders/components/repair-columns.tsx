@@ -194,6 +194,10 @@ export function getRepairColumns(
               },
               {
                 label: 'Mark as Collected',
+                permission: {
+                  method: 'POST',
+                  path: '/orders/:id/repairs/:repairId/receive',
+                },
                 icon: CheckIcon,
                 disabled: !canReceive,
                 onClick: () => onReceive(repair),

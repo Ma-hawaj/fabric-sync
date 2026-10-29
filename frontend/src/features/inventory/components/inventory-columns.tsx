@@ -146,16 +146,19 @@ export const getInventoryColumns = (
             },
             {
               label: 'Edit Material',
+              permission: { method: 'PATCH', path: '/materials/:id' },
               icon: PencilIcon,
               onClick: () => onEdit(row.original),
             },
             {
               label: 'Add Stock',
+              permission: { method: 'PATCH', path: '/materials/:id' },
               icon: PlusIcon,
               onClick: () => onAddStock(row.original),
             },
             {
               label: 'Move Stock',
+              permission: { method: 'PATCH', path: '/materials/:id' },
               icon: ArrowRightLeftIcon,
               disabled: totalQuantity(row.original) <= 0,
               onClick: () => onTransfer(row.original),
@@ -165,6 +168,7 @@ export const getInventoryColumns = (
               // there is nothing to take — the backend would refuse every
               // entry.
               label: 'Remove Stock',
+              permission: { method: 'PATCH', path: '/materials/:id' },
               icon: MinusIcon,
               disabled: totalQuantity(row.original) <= 0,
               onClick: () => onRemoveStock(row.original),

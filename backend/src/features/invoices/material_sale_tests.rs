@@ -55,6 +55,8 @@ async fn material_sales_database() {
         .unwrap();
     sqlx::migrate!().run(&pool).await.unwrap();
     let mut config = Config::from_env();
+    config.zitadel_project_id = Some("test-project".into());
+    config.zitadel_organization_id = Some("test-org".into());
     config.oauth_introspection_url = Some("http://localhost/unused".into());
     config.zitadel_users_client_id = Some("unused".into());
     config.zitadel_users_client_secret = Some("unused".into());

@@ -10,6 +10,8 @@ pub async fn state(db: PgPool, renderer: Option<String>, provider: Option<String
     config.urgent_charge_amount = Some("5".into());
     config.urgent_charge_unit = "amount".into();
     config.customer_material_base_price = Some("15".into());
+    config.zitadel_project_id = Some("test-project".into());
+    config.zitadel_organization_id = Some("test-org".into());
     config.oauth_issuer_url = "http://127.0.0.1:1".into();
     config.oauth_introspection_url = Some("http://127.0.0.1:1/introspect".into());
     config.zitadel_users_client_id = Some("test".into());

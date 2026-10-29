@@ -1,4 +1,10 @@
-import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
+import { PageGuard } from '@/components/permission-guard'
+import {
+  createFileRoute,
+  redirect,
+  Outlet,
+  useLocation,
+} from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authenticated')({
   beforeLoad: async ({ location, context }) => {
@@ -21,7 +27,12 @@ export const Route = createFileRoute('/_authenticated')({
  */
 function AuthenticatedLayout() {
   const { auth } = Route.useRouteContext()
+  const { pathname } = useLocation()
 
   if (!auth.isAuthenticated) return null
-  return <Outlet />
+  return (
+    <PageGuard pathname={pathname}>
+      <Outlet />
+    </PageGuard>
+  )
 }

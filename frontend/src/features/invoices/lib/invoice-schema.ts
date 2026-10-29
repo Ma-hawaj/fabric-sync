@@ -31,7 +31,7 @@ const measurementDraftSchema = z.custom<MeasurementDraft>()
 const MEASUREMENT_TYPE_VALUES = MEASUREMENT_TYPES as readonly string[]
 const MEASUREMENT_FIT_VALUES = MEASUREMENT_FITS as readonly string[]
 
-const orderDraftSchema = z
+export const orderDraftSchema = z
   .object({
     key: z.string(),
     thobeType: z.string(),

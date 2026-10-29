@@ -1,0 +1,397 @@
+[
+  {
+    "method": "GET",
+    "path": "/me/preferences",
+    "roles": ["authenticated"]
+  },
+  {
+    "method": "PUT",
+    "path": "/me/preferences",
+    "roles": ["authenticated"]
+  },
+  {
+    "method": "GET",
+    "path": "/customers",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "GET",
+    "path": "/customers/:id",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "POST",
+    "path": "/customers",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "PATCH",
+    "path": "/customers/:id",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "GET",
+    "path": "/materials",
+    "roles": ["sales", "production", "inventory"]
+  },
+  {
+    "method": "GET",
+    "path": "/materials/:id",
+    "roles": ["sales", "production", "inventory"]
+  },
+  {
+    "method": "POST",
+    "path": "/materials",
+    "roles": ["inventory"]
+  },
+  {
+    "method": "POST",
+    "path": "/materials/:id/stock",
+    "roles": ["inventory"]
+  },
+  {
+    "method": "POST",
+    "path": "/materials/:id/stock/remove",
+    "roles": ["inventory"]
+  },
+  {
+    "method": "POST",
+    "path": "/materials/:id/stock/transfer",
+    "roles": ["inventory"]
+  },
+  {
+    "method": "PATCH",
+    "path": "/materials/:id",
+    "roles": ["inventory"]
+  },
+  {
+    "method": "GET",
+    "path": "/products",
+    "roles": ["sales", "inventory"]
+  },
+  {
+    "method": "GET",
+    "path": "/products/:id",
+    "roles": ["sales", "inventory"]
+  },
+  {
+    "method": "POST",
+    "path": "/products",
+    "roles": ["inventory"]
+  },
+  {
+    "method": "POST",
+    "path": "/products/:id/stock",
+    "roles": ["inventory"]
+  },
+  {
+    "method": "PATCH",
+    "path": "/products/:id",
+    "roles": ["inventory"]
+  },
+  {
+    "method": "GET",
+    "path": "/locations",
+    "roles": ["sales", "production", "inventory"]
+  },
+  {
+    "method": "GET",
+    "path": "/locations/:id",
+    "roles": ["sales", "production", "inventory"]
+  },
+  {
+    "method": "POST",
+    "path": "/locations",
+    "roles": ["admin"]
+  },
+  {
+    "method": "PATCH",
+    "path": "/locations/:id",
+    "roles": ["admin"]
+  },
+  {
+    "method": "GET",
+    "path": "/pricing",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/design-options",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "POST",
+    "path": "/design-options",
+    "roles": ["admin"]
+  },
+  {
+    "method": "PATCH",
+    "path": "/design-options/:id",
+    "roles": ["admin"]
+  },
+  {
+    "method": "GET",
+    "path": "/order-stages",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "POST",
+    "path": "/order-stages",
+    "roles": ["admin"]
+  },
+  {
+    "method": "PATCH",
+    "path": "/order-stages/:id",
+    "roles": ["admin"]
+  },
+  {
+    "method": "GET",
+    "path": "/invoices",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/invoices/:id",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/invoices/:id/edit",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/invoices/:id/document",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/invoices",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/invoices/:id/collect",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/invoices/:id/payments",
+    "roles": ["sales"]
+  },
+  {
+    "method": "PUT",
+    "path": "/invoices/:id",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/invoices/:id/ready",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "GET",
+    "path": "/orders",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "GET",
+    "path": "/orders/:id",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "GET",
+    "path": "/orders/:id/document",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "GET",
+    "path": "/repairs",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "GET",
+    "path": "/orders/:id/repairs/:repairId/document",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "PATCH",
+    "path": "/orders/:id",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "PATCH",
+    "path": "/orders/:id/repairs/:repairId",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "POST",
+    "path": "/orders/:id/collect",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/orders/:id/repairs",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/orders/:id/repairs/:repairId/receive",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/orders/:id/ready",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "POST",
+    "path": "/orders/:id/reopen",
+    "roles": ["manager"]
+  },
+  {
+    "method": "POST",
+    "path": "/orders/:id/stages/:stageId",
+    "roles": ["production"]
+  },
+  {
+    "method": "PUT",
+    "path": "/orders/:id/stages/:stageId/assignee",
+    "roles": ["manager"]
+  },
+  {
+    "method": "PUT",
+    "path": "/orders/:id/repairs/:repairId/measurement",
+    "roles": ["sales", "production"]
+  },
+  {
+    "method": "GET",
+    "path": "/invoices/:id/returns",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/orders/:id/cancel",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/invoices/:id/returns",
+    "roles": ["manager"]
+  },
+  {
+    "method": "POST",
+    "path": "/invoices/:id/refunds",
+    "roles": ["manager"]
+  },
+  {
+    "method": "POST",
+    "path": "/orders/:id/cancel",
+    "roles": ["manager"]
+  },
+  {
+    "method": "GET",
+    "path": "/gift-cards",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/gift-cards/by-code/:code",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/gift-cards/:id/preview",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/gift-cards/:id/image",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/gift-cards",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/gift-cards/:id/send",
+    "roles": ["sales"]
+  },
+  {
+    "method": "PATCH",
+    "path": "/gift-cards/:id",
+    "roles": ["manager"]
+  },
+  {
+    "method": "GET",
+    "path": "/notifications/capabilities",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/invoices/:id/notifications",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/notifications/:id",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/notifications/:id/sends",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/documents/:id",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/documents/:id/content",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/invoices/:id/notifications",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/notifications/:id/send",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/notifications/:id/selection",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/notifications/:id/cancel",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/notifications/:id/resend",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/invoices/:id/documents",
+    "roles": ["sales"]
+  },
+  {
+    "method": "DELETE",
+    "path": "/notifications/:id",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/users",
+    "roles": ["sales", "production"]
+  }
+]

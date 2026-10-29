@@ -1,3 +1,4 @@
+import { PermissionGuard } from '@/components/permission-guard'
 import { defineColumns } from '@/lib/define-columns'
 import { Link } from '@tanstack/react-router'
 import { ListChecksIcon, CheckIcon } from 'lucide-react'
@@ -81,13 +82,19 @@ export function getOrderColumns(
         <DataTableColumnHeader column={column} label="Invoice" />
       ),
       cell: ({ row }) => (
-        <Link
-          to="/invoices/$invoiceId"
-          params={{ invoiceId: row.original.invoiceId }}
-          className="font-mono font-medium text-info hover:underline"
+        <PermissionGuard
+          method="GET"
+          path="/invoices/:id"
+          fallback={<span>INV-{row.getValue<number>('invoiceNumber')}</span>}
         >
-          INV-{row.getValue<number>('invoiceNumber')}
-        </Link>
+          <Link
+            to="/invoices/$invoiceId"
+            params={{ invoiceId: row.original.invoiceId }}
+            className="font-mono font-medium text-info hover:underline"
+          >
+            INV-{row.getValue<number>('invoiceNumber')}
+          </Link>
+        </PermissionGuard>
       ),
       enableSorting: true,
       enableColumnFilter: true,
@@ -458,6 +465,7 @@ export function getOrderColumns(
                 onClick: () => onOpen(order),
               },
               {
+                permission: { method: 'POST', path: '/orders/:id/collect' },
                 label:
                   order.status === 'collected' ? 'Collected' : 'Mark Collected',
                 icon: CheckIcon,

@@ -210,6 +210,7 @@ export const getGiftCardColumns = (
               },
               {
                 label: 'Edit recipient',
+                permission: { method: 'PATCH', path: '/gift-cards/:id' },
                 icon: PencilIcon,
                 onClick: () => onEditRecipient(card),
               },
@@ -224,6 +225,7 @@ export const getGiftCardColumns = (
               },
               {
                 label: card.isActive ? 'Void' : 'Restore',
+                permission: { method: 'PATCH', path: '/gift-cards/:id' },
                 icon: card.isActive ? BanIcon : RotateCcwIcon,
                 disabled: isToggling,
                 destructive: card.isActive,
