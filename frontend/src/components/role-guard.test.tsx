@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { useEffect } from 'react'
 import { useAuth } from '@/lib/auth'
 import type { AuthState } from '@/lib/auth'
+import { rolesFromProfile } from '@/lib/permissions'
 import type { Role } from '@/lib/permissions'
 import { RoleGuard } from './role-guard'
 import { PageGuard, PermissionGuard } from './permission-guard'
@@ -60,6 +61,27 @@ describe('authorization guards', () => {
       </PermissionGuard>,
     )
     expect(screen.queryByText('Create invoice')).toBeNull()
+  })
+  it('renders a trusted external assignment and removes controls when its trust is removed', () => {
+    const profile = {
+      'urn:zitadel:iam:org:project:app:roles': {
+        production: { ext: 'external.example' },
+      },
+    }
+    session(rolesFromProfile(profile, 'app', 'org', 'ext'))
+    const { rerender } = render(
+      <>
+        <RoleGuard role="production">Production controls</RoleGuard>
+        <PermissionGuard method="POST" path="/invoices">
+          Create invoice
+        </PermissionGuard>
+      </>,
+    )
+    expect(screen.getByText('Production controls')).toBeTruthy()
+    expect(screen.queryByText('Create invoice')).toBeNull()
+    session(rolesFromProfile(profile, 'app', 'org', ''))
+    rerender(<RoleGuard role="production">Production controls</RoleGuard>)
+    expect(screen.queryByText('Production controls')).toBeNull()
   })
   it('blocks direct navigation before the form mounts', () => {
     render(

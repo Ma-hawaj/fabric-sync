@@ -77,7 +77,7 @@ pub struct TokenIntrospection {
     client: IntrospectionClient,
     expected_audience: Option<String>,
     project_id: String,
-    organization_id: String,
+    organization_ids: Vec<String>,
     http_client: reqwest::Client,
 }
 
@@ -87,10 +87,18 @@ impl TokenIntrospection {
             .zitadel_project_id
             .clone()
             .ok_or("ZITADEL_PROJECT_ID is required for role authorization")?;
-        let organization_id = config
+        let primary_organization = config
             .zitadel_organization_id
-            .clone()
+            .as_deref()
+            .filter(|id| !id.trim().is_empty())
             .ok_or("ZITADEL_ORGANIZATION_ID is required for role authorization")?;
+        let organization_ids = crate::authorization::trusted_organization_ids(
+            primary_organization,
+            config
+                .zitadel_trusted_organization_ids
+                .as_deref()
+                .unwrap_or_default(),
+        );
         let http_client = reqwest::ClientBuilder::new()
             .redirect(reqwest::redirect::Policy::none())
             .build()
@@ -134,7 +142,7 @@ impl TokenIntrospection {
         Ok(Self {
             client,
             project_id,
-            organization_id,
+            organization_ids,
             expected_audience: config.oauth_resource_audience.clone(),
             http_client,
         })
@@ -179,7 +187,7 @@ impl TokenIntrospection {
         let roles = crate::authorization::roles_from_claims(
             &response.extra_fields().claims,
             &self.project_id,
-            &self.organization_id,
+            &self.organization_ids,
         );
         Ok(AuthenticatedUser {
             roles,
@@ -273,9 +281,9 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let provider = Router::new().route("/introspect", post(|axum::Form(form): axum::Form<std::collections::HashMap<String, String>>| async move {
             let token = form.get("token").map(String::as_str).unwrap_or("");
-            let audience = if token == "wrong-project" { "other" } else { "app" };
-            let organization = if token == "wrong-org" { "other" } else { "org" };
-            let role = match token { "production" => "production", "no-role" => "unknown", _ => "sales" };
+            let audience = if matches!(token, "wrong-project" | "external-wrong-project") { "other" } else { "app" };
+            let organization = if token == "wrong-org" { "other" } else if token.starts_with("external-") { "external-org" } else { "org" };
+            let role = match token { "production" | "external-production" => "production", "no-role" | "external-no-role" => "unknown", _ => "sales" };
             Json(json!({"active": token != "inactive", "sub": "person", "aud": [audience],
                 "urn:zitadel:iam:org:project:app:roles": {role: {organization: "domain"}}
             }))
@@ -287,6 +295,8 @@ mod tests {
         config.oauth_resource_audience = None;
         config.zitadel_project_id = Some("app".into());
         config.zitadel_organization_id = Some("org".into());
+        config.zitadel_trusted_organization_ids =
+            Some(" external-org, second-org, external-org, ,".into());
         config.zitadel_users_client_id = Some("test".into());
         config.zitadel_users_client_secret = Some("test".into());
         let introspection = TokenIntrospection::discover(&config).await.unwrap();
@@ -302,6 +312,10 @@ mod tests {
                 "/invoices",
                 get(|| async { "allowed" }).post(|| async { "saved" }),
             )
+            .route(
+                "/orders/:id/stages/:stageId",
+                post(|| async { "stage saved" }),
+            )
             .route_layer(axum::middleware::from_fn_with_state(
                 state.clone(),
                 require_auth,
@@ -316,6 +330,10 @@ mod tests {
         let client = reqwest::Client::new();
         for (token, expected) in [
             ("sales", 200),
+            ("external-sales", 200),
+            ("external-production", 403),
+            ("external-wrong-project", 401),
+            ("external-no-role", 403),
             ("production", 403),
             ("wrong-project", 401),
             ("wrong-org", 403),
@@ -342,6 +360,17 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status().as_u16(), 200);
+        for (token, expected) in [("external-production", 200), ("external-sales", 403)] {
+            let response = client
+                .post(format!(
+                    "http://{app_address}/api/orders/order/stages/stage"
+                ))
+                .bearer_auth(token)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status().as_u16(), expected, "{token}");
+        }
         // Verify auth is installed on every actual feature route, before
         // payload extraction or any database work can take place.
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

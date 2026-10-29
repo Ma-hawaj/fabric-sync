@@ -25,13 +25,30 @@ export function hasRole(
   )
 }
 
+/** Primary and external organizations trusted to assign roles in this project. */
+export function trustedOrganizationIds(
+  primary: string,
+  additional = '',
+): string[] {
+  return [
+    ...new Set(
+      [primary, ...additional.split(',')]
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  ]
+}
+
 export function rolesFromProfile(
   profile: Record<string, unknown> | undefined,
   project = import.meta.env.VITE_ZITADEL_PROJECT_ID as string | undefined,
   organization = import.meta.env.VITE_ZITADEL_ORGANIZATION_ID as
     string | undefined,
+  trustedOrganizations = import.meta.env
+    .VITE_ZITADEL_TRUSTED_ORGANIZATION_IDS as string | undefined,
 ): Role[] {
-  if (!profile || !project || !organization) return []
+  if (!profile || !project || !organization?.trim()) return []
+  const trustedIds = trustedOrganizationIds(organization, trustedOrganizations)
   // The explicit project claim prevents roles from another project from
   // enabling controls. The backend independently validates the access token.
   const claim = profile[`urn:zitadel:iam:org:project:${project}:roles`]
@@ -42,8 +59,10 @@ export function rolesFromProfile(
       organizations !== null &&
       typeof organizations === 'object' &&
       !Array.isArray(organizations) &&
-      typeof (organizations as Record<string, unknown>)[organization] ===
-        'string'
+      trustedIds.some(
+        (id) =>
+          typeof (organizations as Record<string, unknown>)[id] === 'string',
+      )
     )
   })
 }

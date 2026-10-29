@@ -21,21 +21,36 @@ pub fn has_any_role(held: &[Role], required: &[Role]) -> bool {
             }))
 }
 
+/// The primary organization remains trusted when no external IDs are configured.
+/// Entries are literal organization IDs; blanks are ignored and duplicates removed.
+pub fn trusted_organization_ids(primary: &str, additional: &str) -> Vec<String> {
+    let mut ids = Vec::new();
+    for id in std::iter::once(primary).chain(additional.split(',')) {
+        let id = id.trim();
+        if !id.is_empty() && !ids.iter().any(|existing| existing == id) {
+            ids.push(id.to_owned());
+        }
+    }
+    ids
+}
+
 /// Accept only the explicit project claim: a generic role claim could refer
 /// to a different project on a token with several audiences. Each role must
-/// also contain the configured organization as a map key.
+/// also contain a configured trusted organization as a map key.
 pub fn roles_from_claims(
     claims: &HashMap<String, serde_json::Value>,
     project: &str,
-    organization: &str,
+    trusted_organizations: &[String],
 ) -> Vec<Role> {
     let namespaced = format!("urn:zitadel:iam:org:project:{project}:roles");
     let mut roles = Vec::new();
     if let Some(map) = claims.get(&namespaced).and_then(|value| value.as_object()) {
         for (name, organizations) in map {
             if organizations.as_object().is_some_and(|map| {
-                map.get(organization)
-                    .is_some_and(|domain| domain.is_string())
+                trusted_organizations.iter().any(|organization| {
+                    map.get(organization)
+                        .is_some_and(|domain| domain.is_string())
+                })
             }) {
                 if let Ok(role) =
                     serde_json::from_value::<Role>(serde_json::Value::String(name.clone()))
@@ -118,6 +133,53 @@ mod tests {
         }
     }
     #[test]
+    fn trusted_ids_preserve_primary_and_normalize_external_ids() {
+        assert_eq!(trusted_organization_ids("org", ""), vec!["org"]);
+        assert_eq!(
+            trusted_organization_ids(" org ", " , ext,org, ext, second , ,"),
+            vec!["org", "ext", "second"]
+        );
+        assert_eq!(trusted_organization_ids("org", " , , "), vec!["org"]);
+    }
+
+    #[test]
+    fn external_grants_require_trusted_ids_and_keep_role_permissions() {
+        let claims = serde_json::from_value(serde_json::json!({
+            "urn:zitadel:iam:org:project:app:roles": {
+                "sales": {"org": "primary.example", "ext": "external.example"},
+                "production": {"ext": "external.example", "second": "second.example"},
+                "admin": {"untrusted": "unknown.example"},
+                "manager": {"ext": 42},
+                "inventory": ["ext"],
+                "unknown": {"ext": "external.example"}
+            },
+            "urn:zitadel:iam:org:project:other:roles": {"admin": {"ext": "external.example"}},
+            "urn:zitadel:iam:org:project:roles": {"admin": {"ext": "external.example"}}
+        }))
+        .unwrap();
+        let local = roles_from_claims(&claims, "app", &trusted_organization_ids("org", ""));
+        assert_eq!(local, vec![Role::Sales]);
+        let roles = roles_from_claims(
+            &claims,
+            "app",
+            &trusted_organization_ids("org", "ext, second, ext"),
+        );
+        assert_eq!(roles.len(), 2);
+        assert!(roles.contains(&Role::Sales) && roles.contains(&Role::Production));
+        assert!(authorize(&roles, "POST", "/orders/:id/stages/:stageId").is_ok());
+        assert!(authorize(&roles, "POST", "/locations").is_err());
+        assert!(
+            roles_from_claims(&claims, "missing", &trusted_organization_ids("org", "ext"))
+                .is_empty()
+        );
+        assert!(roles_from_claims(&claims, "app", &[]).is_empty());
+        assert_eq!(
+            roles_from_claims(&claims, "app", &trusted_organization_ids("org", "*")),
+            local
+        );
+    }
+
+    #[test]
     fn roles_are_scoped_to_project_and_organization() {
         let claims: HashMap<String, serde_json::Value> =
             serde_json::from_value(serde_json::json!({
@@ -130,8 +192,11 @@ mod tests {
                 }
             }))
             .unwrap();
-        assert_eq!(roles_from_claims(&claims, "app", "org"), vec![Role::Sales]);
-        assert!(roles_from_claims(&claims, "missing", "org").is_empty());
+        assert_eq!(
+            roles_from_claims(&claims, "app", &["org".into()]),
+            vec![Role::Sales]
+        );
+        assert!(roles_from_claims(&claims, "missing", &["org".into()]).is_empty());
     }
 }
 

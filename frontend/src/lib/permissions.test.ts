@@ -8,6 +8,7 @@ import {
   hasRole,
   homePath,
   rolesFromProfile,
+  trustedOrganizationIds,
 } from './permissions'
 import type { Role } from './permissions'
 
@@ -29,6 +30,61 @@ describe('Zitadel roles', () => {
     expect(rolesFromProfile(profile, 'missing', 'org')).toEqual([])
     expect(rolesFromProfile(profile, 'app', 'wrong-org')).toEqual([])
     expect(rolesFromProfile(undefined, 'app', 'org')).toEqual([])
+  })
+})
+
+describe('external project role assignments', () => {
+  const profile = {
+    'urn:zitadel:iam:org:project:app:roles': {
+      sales: { org: 'primary.example', ext: 'external.example' },
+      production: { ext: 'external.example', second: 'second.example' },
+      admin: { untrusted: 'unknown.example' },
+      manager: { ext: 42 },
+      inventory: ['ext'],
+      unknown: { ext: 'external.example' },
+    },
+    'urn:zitadel:iam:org:project:other:roles': {
+      admin: { ext: 'external.example' },
+    },
+    'urn:zitadel:iam:org:project:roles': { admin: { ext: 'external.example' } },
+  }
+  it('normalizes the allowlist without removing the primary organization', () => {
+    expect(
+      trustedOrganizationIds(' org ', ' , ext, org, ext, second , ,'),
+    ).toEqual(['org', 'ext', 'second'])
+    expect(trustedOrganizationIds('org', ' , , ')).toEqual(['org'])
+  })
+  it('requires opt-in and unions local and trusted external grants without duplicates', () => {
+    expect(rolesFromProfile(profile, 'app', 'org', '')).toEqual(['sales'])
+    expect(
+      rolesFromProfile(profile, 'app', 'org', ' ext, second, ext, ,'),
+    ).toEqual(['sales', 'production'])
+    expect(rolesFromProfile(profile, 'app', 'org', '*')).toEqual(['sales'])
+  })
+  it('ignores untrusted organizations, unrelated projects, and malformed grants', () => {
+    expect(rolesFromProfile(profile, 'missing', 'org', 'ext')).toEqual([])
+    expect(rolesFromProfile(profile, 'app', 'org', 'ext')).not.toContain(
+      'admin',
+    )
+    expect(rolesFromProfile(profile, 'app', 'org', 'ext')).not.toContain(
+      'manager',
+    )
+    expect(rolesFromProfile(profile, 'app', 'org', 'ext')).not.toContain(
+      'inventory',
+    )
+    expect(rolesFromProfile(profile, 'app', '', 'ext')).toEqual([])
+  })
+  it('keeps the existing endpoint and form permissions for an externally assigned role', () => {
+    const externalOnly = {
+      'urn:zitadel:iam:org:project:app:roles': {
+        production: { ext: 'external.example' },
+      },
+    }
+    const user = { roles: rolesFromProfile(externalOnly, 'app', 'org', 'ext') }
+    expect(canAccess(user, 'POST', '/orders/1/stages/2')).toBe(true)
+    expect(canAccess(user, 'GET', '/locations')).toBe(true)
+    expect(canAccess(user, 'POST', '/invoices')).toBe(false)
+    expect(canVisit(user, '/locations/new')).toBe(false)
   })
 })
 

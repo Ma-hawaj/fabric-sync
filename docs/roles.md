@@ -10,7 +10,7 @@ access only its own preferences. There is no viewer role or automatic staff role
 ## Zitadel setup
 
 1. Create those five role keys in the application's Zitadel project and grant
-   each user the roles they need in the permitted organization. Keep the SPA
+   each user the roles they need in a trusted organization. Keep the SPA
    application and backend introspection application in this project.
 2. Enable project role assertion in Zitadel and role assertion for the relevant
    application responses. The SPA requests `urn:zitadel:iam:org:projects:roles`
@@ -23,18 +23,58 @@ access only its own preferences. There is no viewer role or automatic staff role
    Missing backend values refuse authentication setup at startup; missing frontend
    values show a configuration error. For container deployment pass the frontend
    values as Docker build arguments (or GitHub repository variables for the Docker
-   workflow), and backend values as runtime environment variables.
+   workflow), and backend values as runtime environment variables. To trust external
+   role assignments, set the matching comma-separated allowlists described below.
 4. Sign out and sign in again after changing role scopes or grants. The frontend
    updates when the OIDC profile refreshes; the backend introspects on each request.
    The browser query cache is cleared when the identity or recognized roles change.
 
 Backend authentication requires an active access token with the configured project
 in its audience, plus `OAUTH_RESOURCE_AUDIENCE` when configured. Authorization
-accepts only the explicit project role claim and the configured organization.
-Generic roles, Authentik groups, unknown roles, and grants in other organizations
-provide no permissions. An invalid token returns 401; a valid token without the
+accepts only the explicit project role claim and a trusted organization ID.
+Generic roles, Authentik groups, unknown roles, and grants from organizations
+outside the allowlist provide no permissions. An invalid token returns 401; a valid token without the
 required role returns 403. The frontend guards improve the UI; the API enforces
 all permissions independently.
+
+## External user role assignments
+
+The primary `ZITADEL_ORGANIZATION_ID` is always trusted. External assignments
+are opt-in: list additional organization IDs in backend
+`ZITADEL_TRUSTED_ORGANIZATION_IDS` and the same IDs in frontend
+`VITE_ZITADEL_TRUSTED_ORGANIZATION_IDS`. These are optional comma-separated
+lists; whitespace, empty entries, and duplicates are ignored. Blank or unset
+lists preserve primary-organization-only access. IDs are matched literally;
+`*` does not enable all organizations.
+
+For example:
+
+```dotenv
+# Backend runtime configuration
+ZITADEL_ORGANIZATION_ID=primary-org-id
+ZITADEL_TRUSTED_ORGANIZATION_IDS=partner-org-id,contractor-org-id
+
+# Frontend build configuration
+VITE_ZITADEL_ORGANIZATION_ID=primary-org-id
+VITE_ZITADEL_TRUSTED_ORGANIZATION_IDS=partner-org-id,contractor-org-id
+```
+
+In Zitadel, create a project grant for the external organization, delegate the
+appropriate application role keys, and assign its users to those roles through
+the grant. Use the organization ID keys emitted in the project's role claim,
+not email domains or organization display names. Role keys from all trusted
+organizations are combined and deduplicated. A trusted external assignment
+receives exactly the same permissions as a primary-organization assignment of
+that role, including manager/admin privileges when those roles are granted.
+Project namespacing, token audience checks, and all endpoint/field permissions
+still apply.
+
+Pass the frontend list as the Docker build argument or GitHub repository
+variable of the same name. Compose passes the backend list at runtime. Rebuild
+the frontend and restart the backend after changing these settings; sign in
+again after changing Zitadel grants. External login authorization does not
+provision users or expand the directory machine user's permissions, which also
+control which people can be found in staff/assignee lookups.
 
 ## Policy source
 
