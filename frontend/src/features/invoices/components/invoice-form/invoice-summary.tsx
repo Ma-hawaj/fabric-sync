@@ -287,7 +287,7 @@ export function InvoiceSummary({
             </span>
           </div>
         ))}
-        <div className="flex justify-between gap-3 rounded-lg border border-brand/20 bg-brand-soft p-3 font-semibold">
+        <div className="flex justify-between gap-3 rounded-lg border border-primary/20 bg-accent p-3 font-semibold text-accent-foreground">
           <span>Total</span>
           <span className="shrink-0 tabular-nums">
             {totals ? `${CURRENCY} ${totals.total.toFixed(2)}` : '—'}

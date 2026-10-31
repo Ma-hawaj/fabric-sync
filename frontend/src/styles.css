@@ -37,8 +37,6 @@ body {
   --muted-foreground: #625c56;
   --accent: #f8eadc;
   --accent-foreground: #233029;
-  --brand: #c09457;
-  --brand-soft: #f8eadc;
   --destructive: #ab3e36;
   --success: #28704e;
   --info: #326388;
@@ -79,8 +77,6 @@ body {
   --muted-foreground: #bbb8ac;
   --accent: #34453a;
   --accent-foreground: #f8eadc;
-  --brand: #c09457;
-  --brand-soft: #34453a;
   --destructive: #f29a8d;
   --success: #91cba7;
   --info: #9bc4e0;
@@ -109,8 +105,6 @@ body {
   --font-sans: 'Inter Variable', sans-serif;
   --font-heading: 'Inter Variable', sans-serif;
   --font-mono: 'JetBrains Mono Variable', monospace;
-  --color-brand: var(--brand);
-  --color-brand-soft: var(--brand-soft);
   --color-success: var(--success);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);

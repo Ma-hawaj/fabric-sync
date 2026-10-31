@@ -35,7 +35,7 @@ export function SegmentedOptions({
           className={cn(
             'rounded-md border px-3 py-1.5 text-sm font-medium transition-colors',
             value === option
-              ? 'border-primary bg-brand-soft text-foreground'
+              ? 'border-primary bg-accent text-accent-foreground'
               : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
           )}
         >

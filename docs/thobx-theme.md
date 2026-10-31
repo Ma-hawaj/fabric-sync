@@ -2,19 +2,21 @@
 
 Verified on 2026-10-31 against the rendered [official homepage](https://thobx.bh/), its inline styles, and [Salient's dynamic stylesheet](https://thobx.bh/wp-content/uploads/salient/salient-dynamic-styles.css). These are observed website colors, not a separate brand guidelines document.
 
-| Website color              | Evidence                                                               | App use                                                                  |
-| -------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Gold `#C09457`             | `--nectar-accent-color`; heading highlights and testimonial background | Brand emblem and active indicator, summary accents, dark primary actions |
-| Forest green `#233029`     | `--nectar-extra-color-1`; header background setting and hero overlay   | Sidebar, light primary actions and focus rings                           |
-| Supporting green `#28392F` | `--nectar-extra-color-2`                                               | Navigation hover and dark secondary surfaces                             |
-| Taupe `#E2DBD5`            | `--nectar-bg-color`; computed services and footer backgrounds          | Light workspace background, dark text                                    |
-| Stone `#D9D2CC`            | `--nectar-extra-color-3`                                               | Light secondary surfaces                                                 |
-| Cream `#F8EADC`            | Inline testimonial text color, confirmed by computed styles            | Light selection/summary surfaces, navigation hover text                  |
-| Ink `#151110`              | `--nectar-font-color`; computed body/heading text                      | Light body text                                                          |
+| Website color              | Evidence                                                               | App use                                                      |
+| -------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Gold `#C09457`             | `--nectar-accent-color`; heading highlights and testimonial background | Brand emblem, sidebar active indicator, dark primary actions |
+| Forest green `#233029`     | `--nectar-extra-color-1`; header background setting and hero overlay   | Sidebar, light primary actions and focus rings               |
+| Supporting green `#28392F` | `--nectar-extra-color-2`                                               | Navigation hover and dark secondary surfaces                 |
+| Taupe `#E2DBD5`            | `--nectar-bg-color`; computed services and footer backgrounds          | Light workspace background, dark text                        |
+| Stone `#D9D2CC`            | `--nectar-extra-color-3`                                               | Light secondary surfaces                                     |
+| Cream `#F8EADC`            | Inline testimonial text color, confirmed by computed styles            | Light selection/summary surfaces, navigation hover text      |
+| Ink `#151110`              | `--nectar-font-color`; computed body/heading text                      | Light body text                                              |
 
 The website also uses blue `#7A95A8` on its “Unique Details” section; it is available as a secondary chart color. Payment, readiness, repair and production badges retain their semantic colors. `StatusBadge` composes the generated shadcn `Badge` with Tailwind classes selected through CVA, following the primitive's variant pattern. The app-owned wrapper adds semantic tones without editing the generated component or adding global badge selectors.
 
 White data surfaces keep dense tables readable. Muted text, borders and dark background shades are app contrast adaptations; they are not claimed as additional official brand colors. Gold is an accent on light surfaces because it lacks normal-text contrast against white. Light buttons use white on forest green; dark buttons use forest green on gold. Selected segmented controls use the primary border to keep their state visible.
+
+Colors use the existing shadcn roles: `primary` for main actions and selected borders, `accent`/`accent-foreground` for selected surfaces and invoice totals, and `sidebar-primary` for navigation highlights. There are no separate `brand` or `brand-soft` tokens.
 
 The app uses Inter for body text and headings, and JetBrains Mono for identifiers. The official website uses display serif fonts; the app keeps a font suited to dense data screens. The Atelier labels identify the staff workspace. Existing role checks, workflows and light/dark/system appearance settings continue to apply.
 
