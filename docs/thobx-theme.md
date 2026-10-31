@@ -32,7 +32,7 @@ The sidebar uses the full gold artwork on forest green, in both themes. The coll
 
 ## Document logo configuration
 
-Invoices, orders, repairs and gift cards use the backend's `COMPANY_LOGO_DATA_URL` setting. Invoice, order and repair headers place the gold artwork on a compact forest green panel and keep the paper white. From the repository root, generate a single environment entry:
+Invoices, orders, repairs and gift cards use the backend's `COMPANY_LOGO_DATA_URL` setting. Invoice, order and repair headers center the gold artwork on white paper with no colored logo background. Equal-width columns for the company details and document title keep the logo aligned with the center of the page. From the repository root, generate a single environment entry:
 
 ```bash
 python3 - <<'PY'

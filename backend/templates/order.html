@@ -166,29 +166,28 @@
       /* Labels are English-only. */
 
       header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: center;
         gap: 10px;
         padding-bottom: 6px;
         border-bottom: 1.5px solid var(--ink);
       }
 
       .logo {
-        flex-shrink: 0;
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: center;
         width: 116px;
         height: 52px;
-        padding: 6px 8px;
-        border-radius: 4px;
-        background: var(--accent);
         object-fit: contain;
       }
 
       .company-identity {
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        grid-column: 1;
+        grid-row: 1;
         min-width: 0;
+        overflow-wrap: anywhere;
       }
 
       .company-name {
@@ -210,8 +209,9 @@
       }
 
       .doc-title {
-        text-align: left;
-        flex-shrink: 0;
+        grid-column: 3;
+        grid-row: 1;
+        text-align: right;
       }
 
       .doc-title h2 {
@@ -229,7 +229,7 @@
         font-weight: 700;
         color: var(--accent);
         direction: ltr;
-        text-align: left;
+        text-align: right;
       }
 
       .doc-number .ord {
@@ -569,17 +569,16 @@
     <main class="print-page">
     <header>
       <div class="company-identity">
-        {% if company.logoDataUrl %}
-          <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
-        {% endif %}
-        <div>
         <h1 class="company-name">{{ company.nameEn }}</h1>
         <div class="company-meta">
           {% if company.phone %}<div dir="ltr">{{ company.phone }}</div>{% endif %}
           {% if company.email %}<div dir="ltr">{{ company.email }}</div>{% endif %}
         </div>
-        </div>
       </div>
+
+      {% if company.logoDataUrl %}
+        <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
+      {% endif %}
 
       <div class="doc-title">
         <h2>Production Order</h2>

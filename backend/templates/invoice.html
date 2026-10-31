@@ -114,29 +114,28 @@
       }
 
       header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: center;
         gap: 16px;
         padding-bottom: 10px;
         border-bottom: 2px solid var(--ink);
       }
 
       .logo {
-        flex-shrink: 0;
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: center;
         width: 126px;
         height: 58px;
-        padding: 6px 8px;
-        border-radius: 4px;
-        background: var(--accent);
         object-fit: contain;
       }
 
       .company-identity {
-        display: flex;
-        align-items: flex-start;
-        gap: 10px;
+        grid-column: 1;
+        grid-row: 1;
         min-width: 0;
+        overflow-wrap: anywhere;
       }
 
       .company-name {
@@ -162,8 +161,9 @@
       }
 
       .doc-title {
+        grid-column: 3;
+        grid-row: 1;
         text-align: left;
-        flex-shrink: 0;
       }
 
       .doc-title h2 {
@@ -527,10 +527,6 @@
   <body>
     <header>
       <div class="company-identity">
-        {% if company.logoDataUrl %}
-          <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
-        {% endif %}
-        <div>
         <h1 class="company-name">
           {{ company.nameAr }}
           <span class="en">{{ company.nameEn }}</span>
@@ -550,8 +546,11 @@
             </div>
           {% endif %}
         </div>
-        </div>
       </div>
+
+      {% if company.logoDataUrl %}
+        <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
+      {% endif %}
 
       <div class="doc-title">
         <h2>

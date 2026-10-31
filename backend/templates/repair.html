@@ -69,29 +69,28 @@
       }
 
       header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: center;
         gap: 10px;
         padding-bottom: 8px;
         border-bottom: 1.5px solid var(--ink);
       }
 
       .logo {
-        flex-shrink: 0;
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: center;
         width: 116px;
         height: 52px;
-        padding: 6px 8px;
-        border-radius: 4px;
-        background: var(--accent);
         object-fit: contain;
       }
 
       .company-identity {
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        grid-column: 1;
+        grid-row: 1;
         min-width: 0;
+        overflow-wrap: anywhere;
       }
 
       .company-name {
@@ -107,6 +106,8 @@
       }
 
       .doc-title {
+        grid-column: 3;
+        grid-row: 1;
         text-align: end;
       }
 
@@ -224,16 +225,14 @@
     <main class="print-page">
     <header>
       <div class="company-identity">
-        {% if company.logoDataUrl %}
-          <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
-        {% endif %}
-        <div>
         <p class="company-name">{{ company.nameEn }} · {{ company.nameAr }}</p>
         <p class="company-meta">
           {{ company.addressEn }}{% if company.phone %} · {{ company.phone }}{% endif %}
         </p>
-        </div>
       </div>
+      {% if company.logoDataUrl %}
+        <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
+      {% endif %}
       <div class="doc-title">
         <h1>Repair receipt · إيصال إصلاح</h1>
         <p>ORD-{{ order.orderNumber }} · INV-{{ order.invoiceNumber }}</p>
