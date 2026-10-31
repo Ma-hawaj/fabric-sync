@@ -18,6 +18,8 @@ White data surfaces keep dense tables readable. Muted text, borders and dark bac
 
 The app uses Inter for body text and headings, and JetBrains Mono for identifiers. The official website uses display serif fonts; the app keeps a font suited to dense data screens. The Atelier labels identify the staff workspace. Existing role checks, workflows and light/dark/system appearance settings continue to apply.
 
+Page headings, list spacing and list descriptions use standard Tailwind scale utilities on the owning page elements: `text-2xl`, `leading-tight`, `tracking-tight`, `gap-5`, `mt-1.5` and `text-sm`. They are not styled through a global workspace class or descendant overrides. The existing `list-page` and `workspace-page` data slots identify the page layouts for the app shell's width constraints.
+
 Browser inspection used TLS-verified responses through the environment proxy. Google Fonts and analytics were skipped because those external hosts are outside this environment's allowed destinations; the page's own HTML, CSS, scripts and images were loaded. Color verification is unaffected by those font/analytics requests.
 
 ## Official logo

@@ -79,7 +79,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               <PackageCheckIcon className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">
+              <h1 className="text-2xl font-semibold leading-tight tracking-tight">
                 Order ORD-{order.orderNumber}
               </h1>
               <p className="text-muted-foreground">
