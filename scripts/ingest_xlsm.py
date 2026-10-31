@@ -3,7 +3,7 @@
 
 Reads three sheets of the workbook (read-only, no macros executed) and loads
 their data into the Postgres schema defined by
-``backend/migrations/20260712000000_create_tables.sql``:
+``backend/migrations/0001_core_schema.sql``:
 
   New          -> invoices + orders (+ per-order measurement copies)
   Measurments  -> value source for the copies + standalone customer history
@@ -54,11 +54,14 @@ Mapping decisions worth knowing:
     default ``'General'``), created when missing. Fabric identity for
     legacy orders is therefore not preserved; re-run against a DB that
     already holds sheet-named materials leaves those rows untouched.
+    Legacy fabric quantities are unknown: ``--material-amount`` supplies a
+    positive placeholder per order (default 1 metre), without deducting stock.
   * Invoice money is stored exactly as charged: total_price = Final Amount,
     discount = Discount. Order prices split the final amount across the
     invoice's orders, so they are VAT-inclusive gross figures — the app's
-    breakdown extracts VAT from the discounted gross, which matches how the
-    workbook charged it (see invoices/service.rs breakdown).
+    saved tax basis extracts 10% VAT from Final Amount (already discounted),
+    rounding the taxable amount to cents and storing VAT as the remainder.
+    Discount is not subtracted again (see invoices/service.rs breakdown).
   * Every payment lands in invoice_payments: the advance as one row, and for
     done receipts the remainder as a second row, so the derived status comes
     out paid. Payment types map to benefit/cash/card; the workbook's coupons,
@@ -138,6 +141,7 @@ WORKBOOK = ROOT / "2026 Orders.xlsm"
 DEFAULT_MATERIAL = "General"
 PLACEHOLDER_DATE = dt.datetime(2026, 1, 1, 0, 0, 0)
 DEFAULT_BRANCH = "Main Branch"
+LEGACY_VAT_RATE = Decimal("0.10")
 
 VULGAR = {
     "⅛": Decimal("0.125"), "¼": Decimal("0.25"), "⅜": Decimal("0.375"),
@@ -828,7 +832,12 @@ def has_stored_values(m: dict) -> bool:
 
 
 def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
-                   material_name: str = DEFAULT_MATERIAL) -> None:
+                   material_name: str = DEFAULT_MATERIAL,
+                   material_amount: Decimal = Decimal("1")) -> None:
+    if (not material_amount.is_finite() or material_amount <= 0
+            or material_amount > Decimal("99999999.99")
+            or material_amount != material_amount.quantize(Decimal("0.01"))):
+        raise ValueError("material amount must be positive with at most two decimal places")
     state = load_db_state(conn)
     with conn.cursor() as cur:
         # ---- materials ------------------------------------------------------
@@ -959,6 +968,10 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                                inv["invoice_number"])
                 continue
             total = inv["final"]
+            # Final Amount is the VAT-inclusive amount already charged.
+            taxable_amount = (total / (1 + LEGACY_VAT_RATE)).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP)
+            vat_amount = total - taxable_amount
             delivery = inv["delivery"]
             target_date = (
                 delivery.date()
@@ -971,8 +984,9 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 """
                 INSERT INTO invoices (
                     invoice_number, created_at, total_price, invoice_date, target_date, branch_id,
-                    discount, discount_unit, customer_id, gift_card_redeemed
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'amount', %s, 0)
+                    discount, discount_unit, customer_id, gift_card_redeemed,
+                    vat_rate, taxable_amount, vat_amount
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'amount', %s, 0, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -984,6 +998,9 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                     branch_id,
                     inv["discount"],
                     customer_ids[inv_key],
+                    LEGACY_VAT_RATE,
+                    taxable_amount,
+                    vat_amount,
                 ),
             )
             invoice_id = cur.fetchone()[0]
@@ -1077,7 +1094,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                     (
                         measurement_id,
                         material_id,
-                        Decimal("0"),
+                        material_amount,
                         invoice_id,
                         prices[k],
                         design.get("thobe_type"),
@@ -1180,6 +1197,8 @@ def main() -> int:
     parser.add_argument("--material", default=DEFAULT_MATERIAL,
                         help="placeholder material every order points at "
                              "(created if missing; sheet names are ignored)")
+    parser.add_argument("--material-amount", type=Decimal, default=Decimal("1"),
+                        help="positive placeholder metres per legacy order (default: 1)")
     parser.add_argument("--dry-run", action="store_true",
                         help="read the workbook only; write nothing")
     args = parser.parse_args()
@@ -1211,7 +1230,7 @@ def main() -> int:
                 branch_id = cur.fetchone()[0]
             report.count(f"branch created: {created_name}")
         perform_insert(conn, workbook, branch_id, report,
-                       material_name=args.material)
+                       material_name=args.material, material_amount=args.material_amount)
         conn.commit()
     except Exception:
         conn.rollback()
