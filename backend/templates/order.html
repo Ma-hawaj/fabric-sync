@@ -92,10 +92,9 @@
 {%- macro thobe_ellipse(e) -%}
   <ellipse class="thob-garment" cx="{{ e.cx }}" cy="{{ e.cy }}" rx="{{ e.rx }}" ry="{{ e.ry }}"{% if e.transform %} transform="{{ e.transform }}"{% endif %}{% if e.stroke_width %} stroke-width="{{ e.stroke_width }}"{% endif %} />
 {%- endmacro -%}
-{# One design cell: thumbnail above, small caption below. `cls` carries the
-   cell classes so the sidebar and the overflow strip share the markup. #}
-{%- macro design_cell(chip, cls) -%}
-  <div class="{{ cls }}">
+{# One design cell: thumbnail above, full caption below. #}
+{%- macro design_cell(chip) -%}
+  <div class="design-cell">
     {% if chip.image %}
       <img src="{{ chip.image }}" alt="{{ chip.label }}" />
     {% else %}
@@ -128,20 +127,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Order ORD-{{ order.orderNumber }}</title>
     <style>
-      /* A4 with a tight printer-safe margin. Compact type, single-line
-         bilingual labels and small design thumbnails keep the header tight;
-         the thobe sheet below it prints tall so the slot values stay
-         readable, and the measurement tables flow after it. */
+      /* All seven choices and the complete measurement snapshot share one A4. */
       @page {
         size: A4;
         margin: 8mm;
       }
 
       :root {
-        --ink: #10151c;
-        --muted: #6b7280;
-        --rule: #d8dee7;
-        --accent: #1d4ed8;
+        --ink: #151110;
+        --muted: #626660;
+        --rule: #e2dbd5;
+        --accent: #233029;
       }
 
       * {
@@ -179,9 +175,20 @@
       }
 
       .logo {
-        max-height: 36px;
-        max-width: 140px;
+        flex-shrink: 0;
+        width: 116px;
+        height: 52px;
+        padding: 6px 8px;
+        border-radius: 4px;
+        background: var(--accent);
         object-fit: contain;
+      }
+
+      .company-identity {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
       }
 
       .company-name {
@@ -268,12 +275,14 @@
       .row dt {
         margin: 0;
         color: var(--muted);
+        flex-shrink: 0;
       }
 
       .row dd {
         margin: 0;
         font-weight: 600;
         text-align: left;
+        overflow-wrap: anywhere;
       }
 
       dl {
@@ -324,19 +333,16 @@
         font-size: 8px;
       }
 
-      /* Side-by-side production spec: the design choices stack as a narrow
-         column on the left while the thobe sheet takes the remaining width,
-         so the diagram can print tall enough to read the slot values. */
+      /* Two columns keep every design choice beside the measurement diagram. */
       .design-and-sheet {
         display: grid;
-        grid-template-columns: 172px minmax(0, 1fr);
+        grid-template-columns: 218px minmax(0, 1fr);
         gap: 6px;
         margin-top: 6px;
         align-items: start;
       }
 
-      /* One bordered "Design" panel: a heading and then a vertical stack of
-         cells, one per slot (Thobe / Collar / Sleeve / Front Pocket / Side Pocket / Patti / EMD).
+      /* One bordered panel for all seven design slots.
          A catalog match fills its cell with a raster; a legacy value that
          matches nothing fills the label only, so the sheet reads the same
          shape either way. The panel never splits across pages. */
@@ -360,7 +366,7 @@
 
       .design-grid {
         display: grid;
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 3px;
       }
 
@@ -379,9 +385,7 @@
 
       .design-cell img {
         width: 100%;
-        /* Compact beside the sheet: five stacked choices stay in balance
-           with the taller diagram. */
-        height: 80px;
+        height: 48px;
         object-fit: contain;
       }
 
@@ -394,54 +398,35 @@
         flex-direction: column;
         align-items: center;
         text-align: center;
-        line-height: 1.1;
+        line-height: 1.3;
         min-width: 0;
       }
 
       .design-title {
-        font-size: 7px;
+        font-size: 9px;
         color: var(--muted);
-        white-space: nowrap;
       }
 
       .design-name {
-        font-size: 7.5px;
+        font-size: 10px;
         font-weight: 600;
         text-align: center;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        overflow-wrap: anywhere;
         max-width: 100%;
       }
 
       .design-note {
         margin-top: 3px;
         color: var(--muted);
-        font-size: 8.5px;
+        font-size: 10px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
       }
 
       /* The free-text note under the diagram gets a touch more air than its
          sidebar sibling since it spans the full sheet width. */
       .design-note-below {
         margin-top: 6px;
-      }
-
-      /* Choices past the fifth land here, below the diagram, so the sidebar
-         never stretches the side-by-side balance. Bounded in practice: six
-         design slots exist, so at most one chip overflows. */
-      .design-overflow {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 3px;
-        margin-top: 6px;
-      }
-
-      .design-overflow .design-cell {
-        flex: 0 1 140px;
-      }
-
-      .design-overflow .design-cell img {
-        height: 64px;
       }
 
       .measurements {
@@ -506,6 +491,9 @@
 
       .measurement-group .m span:last-child {
         font-weight: 600;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        min-width: 0;
       }
 
       .thob-sheet {
@@ -534,7 +522,7 @@
         display: block;
         width: 100%;
         height: auto;
-        max-height: 460px;
+        max-height: 380px;
         margin: 0 auto;
       }
 
@@ -577,16 +565,19 @@
       }
     </style>
   </head>
-  <body>
+  <body data-print-height="281" style="--page-width: 194mm">
+    <main class="print-page">
     <header>
-      <div>
+      <div class="company-identity">
         {% if company.logoDataUrl %}
           <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
         {% endif %}
+        <div>
         <h1 class="company-name">{{ company.nameEn }}</h1>
         <div class="company-meta">
           {% if company.phone %}<div dir="ltr">{{ company.phone }}</div>{% endif %}
           {% if company.email %}<div dir="ltr">{{ company.email }}</div>{% endif %}
+        </div>
         </div>
       </div>
 
@@ -689,11 +680,8 @@
         <h3>Design</h3>
         {% if designs %}
           <div class="design-grid">
-            {# The sidebar holds five choices; anything past that flows below
-               the diagram so the side-by-side balance never stretches. There
-               are only six design slots, so at most one lands there. #}
-            {% for chip in designs[:5] %}
-              {{ design_cell(chip, "design-cell") }}
+            {% for chip in designs %}
+              {{ design_cell(chip) }}
             {% endfor %}
           </div>
         {% else %}
@@ -747,13 +735,6 @@
         </div>
         {% if design_note %}
           <div class="design-note design-note-below">{{ design_note }}</div>
-        {% endif %}
-        {% if designs|length > 5 %}
-          <div class="design-overflow">
-            {% for chip in designs[5:] %}
-              {{ design_cell(chip, "design-cell design-cell-overflow") }}
-            {% endfor %}
-          </div>
         {% endif %}
       </div>
     </div>
@@ -822,5 +803,7 @@
         <div dir="ltr">ORD-{{ order.orderNumber }} · {{ invoice_date_time }}</div>
       </footer>
     </div>
+    </main>
+    {% include "print-fit.html" %}
   </body>
 </html>

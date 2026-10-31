@@ -49,6 +49,22 @@ export async function printHtmlDocument(
     throw new Error(`Could not open the ${label} document for printing.`)
   }
 
+  // The templates fit the complete sheet after their fonts and images load.
+  // Older disk overrides need only the normal resource readiness checks.
+  try {
+    const printView = view as Window & { documentPrintReady?: Promise<void> }
+    await view.document.fonts.ready
+    await Promise.all(
+      Array.from(view.document.images, (image) =>
+        image.decode().catch(() => undefined),
+      ),
+    )
+    await printView.documentPrintReady
+  } catch (error) {
+    frame.remove()
+    throw error
+  }
+
   let removed = false
   const remove = () => {
     if (removed) return

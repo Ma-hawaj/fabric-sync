@@ -1047,14 +1047,13 @@ mod tests {
     }
 
     #[test]
-    fn extra_design_choices_overflow_below_the_sheet() {
-        // All six slots filled: five stack in the sidebar, the sixth flows
-        // below the diagram so the side-by-side balance never stretches.
+    fn all_seven_design_choices_stay_together_beside_the_sheet() {
         let mut order = services_order();
         order.thobe_type = Some("thobx".to_string());
         order.collar = Some("Saudi".to_string());
         order.sleeve = Some("open".to_string());
         order.f_pocket = Some("round".to_string());
+        order.s_pocket = Some("with button".to_string());
         order.patti = Some("normal".to_string());
         order.emd = Some("6".to_string());
         let detail = OrderDetail {
@@ -1064,8 +1063,8 @@ mod tests {
         };
         let html = test_render(&detail, &branding());
 
-        assert_eq!(html.matches("<div class=\"design-cell\">").count(), 5);
-        assert_eq!(html.matches("design-cell-overflow").count(), 1);
+        assert_eq!(html.matches("<div class=\"design-cell\">").count(), 7);
+        assert!(html.find("with button").unwrap() < html.find("<svg").unwrap());
     }
 
     #[test]

@@ -32,7 +32,7 @@ The sidebar uses the full gold artwork on forest green, in both themes. The coll
 
 ## Document logo configuration
 
-Invoices, orders, repairs and gift cards use the backend's `COMPANY_LOGO_DATA_URL` setting. The gold artwork is suitable for the documents' light backgrounds. From the repository root, generate a single environment entry:
+Invoices, orders, repairs and gift cards use the backend's `COMPANY_LOGO_DATA_URL` setting. Invoice, order and repair headers place the gold artwork on a compact forest green panel and keep the paper white. From the repository root, generate a single environment entry:
 
 ```bash
 python3 - <<'PY'
@@ -45,3 +45,11 @@ PY
 ```
 
 Set the output in the backend environment, or in the environment file used by production Compose, and restart the backend to apply it. The source image is bundled with the app; document rendering does not need to fetch it from the website.
+
+## Printed sheets
+
+Orders keep all seven design choices beside the thobe diagram, with full names wrapping instead of truncating. The complete recorded measurement snapshot remains below it. Repair receipts use two columns for the before/after measurements, preserving the reason, notes, dates, payments and signature lines.
+
+Order and repair sheets fit one A4 page. The shared embedded `print-fit.html` helper measures the complete content after fonts and images load; only overflowing sheets scale down, without clipping or dropping fields. The browser print helper waits for this preparation. Very long notes can therefore reduce the printed text size. `INVOICE_TEMPLATE_DIR` overrides continue to work, and may include the built-in fitting helper.
+
+Invoices retain the totals layout from #95, with forest green accents and larger design labels. Typical invoices fit one page; long invoices continue across pages at the same readable text size. Every page repeats the invoice reference and page number in its margin. Amounts, VAT, QR data and saved values remain computed by the existing Rust code.
