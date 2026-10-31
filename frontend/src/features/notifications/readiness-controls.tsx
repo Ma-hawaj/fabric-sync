@@ -3,7 +3,8 @@ import { canAccess } from '@/lib/permissions'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/status-badge'
+import type { StatusTone } from '@/components/status-badge'
 import { StaffName } from '@/features/users/components/staff-name'
 import {
   Dialog,
@@ -29,6 +30,13 @@ export const readinessLabels: Record<string, string> = {
   partially_ready: 'Partially ready',
   in_progress: 'In progress',
 }
+const readinessTones: Record<string, StatusTone> = {
+  collected: 'success',
+  ready: 'success',
+  partially_ready: 'warning',
+  in_progress: 'info',
+}
+
 export function ReadinessBadge({
   readinessStatus,
   readyOrderCount,
@@ -37,9 +45,9 @@ export function ReadinessBadge({
   if (!readinessStatus || readinessStatus === 'not_applicable') return null
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
-      <Badge variant={readinessStatus === 'ready' ? 'default' : 'outline'}>
+      <StatusBadge tone={readinessTones[readinessStatus] ?? 'neutral'}>
         {readinessLabels[readinessStatus] ?? readinessStatus}
-      </Badge>
+      </StatusBadge>
       {readinessStatus !== 'collected' && (
         <span className="text-xs text-muted-foreground">
           {readyOrderCount ?? 0} ready · {pendingOrderCount ?? 0} in production

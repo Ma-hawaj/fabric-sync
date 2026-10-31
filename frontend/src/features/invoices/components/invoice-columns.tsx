@@ -12,6 +12,8 @@ import {
   WalletIcon,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/status-badge'
+import type { StatusTone } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
@@ -32,13 +34,10 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: CURRENCY,
 })
 
-const PAYMENT_STATUS_VARIANT: Record<
-  PaymentStatus,
-  'destructive' | 'secondary' | 'default'
-> = {
-  unpaid: 'destructive',
-  partial: 'secondary',
-  paid: 'default',
+const PAYMENT_STATUS_TONE: Record<PaymentStatus, StatusTone> = {
+  unpaid: 'danger',
+  partial: 'warning',
+  paid: 'success',
 }
 
 export const getInvoiceColumns = (
@@ -202,13 +201,11 @@ export const getInvoiceColumns = (
             <span className="text-muted-foreground">No tailoring orders</span>
           )
         return (
-          <Badge
-            variant={
-              collectedOrderCount === orderCount ? 'default' : 'secondary'
-            }
+          <StatusBadge
+            tone={collectedOrderCount === orderCount ? 'success' : 'neutral'}
           >
             {collectedOrderCount} of {orderCount} collected
-          </Badge>
+          </StatusBadge>
         )
       },
       enableSorting: true,
@@ -349,12 +346,12 @@ export const getInvoiceColumns = (
       cell: ({ row }) => {
         const status = row.getValue<PaymentStatus>('paymentStatus')
         return (
-          <Badge
-            variant={PAYMENT_STATUS_VARIANT[status]}
+          <StatusBadge
+            tone={PAYMENT_STATUS_TONE[status]}
             className="capitalize"
           >
             {status}
-          </Badge>
+          </StatusBadge>
         )
       },
       enableSorting: true,

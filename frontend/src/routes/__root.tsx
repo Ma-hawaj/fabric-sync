@@ -36,10 +36,14 @@ function RootErrorComponent({ error }: { error: Error }) {
 
 function Header() {
   return (
-    <header className="shrink-0 border-b">
-      <div className="flex h-12 items-center gap-2 px-3 md:px-4">
+    <header className="shrink-0 border-b bg-card">
+      <div className="flex h-14 items-center gap-3 px-4 md:px-6">
         <SidebarTrigger />
+        <span className="h-4 w-px bg-border" aria-hidden="true" />
         <Breadcrumbs />
+        <span className="ms-auto hidden text-[10px] font-medium tracking-widest text-muted-foreground sm:block">
+          THOBX ATELIER
+        </span>
       </div>
     </header>
   )
@@ -51,7 +55,7 @@ function RootComponent() {
       <Sidebar />
       <SidebarInset className="min-w-0 overflow-hidden">
         <Header />
-        <div className="min-h-0 flex-1 overflow-y-auto p-3 md:p-4 [&>:not([data-slot=list-page])]:mx-auto [&>:not([data-slot=list-page]):not([data-slot=workspace-page])]:max-w-6xl">
+        <div className="workspace-content min-h-0 flex-1 overflow-y-auto p-4 md:p-6 [&>:not([data-slot=list-page])]:mx-auto [&>:not([data-slot=list-page]):not([data-slot=workspace-page])]:max-w-6xl">
           <Outlet />
         </div>
       </SidebarInset>
