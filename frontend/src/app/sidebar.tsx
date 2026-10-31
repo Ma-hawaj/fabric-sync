@@ -169,7 +169,7 @@ export function AppSidebar() {
             className="flex flex-col items-center gap-2 rounded-xl px-1 py-1.5"
           >
             <img
-              src="/brand/thobx-logo-white.webp"
+              src="/brand/thobx-logo-gold.webp"
               alt="THOBX — ثوبكس"
               width={826}
               height={346}

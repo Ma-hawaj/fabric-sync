@@ -28,7 +28,7 @@ Browser inspection used TLS-verified responses through the environment proxy. Go
 
 The homepage uses the original bilingual logo: the English wordmark, central ornamental emblem and Arabic wordmark. Its [white artwork](https://thobx.bh/wp-content/uploads/2025/08/logo-w.png) and [gold artwork](https://thobx.bh/wp-content/uploads/2025/08/logo-g.png) are bundled as lossless WebP files under `frontend/public/brand/`. Both retain the original 826 × 346 dimensions and transparency; decoded RGBA pixels match the source PNGs exactly. Opaque gold pixels are exactly `#C09457`, providing another direct source for the brand accent.
 
-The sidebar uses the full white artwork on forest green, in both themes. The collapsed sidebar and favicon display the central emblem from the gold artwork. The favicon embeds the lossless gold WebP and uses an SVG viewport to show only the emblem, with a forest background; it does not redraw the mark. The website's WordPress metadata reports no configured site icon, so this emblem presentation is an app adaptation rather than a claimed official favicon. These assets replace the starter branding and unused starter icons.
+The sidebar uses the full gold artwork on forest green, in both themes. The collapsed sidebar and favicon display the central emblem from the gold artwork. The favicon embeds the lossless gold WebP and uses an SVG viewport to show only the emblem, with a forest background; it does not redraw the mark. The website's WordPress metadata reports no configured site icon, so this emblem presentation is an app adaptation rather than a claimed official favicon. These assets replace the starter branding and unused starter icons.
 
 ## Document logo configuration
 
