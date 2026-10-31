@@ -15,7 +15,8 @@
 # Deploy with Dokploy:
 #   1. Dokploy > Compose > point it at this repo, compose file path
 #      `docker-compose.prod.yml`.
-#   2. Fill in the env vars below in the service's Environment tab.
+#   2. Copy .env.production.example into the service's Environment tab and
+#      fill in the required values.
 #   3. In the Domains tab, attach your public domain to the `app` service
 #      (port 8000).
 #   4. Deploy. To upgrade, set IMAGE_TAG to a new tag and Redeploy.
@@ -78,9 +79,9 @@ services:
       # deploy loudly instead of booting against an empty host. NOTE: keep
       # the password URL-safe (letters/digits) or URL-encode it.
       DATABASE_URL: postgres://${POSTGRES_ADMIN_USER:?set POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD:?set POSTGRES_ADMIN_PASSWORD}@${POSTGRES_HOST:?set POSTGRES_HOST}:5432/${POSTGRES_DB:?set POSTGRES_DB}
-      OAUTH_ISSUER_URL: ${OAUTH_ISSUER_URL}
-      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID}
-      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET}
+      OAUTH_ISSUER_URL: ${OAUTH_ISSUER_URL:?set OAUTH_ISSUER_URL}
+      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID:?set OAUTH_CLIENT_ID}
+      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:?set OAUTH_CLIENT_SECRET}
       # Only set if Zitadel uses a non-standard introspection endpoint —
       # otherwise discovery advertises it.
       OAUTH_INTROSPECTION_URL: ${OAUTH_INTROSPECTION_URL:-}
@@ -94,6 +95,11 @@ services:
       # backend/.env.example). Required — the app refuses to boot without both.
       ZITADEL_USERS_CLIENT_ID: ${ZITADEL_USERS_CLIENT_ID:?set ZITADEL_USERS_CLIENT_ID}
       ZITADEL_USERS_CLIENT_SECRET: ${ZITADEL_USERS_CLIENT_SECRET:?set ZITADEL_USERS_CLIENT_SECRET}
+      SEED_DESIGN_OPTIONS: ${SEED_DESIGN_OPTIONS:-false}
+      VAT_RATE: ${VAT_RATE:-0.10}
+      URGENT_ORDER_CHARGE: ${URGENT_ORDER_CHARGE:-}
+      URGENT_ORDER_CHARGE_UNIT: ${URGENT_ORDER_CHARGE_UNIT:-amount}
+      CUSTOMER_MATERIAL_BASE_PRICE: ${CUSTOMER_MATERIAL_BASE_PRICE:-}
       SEED_DEV_DATA: ${SEED_DEV_DATA:-false}
       TIMEZONE: ${TIMEZONE:-Asia/Bahrain}
       RUST_LOG: ${RUST_LOG:-info}
@@ -105,6 +111,8 @@ services:
       COMPANY_ADDRESS_AR: ${COMPANY_ADDRESS_AR:-}
       COMPANY_PHONE: ${COMPANY_PHONE:-}
       COMPANY_EMAIL: ${COMPANY_EMAIL:-}
+      # Custom templates require a matching read-only volume mount override.
+      INVOICE_TEMPLATE_DIR: ${INVOICE_TEMPLATE_DIR:-}
       COMPANY_LOGO_DATA_URL: ${COMPANY_LOGO_DATA_URL:-}
     # Liveness comes from the image's own HEALTHCHECK
     # (wget localhost:8000/health expecting {"status":"ok"}).
