@@ -2,6 +2,24 @@
 
 Fabric Sync is a full-stack workspace for building a protected data synchronization application. The repository is split into a Rust API backend and a React frontend.
 
+## Production deployment
+
+Production deployments use `docker-compose.prod.yml` with a prebuilt GHCR image
+and an existing Dokploy PostgreSQL 18+ database. Copy
+[`.env.production.example`](.env.production.example) into Dokploy's Environment
+tab and fill in the required credentials, project IDs, and database connection.
+For CLI deployments, copy it to `.env.production` and validate before starting:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml config --quiet
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+```
+
+The external `dokploy-network` must already exist. Set pricing values before
+accepting urgent or customer-material orders. Frontend `VITE_*` settings are
+baked into the image by the Docker workflow; configure its repository variables
+as listed in the example and rebuild when those values change.
+
 ## Repository Structure
 
 ```text
