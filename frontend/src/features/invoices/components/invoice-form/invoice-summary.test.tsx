@@ -118,17 +118,46 @@ function rowValue(label: string) {
 // Line prices are gross (VAT included): a 90 order holds 81.82 of net and
 // 8.18 of VAT, and the total is the 90 quoted — never 90 plus tax.
 describe('InvoiceSummary', () => {
-  it('uses the saved invoice rate rather than a new configured rate', () => {
-    render(
-      <Harness
-        defaultValues={baseValues({
-          expectedVatRate: 0.15,
-          customers: [customerWithOrder(110)],
-        })}
-      />,
-    )
-    expect(rowValue('VAT (15%, incl.)')).toBe(`${CURRENCY} 14.35`)
-  })
+  it.each([0, 200])(
+    'shows a total without VAT for %s of untaxed sales',
+    (amount) => {
+      render(
+        <Harness
+          defaultValues={baseValues({
+            giftCards:
+              amount > 0 ? [{ ...createEmptyGiftCardLine(), amount }] : [],
+          })}
+        />,
+      )
+      expect(rowValue('Total without VAT')).toBe(
+        `${CURRENCY} ${amount.toFixed(2)}`,
+      )
+      expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 0.00`)
+      expect(rowValue('Total incl. VAT')).toBe(
+        `${CURRENCY} ${amount.toFixed(2)}`,
+      )
+    },
+  )
+
+  it.each([
+    [0.15, '15', '14.35', '95.65'],
+    [0.125, '12.5', '12.22', '97.78'],
+  ] as const)(
+    'uses the saved invoice rate %s rather than a new configured rate',
+    (rate, percent, vat, withoutVat) => {
+      render(
+        <Harness
+          defaultValues={baseValues({
+            expectedVatRate: rate,
+            customers: [customerWithOrder(110)],
+          })}
+        />,
+      )
+      expect(rowValue(`VAT (${percent}%)`)).toBe(`${CURRENCY} ${vat}`)
+      expect(rowValue('Total without VAT')).toBe(`${CURRENCY} ${withoutVat}`)
+      expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 110.00`)
+    },
+  )
 
   it('shows order urgency totals without an invoice priority control', () => {
     render(
@@ -151,7 +180,8 @@ describe('InvoiceSummary', () => {
         })}
       />,
     )
-    expect(rowValue('Total')).toBe(`${CURRENCY} 110.00`)
+    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 100.00`)
+    expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 110.00`)
     expect(
       screen
         .getByRole('radio', { name: 'Delivery' })
@@ -199,7 +229,7 @@ describe('InvoiceSummary', () => {
       />,
     )
     expect(rowValue('Urgent charges (incl. VAT)')).toBe(`${CURRENCY} 30.00`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 280.00`)
+    expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 280.00`)
   })
   it('extracts VAT from order line items instead of adding it', () => {
     render(
@@ -208,9 +238,14 @@ describe('InvoiceSummary', () => {
       />,
     )
 
+    const breakdown = screen.getByText('Price breakdown').closest('details')!
+    expect(breakdown.open).toBe(false)
+    fireEvent.click(screen.getByText('Price breakdown'))
+    expect(breakdown.open).toBe(true)
+    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 81.82`)
     expect(rowValue('Subtotal (incl. VAT)')).toBe(`${CURRENCY} 90.00`)
-    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 8.18`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 90.00`)
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 8.18`)
+    expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 90.00`)
   })
 
   it('applies a flat CURRENCY discount to the gross before extracting VAT', () => {
@@ -225,8 +260,10 @@ describe('InvoiceSummary', () => {
     )
 
     // gross = 90 - 10 = 80, net 72.73, vat 7.27, total 80
-    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 7.27`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 80.00`)
+    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 72.73`)
+    expect(rowValue('Discount applied')).toBe(`−${CURRENCY} 10.00`)
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 7.27`)
+    expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 80.00`)
   })
 
   it('applies a percentage discount to the gross before extracting VAT', () => {
@@ -241,8 +278,9 @@ describe('InvoiceSummary', () => {
     )
 
     // gross = 90 - 9 = 81, net 73.64, vat 7.36, total 81
-    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 7.36`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 81.00`)
+    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 73.64`)
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 7.36`)
+    expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 81.00`)
   })
 
   it('computes balance due as total minus payments, never negative', () => {
@@ -255,7 +293,7 @@ describe('InvoiceSummary', () => {
       />,
     )
 
-    expect(rowValue('Balance Due')).toBe(`${CURRENCY} 0.00`)
+    expect(rowValue('Balance due')).toBe(`${CURRENCY} 0.00`)
   })
 
   it('updates the discount amount live as the input changes', () => {
@@ -271,8 +309,9 @@ describe('InvoiceSummary', () => {
     })
 
     // gross = 70, net 63.64, vat 6.36, total 70
-    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 6.36`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 70.00`)
+    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 63.64`)
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 6.36`)
+    expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 70.00`)
   })
 
   it('multiplies a product line out and shares the gross subtotal', () => {
@@ -287,8 +326,8 @@ describe('InvoiceSummary', () => {
 
     // 90 + (3 × 20) = 150 gross, net 136.36, vat 13.64
     expect(rowValue('Subtotal (incl. VAT)')).toBe(`${CURRENCY} 150.00`)
-    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 13.64`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 150.00`)
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 13.64`)
+    expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 150.00`)
   })
 
   it('adds a gift card sale to the total without taxing it', () => {
@@ -305,8 +344,9 @@ describe('InvoiceSummary', () => {
 
     // The card's 200 is outside the VAT base entirely.
     expect(rowValue('Subtotal (incl. VAT)')).toBe(`${CURRENCY} 100.00`)
-    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 9.09`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 300.00`)
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 9.09`)
+    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 290.91`)
+    expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 300.00`)
   })
 
   it('keeps a percentage discount off gift card sales', () => {
@@ -324,8 +364,9 @@ describe('InvoiceSummary', () => {
     )
 
     // 10% comes off the 100 of gross goods only: 90, plus 200
-    expect(rowValue('VAT (10%, incl.)')).toBe(`${CURRENCY} 8.18`)
-    expect(rowValue('Total')).toBe(`${CURRENCY} 290.00`)
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 8.18`)
+    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 281.82`)
+    expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 290.00`)
   })
 
   it('nets tender off the balance due without changing the total', () => {
@@ -341,10 +382,11 @@ describe('InvoiceSummary', () => {
       />,
     )
 
-    expect(rowValue('Total')).toBe(`${CURRENCY} 90.00`)
+    expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 90.00`)
+    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 81.82`)
     expect(rowValue('Gift Card Redeemed')).toBe(`−${CURRENCY} 50.00`)
     // 90 - 50 - 20 = 20
-    expect(rowValue('Balance Due')).toBe(`${CURRENCY} 20.00`)
+    expect(rowValue('Balance due')).toBe(`${CURRENCY} 20.00`)
   })
 
   it('never redeems more than the invoice total', () => {
@@ -360,7 +402,7 @@ describe('InvoiceSummary', () => {
     )
 
     expect(rowValue('Gift Card Redeemed')).toBe(`−${CURRENCY} 90.00`)
-    expect(rowValue('Balance Due')).toBe(`${CURRENCY} 0.00`)
+    expect(rowValue('Balance due')).toBe(`${CURRENCY} 0.00`)
   })
 
   it('locks payments to read-only on edit but still counts them', () => {
@@ -375,7 +417,7 @@ describe('InvoiceSummary', () => {
     )
 
     // Taken money still nets off the balance…
-    expect(rowValue('Balance Due')).toBe(`${CURRENCY} 70.00`)
+    expect(rowValue('Balance due')).toBe(`${CURRENCY} 70.00`)
     // …but there is no amount input or add button to change it with.
     expect(screen.queryByLabelText('Amount')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Add Payment' })).toBeNull()

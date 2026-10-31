@@ -21,10 +21,10 @@ import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-def
 import type { Material } from '../../types/materials'
 import type { Product } from '@/features/products/types/product'
 import { CURRENCY } from '@/lib/currency'
+import { InvoicePriceSummary } from '../invoice-price-summary'
 import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
-  formatVatPercent,
   computeOrderLineTotal,
   computeOrderUrgentCharge,
   computeUrgentCharges,
@@ -211,18 +211,16 @@ export function InvoiceSummary({
               </p>
             )}
         </div>
-        <div className="flex justify-between gap-3 border-t pt-4 text-sm">
-          <span className="text-muted-foreground">Subtotal (incl. VAT)</span>
-          <span className="shrink-0 tabular-nums">
-            {subtotal == null ? '—' : `${CURRENCY} ${subtotal.toFixed(2)}`}
-          </span>
-        </div>
         {discountOpen ? (
           <div className="grid grid-cols-[minmax(0,1fr)_5rem] items-end gap-3">
             <NumberField form={form} name="discount" label="Discount" />
             <form.Field name={'discountUnit' as never}>
               {(field: any) => (
                 <Select
+                  items={[
+                    { value: 'amount', label: CURRENCY },
+                    { value: 'percent', label: '%' },
+                  ]}
                   value={field.state.value}
                   onValueChange={(value: string) => field.handleChange(value)}
                 >
@@ -249,50 +247,60 @@ export function InvoiceSummary({
             Add discount
           </Button>
         )}
-        {urgentCharge > 0 && (
-          <div className="flex justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">
-              Urgent charges (incl. VAT)
-            </span>
-            <span className="shrink-0 tabular-nums">
-              {CURRENCY} {urgentCharge.toFixed(2)}
-            </span>
-          </div>
-        )}
         {totals ? (
-          <div className="flex justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">
-              VAT ({formatVatPercent(values.expectedVatRate as number)}%, incl.)
-            </span>
-            <span className="shrink-0 tabular-nums">
-              {CURRENCY} {totals.vat.toFixed(2)}
-            </span>
-          </div>
+          <InvoicePriceSummary
+            total={totals.total}
+            vat={totals.vat}
+            vatRate={values.expectedVatRate as number}
+          >
+            <div className="flex justify-between gap-3 border-t pt-4 text-sm">
+              <span className="text-muted-foreground">
+                Subtotal (incl. VAT)
+              </span>
+              <span className="shrink-0 tabular-nums">
+                {subtotal == null ? '—' : `${CURRENCY} ${subtotal.toFixed(2)}`}
+              </span>
+            </div>
+            {totals.discountAmount > 0 && (
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">Discount applied</span>
+                <span className="shrink-0 tabular-nums">
+                  −{CURRENCY} {totals.discountAmount.toFixed(2)}
+                </span>
+              </div>
+            )}
+            {urgentCharge > 0 && (
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">
+                  Urgent charges (incl. VAT)
+                </span>
+                <span className="shrink-0 tabular-nums">
+                  {CURRENCY} {urgentCharge.toFixed(2)}
+                </span>
+              </div>
+            )}
+            {values.giftCards.map((line, index) => (
+              <div
+                key={line.key}
+                className="flex justify-between gap-3 text-sm text-muted-foreground"
+              >
+                <span className="min-w-0 break-words">
+                  {line.code
+                    ? `Gift card ${line.code}`
+                    : `Gift card ${index + 1}`}{' '}
+                  (not taxed)
+                </span>
+                <span className="shrink-0 tabular-nums">
+                  {CURRENCY} {computeGiftCardLineTotal(line).toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </InvoicePriceSummary>
         ) : (
           <p className="text-sm text-muted-foreground">
             Loading VAT pricing...
           </p>
         )}
-        {values.giftCards.map((line, index) => (
-          <div
-            key={line.key}
-            className="flex justify-between gap-3 text-sm text-muted-foreground"
-          >
-            <span className="min-w-0 break-words">
-              {line.code ? `Gift card ${line.code}` : `Gift card ${index + 1}`}{' '}
-              (not taxed)
-            </span>
-            <span className="shrink-0 tabular-nums">
-              {CURRENCY} {computeGiftCardLineTotal(line).toFixed(2)}
-            </span>
-          </div>
-        ))}
-        <div className="flex justify-between gap-3 rounded-lg border border-primary/20 bg-accent p-3 font-semibold text-accent-foreground">
-          <span>Total</span>
-          <span className="shrink-0 tabular-nums">
-            {totals ? `${CURRENCY} ${totals.total.toFixed(2)}` : '—'}
-          </span>
-        </div>
       </section>
 
       {
@@ -574,8 +582,8 @@ export function InvoiceSummary({
             </div>
           )}
         </form.Field>
-        <div className="flex justify-between gap-3 border-t pt-4 font-semibold">
-          <span>Balance Due</span>
+        <div className="flex justify-between gap-3 rounded-lg bg-muted/50 p-3 font-semibold">
+          <span>Balance due</span>
           <span className="shrink-0 tabular-nums">
             {totals ? `${CURRENCY} ${totals.balanceDue.toFixed(2)}` : '—'}
           </span>
