@@ -384,13 +384,16 @@ it('saves material and gift-card sales together and includes materials in both i
   expect(
     screen.getByText('Subtotal (incl. VAT)').parentElement?.textContent,
   ).toContain('27.50')
-  expect(
-    screen.getByText('VAT (10%, incl.)').parentElement?.textContent,
-  ).toContain('2.25')
-  expect(screen.getByText('Total').parentElement?.textContent).toContain(
-    '74.75',
+  expect(screen.getByText('VAT (10%)').parentElement?.textContent).toContain(
+    '2.25',
   )
-  expect(screen.getByText('Balance Due').parentElement?.textContent).toContain(
+  expect(
+    screen.getByText('Total without VAT').parentElement?.textContent,
+  ).toContain('72.50')
+  expect(
+    screen.getByText('Total incl. VAT').parentElement?.textContent,
+  ).toContain('74.75')
+  expect(screen.getByText('Balance due').parentElement?.textContent).toContain(
     '64.75',
   )
   expect(screen.getByLabelText('Invoice total').textContent).toContain('74.75')

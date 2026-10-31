@@ -1,4 +1,3 @@
-import { formatVatPercent } from './lib/invoice-pricing'
 import { NotificationDialog } from '@/features/notifications/notification-dialog'
 import { NotificationHistory } from '@/features/notifications/notification-history'
 import {
@@ -32,6 +31,7 @@ import { toast } from 'sonner'
 import { CollectInvoiceDialog } from './components/collect-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
 import { InvoicePaymentHistory } from './components/invoice-payment-history'
+import { InvoicePriceSummary } from './components/invoice-price-summary'
 import {
   ReturnsPanel,
   RefundPendingCreditAction,
@@ -292,96 +292,120 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
-        <dl className="ms-auto max-w-sm space-y-1.5 text-sm">
-          <TotalRow
-            label="Subtotal (incl. VAT)"
-            value={detail.totals.subtotal}
-          />
-          {detail.totals.discountAmount > 0 && (
-            <TotalRow
-              label={
-                detail.totals.discountUnit === 'percent'
-                  ? `Discount (${detail.totals.discount}%)`
-                  : 'Discount'
-              }
-              value={-detail.totals.discountAmount}
-            />
-          )}
-          <TotalRow
-            label={`VAT (${formatVatPercent(detail.totals.vatRate)}%)`}
-            value={detail.totals.vat}
-          />
-          {detail.totals.giftCardSales > 0 && (
-            <TotalRow
-              label="Gift cards sold"
-              value={detail.totals.giftCardSales}
-            />
-          )}
-          {detail.totals.urgentCharge > 0 && (
-            <TotalRow
-              label="Urgent charges (incl. VAT)"
-              value={detail.totals.urgentCharge}
-            />
-          )}
-          <TotalRow
-            label="Invoice total"
-            value={detail.totals.total}
-            emphasis
-          />
-          {detail.hasAdjustments && (
-            <>
+      <section
+        aria-labelledby="invoice-summary-heading"
+        className="space-y-4 rounded-xl border border-border/60 bg-card p-4 shadow-sm"
+      >
+        <h2 id="invoice-summary-heading" className="text-sm font-semibold">
+          Invoice Summary
+        </h2>
+        <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
+          <InvoicePriceSummary
+            total={detail.totals.total}
+            vat={detail.totals.vat}
+            vatRate={detail.totals.vatRate}
+            formatAmount={currencyFormatter.format}
+          >
+            <dl className="space-y-2">
               <TotalRow
-                label="Return / cancellation credits"
-                value={-detail.totals.amountCredited}
+                label="Subtotal (incl. VAT)"
+                value={detail.totals.subtotal}
               />
-              <TotalRow label="After credits" value={detail.totals.netTotal} />
-            </>
-          )}
-          {detail.totals.giftCardRedeemed > 0 && (
-            <TotalRow
-              label="Paid by gift card"
-              value={-detail.totals.giftCardRedeemed}
-            />
-          )}
-          {detail.totals.amountPaid > 0 && (
-            <TotalRow label="Paid" value={-detail.totals.amountPaid} />
-          )}
-          {detail.totals.cashRefunded > 0 && (
-            <TotalRow
-              label="Refunds paid back"
-              value={detail.totals.cashRefunded}
-            />
-          )}
-          {detail.totals.giftCardRefunded > 0 && (
-            <TotalRow
-              label="Restored to gift cards"
-              value={detail.totals.giftCardRefunded}
-            />
-          )}
-          {(detail.totals.cashRefunded > 0 ||
-            detail.totals.giftCardRefunded > 0) && (
-            <TotalRow
-              label="Net paid (all methods)"
-              value={
-                detail.totals.netAmountPaid + detail.totals.netGiftCardRedeemed
-              }
-            />
-          )}
-          {detail.totals.refundDue > 0 && (
-            <TotalRow
-              label="Refund due"
-              value={detail.totals.refundDue}
-              emphasis
-            />
-          )}
-          <TotalRow
-            label="Balance due"
-            value={detail.totals.balanceDue}
-            emphasis
-          />
-        </dl>
-      </div>
+              {detail.totals.discountAmount > 0 && (
+                <TotalRow
+                  label={
+                    detail.totals.discountUnit === 'percent'
+                      ? `Discount (${detail.totals.discount}%)`
+                      : 'Discount'
+                  }
+                  value={-detail.totals.discountAmount}
+                />
+              )}
+              {detail.totals.giftCardSales > 0 && (
+                <TotalRow
+                  label="Gift cards sold"
+                  value={detail.totals.giftCardSales}
+                />
+              )}
+              {detail.totals.urgentCharge > 0 && (
+                <TotalRow
+                  label="Urgent charges (incl. VAT)"
+                  value={detail.totals.urgentCharge}
+                />
+              )}
+            </dl>
+          </InvoicePriceSummary>
+          <div className="space-y-3 border-t pt-4 lg:border-s lg:border-t-0 lg:ps-8 lg:pt-0">
+            <h3 className="text-sm font-semibold">Payments & credits</h3>
+            <dl className="space-y-2 text-sm">
+              {detail.hasAdjustments && (
+                <>
+                  <TotalRow
+                    label="Return / cancellation credits"
+                    value={-detail.totals.amountCredited}
+                  />
+                  <TotalRow
+                    label="After credits"
+                    value={detail.totals.netTotal}
+                  />
+                </>
+              )}
+              {detail.totals.giftCardRedeemed > 0 && (
+                <TotalRow
+                  label="Paid by gift card"
+                  value={-detail.totals.giftCardRedeemed}
+                />
+              )}
+              {detail.totals.amountPaid > 0 && (
+                <TotalRow label="Paid" value={-detail.totals.amountPaid} />
+              )}
+            </dl>
+            {(detail.totals.cashRefunded > 0 ||
+              detail.totals.giftCardRefunded > 0) && (
+              <details className="rounded-lg border border-border/60 p-3 text-sm">
+                <summary className="cursor-pointer text-muted-foreground">
+                  Refund breakdown
+                </summary>
+                <dl className="mt-3 space-y-2">
+                  {detail.totals.cashRefunded > 0 && (
+                    <TotalRow
+                      label="Refunds paid back"
+                      value={detail.totals.cashRefunded}
+                    />
+                  )}
+                  {detail.totals.giftCardRefunded > 0 && (
+                    <TotalRow
+                      label="Restored to gift cards"
+                      value={detail.totals.giftCardRefunded}
+                    />
+                  )}
+                  <TotalRow
+                    label="Net paid (all methods)"
+                    value={
+                      detail.totals.netAmountPaid +
+                      detail.totals.netGiftCardRedeemed
+                    }
+                  />
+                </dl>
+              </details>
+            )}
+            <dl className="space-y-2 rounded-lg bg-muted/50 p-3 text-sm">
+              {detail.totals.refundDue > 0 && (
+                <TotalRow
+                  label="Refund due"
+                  value={detail.totals.refundDue}
+                  emphasis
+                />
+              )}
+              <TotalRow
+                label="Balance due"
+                value={detail.totals.balanceDue}
+                emphasis
+              />
+            </dl>
+          </div>
+        </div>
+      </section>
 
       <ReturnsPanel invoiceId={detail.id} />
 
