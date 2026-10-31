@@ -104,7 +104,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
             <ReceiptText className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">
+            <h1 className="text-2xl font-semibold leading-tight tracking-tight">
               Invoice INV-{detail.invoiceNumber}
             </h1>
             <p className="text-muted-foreground">

@@ -272,8 +272,10 @@ DOCUMENT_RENDERER_TEST_OUTPUT=/tmp/fabric-sync-invoice.pdf \
 cargo test real_chromium -- --ignored
 ```
 
-The document CI job also checks that the resulting PDF has multiple pages and
-embeds the Arabic font. Provider tests use controlled local HTTP servers and
+The document CI job also checks that long invoices retain readable text across
+multiple pages, repeat the invoice reference and page number on every page,
+retain the closing balance, and embed the Arabic font.
+Provider tests use controlled local HTTP servers and
 never contact Meta. Actual delivery still needs a staging smoke test with the
 configured approved templates and a designated test recipient.
 

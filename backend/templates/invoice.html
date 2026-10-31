@@ -54,19 +54,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Invoice INV-{{ invoice.invoiceNumber }}</title>
     <style>
-      /* A4 with a printer-safe margin. The document is one page for a typical
-         invoice and flows onto a second only when the line table is long. */
+      /* Typical invoices fit one A4; long invoices continue at readable size. */
       @page {
         size: A4;
         margin: 12mm;
+        @bottom-left {
+          content: 'INV-{{ invoice.invoiceNumber }} · Page ' counter(page) ' / ' counter(pages);
+          font-family: 'Noto Sans Arabic', 'Segoe UI', sans-serif;
+          font-size: 8px;
+          color: #626660;
+          direction: ltr;
+          text-align: left;
+        }
       }
 
       :root {
-        --ink: #10151c;
-        --muted: #6b7280;
-        --rule: #d8dee7;
-        --tint: #f4f6f9;
-        --accent: #1d4ed8;
+        --ink: #151110;
+        --muted: #626660;
+        --rule: #e2dbd5;
+        --tint: #f8eadc;
+        --accent: #233029;
       }
 
       * {
@@ -107,23 +114,33 @@
       }
 
       header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: center;
         gap: 16px;
         padding-bottom: 10px;
         border-bottom: 2px solid var(--ink);
       }
 
       .logo {
-        max-height: 68px;
-        max-width: 190px;
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: center;
+        width: 126px;
+        height: 58px;
         object-fit: contain;
+      }
+
+      .company-identity {
+        grid-column: 1;
+        grid-row: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
       }
 
       .company-name {
         margin: 0;
-        font-size: 19px;
+        font-size: 17px;
         font-weight: 700;
         line-height: 1.25;
       }
@@ -144,8 +161,9 @@
       }
 
       .doc-title {
+        grid-column: 3;
+        grid-row: 1;
         text-align: left;
-        flex-shrink: 0;
       }
 
       .doc-title h2 {
@@ -334,7 +352,7 @@
       }
 
       .design-title {
-        font-size: 7.5px;
+        font-size: 9px;
         color: var(--muted);
       }
 
@@ -345,7 +363,7 @@
       }
 
       .design-name {
-        font-size: 8.5px;
+        font-size: 10px;
         font-weight: 600;
         text-align: center;
       }
@@ -508,10 +526,7 @@
   </head>
   <body>
     <header>
-      <div>
-        {% if company.logoDataUrl %}
-          <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
-        {% endif %}
+      <div class="company-identity">
         <h1 class="company-name">
           {{ company.nameAr }}
           <span class="en">{{ company.nameEn }}</span>
@@ -532,6 +547,10 @@
           {% endif %}
         </div>
       </div>
+
+      {% if company.logoDataUrl %}
+        <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
+      {% endif %}
 
       <div class="doc-title">
         <h2>

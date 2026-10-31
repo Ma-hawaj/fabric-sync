@@ -43,6 +43,7 @@ function stubIframeBehaviour() {
       print,
       focus: vi.fn(),
       addEventListener: vi.fn(),
+      document: { fonts: { ready: Promise.resolve() }, images: [] },
     } as unknown as Window,
   )
 

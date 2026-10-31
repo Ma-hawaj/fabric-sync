@@ -59,5 +59,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y poppler-utils
           pdfinfo /tmp/fabric-sync-invoice.pdf
-          test "$(pdfinfo /tmp/fabric-sync-invoice.pdf | awk '/^Pages:/ {print $2}')" -gt 1
+          pages=$(pdfinfo /tmp/fabric-sync-invoice.pdf | awk '/^Pages:/ {print $2}')
+          test "$pages" -gt 1
+          pdftotext /tmp/fabric-sync-invoice.pdf /tmp/fabric-sync-invoice.txt
+          grep -q 'INV-' /tmp/fabric-sync-invoice.txt
+          grep -q 'Balance due' /tmp/fabric-sync-invoice.txt
+          for page in $(seq 1 "$pages"); do
+            pdftotext -f "$page" -l "$page" /tmp/fabric-sync-invoice.pdf - | grep -q 'INV-.*Page'
+          done
           pdffonts /tmp/fabric-sync-invoice.pdf | grep -i NotoSansArabic

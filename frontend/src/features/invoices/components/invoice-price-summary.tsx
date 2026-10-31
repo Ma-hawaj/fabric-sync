@@ -36,7 +36,7 @@ export function InvoicePriceSummary({
           </dt>
           <dd className="shrink-0">{formatAmount(vat)}</dd>
         </div>
-        <div className="flex items-baseline justify-between gap-4 border-t pt-3 font-semibold">
+        <div className="flex items-baseline justify-between gap-4 rounded-lg border border-primary/20 bg-accent px-3 py-2 font-semibold text-accent-foreground">
           <dt>Total incl. VAT</dt>
           <dd className="shrink-0 text-lg">{formatAmount(total)}</dd>
         </div>

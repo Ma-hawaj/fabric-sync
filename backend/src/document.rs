@@ -88,6 +88,11 @@ pub(crate) fn template_environment(
     embedded: &'static str,
 ) -> Result<Environment<'static>, AppError> {
     let mut env = Environment::new();
+    // Also available to disk overrides that include the shared fitting helper.
+    env.add_template(
+        "print-fit.html",
+        include_str!("../templates/print-fit.html"),
+    )?;
 
     match &branding.template_dir {
         // Loading from disk means the document can be restyled and the change
@@ -103,6 +108,34 @@ pub(crate) fn template_environment(
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    #[test]
+    fn disk_overrides_can_include_the_embedded_print_helper() {
+        let directory = std::env::temp_dir().join(format!("print-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&directory).unwrap();
+        std::fs::write(
+            directory.join("order.html"),
+            "Custom header {% include 'print-fit.html' %}",
+        )
+        .unwrap();
+        let branding = InvoiceBranding {
+            name_en: String::new(),
+            name_ar: String::new(),
+            vat_number: String::new(),
+            cr_number: String::new(),
+            address_en: String::new(),
+            address_ar: String::new(),
+            phone: String::new(),
+            email: String::new(),
+            logo_data_url: None,
+            template_dir: Some(directory.to_string_lossy().into_owned()),
+        };
+        let env = template_environment(&branding, "order.html", "Embedded header").unwrap();
+        let html = env.get_template("order.html").unwrap().render(()).unwrap();
+        assert!(html.starts_with("Custom header"));
+        assert!(html.contains("documentPrintReady"));
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn measurement_fractions_keep_symbols_and_other_decimals_keep_precision() {

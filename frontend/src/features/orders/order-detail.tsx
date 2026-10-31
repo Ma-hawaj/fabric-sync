@@ -3,7 +3,7 @@ import { ReadinessControls } from '@/features/notifications/readiness-controls'
 import * as React from 'react'
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { CURRENCY } from '@/lib/currency'
 import { OrderResolutionActions } from '@/features/returns/components/order-resolution-actions'
@@ -79,7 +79,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               <PackageCheckIcon className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">
+              <h1 className="text-2xl font-semibold leading-tight tracking-tight">
                 Order ORD-{order.orderNumber}
               </h1>
               <p className="text-muted-foreground">
@@ -93,9 +93,15 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           </div>
 
           <div className="mt-2 flex flex-wrap gap-2">
-            {order.isUrgent && <Badge variant="destructive">Urgent</Badge>}
-            <Badge
-              variant={order.status === 'collected' ? 'default' : 'secondary'}
+            {order.isUrgent && <StatusBadge tone="danger">Urgent</StatusBadge>}
+            <StatusBadge
+              tone={
+                closed
+                  ? 'neutral'
+                  : order.status === 'collected' || order.status === 'ready'
+                    ? 'success'
+                    : 'info'
+              }
             >
               {closed
                 ? order.outcome === 'cancelled'
@@ -106,10 +112,14 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                   : order.status === 'ready'
                     ? 'Ready for pickup'
                     : 'Pending'}
-            </Badge>
-            <Badge
-              variant={
-                order.invoicePaymentStatus === 'paid' ? 'default' : 'outline'
+            </StatusBadge>
+            <StatusBadge
+              tone={
+                order.invoicePaymentStatus === 'paid'
+                  ? 'success'
+                  : order.invoicePaymentStatus === 'partial'
+                    ? 'warning'
+                    : 'danger'
               }
               className="capitalize"
             >
@@ -118,7 +128,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 : order.invoicePaymentStatus === 'paid'
                   ? 'Paid'
                   : 'Unpaid'}
-            </Badge>
+            </StatusBadge>
           </div>
         </div>
 
