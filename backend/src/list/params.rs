@@ -15,9 +15,9 @@ use crate::error::AppError;
 /// to pull the whole table through a paginated endpoint.
 pub const MAX_PER_PAGE: i64 = 200;
 
-/// The shape of a filter's target column, as declared by the frontend's
-/// `column.meta.variant`. It travels with every filter so the server can reject
-/// nonsense (a `isBetween` on a boolean) without knowing the column.
+/// The frontend control's shape, as declared by `column.meta.variant`.
+/// Deserialization validates its wire spelling; the server's `ColumnKind`
+/// determines which operators and values are legal for the target column.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum FilterVariant {
@@ -210,7 +210,10 @@ pub struct FilterItem {
     pub id: String,
     #[serde(default)]
     pub value: FilterValue,
-    pub variant: FilterVariant,
+    // Validate the frontend metadata, but use the server's column registry
+    // rather than this client-supplied hint when building SQL.
+    #[serde(rename = "variant")]
+    _variant: FilterVariant,
     pub operator: FilterOperator,
     // `filterId` is the frontend's React key for the filter row. It is accepted
     // so the URL state can be forwarded verbatim, and deliberately ignored.
@@ -405,7 +408,7 @@ mod tests {
 
         assert_eq!(params.filters.len(), 1);
         assert_eq!(params.filters[0].id, "name");
-        assert_eq!(params.filters[0].variant, FilterVariant::Text);
+        assert_eq!(params.filters[0]._variant, FilterVariant::Text);
         assert_eq!(params.filters[0].operator, FilterOperator::ILike);
         assert_eq!(params.filters[0].value, FilterValue::One("ali".to_string()));
 
