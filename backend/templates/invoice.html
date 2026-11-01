@@ -117,7 +117,7 @@
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
         align-items: center;
-        gap: 16px;
+        gap: 8px 16px;
         padding-bottom: 10px;
         border-bottom: 2px solid var(--ink);
       }
@@ -134,6 +134,7 @@
       .company-identity {
         grid-column: 1;
         grid-row: 1;
+        align-self: start;
         min-width: 0;
         overflow-wrap: anywhere;
       }
@@ -151,18 +152,34 @@
       }
 
       .company-meta {
-        margin-top: 5px;
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px 16px;
+        align-items: start;
         color: var(--muted);
         font-size: 10px;
+        line-height: 1.45;
+        text-align: right;
+        overflow-wrap: anywhere;
       }
 
-      .company-meta div + div {
+      .company-meta > div > div + div {
         margin-top: 1px;
+      }
+
+      .company-contact {
+        text-align: center;
+      }
+
+      .company-registration {
+        text-align: left;
       }
 
       .doc-title {
         grid-column: 3;
         grid-row: 1;
+        align-self: start;
         text-align: left;
       }
 
@@ -531,21 +548,6 @@
           {{ company.nameAr }}
           <span class="en">{{ company.nameEn }}</span>
         </h1>
-        <div class="company-meta">
-          {% if company.addressAr %}<div>{{ company.addressAr }}</div>{% endif %}
-          {% if company.addressEn %}<div dir="ltr">{{ company.addressEn }}</div>{% endif %}
-          {% if company.phone %}<div dir="ltr">{{ company.phone }}</div>{% endif %}
-          {% if company.email %}<div dir="ltr">{{ company.email }}</div>{% endif %}
-          {% if company.crNumber %}
-            <div>س.ت / CR: <span dir="ltr">{{ company.crNumber }}</span></div>
-          {% endif %}
-          {% if company.vatNumber %}
-            <div>
-              الرقم الضريبي / VAT:
-              <span dir="ltr">{{ company.vatNumber }}</span>
-            </div>
-          {% endif %}
-        </div>
       </div>
 
       {% if company.logoDataUrl %}
@@ -559,6 +561,27 @@
         </h2>
         <div class="doc-number">INV-{{ invoice.invoiceNumber }}</div>
       </div>
+
+      {% if company.addressAr or company.addressEn or company.phone or company.email or company.crNumber or company.vatNumber %}
+        <div class="company-meta">
+          <div class="company-address">
+            {% if company.addressAr %}<div>{{ company.addressAr }}</div>{% endif %}
+            {% if company.addressEn %}<div dir="ltr">{{ company.addressEn }}</div>{% endif %}
+          </div>
+          <div class="company-contact" dir="ltr">
+            {% if company.phone %}<div>{{ company.phone }}</div>{% endif %}
+            {% if company.email %}<div>{{ company.email }}</div>{% endif %}
+          </div>
+          <div class="company-registration">
+            {% if company.crNumber %}
+              <div>س.ت / CR: <bdi dir="ltr">{{ company.crNumber }}</bdi></div>
+            {% endif %}
+            {% if company.vatNumber %}
+              <div>الرقم الضريبي / VAT: <bdi dir="ltr">{{ company.vatNumber }}</bdi></div>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
     </header>
 
     <section class="panels">
