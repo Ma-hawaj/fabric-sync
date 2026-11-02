@@ -115,15 +115,9 @@ export function InvoiceSummary({
   const receivingDefault = useApplicableDefaultLocation('receiving')
   const workspace = useInvoiceWorkspace()
   const [discountOpen, setDiscountOpen] = useState(values.discount !== '')
-  const [paymentsOpen, setPaymentsOpen] = useState(
-    values.payments.some(
-      (payment) => payment.amount !== '' || payment.paymentType !== '',
-    ),
-  )
   useEffect(() => {
     const path = workspace?.validationTarget?.path
     if (path?.startsWith('discount')) setDiscountOpen(true)
-    if (path?.startsWith('payments')) setPaymentsOpen(true)
   }, [workspace?.validationTarget])
   const urgentCharge = computeUrgentCharges(values.customers)
   const hasUrgentOrders = values.customers.some((customer) =>
@@ -442,12 +436,12 @@ export function InvoiceSummary({
                 </>
               ) : (
                 <>
-                  {!paymentsOpen && (
+                  {!paymentsField.state.value.length && (
                     <p className="text-xs text-muted-foreground">
                       No payment recorded. You can collect it later.
                     </p>
                   )}
-                  <div hidden={!paymentsOpen} className="space-y-3">
+                  <div className="space-y-3">
                     {paymentsField.state.value.map(
                       (payment: PaymentDraft, index: number) => (
                         <div
@@ -538,14 +532,12 @@ export function InvoiceSummary({
                     variant="outline"
                     size="sm"
                     className="w-full"
-                    onClick={() => {
-                      if (paymentsOpen || !paymentsField.state.value.length)
-                        paymentsField.pushValue(createEmptyPayment())
-                      setPaymentsOpen(true)
-                    }}
+                    onClick={() =>
+                      paymentsField.pushValue(createEmptyPayment())
+                    }
                   >
                     <PlusIcon />
-                    {paymentsOpen ? 'Add Payment' : 'Record payment'}
+                    Add Payment
                   </Button>
                 </>
               )}

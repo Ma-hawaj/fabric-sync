@@ -7,6 +7,12 @@ import {
   createEmptyGiftCardLine,
 } from '../types/invoice-form'
 
+it('omits the untouched default payment entry from an unpaid invoice', () => {
+  const values = createEmptyInvoiceForm()
+  expect(values.payments).toHaveLength(1)
+  expect(invoicePayload(values).payments).toEqual([])
+})
+
 describe('invoice material payload', () => {
   it('saves customer addresses, collection, and urgency and clears a regular surcharge', () => {
     const values = createEmptyInvoiceForm()

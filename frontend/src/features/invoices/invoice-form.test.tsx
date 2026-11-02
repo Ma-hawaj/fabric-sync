@@ -109,7 +109,6 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
     // Keep queries out of the large, unrelated order editor.
     const payment = within(screen.getByRole('region', { name: 'Payment' }))
     const saveButton = screen.getByRole('button', { name: 'Save invoice' })
-    fireEvent.click(payment.getByRole('button', { name: 'Record payment' }))
     fireEvent.change(payment.getByLabelText('Amount'), {
       target: { value: '10' },
     })
