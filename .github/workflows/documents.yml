@@ -54,17 +54,19 @@ jobs:
           workspaces: backend
       - name: Render bilingual multi-page invoice with real Chromium
         run: cargo test real_chromium -- --ignored
-      - name: Check PDF page count and embedded Arabic font
+      - name: Check PDF content, pagination and embedded Arabic font
         run: |
           sudo apt-get update
           sudo apt-get install -y poppler-utils
           pdfinfo /tmp/fabric-sync-invoice.pdf
           pages=$(pdfinfo /tmp/fabric-sync-invoice.pdf | awk '/^Pages:/ {print $2}')
           test "$pages" -gt 1
-          pdftotext /tmp/fabric-sync-invoice.pdf /tmp/fabric-sync-invoice.txt
+          pdftotext -layout /tmp/fabric-sync-invoice.pdf /tmp/fabric-sync-invoice.txt
           grep -q 'INV-' /tmp/fabric-sync-invoice.txt
-          grep -q 'Balance due' /tmp/fabric-sync-invoice.txt
+          # The fixture has 30 unpaid BHD 100 orders. Match the amount beside
+          # its label so a value in another totals row/column cannot satisfy it.
+          grep -Eq 'BHD[[:space:]]+3000[.]000[[:space:]]+Balance[[:space:]]+due([[:space:]]|$)' /tmp/fabric-sync-invoice.txt
           for page in $(seq 1 "$pages"); do
-            pdftotext -f "$page" -l "$page" /tmp/fabric-sync-invoice.pdf - | grep -q 'INV-.*Page'
+            pdftotext -f "$page" -l "$page" /tmp/fabric-sync-invoice.pdf - | grep -Eq "INV-.*Page[[:space:]]+${page}[[:space:]]*/[[:space:]]*${pages}([[:space:]]|$)"
           done
           pdffonts /tmp/fabric-sync-invoice.pdf | grep -i NotoSansArabic

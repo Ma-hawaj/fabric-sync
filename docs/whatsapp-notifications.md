@@ -273,8 +273,9 @@ cargo test real_chromium -- --ignored
 ```
 
 The document CI job also checks that long invoices retain readable text across
-multiple pages, repeat the invoice reference and page number on every page,
-retain the closing balance, and embed the Arabic font.
+multiple pages, repeat the invoice reference with the correct current and total
+page numbers on every page, show `BHD 3000.000` beside `Balance due` for the
+30-order unpaid fixture, and embed the Arabic font.
 Provider tests use controlled local HTTP servers and
 never contact Meta. Actual delivery still needs a staging smoke test with the
 configured approved templates and a designated test recipient.
