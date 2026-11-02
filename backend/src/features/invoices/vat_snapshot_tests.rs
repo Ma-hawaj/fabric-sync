@@ -85,6 +85,89 @@ async fn stock(pool: &PgPool, material: Uuid) -> f64 {
 }
 
 #[sqlx::test]
+async fn invoice_list_keeps_issued_totals_after_configuration_changes_without_edits(pool: PgPool) {
+    let (_, mut payload) = fixture(&pool).await;
+    payload["customers"][0]["orders"][0]["materialSource"] = json!("customer");
+    payload["customers"][0]["orders"][0]["materialId"] = Value::Null;
+    payload["customers"][0]["orders"][0]["customerMaterialDescription"] = json!("Customer linen");
+    let original_state = state(&pool, "0.10", "5").await;
+    let created = service::create_invoice(&original_state, input(payload.clone()), "staff")
+        .await
+        .unwrap();
+    assert_eq!(created.total_price, 30.0);
+    let params = crate::list::ListParams {
+        page: 1,
+        ..Default::default()
+    };
+    let before = service::list_invoices(&original_state, &params)
+        .await
+        .unwrap();
+    let stored_before: Value = sqlx::query_scalar("SELECT to_jsonb(i) FROM invoices i WHERE id=$1")
+        .bind(created.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    // No update_invoice calls: only reload the list after deployment pricing
+    // changes, including switching urgency units and removing configured rates.
+    for (urgency, customer_price) in [
+        (Some(("9", "amount")), Some("35")),
+        (Some(("25", "percent")), Some("50")),
+        (None, None),
+    ] {
+        let changed_state = state_with_pricing(&pool, "0.15", urgency, customer_price).await;
+        let after = service::list_invoices(&changed_state, &params)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(after).unwrap(),
+            serde_json::to_value(&before).unwrap()
+        );
+        let stored_after: Value =
+            sqlx::query_scalar("SELECT to_jsonb(i) FROM invoices i WHERE id=$1")
+                .bind(created.id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(stored_after, stored_before);
+    }
+
+    // A later invoice uses the changed rate without replacing the existing
+    // invoice's row or amount in the list.
+    let changed_state = state_with_pricing(&pool, "0.15", Some(("9", "amount")), Some("35")).await;
+    payload["expectedVatRate"] = json!(0.15);
+    payload["customers"][0]["newCustomer"] = json!({
+        "name": "Later buyer", "mobileNo": "33223344"
+    });
+    let later = service::create_invoice(&changed_state, input(payload), "staff")
+        .await
+        .unwrap();
+    assert_eq!(later.total_price, 54.0);
+    let after = service::list_invoices(&changed_state, &params)
+        .await
+        .unwrap();
+    assert_eq!(after.data.len(), 2);
+    assert_eq!(
+        after
+            .data
+            .iter()
+            .find(|row| row.id == created.id)
+            .unwrap()
+            .total_price,
+        30.0
+    );
+    assert_eq!(
+        after
+            .data
+            .iter()
+            .find(|row| row.id == later.id)
+            .unwrap()
+            .total_price,
+        54.0
+    );
+}
+
+#[sqlx::test]
 async fn customer_fabric_quantity_edits_keep_issued_prices_after_rate_changes(pool: PgPool) {
     let (material, mut payload) = fixture(&pool).await;
     let order = &mut payload["customers"][0]["orders"][0];
