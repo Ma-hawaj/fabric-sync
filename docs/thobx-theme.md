@@ -14,6 +14,8 @@ Verified on 2026-10-31 against the rendered [official homepage](https://thobx.bh
 
 The website also uses blue `#7A95A8` on its “Unique Details” section; it is available as a secondary chart color. Payment, readiness, repair and production badges retain their semantic colors. `StatusBadge` composes the generated shadcn `Badge` with Tailwind classes selected through CVA, following the primitive's variant pattern. The app-owned wrapper adds semantic tones without editing the generated component or adding global badge selectors.
 
+Status badges use an opaque `card` background in both themes. This keeps their small text above 4.5:1 contrast on workspace, card, popover, striped/hovered table, selected and secondary surfaces while retaining semantic text and border colors.
+
 White data surfaces keep dense tables readable. Muted text, borders and dark background shades are app contrast adaptations; they are not claimed as additional official brand colors. Gold is an accent on light surfaces because it lacks normal-text contrast against white. Light buttons use white on forest green; dark buttons use forest green on gold. Selected segmented controls use the primary border to keep their state visible.
 
 Colors use the existing shadcn roles: `primary` for main actions and selected borders, `accent`/`accent-foreground` for selected surfaces and invoice totals, and `sidebar-primary` for navigation highlights. There are no separate `brand` or `brand-soft` tokens.
