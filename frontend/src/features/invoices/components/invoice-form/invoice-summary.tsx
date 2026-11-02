@@ -436,11 +436,6 @@ export function InvoiceSummary({
                 </>
               ) : (
                 <>
-                  {!paymentsField.state.value.length && (
-                    <p className="text-xs text-muted-foreground">
-                      No payment recorded. You can collect it later.
-                    </p>
-                  )}
                   <div className="space-y-3">
                     {paymentsField.state.value.map(
                       (payment: PaymentDraft, index: number) => (
@@ -457,6 +452,7 @@ export function InvoiceSummary({
                               size="icon-sm"
                               type="button"
                               aria-label={`Remove payment ${index + 1}`}
+                              disabled={paymentsField.state.value.length <= 1}
                               onClick={() => paymentsField.removeValue(index)}
                             >
                               <XIcon />

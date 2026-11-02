@@ -141,7 +141,7 @@ describe('InvoiceSummary', () => {
     ).toBeNull()
   })
 
-  it('adds and removes payment entries while preserving entered amounts', () => {
+  it('adds and removes extra payments while keeping the last entry', () => {
     render(<Harness defaultValues={baseValues()} />)
     const paymentSection = within(
       screen.getByRole('region', { name: 'Payment' }),
@@ -171,22 +171,21 @@ describe('InvoiceSummary', () => {
     expect(
       paymentSection.getByLabelText<HTMLInputElement>('Amount').value,
     ).toBe('10')
-    fireEvent.click(
-      paymentSection.getByRole('button', { name: 'Remove payment 1' }),
-    )
-    expect(paymentSection.queryByLabelText('Amount')).toBeNull()
+    const removeLast = paymentSection.getByRole('button', {
+      name: 'Remove payment 1',
+    })
+    expect(removeLast.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(removeLast)
     expect(
-      paymentSection.getByText(
-        'No payment recorded. You can collect it later.',
-      ),
-    ).toBeTruthy()
+      paymentSection.getByLabelText<HTMLInputElement>('Amount').value,
+    ).toBe('10')
 
     fireEvent.click(addPayment)
     expect(
       paymentSection.getAllByRole('combobox', { name: /^Method/ }),
-    ).toHaveLength(1)
+    ).toHaveLength(2)
     expect(
-      paymentSection.getByLabelText<HTMLInputElement>('Amount').value,
+      paymentSection.getByLabelText<HTMLInputElement>('Amount 2').value,
     ).toBe('')
   })
 

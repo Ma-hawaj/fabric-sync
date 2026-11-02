@@ -9,7 +9,11 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { InvoiceForm, InvoiceFormPage } from './invoice-form'
 
-import { createEmptyInvoiceForm, createEmptyOrder } from './types/invoice-form'
+import {
+  createEmptyInvoiceForm,
+  createEmptyOrder,
+  createEmptyPayment,
+} from './types/invoice-form'
 import type { InvoiceFormValues } from './types/invoice-form'
 import { apiGetMock } from '@/lib/list-fixtures'
 
@@ -70,6 +74,9 @@ function renderPage() {
 
 function validInvoice(): InvoiceFormValues {
   const values = createEmptyInvoiceForm()
+  values.payments = [
+    { ...createEmptyPayment(), amount: 10, paymentType: 'cash' },
+  ]
   values.customers[0].existingCustomerId = 'customer-1'
   values.customers[0].measurement.type = 'body'
   values.customers[0].measurement.fit = 'medium'
@@ -104,8 +111,29 @@ function renderInvoice(values = validInvoice()) {
 }
 
 describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
+  it('requires the blank opening payment to be filled before saving', async () => {
+    const values = validInvoice()
+    values.payments = [createEmptyPayment()]
+    const save = renderInvoice(values)
+    const payment = within(screen.getByRole('region', { name: 'Payment' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    expect(
+      await payment.findByText('Enter an amount greater than 0.'),
+    ).toBeTruthy()
+    expect(payment.getByText('Pick how this payment was made.')).toBeTruthy()
+    expect(
+      payment
+        .getByRole('combobox', { name: 'Method' })
+        .getAttribute('aria-invalid'),
+    ).toBe('true')
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it('highlights a missing payment method and clears the error after choosing one', async () => {
-    const save = renderInvoice()
+    const values = validInvoice()
+    values.payments = [createEmptyPayment()]
+    const save = renderInvoice(values)
     // Keep queries out of the large, unrelated order editor.
     const payment = within(screen.getByRole('region', { name: 'Payment' }))
     const saveButton = screen.getByRole('button', { name: 'Save invoice' })

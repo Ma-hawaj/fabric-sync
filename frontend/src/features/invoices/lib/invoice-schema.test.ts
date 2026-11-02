@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createEmptyMeasurement } from '@/features/customers/types/measurement-form'
-import { invoiceFormSchema } from './invoice-schema'
+import { invoiceCreateFormSchema, invoiceFormSchema } from './invoice-schema'
 import {
   createEmptyCustomer,
   createEmptyGiftCardLine,
@@ -61,6 +61,98 @@ function baseValues(customers: InvoiceCustomerDraft[]): InvoiceFormValues {
 function firstError(customers: InvoiceCustomerDraft[]) {
   return firstErrorFor(baseValues(customers))
 }
+
+describe('invoiceCreateFormSchema payments', () => {
+  function invoice(overrides: Partial<InvoiceFormValues> = {}) {
+    return values({
+      products: [validProductLine()],
+      productBranch: 'loc-1',
+      ...overrides,
+    })
+  }
+
+  it('rejects an invoice with no payment entries', () => {
+    const result = invoiceCreateFormSchema.safeParse(invoice({ payments: [] }))
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(
+        expect.objectContaining({ path: ['payments'] }),
+      )
+    }
+  })
+
+  it.each([1, 2])('rejects %s untouched payment entries', (count) => {
+    const result = invoiceCreateFormSchema.safeParse(
+      invoice({ payments: Array.from({ length: count }, createEmptyPayment) }),
+    )
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: ['payments', 0, 'amount'] }),
+          expect.objectContaining({ path: ['payments', 0, 'paymentType'] }),
+        ]),
+      )
+    }
+  })
+
+  it.each([0, -1])('rejects a payment amount of %s', (amount) => {
+    expect(
+      invoiceCreateFormSchema.safeParse(
+        invoice({
+          payments: [{ ...createEmptyPayment(), amount, paymentType: 'cash' }],
+        }),
+      ).success,
+    ).toBe(false)
+  })
+
+  it.each(['cash', 'card', 'benefit'] as const)(
+    'accepts a positive %s payment with untouched extra entries',
+    (paymentType) => {
+      expect(
+        invoiceCreateFormSchema.safeParse(
+          invoice({
+            payments: [
+              createEmptyPayment(),
+              { ...createEmptyPayment(), amount: 10, paymentType },
+            ],
+          }),
+        ).success,
+      ).toBe(true)
+    },
+  )
+
+  it('requires a method for the opening payment', () => {
+    const result = invoiceCreateFormSchema.safeParse(
+      invoice({ payments: [{ ...createEmptyPayment(), amount: 10 }] }),
+    )
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(
+        expect.objectContaining({ path: ['payments', 0, 'paymentType'] }),
+      )
+    }
+  })
+
+  it.each([10, 40])(
+    'counts a gift-card payment of %s as opening tender',
+    (amount) => {
+      expect(
+        invoiceCreateFormSchema.safeParse(
+          invoice({
+            redemptions: [{ ...createEmptyRedemption(), code: 'GC-1', amount }],
+          }),
+        ).success,
+      ).toBe(true)
+    },
+  )
+
+  it('keeps existing unpaid invoices valid for editing', () => {
+    expect(invoiceFormSchema.safeParse(invoice({ payments: [] })).success).toBe(
+      true,
+    )
+  })
+})
 
 describe('invoiceFormSchema', () => {
   it('requires a target date when any order is urgent', () => {

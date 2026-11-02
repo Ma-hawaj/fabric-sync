@@ -5,12 +5,19 @@ import {
   createEmptyCustomer,
   createEmptyOrder,
   createEmptyGiftCardLine,
+  createEmptyPayment,
 } from '../types/invoice-form'
 
-it('omits the untouched default payment entry from an unpaid invoice', () => {
+it('omits untouched extra entries while preserving the required payment', () => {
   const values = createEmptyInvoiceForm()
-  expect(values.payments).toHaveLength(1)
-  expect(invoicePayload(values).payments).toEqual([])
+  values.payments.push({
+    ...createEmptyPayment(),
+    amount: 10,
+    paymentType: 'cash',
+  })
+  expect(invoicePayload(values).payments).toEqual([
+    { amount: 10, paymentType: 'cash' },
+  ])
 })
 
 describe('invoice material payload', () => {

@@ -10,6 +10,7 @@ import type { CreatedInvoice } from './lib/invoice-payload'
 import {
   createEmptyGiftCardLine,
   createEmptyInvoiceForm,
+  createEmptyPayment,
 } from './types/invoice-form'
 
 const { navigate } = vi.hoisted(() => ({ navigate: vi.fn() }))
@@ -127,6 +128,15 @@ function renderForm({
           ...createEmptyInvoiceForm(),
           expectedVatRate: 0.1,
           customers: [],
+          payments: editing
+            ? []
+            : [
+                {
+                  ...createEmptyPayment(),
+                  amount: count * 50,
+                  paymentType: 'cash',
+                },
+              ],
           giftCards: issued.map((_, index) => ({
             ...createEmptyGiftCardLine(),
             amount: 50,
