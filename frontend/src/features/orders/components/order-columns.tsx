@@ -3,6 +3,7 @@ import { defineColumns } from '@/lib/define-columns'
 import { Link } from '@tanstack/react-router'
 import { ListChecksIcon, CheckIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/status-badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
 import { CURRENCY } from '@/lib/currency'
@@ -266,20 +267,26 @@ export function getOrderColumns(
     },
     {
       accessorKey: 'status',
-      size: 96,
+      size: 144,
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Collection" />
       ),
       cell: ({ row }) => {
         const status = row.getValue<Order['status']>('status')
         return (
-          <Badge variant={status === 'collected' ? 'default' : 'secondary'}>
+          <StatusBadge
+            tone={
+              status === 'collected' || status === 'ready'
+                ? 'success'
+                : 'neutral'
+            }
+          >
             {status === 'collected'
               ? 'Collected'
               : status === 'ready'
                 ? 'Ready for pickup'
                 : 'Pending'}
-          </Badge>
+          </StatusBadge>
         )
       },
       enableSorting: true,
@@ -343,9 +350,9 @@ export function getOrderColumns(
         )
         return (
           <div className="flex items-center gap-2 overflow-hidden">
-            <Badge variant={label === COMPLETED ? 'default' : 'secondary'}>
+            <StatusBadge tone={label === COMPLETED ? 'success' : 'info'}>
               {label}
-            </Badge>
+            </StatusBadge>
             {current?.assigneeName && (
               <span
                 className="truncate text-xs text-muted-foreground"
@@ -379,9 +386,9 @@ export function getOrderColumns(
         const total = row.original.repairs.length
         if (total === 0) return <div className="text-muted-foreground">—</div>
         return (
-          <Badge variant={open > 0 ? 'secondary' : 'outline'}>
+          <StatusBadge tone={open > 0 ? 'warning' : 'neutral'}>
             {open > 0 ? `${open} open` : `${total} closed`}
-          </Badge>
+          </StatusBadge>
         )
       },
       enableSorting: true,
@@ -420,9 +427,17 @@ export function getOrderColumns(
               ? 'Partial'
               : 'Unpaid'
         return (
-          <Badge variant={status === 'paid' ? 'default' : 'outline'}>
+          <StatusBadge
+            tone={
+              status === 'paid'
+                ? 'success'
+                : status === 'partial'
+                  ? 'warning'
+                  : 'danger'
+            }
+          >
             {label}
-          </Badge>
+          </StatusBadge>
         )
       },
       enableSorting: true,

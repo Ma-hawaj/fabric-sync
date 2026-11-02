@@ -38,9 +38,11 @@
       }
 
       :root {
-        --ink: #10151c;
-        --muted: #6b7280;
-        --rule: #d8dee7;
+        --ink: #151110;
+        --muted: #626660;
+        --rule: #e2dbd5;
+        --accent: #233029;
+        --tint: #f8eadc;
       }
 
       * {
@@ -67,23 +69,33 @@
       }
 
       header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: center;
         gap: 10px;
         padding-bottom: 8px;
         border-bottom: 1.5px solid var(--ink);
       }
 
       .logo {
-        max-height: 40px;
-        max-width: 150px;
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: center;
+        width: 116px;
+        height: 52px;
         object-fit: contain;
+      }
+
+      .company-identity {
+        grid-column: 1;
+        grid-row: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
       }
 
       .company-name {
         margin: 0;
-        font-size: 16px;
+        font-size: 14px;
         font-weight: 700;
       }
 
@@ -94,12 +106,15 @@
       }
 
       .doc-title {
+        grid-column: 3;
+        grid-row: 1;
         text-align: end;
       }
 
       .doc-title h1 {
         margin: 0;
-        font-size: 18px;
+        font-size: 16px;
+        color: var(--accent);
       }
 
       .doc-title p {
@@ -108,7 +123,7 @@
       }
 
       section {
-        margin-top: 12px;
+        margin-top: 8px;
       }
 
       h2 {
@@ -134,6 +149,26 @@
         margin: 0;
         font-weight: 600;
         text-align: end;
+        overflow-wrap: anywhere;
+      }
+
+      .details {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .reason {
+        margin: 8px 0 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .measurement-tables {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        align-items: start;
       }
 
       table {
@@ -143,13 +178,13 @@
 
       th,
       td {
-        padding: 5px 8px;
+        padding: 3px 6px;
         border: 1px solid var(--rule);
         text-align: start;
       }
 
       th {
-        background: #f3f4f6;
+        background: var(--tint);
         font-size: 10px;
         text-transform: uppercase;
         letter-spacing: 0.04em;
@@ -158,6 +193,7 @@
       .num {
         text-align: end;
         font-variant-numeric: tabular-nums;
+        direction: ltr;
       }
 
       .notes {
@@ -165,10 +201,12 @@
         border: 1px solid var(--rule);
         border-radius: 6px;
         white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        margin-top: 8px;
       }
 
       footer {
-        margin-top: 24px;
+        margin-top: 20px;
         display: flex;
         justify-content: space-between;
         gap: 24px;
@@ -183,23 +221,25 @@
       }
     </style>
   </head>
-  <body>
+  <body data-print-height="277" style="--page-width: 190mm">
+    <main class="print-page">
     <header>
-      <div>
-        {% if company.logoDataUrl %}
-          <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
-        {% endif %}
+      <div class="company-identity">
         <p class="company-name">{{ company.nameEn }} · {{ company.nameAr }}</p>
         <p class="company-meta">
           {{ company.addressEn }}{% if company.phone %} · {{ company.phone }}{% endif %}
         </p>
       </div>
+      {% if company.logoDataUrl %}
+        <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
+      {% endif %}
       <div class="doc-title">
         <h1>Repair receipt · إيصال إصلاح</h1>
         <p>ORD-{{ order.orderNumber }} · INV-{{ order.invoiceNumber }}</p>
       </div>
     </header>
 
+    <div class="details">
     <section>
       <h2>Customer · العميل</h2>
       <dl>
@@ -217,8 +257,6 @@
     <section>
       <h2>Repair · الإصلاح</h2>
       <dl>
-        <dt>Reason</dt>
-        <dd>{{ repair.reason }}</dd>
         <dt>Reported</dt>
         <dd>{{ reported_on }}</dd>
         <dt>Ready</dt>
@@ -230,11 +268,12 @@
         <dt>Collected ({{ currency }})</dt>
         <dd class="num">{{ amounts.receivedAmount }}{% if repair.receivedPaymentType %} · {{ repair.receivedPaymentType }}{% endif %}</dd>
       </dl>
-      {% if repair.notes %}
-        <div style="height: 8px"></div>
-        <div class="notes">{{ repair.notes }}</div>
-      {% endif %}
     </section>
+    </div>
+    <p class="reason"><strong>Reason · السبب:</strong> {{ repair.reason }}</p>
+    {% if repair.notes %}
+      <div class="notes">{{ repair.notes }}</div>
+    {% endif %}
 
     <section>
       <h2>Measurement fixes · تعديلات القياس</h2>
@@ -247,6 +286,11 @@
           {% endif %}
         </p>
       {% else %}
+        {# Balanced columns retain every changed field in reading order. #}
+        {% set split = (measurement_changes | length + 1) // 2 %}
+        <div class="measurement-tables">
+        {% for changes in [measurement_changes[:split], measurement_changes[split:]] %}
+        {% if changes %}
         <table>
           <thead>
             <tr>
@@ -256,7 +300,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for change in measurement_changes %}
+            {% for change in changes %}
               <tr>
                 <td>{{ change.label }}</td>
                 <td class="num">{{ change.before }}</td>
@@ -265,6 +309,9 @@
             {% endfor %}
           </tbody>
         </table>
+        {% endif %}
+        {% endfor %}
+        </div>
       {% endif %}
     </section>
 
@@ -272,5 +319,7 @@
       <div class="sign">Staff signature · توقيع الموظف</div>
       <div class="sign">Customer signature · توقيع العميل</div>
     </footer>
+    </main>
+    {% include "print-fit.html" %}
   </body>
 </html>

@@ -45,7 +45,9 @@ export function GiftCardFormPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Issue Gift Card</h1>
+        <h1 className="text-2xl font-semibold leading-tight tracking-tight">
+          Issue Gift Card
+        </h1>
         <p className="text-muted-foreground">
           Issues a card without a sale, for a comp or a replacement. Selling one
           to a customer is done from the invoice form instead.

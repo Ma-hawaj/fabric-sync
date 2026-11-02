@@ -136,7 +136,7 @@ export function InvoiceSummary({
   return (
     <div className="space-y-4">
       <section
-        className="space-y-4 rounded-xl border border-border/60 bg-card p-4"
+        className="space-y-4 rounded-xl border border-border bg-card p-4"
         aria-labelledby="invoice-summary-title"
       >
         <h2
@@ -305,7 +305,7 @@ export function InvoiceSummary({
 
       {
         <section
-          className="space-y-4 rounded-xl border border-border/60 bg-card p-4"
+          className="space-y-4 rounded-xl border border-border bg-card p-4"
           aria-label="Collection"
         >
           <h3 className="text-sm font-semibold">Collection</h3>
@@ -371,7 +371,7 @@ export function InvoiceSummary({
       }
 
       {values.customers.length === 0 && (
-        <section className="space-y-3 rounded-xl border border-border/60 bg-card p-4">
+        <section className="space-y-3 rounded-xl border border-border bg-card p-4">
           <form.Field name={'customerId' as never}>
             {(field: any) => (
               <Field>
@@ -400,7 +400,7 @@ export function InvoiceSummary({
       )}
 
       <section
-        className="space-y-4 rounded-xl border border-border/60 bg-card p-4"
+        className="space-y-4 rounded-xl border border-border bg-card p-4"
         aria-label="Payment"
       >
         <h3 className="text-sm font-semibold">Payment</h3>

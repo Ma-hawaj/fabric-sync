@@ -10,6 +10,8 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarSeparator,
+  SidebarGroup,
+  SidebarGroupLabel,
 } from '@/components/ui/sidebar'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -32,7 +34,6 @@ import {
   ShoppingCart,
   ReceiptText,
   PackageIcon,
-  ScissorsIcon,
   ContactIcon,
   ListChecksIcon,
   MapPinIcon,
@@ -161,44 +162,80 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" variant="inset">
       <SidebarContent>
-        <SidebarHeader className="px-2">
+        <SidebarHeader className="px-2 pb-5 pt-4">
           <Link
             to={homePath(user)}
-            className="flex items-center gap-2 rounded-xl px-1 py-1.5 group-data-[collapsible=icon]:justify-center"
+            aria-label="THOBX home"
+            className="flex flex-col items-center gap-2 rounded-xl px-1 py-1.5"
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <ScissorsIcon className="size-4" />
-            </span>
-            <span className="flex flex-col leading-none group-data-[collapsible=icon]:hidden">
-              <span className="font-heading text-sm font-semibold tracking-normal">
-                Fabric Sync
-              </span>
-              <span className="text-xs text-sidebar-foreground/60">
-                Tailoring workspace
-              </span>
+            <img
+              src="/brand/thobx-logo-gold.webp"
+              alt="THOBX — ثوبكس"
+              width={826}
+              height={346}
+              className="h-auto w-44 max-w-full group-data-[collapsible=icon]:hidden"
+            />
+            <img
+              src="/favicon.svg"
+              alt=""
+              width={32}
+              height={32}
+              className="hidden size-8 shrink-0 group-data-[collapsible=icon]:block"
+            />
+            <span className="text-[10px] leading-none tracking-widest text-sidebar-foreground/60 uppercase group-data-[collapsible=icon]:hidden">
+              Atelier workspace
             </span>
           </Link>
         </SidebarHeader>
         <SidebarSeparator />
-        <SidebarMenu>
-          {navItems
-            .filter(({ to }) => canVisit(user, to))
-            .map(({ to, label, icon: Icon }) => {
-              const isActive = pathname === to || pathname.startsWith(`${to}/`)
+        {[
+          {
+            label: 'Workspace',
+            paths: ['/invoices', '/orders', '/repairs', '/customers'],
+          },
+          {
+            label: 'Catalog',
+            paths: ['/inventory', '/products', '/gift-cards'],
+          },
+          {
+            label: 'Administration',
+            paths: ['/locations', '/order-stages', '/design-options', '/users'],
+          },
+        ].map((group) => {
+          const items = navItems.filter(
+            ({ to }) => group.paths.includes(to) && canVisit(user, to),
+          )
+          if (!items.length) return null
+          return (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>
+                <span className="text-[10px] tracking-widest uppercase">
+                  {group.label}
+                </span>
+              </SidebarGroupLabel>
+              <SidebarMenu>
+                {items.map(({ to, label, icon: Icon }) => {
+                  const isActive =
+                    pathname === to || pathname.startsWith(`${to}/`)
 
-              return (
-                <SidebarMenuItem key={to}>
-                  <SidebarMenuButton
-                    isActive={isActive}
-                    render={<Link to={to} />}
-                  >
-                    <Icon />
-                    <span>{label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )
-            })}
-        </SidebarMenu>
+                  return (
+                    <SidebarMenuItem key={to}>
+                      <SidebarMenuButton
+                        isActive={isActive}
+                        tooltip={label}
+                        className="h-9 border-s-2 border-transparent px-2.5 text-[13px] text-sidebar-foreground/75 data-active:border-sidebar-primary data-active:text-sidebar-foreground"
+                        render={<Link to={to} />}
+                      >
+                        <Icon />
+                        <span>{label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )
+                })}
+              </SidebarMenu>
+            </SidebarGroup>
+          )
+        })}
       </SidebarContent>
       <SidebarFooter>
         <SidebarSeparator />

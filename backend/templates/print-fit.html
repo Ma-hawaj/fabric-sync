@@ -1,0 +1,42 @@
+{# Fit the complete sheet after fonts/images load; never clip recorded content.
+   CSS zoom changes print layout as well as paint. Expanding the logical width
+   by the inverse scale keeps the physical content width inside the A4 margins. #}
+<style>
+  body {
+    width: var(--page-width);
+    box-sizing: content-box;
+  }
+
+  .print-page {
+    display: flow-root;
+    width: calc(var(--page-width) / var(--print-scale, 1));
+    zoom: var(--print-scale, 1);
+  }
+</style>
+<script>
+  (() => {
+    const page = document.querySelector('.print-page');
+    const availableHeight = Number(document.body.dataset.printHeight) * 96 / 25.4 - 4;
+    const setScale = (scale) => page.style.setProperty('--print-scale', scale);
+    const fits = () => page.getBoundingClientRect().height <= availableHeight;
+    const fit = () => {
+      setScale(1);
+      if (fits()) return;
+      let low = 0.01;
+      let high = 1;
+      for (let step = 0; step < 12; step++) {
+        const scale = (low + high) / 2;
+        setScale(scale);
+        if (fits()) low = scale;
+        else high = scale;
+      }
+      setScale(low);
+    };
+    window.documentPrintReady = (async () => {
+      await document.fonts.ready;
+      await Promise.all(Array.from(document.images, (image) => image.decode().catch(() => {})));
+      fit();
+    })();
+    window.addEventListener('beforeprint', fit);
+  })();
+</script>

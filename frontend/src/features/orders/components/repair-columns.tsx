@@ -1,7 +1,7 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { Link } from '@tanstack/react-router'
 import { CheckIcon, FileDownIcon, LinkIcon } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/status-badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
 import { CURRENCY } from '@/lib/currency'
@@ -124,9 +124,9 @@ export function getRepairColumns(
       cell: ({ row }) => {
         const status = row.original.status
         return (
-          <Badge variant={isRepairFinished(status) ? 'outline' : 'secondary'}>
+          <StatusBadge tone={isRepairFinished(status) ? 'neutral' : 'warning'}>
             {repairStatusLabel(status)}
-          </Badge>
+          </StatusBadge>
         )
       },
       enableSorting: false,
