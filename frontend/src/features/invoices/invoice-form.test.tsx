@@ -105,30 +105,41 @@ function renderInvoice(values = validInvoice()) {
 
 describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
   it('highlights a missing payment method and clears the error after choosing one', async () => {
-    renderInvoice()
-    fireEvent.click(screen.getByRole('button', { name: 'Record payment' }))
-    fireEvent.change(screen.getByLabelText('Amount'), {
+    const save = renderInvoice()
+    // Keep queries out of the large, unrelated order editor.
+    const payment = within(screen.getByRole('region', { name: 'Payment' }))
+    const saveButton = screen.getByRole('button', { name: 'Save invoice' })
+    fireEvent.click(payment.getByRole('button', { name: 'Record payment' }))
+    fireEvent.change(payment.getByLabelText('Amount'), {
       target: { value: '10' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    fireEvent.click(saveButton)
 
     expect(
-      await screen.findByText('Pick how this payment was made.'),
+      await payment.findByText('Pick how this payment was made.'),
     ).toBeTruthy()
-    const method = screen.getByRole('combobox', { name: 'Method' })
+    const method = payment.getByRole('combobox', { name: 'Method' })
     expect(method.getAttribute('aria-invalid')).toBe('true')
+    expect(save).not.toHaveBeenCalled()
 
     fireEvent.click(method)
-    fireEvent.pointerDown(screen.getByRole('option', { name: 'Cash' }), {
+    const cash = within(screen.getByRole('listbox')).getByRole('option', {
+      name: 'Cash',
+    })
+    fireEvent.pointerDown(cash, {
       pointerType: 'mouse',
     })
-    fireEvent.click(screen.getByRole('option', { name: 'Cash' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    fireEvent.click(cash)
+    fireEvent.click(saveButton)
 
     await waitFor(() => {
-      expect(screen.queryByText('Pick how this payment was made.')).toBeNull()
+      expect(payment.queryByText('Pick how this payment was made.')).toBeNull()
       expect(method.getAttribute('aria-invalid')).toBe('false')
+      expect(save).toHaveBeenCalledOnce()
     })
+    expect(
+      (save.mock.calls[0][0] as InvoiceFormValues).payments[0],
+    ).toMatchObject({ amount: 10, paymentType: 'cash' })
   })
 
   it('requires a target date for an urgent order and clears the error when that order becomes regular', async () => {
