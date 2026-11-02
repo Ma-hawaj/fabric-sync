@@ -11,6 +11,29 @@ export const getCustomerColumns = (
 ) =>
   defineColumns<Customer>()([
     {
+      accessorKey: 'customerNumber',
+      size: 130,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Customer ID" />
+      ),
+      cell: ({ row }) => (
+        <button
+          type="button"
+          onClick={() => onViewDetails(row.original)}
+          className="font-mono font-medium text-info hover:underline"
+        >
+          CSTMR-{row.getValue<number>('customerNumber')}
+        </button>
+      ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      meta: {
+        label: 'Customer ID',
+        placeholder: 'Filter customer number...',
+        variant: 'number',
+      },
+    },
+    {
       accessorKey: 'name',
       size: 220,
       header: ({ column }) => (

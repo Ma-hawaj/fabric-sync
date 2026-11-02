@@ -212,6 +212,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         <DetailCard icon={<Users className="h-3.5 w-3.5" />} title="Customer">
           <dl className="space-y-1 text-sm">
             <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Customer ID</dt>
+              <dd className="font-mono">CSTMR-{order.customerNumber}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Name</dt>
               <dd className="font-medium">{order.customerName}</dd>
             </div>

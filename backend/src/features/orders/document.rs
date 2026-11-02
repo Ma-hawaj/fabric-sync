@@ -707,6 +707,49 @@ mod tests {
     }
 
     #[test]
+    fn the_order_sheet_prints_the_readable_customer_id() {
+        let detail = OrderDetail {
+            order: services_order(),
+            invoice_number: 7,
+            measurement: tests_support::measurement(),
+        };
+        let html = test_render(&detail, &branding());
+        assert!(html.contains("<dt>Customer ID</dt>"));
+        assert!(html.contains("<dd dir=\"ltr\">CSTMR-23</dd>"));
+    }
+
+    #[sqlx::test]
+    async fn the_document_uses_the_customer_of_each_order(pool: sqlx::PgPool) {
+        let (_, orders, _, _) = crate::test_support::invoice(&pool, 2, false).await;
+        let customer_id: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO customers(name,mobile_no) VALUES('Second Customer','33112233') RETURNING id",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let measurement_id: uuid::Uuid =
+            sqlx::query_scalar("INSERT INTO measurements(customer_id) VALUES($1) RETURNING id")
+                .bind(customer_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        sqlx::query("UPDATE orders SET measurement_id=$1 WHERE id=$2")
+            .bind(measurement_id)
+            .bind(orders[1])
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let state = crate::test_support::state(pool, None, None).await;
+        for (order, number) in orders.iter().zip([1, 2]) {
+            let detail = service::get_order(&state, *order).await.unwrap();
+            assert_eq!(detail.order.customer_number, number);
+            let html = render_order_document(&state, *order).await.unwrap();
+            assert!(html.contains(&format!("<dd dir=\"ltr\">CSTMR-{number}</dd>")));
+        }
+    }
+
+    #[test]
     fn amounts_are_pre_formatted_and_balance_is_floored_at_zero() {
         let detail = OrderDetail {
             order: services_order(),
@@ -1135,6 +1178,7 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
             .unwrap(),
         measurement_id: uuid::Uuid::nil(),
         customer_name: "Ahmed".to_string(),
+        customer_number: 23,
         customer_mobile: "+973 0000".to_string(),
         material: "Cotton".to_string(),
         material_source: "shop".to_string(),

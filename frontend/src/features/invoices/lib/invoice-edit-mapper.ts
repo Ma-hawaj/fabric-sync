@@ -100,6 +100,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
   const customers: InvoiceCustomerDraft[] = edit.customers.map((block) => {
     seeds.customers.set(block.existingCustomerId, {
       id: block.existingCustomerId,
+      customerNumber: block.customerNumber,
       name: block.customerName,
       mobileNo: block.customerMobileNo,
       address: block.customerAddress ?? null,

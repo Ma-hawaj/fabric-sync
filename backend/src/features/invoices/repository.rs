@@ -983,6 +983,7 @@ pub async fn fetch_invoice_edit(
         SELECT
             o.id AS original_order_id,
             m.customer_id,
+            c.customer_number,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile_no,
             c.address AS customer_address,
@@ -1122,6 +1123,7 @@ pub async fn fetch_invoice_edit(
             Some(block) => block.orders.push(order),
             None => customers.push(InvoiceEditCustomer {
                 existing_customer_id: row.customer_id,
+                customer_number: row.customer_number,
                 customer_name: row.customer_name,
                 customer_mobile_no: row.customer_mobile_no,
                 customer_address: row.customer_address,

@@ -84,6 +84,8 @@ pub struct Measurement {
 pub struct Customer {
     pub whatsapp_notifications_enabled: bool,
     pub id: Uuid,
+    /// Stable, database-assigned number, displayed as CSTMR-<number>.
+    pub customer_number: i64,
     pub name: String,
     pub mobile_no: String,
     pub address: Option<String>,

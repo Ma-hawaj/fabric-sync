@@ -26,6 +26,7 @@ vi.mock('@/lib/api', () => ({
 const CUSTOMERS: Customer[] = [
   {
     id: 'c-1',
+    customerNumber: 1,
     name: 'Zainab',
     mobileNo: '456',
     measurements: [],
@@ -33,6 +34,7 @@ const CUSTOMERS: Customer[] = [
   },
   {
     id: 'c-2',
+    customerNumber: 2,
     name: 'Aamal',
     mobileNo: '123',
     measurements: [],
@@ -103,6 +105,8 @@ describe('customers page sorting (real tanstack-router adapter)', () => {
 
     expect(await screen.findByText('Aamal')).toBeTruthy()
     expect(screen.getByText('Zainab')).toBeTruthy()
+    expect(screen.getByText('CSTMR-1')).toBeTruthy()
+    expect(screen.getByText('CSTMR-2')).toBeTruthy()
     expect(rowOrder()).toEqual(['Zainab', 'Aamal'])
 
     const nameHeader = screen

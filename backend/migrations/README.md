@@ -23,6 +23,10 @@ SQLx applies the files in version order:
    Readiness excludes closed orders, and credits/refunds invalidate previews.
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
    return-line lookups and the unique index allowing one closure per garment.
+5. `0005_customer_numbers.sql` adds unique, automatically assigned customer
+   numbers, displayed as `CSTMR-<number>`. The workbook ingestion script imports
+   each customer's highest legacy Measurement No and advances the sequence
+   beyond the workbook's range. UUID references remain unchanged.
 
 The core schema also defines return credits and lines, refund payouts,
 cancellation details, original fabric stock locations, and balance/outcome views.

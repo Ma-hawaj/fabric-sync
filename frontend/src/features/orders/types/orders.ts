@@ -106,6 +106,7 @@ export interface Order {
   invoiceNumber: number
   invoiceDate: Date
   measurementId: string
+  customerNumber: number
   customerName: string
   customerMobile: string
   material: string

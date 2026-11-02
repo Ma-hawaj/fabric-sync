@@ -2,8 +2,7 @@
 """Ingest the legacy order book (``2026 Orders.xlsm``) into fabric-sync.
 
 Reads three sheets of the workbook (read-only, no macros executed) and loads
-their data into the Postgres schema defined by
-``backend/migrations/0001_core_schema.sql``:
+their data into the Postgres schema defined by ``backend/migrations/``:
 
   New          -> invoices + orders (+ per-order measurement copies)
   Measurments  -> value source for the copies + standalone customer history
@@ -31,7 +30,15 @@ Mapping decisions worth knowing:
    receipt and the referenced ``Measurments`` row name different customers,
    the measurement's customer always owns the order's copy (its phone is the
    one kept).
- * Measurement No is a transient lookup key only and is never stored. One
+ * A customer's highest ``Measurments`` Measurement No becomes their
+   ``customers.customer_number`` (6216 prints as CSTMR-6216). Numbers belong
+   to the measurement's customer, even when the receipt names someone else.
+   When a measurement has no identifiable owner, its receipt customer is
+   used only if all its receipts agree on that customer. Other customers get
+   automatic numbers above the entire workbook's measurement-number range.
+   Existing customer numbers are preserved on re-runs; future app-created
+   customers continue above the reserved range.
+ * Measurement No also serves as a lookup key for per-order copies. One
    order row per measurement number listed on a receipt ('6216 & 9179' ->
    two orders), each backed by a fresh measurement snapshot owned by the
    referenced ``Measurments`` row's customer (measurement wins, always —
@@ -477,8 +484,8 @@ def read_workbook(path: Path, report: Report) -> dict:
         invoices.append(invoice)
     report.count("New: dated rows -> invoices", len(invoices))
 
-    # Measurement numbers referenced by 2026 receipts. The numbers are a
-    # transient lookup key only (never stored): per-order copies take their
+    # Measurement numbers referenced by 2026 receipts also serve as lookup
+    # keys: per-order copies take their
     # values from the referenced sheet row, and repairs resolve through the
     # receipt(s) listing the number (see meas_to_invoices).
     referenced_numbers: set[int] = set()
@@ -544,7 +551,7 @@ def read_workbook(path: Path, report: Report) -> dict:
         if not isinstance(date, dt.datetime):
             date = PLACEHOLDER_DATE
         measurements.append({
-            "measurement_no": no,  # transient join key only, never stored
+            "measurement_no": no,  # Also supplies the readable customer number.
             "name": name,
             "phone": phone,
             "key": canon_key(name, phone),
@@ -641,7 +648,7 @@ def read_workbook(path: Path, report: Report) -> dict:
         "invoices": invoices,
         "measurements": measurements,
         "repairs": repairs,
-        # Transient join key (never stored): measurement no -> receipt
+        # Workbook lookup: measurement no -> receipt
         # numbers listing it. Per-order copies and repairs resolve through it.
         "meas_to_invoices": meas_to_invoices,
     }
@@ -689,7 +696,7 @@ def _canon_num(value: object) -> str:
 def measurement_signature(customer_id: str, measurement_date, values: dict) -> tuple:
     """Identity of a standalone measurement for re-run skipping.
 
-    No stored number exists anymore, so a standalone row is "already present"
+    No source number is stored on measurements, so a row is "already present"
     when the same customer holds the same date + full value set.
     """
     return (
@@ -831,6 +838,48 @@ def has_stored_values(m: dict) -> bool:
     return any(v is not None for v in m["values"].values())
 
 
+def legacy_customer_numbers(workbook: dict, report: Report) -> tuple[dict, int]:
+    """Highest legacy Measurement No per canonical customer, plus reserved max.
+
+    Reserve every valid source/reference number, including unused, orphaned,
+    and older measurements, before allocating numbers to unmapped customers.
+    """
+    receipt_owners: dict[int, set[tuple[str, str]]] = collections.defaultdict(set)
+    reserved = set()
+    for inv in workbook["invoices"]:
+        key = canon_key(inv["name"], inv["phone"])
+        for no in inv["meas_nos"]:
+            if 0 < no < 9223372036854775807:
+                reserved.add(no)
+                if key:
+                    receipt_owners[no].add(key)
+
+    candidates: dict[tuple[str, str], set[int]] = collections.defaultdict(set)
+    for measurement in workbook["measurements"]:
+        no = measurement["measurement_no"]
+        if not 0 < no < 9223372036854775807:
+            report.anomaly("customers: invalid legacy number (automatic ID used)", no)
+            continue
+        reserved.add(no)
+        key = measurement["key"]
+        if key is None:
+            owners = receipt_owners[no]
+            if len(owners) != 1:
+                if owners:
+                    report.anomaly("customers: shared ownerless measurement (automatic IDs used)", no)
+                continue
+            key = next(iter(owners))
+        candidates[key].add(no)
+
+    numbers = {key: max(values) for key, values in candidates.items()}
+    for key, values in candidates.items():
+        if len(values) > 1:
+            report.anomaly("customers: highest measurement number selected",
+                           f"{key}: {sorted(values)} -> CSTMR-{numbers[key]}")
+    report.count("customers with legacy measurement numbers", len(numbers))
+    return numbers, max(reserved, default=0)
+
+
 def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                    material_name: str = DEFAULT_MATERIAL,
                    material_amount: Decimal = Decimal("1")) -> None:
@@ -839,6 +888,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             or material_amount != material_amount.quantize(Decimal("0.01"))):
         raise ValueError("material amount must be positive with at most two decimal places")
     state = load_db_state(conn)
+    legacy_numbers, reserved_max = legacy_customer_numbers(workbook, report)
     with conn.cursor() as cur:
         # ---- materials ------------------------------------------------------
         # Sheet material names are ignored: every order points at one
@@ -884,12 +934,40 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             else:
                 report.count("customers already merged in DB (same canonical key)")
         new_customers = {k: v for k, v in display.items() if k not in db_customers}
-        for name, phone in new_customers.values():
-            cur.execute(
-                "INSERT INTO customers (name, mobile_no) VALUES (%s, %s) "
-                "ON CONFLICT (name, mobile_no) DO UPDATE SET mobile_no = EXCLUDED.mobile_no",
-                (name, phone),
+        # Move above all workbook numbers before automatic inserts. Never
+        # rewind a sequence already advanced by an earlier import/app write.
+        cur.execute(
+            """
+            WITH bounds AS (
+                SELECT GREATEST(
+                    COALESCE(MAX(customer_number), 0),
+                    COALESCE(pg_sequence_last_value(
+                        pg_get_serial_sequence('customers', 'customer_number')::regclass
+                    ), 0), %s
+                ) AS high FROM customers
             )
+            SELECT setval(pg_get_serial_sequence('customers', 'customer_number'),
+                          GREATEST(high, 1), high > 0) FROM bounds
+            """,
+            (reserved_max,),
+        )
+        for key, (name, phone) in new_customers.items():
+            number = legacy_numbers.get(key)
+            if number is None:
+                cur.execute(
+                    "INSERT INTO customers (name, mobile_no) VALUES (%s, %s) "
+                    "ON CONFLICT (name, mobile_no) DO NOTHING",
+                    (name, phone),
+                )
+                report.count("customers assigned automatic numbers")
+            else:
+                cur.execute(
+                    "INSERT INTO customers (name, mobile_no, customer_number) "
+                    "OVERRIDING SYSTEM VALUE VALUES (%s, %s, %s) "
+                    "ON CONFLICT (name, mobile_no) DO NOTHING",
+                    (name, phone, number),
+                )
+                report.count("customers assigned legacy measurement numbers")
         report.count("customers created", len(new_customers))
         cur.execute("SELECT name, mobile_no, id FROM customers")
         customer_ids: dict[tuple[str, str], str] = {}
@@ -899,8 +977,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 customer_ids[key] = str(id_)
 
         # ---- measurements ---------------------------------------------------
-        # Measurement No is a transient join key only: this map feeds the
-        # per-order copies in the invoice loop below; nothing is stored.
+        # This lookup also feeds the per-order copies in the invoice loop.
         source_by_no = {m["measurement_no"]: m for m in workbook["measurements"]}
 
         # Standalone history: sheet rows no 2026 receipt references, imported
@@ -1139,7 +1216,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
         )
 
         # ---- repairs --------------------------------------------------------
-        # Measurement No stays a transient key: number -> receipt(s) listing
+        # Repairs still use the workbook lookup: number -> receipt(s) listing
         # it in this workbook -> orders on those receipts (created above or
         # already in the DB from an earlier run).
         meas_to_invoices = workbook["meas_to_invoices"]
@@ -1205,6 +1282,8 @@ def main() -> int:
 
     report = Report()
     workbook = read_workbook(Path(args.workbook), report)
+    if args.dry_run:
+        legacy_customer_numbers(workbook, report)
     print(report.summary("workbook"))
 
     if args.dry_run:

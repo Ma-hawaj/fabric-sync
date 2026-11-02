@@ -17,6 +17,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 const preferenceLabel = 'Receive invoice and pickup updates via WhatsApp'
 const customer: Customer = {
   id: 'customer-1',
+  customerNumber: 23,
   name: 'Ahmed',
   mobileNo: '+97333112233',
   whatsappNotificationsEnabled: true,

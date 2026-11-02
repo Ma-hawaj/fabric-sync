@@ -7,6 +7,7 @@ import type { Customer, Measurement } from '../types/customers'
 
 const customer: Customer = {
   id: 'cust-1',
+  customerNumber: 23,
   name: 'Ahmed Ali',
   mobileNo: '+973 3300 1234',
   measurements: [],

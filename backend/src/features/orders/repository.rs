@@ -38,6 +38,7 @@ const SPEC: ListSpec = ListSpec {
             i.invoice_number,
             i.invoice_date,
             o.measurement_id,
+            c.customer_number,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile,
             COALESCE(mat.name, o.customer_material_description) AS material,

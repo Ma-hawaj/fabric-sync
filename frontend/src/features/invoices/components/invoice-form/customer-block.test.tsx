@@ -13,6 +13,7 @@ import type { InvoiceCustomerDraft } from '../../types/invoice-form'
 const EXISTING_CUSTOMERS: Customer[] = [
   {
     id: 'cust-1',
+    customerNumber: 1,
     name: 'Ahmed Al-Mansoori',
     mobileNo: '+971-50-1234567',
     measurements: [
@@ -33,6 +34,7 @@ const EXISTING_CUSTOMERS: Customer[] = [
   },
   {
     id: 'cust-2',
+    customerNumber: 2,
     name: 'Fatima Al-Farsi',
     mobileNo: '+971-55-9876543',
     measurements: [],

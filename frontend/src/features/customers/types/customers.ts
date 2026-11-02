@@ -42,6 +42,8 @@ export interface Measurement {
 export interface Customer {
   whatsappNotificationsEnabled?: boolean
   id: string
+  /** Stable, database-assigned number, displayed as CSTMR-<number>. */
+  customerNumber: number
   name: string
   nameArabic?: string
   address?: string | null

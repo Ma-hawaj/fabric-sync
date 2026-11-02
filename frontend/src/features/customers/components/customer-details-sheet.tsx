@@ -97,7 +97,10 @@ export function CustomerDetailsSheet({
                     {customer.name}
                   </SheetTitle>
                   <SheetDescription className="text-muted-foreground mt-0.5">
-                    Phone: {customer.mobileNo}
+                    <span className="font-mono">
+                      CSTMR-{customer.customerNumber}
+                    </span>
+                    {' · '}Phone: {customer.mobileNo}
                   </SheetDescription>
                   {customer.address && (
                     <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">

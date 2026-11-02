@@ -14,7 +14,8 @@ import psycopg2
 from psycopg2 import sql
 
 from ingest_xlsm import (
-    Report, measurement_signature, parse_measurement, perform_insert, read_workbook,
+    Report, canon_key, legacy_customer_numbers, measurement_signature,
+    parse_measurement, perform_insert, read_workbook,
 )
 
 
@@ -202,6 +203,46 @@ class ReadWorkbookTests(unittest.TestCase):
         self.assertEqual(report.numeric["Measurments: edit kept over placeholder"], 2)
         self.assertEqual(report.numeric["Measurments: duplicate number dropped"], 1)
 
+    def test_customer_numbers_use_highest_number_and_keep_shared_phones_separate(self):
+        workbook, report = self.read(invoices=[], measurements=[
+            [9179, self.date, "Customer", "33333333", 42],
+            [6216, self.date, "CUSTOMER", "33333333", 40],
+            [8000, self.date, "Family Member", "33333333", 38],
+            [9999, self.date, None, None, 40],
+        ])
+        numbers, reserved_max = legacy_customer_numbers(workbook, report)
+        self.assertEqual(numbers, {
+            canon_key("Customer", "33333333"): 9179,
+            canon_key("Family Member", "33333333"): 8000,
+        })
+        self.assertEqual(reserved_max, 9999)
+        self.assertEqual(report.numeric["customers: highest measurement number selected"], 1)
+
+    def test_customer_number_belongs_to_measurement_owner(self):
+        workbook, report = self.read()
+        numbers, reserved_max = legacy_customer_numbers(workbook, report)
+        self.assertEqual(numbers, {canon_key("Sheet Customer", "34444444"): 9})
+        self.assertEqual(reserved_max, 9)
+        self.assertNotIn(canon_key("Receipt Customer", "33333333"), numbers)
+
+    def test_ownerless_measurement_only_maps_to_an_unambiguous_receipt_customer(self):
+        workbook, report = self.read(
+            invoices=[
+                [101, self.date, "Customer", "33333333", "7 & 8 & 9000", 30],
+                [102, self.date, "Other", "34444444", "8", 30],
+            ],
+            measurements=[
+                [7, self.date, None, None, 42],
+                [8, self.date, None, None, 40],
+            ],
+        )
+        numbers, reserved_max = legacy_customer_numbers(workbook, report)
+        self.assertEqual(numbers, {canon_key("Customer", "33333333"): 7})
+        self.assertEqual(reserved_max, 9000)
+        self.assertEqual(report.numeric[
+            "customers: shared ownerless measurement (automatic IDs used)"
+        ], 1)
+
     def test_button_columns_are_imported_as_bottom(self):
         # The sheet misspells Bottom / Bottom Fold as Button / Button Fold;
         # the values are hem widths and land on the bottom columns.
@@ -263,6 +304,14 @@ class DatabaseIntegrationTests(unittest.TestCase):
         perform_insert(self.conn, workbook, branch, report,
                        material_amount=Decimal("2.50"))
         with self.conn.cursor() as cur:
+            cur.execute("SELECT id, name, customer_number FROM customers ORDER BY id")
+            original_customers = cur.fetchall()
+            self.assertEqual({name: number for _, name, number in original_customers},
+                             {"Sheet Customer": 9, "Receipt Customer": 10})
+            cur.execute("SELECT DISTINCT c.customer_number FROM orders o "
+                        "JOIN measurements m ON m.id = o.measurement_id "
+                        "JOIN customers c ON c.id = m.customer_id")
+            self.assertEqual(cur.fetchall(), [(9,)])
             cur.execute("SELECT total_price, vat_rate, taxable_amount, vat_amount "
                         "FROM invoices WHERE invoice_number = 101")
             self.assertEqual(cur.fetchone(), tuple(map(Decimal,
@@ -277,10 +326,42 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(cur.fetchone(), (Decimal("2.50"), Decimal("2.50")))
         perform_insert(self.conn, workbook, branch, Report())
         with self.conn.cursor() as cur:
+            cur.execute("SELECT id, name, customer_number FROM customers ORDER BY id")
+            self.assertEqual(cur.fetchall(), original_customers)
             for table, count in (("invoices", 3), ("orders", 9),
                                  ("invoice_payments", 2), ("order_repairs", 1)):
                 cur.execute(sql.SQL("SELECT count(*) FROM {}").format(sql.Identifier(table)))
                 self.assertEqual(cur.fetchone()[0], count, table)
+            cur.execute("INSERT INTO customers(name, mobile_no) "
+                        "VALUES('New app customer', '35555555') RETURNING customer_number")
+            self.assertEqual(cur.fetchone()[0], 11)
+
+    def test_import_reserves_unused_numbers_and_never_rewinds_the_sequence(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read(invoices=[], measurements=[
+            [9179, fixture.date, "Customer", "33333333", 42],
+            [6216, fixture.date, "CUSTOMER", "33333333", 40],
+            [10000, fixture.date, None, None, 38],
+        ])
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name) VALUES('Import test') RETURNING id")
+            branch = cur.fetchone()[0]
+        perform_insert(self.conn, workbook, branch, report)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT customer_number FROM customers")
+            self.assertEqual(cur.fetchall(), [(9179,)])
+            cur.execute("INSERT INTO customers(name, mobile_no) "
+                        "VALUES('New app customer', '35555555') RETURNING customer_number")
+            self.assertEqual(cur.fetchone()[0], 10001)
+            # Even deleted/unused numbers must not be handed out again.
+            cur.execute("DELETE FROM customers WHERE customer_number = 10001")
+        perform_insert(self.conn, workbook, branch, Report())
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO customers(name, mobile_no) "
+                        "VALUES('Next app customer', '36666666') RETURNING customer_number")
+            self.assertEqual(cur.fetchone()[0], 10002)
 
     def test_seed_sets_all_emd_prices_and_preserves_staff_changes(self):
         seed = (self.root / "backend/seeds/design_options.sql").read_text()

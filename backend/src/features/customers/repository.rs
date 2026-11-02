@@ -21,6 +21,7 @@ const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
             c.id,
+            c.customer_number,
             c.name,
             c.mobile_no,
             c.whatsapp_notifications_enabled,
@@ -77,6 +78,10 @@ const SPEC: ListSpec = ListSpec {
     "#,
     columns: &[
         ("id", ColumnDef::new("id", ColumnKind::Uuid)),
+        (
+            "customerNumber",
+            ColumnDef::new("customer_number", ColumnKind::Number),
+        ),
         ("name", ColumnDef::new("name", ColumnKind::Text)),
         ("mobileNo", ColumnDef::new("mobile_no", ColumnKind::Text)),
         (
