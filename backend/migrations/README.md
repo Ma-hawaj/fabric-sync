@@ -27,6 +27,11 @@ SQLx applies the files in version order:
    numbers, displayed as `CSTMR-<number>`. The workbook ingestion script imports
    each customer's highest legacy Measurement No and advances the sequence
    beyond the workbook's range. UUID references remain unchanged.
+6. `0006_measurement_numbers.sql` assigns each saved measurement a permanent
+   number within its customer, formatted as `CSTMR-6216-001`. A database counter
+   serializes concurrent inserts and retains used numbers after deletion.
+   Existing snapshots are numbered by measurement date and UUID within each
+   customer; imported and future snapshots use the same allocation trigger.
 
 The core schema also defines return credits and lines, refund payouts,
 cancellation details, original fabric stock locations, and balance/outcome views.

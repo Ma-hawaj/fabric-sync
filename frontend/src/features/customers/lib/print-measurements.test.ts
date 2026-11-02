@@ -17,6 +17,7 @@ const customer: Customer = {
 const measurement: Measurement = {
   id: 'm-1',
   customerId: 'cust-1',
+  readableId: 'CSTMR-23-001',
   date: new Date('2026-08-26'),
   frontHeight: 48,
   shoulder: 18,
@@ -56,6 +57,10 @@ describe('generateMeasurementsHtml', () => {
 
     expect(html).toContain('Ahmed Ali')
     expect(html).toContain('+973 3300 1234')
+    const document = new DOMParser().parseFromString(html, 'text/html')
+    expect(document.querySelector('.doc-number')?.textContent).toBe(
+      'CSTMR-23-001',
+    )
   })
 
   it('includes the measurement date', () => {

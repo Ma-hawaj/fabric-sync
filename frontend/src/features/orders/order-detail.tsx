@@ -297,6 +297,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         <SectionHeading icon={<Ruler className="h-3.5 w-3.5" />}>
           Measurements
         </SectionHeading>
+        <p className="font-mono text-sm text-muted-foreground">
+          {order.measurement.readableId}
+        </p>
         <ReadOnlyMeasurement measurement={order.measurement} />
       </section>
 

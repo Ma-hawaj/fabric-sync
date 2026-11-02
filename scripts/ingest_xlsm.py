@@ -38,6 +38,10 @@ Mapping decisions worth knowing:
    automatic numbers above the entire workbook's measurement-number range.
    Existing customer numbers are preserved on re-runs; future app-created
    customers continue above the reserved range.
+ * Every saved measurement snapshot gets its own permanent per-customer
+   increment from the database, e.g. CSTMR-6216-001, CSTMR-6216-002. This
+   applies to standalone history and per-order copies alike. Re-running an
+   import skips existing snapshots without renumbering them.
  * Measurement No also serves as a lookup key for per-order copies. One
    order row per measurement number listed on a receipt ('6216 & 9179' ->
    two orders), each backed by a fresh measurement snapshot owned by the

@@ -233,7 +233,7 @@ export function generateMeasurementsHtml(
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8"/>
-<title>Measurements - ${escapeHtml(customer.name)}</title>
+<title>Measurements - ${escapeHtml(measurement.readableId)} - ${escapeHtml(customer.name)}</title>
 <style>
   @page { size: A4; margin: 12mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -393,7 +393,8 @@ export function generateMeasurementsHtml(
         مقاسات العميل
         <span class="en">Customer Measurements</span>
       </h2>
-      <div class="doc-number">${escapeHtml(formatMeasurementDate(measurement.date))}</div>
+      <div class="doc-number" dir="ltr">${escapeHtml(measurement.readableId)}</div>
+      <div>${escapeHtml(formatMeasurementDate(measurement.date))}</div>
     </div>
   </header>
 

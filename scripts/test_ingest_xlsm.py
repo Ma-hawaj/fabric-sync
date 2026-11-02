@@ -312,6 +312,12 @@ class DatabaseIntegrationTests(unittest.TestCase):
                         "JOIN measurements m ON m.id = o.measurement_id "
                         "JOIN customers c ON c.id = m.customer_id")
             self.assertEqual(cur.fetchall(), [(9,)])
+            cur.execute("SELECT m.id, readable_measurement_id(c.customer_number, m.measurement_number) "
+                        "FROM measurements m JOIN customers c ON c.id=m.customer_id "
+                        "ORDER BY m.measurement_number")
+            original_measurements = cur.fetchall()
+            self.assertEqual([code for _, code in original_measurements],
+                             [f"CSTMR-9-{number:03d}" for number in range(1, 10)])
             cur.execute("SELECT total_price, vat_rate, taxable_amount, vat_amount "
                         "FROM invoices WHERE invoice_number = 101")
             self.assertEqual(cur.fetchone(), tuple(map(Decimal,
@@ -328,6 +334,10 @@ class DatabaseIntegrationTests(unittest.TestCase):
         with self.conn.cursor() as cur:
             cur.execute("SELECT id, name, customer_number FROM customers ORDER BY id")
             self.assertEqual(cur.fetchall(), original_customers)
+            cur.execute("SELECT m.id, readable_measurement_id(c.customer_number, m.measurement_number) "
+                        "FROM measurements m JOIN customers c ON c.id=m.customer_id "
+                        "ORDER BY m.measurement_number")
+            self.assertEqual(cur.fetchall(), original_measurements)
             for table, count in (("invoices", 3), ("orders", 9),
                                  ("invoice_payments", 2), ("order_repairs", 1)):
                 cur.execute(sql.SQL("SELECT count(*) FROM {}").format(sql.Identifier(table)))

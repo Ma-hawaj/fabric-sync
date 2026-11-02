@@ -21,6 +21,7 @@ const order = {
   material: 'Cotton',
   measurement: {
     id: 'measurement-1',
+    readableId: 'CSTMR-23-001',
     date: new Date('2026-10-01'),
     type: 'body',
     fit: 'fit',

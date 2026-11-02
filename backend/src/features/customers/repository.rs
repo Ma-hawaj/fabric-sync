@@ -29,7 +29,9 @@ const SPEC: ListSpec = ListSpec {
             max(m.measurement_date) AS last_measured_on,
             count(m.id) AS measurement_count,
             COALESCE(
-                json_agg(to_jsonb(m) ORDER BY m.measurement_date DESC, m.id DESC)
+                json_agg(to_jsonb(m) || jsonb_build_object(
+                    'readable_id', readable_measurement_id(c.customer_number, m.measurement_number)
+                ) ORDER BY m.measurement_date DESC, m.id DESC)
                     FILTER (WHERE m.id IS NOT NULL),
                 '[]'
             ) AS measurements,
@@ -120,8 +122,11 @@ pub async fn get_measurement(
     let row = sqlx::query!(
         r#"
         SELECT
-            to_jsonb(m) AS "measurement!: Json<Measurement>"
+            to_jsonb(m) || jsonb_build_object(
+                'readable_id', readable_measurement_id(c.customer_number, m.measurement_number)
+            ) AS "measurement!: Json<Measurement>"
         FROM measurements m
+        JOIN customers c ON c.id = m.customer_id
         WHERE m.id = $1
         "#,
         measurement_id,

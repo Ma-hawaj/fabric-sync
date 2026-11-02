@@ -1,6 +1,8 @@
 export interface Measurement {
   id: string
   customerId: string
+  /** Permanent ID within the customer, e.g. CSTMR-6216-001. */
+  readableId: string
   date: Date
   // Record-level choices rather than lengths. Null on legacy snapshots that
   // predate them — every new write has to set both.

@@ -34,7 +34,8 @@ export function snapshotLabel(
   total: number,
 ) {
   const date = new Date(snapshot.date).toLocaleDateString()
-  return idx === 0 ? `Current (${date})` : `Previous #${total - idx} (${date})`
+  const status = idx === 0 ? 'Current' : `Previous #${total - idx}`
+  return `${snapshot.readableId} · ${status} (${date})`
 }
 
 export function measurementFromSnapshot(

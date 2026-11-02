@@ -19,12 +19,14 @@ const EXISTING_CUSTOMERS: Customer[] = [
     measurements: [
       {
         id: 'meas-current',
+        readableId: 'CSTMR-1-002',
         customerId: 'cust-1',
         date: new Date('2026-07-01'),
         chest: 108,
       },
       {
         id: 'meas-previous',
+        readableId: 'CSTMR-1-001',
         customerId: 'cust-1',
         date: new Date('2025-06-15'),
         chest: 104,

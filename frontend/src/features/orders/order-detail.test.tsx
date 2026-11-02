@@ -106,6 +106,7 @@ const ORDER: OrderDetail = {
   measurement: {
     id: 'm-1',
     customerId: 'c-1',
+    readableId: 'CSTMR-23-001',
     date: new Date('2026-07-28'),
     frontHeight: 120,
     chest: 50,
@@ -238,6 +239,7 @@ describe('OrderDetailPage', () => {
     renderPage()
 
     expect(screen.getByText('CSTMR-23')).toBeTruthy()
+    expect(screen.getByText('CSTMR-23-001')).toBeTruthy()
     expect(screen.queryByText('Ahmed Al-Mansoori')).toBeTruthy()
     expect(screen.queryByText('Japanese Toray Cotton')).toBeTruthy()
     expect(screen.queryByText('3.5 m')).toBeTruthy()

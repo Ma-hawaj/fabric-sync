@@ -38,6 +38,7 @@ const CUSTOMER: Customer = {
     {
       id: 'meas-1',
       customerId: 'cust-1',
+      readableId: 'CSTMR-23-001',
       date: new Date('2026-07-01'),
       chest: 108,
       sleeveLength: 62,
@@ -70,6 +71,7 @@ describe('CustomerDetailsSheet', () => {
   it('shows the readable customer ID', () => {
     renderSheet(CUSTOMER)
     expect(screen.getByText('CSTMR-23')).toBeTruthy()
+    expect(screen.getByText('CSTMR-23-001')).toBeTruthy()
   })
 
   it('shows fraction symbols in the grid and thobe sheet', () => {

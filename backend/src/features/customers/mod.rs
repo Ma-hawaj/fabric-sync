@@ -7,3 +7,6 @@ mod service;
 pub(crate) mod types;
 
 pub use routes::router;
+
+#[cfg(test)]
+mod number_tests;
