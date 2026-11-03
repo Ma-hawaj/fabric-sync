@@ -50,6 +50,29 @@ const card: GiftCard = {
 
 afterEach(cleanup)
 
+it('requires VAT review and does not prefill an uninvoiced card', async () => {
+  const client = new QueryClient()
+  client.setQueryData(['gift-card', '7KMP4RWT9DXH'], {
+    ...card,
+    vatReviewRequired: true,
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <Harness />
+    </QueryClientProvider>,
+  )
+  const code = screen.getByRole('textbox', { name: 'Gift Card Code' })
+  fireEvent.change(code, { target: { value: '7KMP4RWT9DXH' } })
+  expect(
+    await screen.findByText(/VAT review required before redemption/),
+  ).toBeTruthy()
+  expect(code.getAttribute('aria-invalid')).toBe('true')
+  expect(screen.getByRole('textbox', { name: 'Apply (BHD)' })).toHaveProperty(
+    'value',
+    '',
+  )
+})
+
 it('lets staff type only twelve characters and fills the stored code after lookup', async () => {
   const client = new QueryClient()
   client.setQueryData(['gift-card', '7KMP4RWT9DXH'], card)

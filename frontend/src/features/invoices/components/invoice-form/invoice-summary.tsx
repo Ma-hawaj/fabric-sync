@@ -249,6 +249,7 @@ export function InvoiceSummary({
         )}
         {totals ? (
           <InvoicePriceSummary
+            prepaidAmount={totals.redeemed}
             total={totals.total}
             vat={totals.vat}
             vatRate={values.expectedVatRate as number}

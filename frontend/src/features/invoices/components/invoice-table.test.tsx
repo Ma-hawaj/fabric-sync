@@ -206,7 +206,7 @@ describe('Invoice table', () => {
     expect(screen.getByText(/Due:.*5\.000/)).toBeTruthy()
     expect(screen.getByText(/25\.000/)).toBeTruthy()
     expect(
-      screen.getByRole('columnheader', { name: /Invoice Total/ }),
+      screen.getByRole('columnheader', { name: /Transaction Total/ }),
     ).toBeTruthy()
     expect(screen.getByText(/100\.000/)).toBeTruthy()
   })

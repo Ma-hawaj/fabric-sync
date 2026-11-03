@@ -22,6 +22,33 @@ pub struct InvoiceDetailRows {
     pub redemptions: Vec<InvoiceRedemptionLine>,
 }
 
+#[derive(sqlx::FromRow)]
+pub struct VoucherAccounting {
+    pub prepaid_amount: f64,
+    pub document_kind: String,
+    pub sales_amount: f64,
+}
+
+pub async fn voucher_accounting(
+    db: &sqlx::PgPool,
+    invoice_id: Uuid,
+) -> Result<VoucherAccounting, sqlx::Error> {
+    sqlx::query_as("SELECT prepaid_amount::float8 AS prepaid_amount, document_kind, sales_amount::float8 AS sales_amount FROM invoice_voucher_accounting WHERE invoice_id=$1")
+        .bind(invoice_id).fetch_one(db).await
+}
+
+pub async fn voucher_has_sale_invoice(
+    tx: &mut sqlx::PgTransaction<'_>,
+    gift_card_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=$1 AND kind='gift_card')",
+    )
+    .bind(gift_card_id)
+    .fetch_one(&mut **tx)
+    .await
+}
+
 /// The made-to-measure specification, as one line of prose. Every field is
 /// optional and most orders set only some, so the blanks are dropped rather
 /// than printed as empty labels.
@@ -277,7 +304,7 @@ pub async fn fetch_invoice_detail(
             unit: row.unit,
             unit_price: row.unit_price,
             line_total: row.line_total,
-            taxable: !is_gift_card,
+            taxable: true,
             design_values: None,
         }
     }));
@@ -349,6 +376,8 @@ pub async fn fetch_invoice_detail(
 const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
+            voucher.document_kind,
+            voucher.sales_amount::float8 AS sales_amount,
             i.id,
             i.invoice_number,
             i.invoice_date,
@@ -408,6 +437,7 @@ const SPEC: ListSpec = ListSpec {
         FROM invoices i
         LEFT JOIN branch recv ON recv.id = i.branch_id
         JOIN invoice_readiness ready ON ready.invoice_id = i.id
+        JOIN invoice_voucher_accounting voucher ON voucher.invoice_id = i.id
         LEFT JOIN LATERAL (
             SELECT
                 count(*) AS item_count,
@@ -460,6 +490,10 @@ const SPEC: ListSpec = ListSpec {
             ColumnDef::new("invoice_number", ColumnKind::Number),
         ),
         ("date", ColumnDef::new("invoice_date", ColumnKind::Date)),
+        (
+            "salesAmount",
+            ColumnDef::new("sales_amount", ColumnKind::Number),
+        ),
         (
             "collectionMethod",
             ColumnDef::new("collection_method", ColumnKind::Text),

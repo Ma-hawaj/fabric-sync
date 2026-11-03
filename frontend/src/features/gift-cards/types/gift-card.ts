@@ -2,6 +2,7 @@
 // to spend and is decremented across invoices, so it outlives the sale that
 // created it.
 export interface GiftCard {
+  vatReviewRequired?: boolean
   id: string
   code: string
   initialAmount: number

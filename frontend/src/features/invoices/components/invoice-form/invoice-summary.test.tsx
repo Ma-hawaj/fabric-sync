@@ -118,9 +118,12 @@ function rowValue(label: string) {
 // Line prices are gross (VAT included): a 90 order holds 81.82 of net and
 // 8.18 of VAT, and the total is the 90 quoted — never 90 plus tax.
 describe('InvoiceSummary', () => {
-  it.each([0, 200])(
-    'shows a total without VAT for %s of untaxed sales',
-    (amount) => {
+  it.each([
+    [0, '0.00', '0.00'],
+    [200, '181.82', '18.18'],
+  ] as const)(
+    'extracts VAT at issue from %s of gift-card funding',
+    (amount, net, vat) => {
       render(
         <Harness
           defaultValues={baseValues({
@@ -129,10 +132,8 @@ describe('InvoiceSummary', () => {
           })}
         />,
       )
-      expect(rowValue('Total without VAT')).toBe(
-        `${CURRENCY} ${amount.toFixed(2)}`,
-      )
-      expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 0.00`)
+      expect(rowValue('Total without VAT')).toBe(`${CURRENCY} ${net}`)
+      expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} ${vat}`)
       expect(rowValue('Total incl. VAT')).toBe(
         `${CURRENCY} ${amount.toFixed(2)}`,
       )
@@ -330,7 +331,7 @@ describe('InvoiceSummary', () => {
     expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 150.00`)
   })
 
-  it('adds a gift card sale to the total without taxing it', () => {
+  it('taxes a gift card sale at issue alongside merchandise', () => {
     render(
       <Harness
         defaultValues={baseValues({
@@ -342,10 +343,10 @@ describe('InvoiceSummary', () => {
       />,
     )
 
-    // The card's 200 is outside the VAT base entirely.
+    // The card and merchandise both include VAT.
     expect(rowValue('Subtotal (incl. VAT)')).toBe(`${CURRENCY} 100.00`)
-    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 9.09`)
-    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 290.91`)
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 27.27`)
+    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 272.73`)
     expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 300.00`)
   })
 
@@ -364,8 +365,8 @@ describe('InvoiceSummary', () => {
     )
 
     // 10% comes off the 100 of gross goods only: 90, plus 200
-    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 8.18`)
-    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 281.82`)
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 26.36`)
+    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 263.64`)
     expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 290.00`)
   })
 
@@ -383,7 +384,9 @@ describe('InvoiceSummary', () => {
     )
 
     expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 90.00`)
-    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 81.82`)
+    expect(rowValue('Total excluding new VAT')).toBe(`${CURRENCY} 86.36`)
+    expect(rowValue('Gift-card value already taxed')).toBe(`${CURRENCY} 50.00`)
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 3.64`)
     expect(rowValue('Gift Card Redeemed')).toBe(`−${CURRENCY} 50.00`)
     // 90 - 50 - 20 = 20
     expect(rowValue('Balance due')).toBe(`${CURRENCY} 20.00`)

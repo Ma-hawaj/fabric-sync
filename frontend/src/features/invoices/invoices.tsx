@@ -118,6 +118,7 @@ export function InvoicesPage() {
         'amountRefunded',
         'balanceDue',
         'totalPrice',
+        'salesAmount',
         'readinessStatus',
         'collected',
         'receivingLocation',
@@ -140,7 +141,8 @@ export function InvoicesPage() {
             </span>
           </h1>
           <p className="mt-1.5 hidden text-sm leading-relaxed text-muted-foreground sm:block">
-            Sales, outstanding balances and collection progress.
+            Sales exclude VAT and gift-card funding. Transaction totals include
+            gift-card funding and redemption purchases.
           </p>
         </div>
         <Button nativeButton={false} render={<Link to="/invoices/new" />}>

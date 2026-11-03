@@ -22,3 +22,5 @@ mod payment_response_tests;
 
 #[cfg(test)]
 mod vat_snapshot_tests;
+#[cfg(test)]
+mod voucher_vat_tests;

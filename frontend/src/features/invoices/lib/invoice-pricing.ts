@@ -106,8 +106,8 @@ function discountOf(
 }
 
 // The same arithmetic the backend's breakdown runs, for live form totals:
-// discount off the gross, VAT extracted from the discounted gross, gift
-// cards joining the total untaxed, tender netted off the balance.
+// Bahrain single-purpose vouchers are taxed at issue. Redeemed prepaid value
+// is excluded from the new tax base; merchandise discounts do not reach cards.
 export function computeInvoiceTotals(input: {
   vatRate: number
   orderTotal: number
@@ -129,11 +129,12 @@ export function computeInvoiceTotals(input: {
   const urgentCharge = Math.round((input.urgentCharge ?? 0) * 100) / 100
   const gross =
     Math.round((grossSubtotal - discountAmount + urgentCharge) * 100) / 100
-  const taxable = extractNet(gross, input.vatRate)
-  const vat = extractVat(gross, input.vatRate)
   const giftCardSales = Math.round(input.giftCardSales * 100) / 100
   const total = Math.round((gross + giftCardSales) * 100) / 100
   const redeemed = Math.min(input.redeemed, total)
+  const taxableGross = Math.round(Math.max(total - redeemed, 0) * 100) / 100
+  const taxable = extractNet(taxableGross, input.vatRate)
+  const vat = extractVat(taxableGross, input.vatRate)
   const paid = input.paid
   const balanceDue = Math.max(total - redeemed - paid, 0)
 

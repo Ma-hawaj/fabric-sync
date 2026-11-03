@@ -120,9 +120,14 @@ INSERT INTO invoices (
     -- 1050 goods -> 1050.00, 300 advance on card
     ('019a0000-0008-7000-8000-000000000004', 1050.00, CURRENT_DATE - 6,  CURRENT_DATE + 8,  '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  NULL, 0.00, 0.10, 954.55, 95.45),
     -- 1400 goods -> 1400.00, part-settled with a gift card rather than a payment
-    ('019a0000-0008-7000-8000-000000000005', 1400.00, CURRENT_DATE - 3,  CURRENT_DATE + 11, '019a0000-0001-7000-8000-000000000002',   0.00, 'amount',  NULL, 200.00, 0.10, 1272.73, 127.27),
+    ('019a0000-0008-7000-8000-000000000005', 1400.00, CURRENT_DATE - 3,  CURRENT_DATE + 11, '019a0000-0001-7000-8000-000000000002',   0.00, 'amount',  NULL, 200.00, 0.10, 1090.91, 109.09),
     -- Retail only: 90 of goods, plus a 500 gift card sold at face value
-    ('019a0000-0008-7000-8000-000000000006',  590.00, CURRENT_DATE - 1,  CURRENT_DATE + 13, '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  '019a0000-0002-7000-8000-000000000006', 0.00, 0.10, 81.82, 8.18);
+    ('019a0000-0008-7000-8000-000000000006',  590.00, CURRENT_DATE - 1,  CURRENT_DATE + 13, '019a0000-0001-7000-8000-000000000001',   0.00, 'amount',  '019a0000-0002-7000-8000-000000000006', 0.00, 0.10, 536.36, 53.64),
+    -- Paid issuance records for the other example cards: VAT is due at issue.
+    ('019a0000-0008-7000-8000-000000000007',  500.00, CURRENT_DATE - 20, NULL, NULL, 0.00, 'amount', '019a0000-0002-7000-8000-000000000001', 0.00, 0.10, 454.55, 45.45),
+    ('019a0000-0008-7000-8000-000000000008',  250.00, CURRENT_DATE - 15, NULL, NULL, 0.00, 'amount', '019a0000-0002-7000-8000-000000000002', 0.00, 0.10, 227.27, 22.73),
+    -- Full redemption of the spent example card: receipt with no new VAT.
+    ('019a0000-0008-7000-8000-000000000009',  250.00, CURRENT_DATE - 5, NULL, NULL, 0.00, 'amount', '019a0000-0002-7000-8000-000000000002', 250.00, 0.10, 0.00, 0.00);
 
 -- Every payment lives in the ledger: advances at creation, the balance when
 -- an invoice settles. Invoice 01 has none (unpaid), 02 and 04 carry one
@@ -133,7 +138,9 @@ INSERT INTO invoice_payments (id, invoice_id, order_id, amount, payment_type, pa
     ('019a0000-000e-7000-8000-000000000002', '019a0000-0008-7000-8000-000000000003', NULL, 400.00, 'benefit', CURRENT_DATE - 30),
     ('019a0000-000e-7000-8000-000000000003', '019a0000-0008-7000-8000-000000000003', NULL, 680.00, 'card',    CURRENT_DATE - 20),
     ('019a0000-000e-7000-8000-000000000004', '019a0000-0008-7000-8000-000000000004', NULL, 300.00, 'card',    CURRENT_DATE - 6),
-    ('019a0000-000e-7000-8000-000000000005', '019a0000-0008-7000-8000-000000000006', NULL, 590.00, 'cash',    CURRENT_DATE - 1);
+    ('019a0000-000e-7000-8000-000000000005', '019a0000-0008-7000-8000-000000000006', NULL, 590.00, 'cash',    CURRENT_DATE - 1),
+    ('019a0000-000e-7000-8000-000000000006', '019a0000-0008-7000-8000-000000000007', NULL, 500.00, 'card',    CURRENT_DATE - 20),
+    ('019a0000-000e-7000-8000-000000000007', '019a0000-0008-7000-8000-000000000008', NULL, 250.00, 'cash',    CURRENT_DATE - 15);
 
 -- production_branch_id is Central Workshop on most orders, while orders 06
 -- and 07 are produced at the branch they are collected from. Orders 11 and 12
@@ -168,14 +175,18 @@ INSERT INTO gift_cards (id, code, initial_amount, balance, customer_id, expires_
     ('019a0000-000a-7000-8000-000000000003', 'GC-6CZR-2HKT-8WPM', 500.00, 500.00, '019a0000-0002-7000-8000-000000000006', CURRENT_DATE + 365, TRUE);
 
 INSERT INTO gift_card_redemptions (id, gift_card_id, invoice_id, amount, redeemed_at) VALUES
-    ('019a0000-000b-7000-8000-000000000001', '019a0000-000a-7000-8000-000000000001', '019a0000-0008-7000-8000-000000000005', 200.00, now() - interval '3 days');
+    ('019a0000-000b-7000-8000-000000000001', '019a0000-000a-7000-8000-000000000001', '019a0000-0008-7000-8000-000000000005', 200.00, now() - interval '3 days'),
+    ('019a0000-000b-7000-8000-000000000002', '019a0000-000a-7000-8000-000000000002', '019a0000-0008-7000-8000-000000000009', 250.00, now() - interval '5 days');
 
 INSERT INTO invoice_items (
     id, invoice_id, kind, product_id, gift_card_id, branch_id,
     description, quantity, unit_price, line_total
 ) VALUES
     ('019a0000-000c-7000-8000-000000000001', '019a0000-0008-7000-8000-000000000006', 'product',   '019a0000-0005-7000-8000-000000000001', NULL, '019a0000-0001-7000-8000-000000000001', 'Ghutra (Classic White)', 2.00,  45.00,  90.00),
-    ('019a0000-000c-7000-8000-000000000002', '019a0000-0008-7000-8000-000000000006', 'gift_card', NULL, '019a0000-000a-7000-8000-000000000003', NULL,                                  'Gift card GC-6CZR-2HKT-8WPM', 1.00, 500.00, 500.00);
+    ('019a0000-000c-7000-8000-000000000002', '019a0000-0008-7000-8000-000000000006', 'gift_card', NULL, '019a0000-000a-7000-8000-000000000003', NULL, 'Single-purpose gift card GC-6CZR-2HKT-8WPM', 1.00, 500.00, 500.00),
+    ('019a0000-000c-7000-8000-000000000003', '019a0000-0008-7000-8000-000000000007', 'gift_card', NULL, '019a0000-000a-7000-8000-000000000001', NULL, 'Single-purpose gift card GC-7KMP-4RWT-9DXH', 1.00, 500.00, 500.00),
+    ('019a0000-000c-7000-8000-000000000004', '019a0000-0008-7000-8000-000000000008', 'gift_card', NULL, '019a0000-000a-7000-8000-000000000002', NULL, 'Single-purpose gift card GC-8BNQ-5SVX-3FYJ', 1.00, 250.00, 250.00),
+    ('019a0000-000c-7000-8000-000000000005', '019a0000-0008-7000-8000-000000000009', 'product', '019a0000-0005-7000-8000-000000000001', NULL, '019a0000-0001-7000-8000-000000000001', 'Ghutra (Classic White)', 1.00, 250.00, 250.00);
 
 -- One repair in each status. Order 06 carries two, which is the case the
 -- per-repair history exists for: a second return does not overwrite the first.

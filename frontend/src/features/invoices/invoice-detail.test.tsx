@@ -82,7 +82,7 @@ const DETAIL: InvoiceDetail = {
       unit: null,
       unitPrice: 200,
       lineTotal: 200,
-      taxable: false,
+      taxable: true,
     },
   ],
   redemptions: [],
@@ -103,9 +103,9 @@ const DETAIL: InvoiceDetail = {
     discount: 0,
     discountUnit: 'amount',
     discountAmount: 0,
-    taxable: 90.91,
+    taxable: 272.73,
     vatRate: 0.1,
-    vat: 9.09,
+    vat: 27.27,
     giftCardSales: 200,
     total: 300,
     giftCardRedeemed: 0,
@@ -236,8 +236,8 @@ describe('InvoiceDetailPage', () => {
     const row = (label: string) =>
       within(summary).getByText(label).closest('div')!.querySelector('dd')!
         .textContent
-    expect(row('Total without VAT')).toBe('BHD 290.910')
-    expect(row('VAT (10%)')).toBe('BHD 9.090')
+    expect(row('Total without VAT')).toBe('BHD 272.730')
+    expect(row('VAT (10%)')).toBe('BHD 27.270')
     expect(row('Total incl. VAT')).toBe('BHD 300.000')
     expect(row('Balance due')).toBe('BHD 240.000')
     const breakdown = within(summary)

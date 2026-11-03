@@ -155,8 +155,8 @@ describe('computeInvoiceTotals', () => {
       paid: 30,
     })
     expect(totals.discountAmount).toBe(10)
-    expect(totals.taxable).toBe(100)
-    expect(totals.vat).toBe(10)
+    expect(totals.taxable).toBe(136.36)
+    expect(totals.vat).toBe(13.64)
     expect(totals.total).toBe(160)
     expect(totals.balanceDue).toBe(120)
   })

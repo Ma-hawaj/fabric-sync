@@ -471,7 +471,7 @@ export const getInvoiceColumns = (
       size: 164,
       minSize: 150,
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} label="Invoice Total" />
+        <DataTableColumnHeader column={column} label="Transaction Total" />
       ),
       cell: ({ row }) => (
         <div
@@ -491,11 +491,28 @@ export const getInvoiceColumns = (
       enableSorting: true,
       enableColumnFilter: true,
       meta: {
-        label: 'Invoice total',
+        label: 'Transaction total',
         variant: 'range',
         range: [0, 2000],
         unit: CURRENCY,
       },
+    },
+    {
+      accessorKey: 'salesAmount',
+      size: 164,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} label="Sales excl. VAT" />
+      ),
+      cell: ({ row }) => (
+        <div className="text-end tabular-nums">
+          {row.original.salesAmount == null
+            ? '—'
+            : currencyFormatter.format(row.original.salesAmount)}
+        </div>
+      ),
+      enableSorting: true,
+      enableColumnFilter: false,
+      meta: { label: 'Sales excl. VAT', align: 'end' },
     },
     {
       id: 'readinessStatus',

@@ -47,7 +47,13 @@ export function RedemptionBlock({
   // per resolved card so it doesn't fight a hand-typed amount.
   const prefilledFor = React.useRef<string | null>(null)
   React.useEffect(() => {
-    if (!card || status !== 'Active' || prefilledFor.current === card.id) return
+    if (
+      !card ||
+      card.vatReviewRequired ||
+      status !== 'Active' ||
+      prefilledFor.current === card.id
+    )
+      return
     const currentCode = form.getFieldValue(`${base}.code` as never) as string
     if (normalizeCode(currentCode) !== lookupCode) return
     prefilledFor.current = card.id
@@ -60,6 +66,8 @@ export function RedemptionBlock({
       return 'Enter or scan the code. GC and dashes are optional.'
     if (isFetching) return 'Checking…'
     if (!card) return 'No gift card with this code.'
+    if (card.vatReviewRequired)
+      return 'VAT review required before redemption. No taxed gift-card sale is recorded.'
 
     switch (status) {
       case 'Voided':
@@ -73,7 +81,10 @@ export function RedemptionBlock({
     }
   }
 
-  const unusable = Boolean(lookupCode) && !isFetching && status !== 'Active'
+  const unusable =
+    Boolean(lookupCode) &&
+    !isFetching &&
+    (status !== 'Active' || card?.vatReviewRequired === true)
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">

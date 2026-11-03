@@ -12,6 +12,7 @@ use super::types::{GiftCard, GiftCardBalance};
 const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
+            NOT EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=g.id AND kind='gift_card') AS vat_review_required,
             g.id,
             g.code,
             g.initial_amount::float8 AS initial_amount,
@@ -105,6 +106,7 @@ pub async fn get_gift_card_by_code(
         GiftCard,
         r#"
         SELECT
+            NOT EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=g.id AND kind='gift_card') AS "vat_review_required!",
             g.id,
             g.code,
             g.initial_amount::float8 AS "initial_amount!",

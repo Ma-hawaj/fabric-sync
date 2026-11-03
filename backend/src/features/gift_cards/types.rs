@@ -5,6 +5,7 @@ use uuid::Uuid;
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct GiftCard {
+    pub vat_review_required: bool,
     pub id: Uuid,
     pub code: String,
     pub initial_amount: f64,

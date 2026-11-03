@@ -23,6 +23,10 @@ SQLx applies the files in version order:
    Readiness excludes closed orders, and credits/refunds invalidate previews.
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
    return-line lookups and the unique index allowing one closure per garment.
+5. `0005_bahrain_single_purpose_vouchers.sql` adds a merchandise-sales and
+   document-kind view for Bahrain single-purpose vouchers. Paid cards are taxed
+   at issue, and redemptions exclude the previously taxed value. There are no
+   legacy cards to migrate. See `docs/bahrain-gift-card-vat.md`.
 
 The core schema also defines return credits and lines, refund payouts,
 cancellation details, original fabric stock locations, and balance/outcome views.

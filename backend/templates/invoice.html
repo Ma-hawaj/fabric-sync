@@ -556,8 +556,13 @@
 
       <div class="doc-title">
         <h2>
+          {% if invoice.documentKind == 'redemption_receipt' %}
+          إيصال استرداد بطاقة هدية
+          <span class="en">Gift Card Redemption Receipt</span>
+          {% else %}
           فاتورة ضريبية
           <span class="en">Tax Invoice</span>
+          {% endif %}
         </h2>
         <div class="doc-number">INV-{{ invoice.invoiceNumber }}</div>
       </div>
@@ -750,7 +755,7 @@
           <table class="totals" aria-label="Invoice price totals">
             <tr>
               <td class="label">
-                الإجمالي بدون الضريبة <span class="en">Total without VAT</span>
+                الإجمالي بدون الضريبة الجديدة <span class="en">{% if invoice.totals.prepaidAmount > 0 %}Total excluding new VAT{% else %}Total without VAT{% endif %}</span>
               </td>
               <td class="num">{{ currency }} {{ amounts.totalWithoutVat }}</td>
             </tr>
@@ -781,6 +786,16 @@
               <tr>
                 <td class="label">الإجمالي بعد المرتجعات <span class="en">After credits</span></td>
                 <td class="num">{{ currency }} {{ amounts.netTotal }}</td>
+              </tr>
+            {% endif %}
+            {% if invoice.totals.prepaidAmount > 0 %}
+              <tr>
+                <td>قيمة البطاقة الخاضعة للضريبة مسبقاً <span class="en">Gift-card value already taxed at issue</span></td>
+                <td class="num">{{ currency }} {{ amounts.prepaidAmount }}</td>
+              </tr>
+              <tr>
+                <td>المبلغ الخاضع للضريبة الجديدة <span class="en">New taxable amount (excl. VAT)</span></td>
+                <td class="num">{{ currency }} {{ amounts.taxable }}</td>
               </tr>
             {% endif %}
             {% if invoice.totals.giftCardRedeemed > 0 %}
@@ -859,7 +874,7 @@
             {% endif %}
             {% if invoice.totals.giftCardSales > 0 %}
               <div>
-                <dt>بطاقات الهدايا (غير خاضعة للضريبة) <span class="en">Gift cards sold (not taxed)</span></dt>
+                <dt>بطاقات الهدايا <span class="en">Gift cards sold{% if invoice.totals.prepaidAmount == 0 %} (see VAT above){% endif %}</span></dt>
                 <dd class="num">{{ currency }} {{ amounts.giftCardSales }}</dd>
               </div>
               {% if invoice.totals.taxable > 0 %}

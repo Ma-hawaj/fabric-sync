@@ -32,7 +32,7 @@ export interface InvoiceLine {
   unit: string | null
   unitPrice: number
   lineTotal: number
-  /** False only for gift card sales, which are outside the VAT base. */
+  /** Merchandise and paid single-purpose voucher sales are taxable. */
   taxable: boolean
 }
 
@@ -43,6 +43,8 @@ export interface InvoiceRedemption {
 
 /** The arithmetic behind the total, as the backend computed it. */
 export interface InvoiceTotals {
+  prepaidAmount?: number
+  salesAmount?: number
   urgentCharge: number
   subtotal: number
   discount: number
@@ -79,6 +81,7 @@ export interface InvoicePayment {
 
 /** Shape of GET /invoices/:id. */
 export interface InvoiceDetail extends ReadinessFields {
+  documentKind?: 'tax_invoice' | 'redemption_receipt'
   createdBy: string | null
   collectionMethod: 'delivery' | 'pickup'
   id: string

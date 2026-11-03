@@ -10,26 +10,50 @@ export function InvoicePriceSummary({
   total,
   vat,
   vatRate,
+  prepaidAmount = 0,
   formatAmount = formatCurrency,
   children,
 }: {
   total: number
   vat: number
   vatRate: number
+  prepaidAmount?: number
   formatAmount?: (amount: number) => string
   children: ReactNode
 }) {
-  // Gift card sales remain part of the invoice, but carry no VAT. Subtract
-  // only the actual VAT so this also works for mixed and gift-card-only sales.
+  // Only VAT newly due on this transaction is subtracted. Redeemed voucher
+  // value was already taxed when issued and is shown separately below.
   const withoutVat = Math.round((total - vat) * 100) / 100
 
   return (
     <div className="space-y-3">
       <dl className="space-y-2 text-sm tabular-nums">
         <div className="flex items-baseline justify-between gap-4">
-          <dt className="text-muted-foreground">Total without VAT</dt>
+          <dt className="text-muted-foreground">
+            {prepaidAmount > 0
+              ? 'Total excluding new VAT'
+              : 'Total without VAT'}
+          </dt>
           <dd className="shrink-0 font-medium">{formatAmount(withoutVat)}</dd>
         </div>
+        {prepaidAmount > 0 && (
+          <>
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-muted-foreground">
+                Gift-card value already taxed
+              </dt>
+              <dd>{formatAmount(prepaidAmount)}</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-muted-foreground">Taxable amount</dt>
+              <dd>
+                {formatAmount(
+                  Math.round((total - prepaidAmount - vat) * 100) / 100,
+                )}
+              </dd>
+            </div>
+          </>
+        )}
         <div className="flex items-baseline justify-between gap-4">
           <dt className="text-muted-foreground">
             VAT ({formatVatPercent(vatRate)}%)

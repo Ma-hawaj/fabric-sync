@@ -121,6 +121,11 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">
+            {detail.documentKind === 'redemption_receipt'
+              ? 'Gift card redemption receipt'
+              : 'Tax invoice'}
+          </Badge>
           <ReadinessBadge {...detail} />
           <Badge variant="outline">
             {detail.collectionMethod === 'delivery' ? 'Delivery' : 'Pickup'}
@@ -301,6 +306,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
         </h2>
         <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
           <InvoicePriceSummary
+            prepaidAmount={detail.totals.prepaidAmount}
             total={detail.totals.total}
             vat={detail.totals.vat}
             vatRate={detail.totals.vatRate}
@@ -325,6 +331,12 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                 <TotalRow
                   label="Gift cards sold"
                   value={detail.totals.giftCardSales}
+                />
+              )}
+              {detail.totals.salesAmount != null && (
+                <TotalRow
+                  label="Merchandise sales (excl. VAT)"
+                  value={detail.totals.salesAmount}
                 />
               )}
               {detail.totals.urgentCharge > 0 && (

@@ -351,6 +351,7 @@ fn formatted_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<Strin
 
     for (key, value) in [
         ("subtotal", totals.subtotal),
+        ("prepaidAmount", totals.prepaid_amount),
         ("urgentCharge", totals.urgent_charge),
         ("discountAmount", totals.discount_amount),
         ("taxable", totals.taxable),
@@ -573,19 +574,19 @@ mod tests {
     }
 
     #[test]
-    fn printed_totals_without_vat_include_untaxed_sales_and_ignore_payments() {
+    fn printed_totals_without_vat_use_saved_tax_and_ignore_payments() {
         for (total, vat, gift_cards, discount, urgent_charge, paid, expected_net) in [
             (100.0, 9.09, 0.0, 0.0, 0.0, 0.0, "90.910"),
             (80.0, 7.27, 0.0, 10.0, 0.0, 0.0, "72.730"),
             (110.0, 10.0, 0.0, 0.0, 10.0, 0.0, "100.000"),
-            (300.0, 9.09, 200.0, 0.0, 0.0, 60.0, "290.910"),
-            (200.0, 0.0, 200.0, 0.0, 0.0, 60.0, "200.000"),
+            (300.0, 27.27, 200.0, 0.0, 0.0, 60.0, "272.730"),
+            (200.0, 18.18, 200.0, 0.0, 0.0, 60.0, "181.820"),
             (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "0.000"),
         ] {
             let mut detail = tests_support::detail();
             detail.totals.total = total;
             detail.totals.vat = vat;
-            detail.totals.taxable = total - vat - gift_cards;
+            detail.totals.taxable = total - vat;
             detail.totals.gift_card_sales = gift_cards;
             detail.totals.discount_amount = discount;
             detail.totals.urgent_charge = urgent_charge;
@@ -928,6 +929,7 @@ mod tests_support {
 
     pub fn detail() -> InvoiceDetail {
         InvoiceDetail {
+            document_kind: "tax_invoice".into(),
             created_by: None,
             readiness: Default::default(),
             id: uuid::Uuid::nil(),
@@ -949,6 +951,8 @@ mod tests_support {
             payments: Vec::new(),
             has_adjustments: false,
             totals: InvoiceTotalsBreakdown {
+                prepaid_amount: 0.0,
+                sales_amount: 0.0,
                 urgent_charge: 0.0,
                 amount_credited: 0.0,
                 cash_refunded: 0.0,
