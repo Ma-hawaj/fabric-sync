@@ -1,4 +1,5 @@
 import type { Customer } from '@/features/customers/types/customers'
+import { customerOptionLabel } from '@/features/customers/lib/customer-picker'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 import type { Material } from '../types/materials'
 import type { Product } from '@/features/products/types/product'
@@ -74,10 +75,6 @@ export interface InvoiceEditSeeds {
   soldFromBranchName: string
 }
 
-function customerLabel(name: string, mobileNo: string): string {
-  return `${name} — ${mobileNo}`
-}
-
 export function mapInvoiceEditToForm(edit: InvoiceEdit): {
   values: InvoiceFormValues
   seeds: InvoiceEditSeeds
@@ -109,7 +106,11 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
     })
     seeds.customerLabels.set(
       block.existingCustomerId,
-      customerLabel(block.customerName, block.customerMobileNo),
+      customerOptionLabel({
+        customerNumber: block.customerNumber,
+        name: block.customerName,
+        mobileNo: block.customerMobileNo,
+      }),
     )
 
     const orders: InvoiceOrderDraft[] = block.orders.map((line) => {

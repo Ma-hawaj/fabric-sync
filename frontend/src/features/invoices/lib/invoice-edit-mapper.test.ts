@@ -211,7 +211,7 @@ describe('mapInvoiceEditToForm', () => {
     ).toBe('Ahmed')
     expect(
       seeds.customerLabels.get('0197fdd2-6a67-7000-8000-000000000002'),
-    ).toBe('Ahmed — 0500000000')
+    ).toBe('C-23 · Ahmed — 0500000000')
     expect(
       seeds.materials.get('0197fdd2-6a67-7000-8000-000000000003'),
     ).toMatchObject({ name: 'Linen', unit: 'meters' })

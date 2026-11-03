@@ -104,3 +104,41 @@ async fn saved_measurement_numbers_cannot_change_or_be_reused(pool: PgPool) {
         .unwrap();
     assert_eq!(measurement(&pool, owner).await.1, 2);
 }
+
+#[sqlx::test]
+async fn customer_picker_search_matches_readable_ids_names_and_phones(pool: PgPool) {
+    let first = customer(&pool, "Ahmed", 6216).await;
+    let second = customer(&pool, "Fatima", 6217).await;
+    let third = customer(&pool, "Other", 9179).await;
+    let state = crate::test_support::state(pool, None, None).await;
+    for (search, mut expected) in [
+        ("C-6216", vec![first]),
+        ("c-6216", vec![first]),
+        ("6216", vec![first]),
+        ("C-62", vec![first, second]),
+        ("fatima", vec![second]),
+        ("33112233", vec![first, second, third]),
+        ("C-999999", vec![]),
+    ] {
+        let params = crate::list::ListParams {
+            page: 1,
+            per_page: Some(20),
+            filters: serde_json::from_value(serde_json::json!([
+                {"id":"name","value":search,"variant":"text","operator":"iLike"},
+                {"id":"mobileNo","value":search,"variant":"text","operator":"iLike"},
+                {"id":"customerCode","value":search,"variant":"text","operator":"iLike"},
+            ]))
+            .unwrap(),
+            join: serde_json::from_str("\"or\"").unwrap(),
+            ..Default::default()
+        };
+        let page = super::repository::list_customers(&state, &params)
+            .await
+            .unwrap();
+        assert_eq!(page.total, expected.len() as i64, "{search}");
+        let mut found: Vec<Uuid> = page.data.into_iter().map(|customer| customer.id).collect();
+        found.sort();
+        expected.sort();
+        assert_eq!(found, expected, "{search}");
+    }
+}

@@ -15,6 +15,11 @@ import { useCreateGiftCard } from './hooks/use-create-gift-card'
 import { giftCardFormSchema } from './lib/gift-card-schema'
 import { createEmptyGiftCardForm } from './types/gift-card-form'
 import type { Customer } from '@/features/customers/types/customers'
+import {
+  CUSTOMER_SEARCH_FIELDS,
+  CUSTOMER_SEARCH_PLACEHOLDER,
+  customerOptionLabel,
+} from '@/features/customers/lib/customer-picker'
 
 export function GiftCardFormPage() {
   const navigate = useNavigate()
@@ -99,12 +104,12 @@ export function GiftCardFormPage() {
                   id={field.name}
                   endpoint="/customers"
                   queryKey="gift-card-customers"
-                  searchField={['name', 'mobileNo']}
-                  placeholder="Search customer..."
+                  searchField={CUSTOMER_SEARCH_FIELDS}
+                  placeholder={CUSTOMER_SEARCH_PLACEHOLDER}
                   emptyMessage="No customers found."
                   toOption={(customer) => ({
                     value: customer.id,
-                    label: `${customer.name} — ${customer.mobileNo}`,
+                    label: customerOptionLabel(customer),
                   })}
                   value={field.state.value || null}
                   onValueChange={(customerId) =>
