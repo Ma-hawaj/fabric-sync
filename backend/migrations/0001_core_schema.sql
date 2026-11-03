@@ -145,7 +145,7 @@ CREATE TABLE measurements (
     CONSTRAINT measurements_customer_number_key UNIQUE (customer_id, measurement_number)
 );
 
--- Keep the counter even if a measurement is deleted so saved IDs are never reused.
+-- Allocate permanent measurement IDs independently for each customer.
 CREATE TABLE customer_measurement_counters (
     customer_id UUID PRIMARY KEY REFERENCES customers(id) ON DELETE CASCADE,
     last_number BIGINT NOT NULL CHECK (last_number > 0)
@@ -176,6 +176,15 @@ BEGIN
 END $$;
 CREATE TRIGGER measurements_preserve_number BEFORE UPDATE OF customer_id, measurement_number
     ON measurements FOR EACH ROW EXECUTE FUNCTION preserve_measurement_number();
+
+-- Measurement history is permanent, including snapshots no order references.
+-- A statement trigger also rejects bulk deletes and cascading truncations.
+CREATE FUNCTION retain_measurement_history() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'customer measurements cannot be deleted or truncated' USING ERRCODE = '23514';
+END $$;
+CREATE TRIGGER measurements_retain_history BEFORE DELETE OR TRUNCATE ON measurements
+    FOR EACH STATEMENT EXECUTE FUNCTION retain_measurement_history();
 
 CREATE FUNCTION readable_measurement_id(customer_number BIGINT, measurement_number BIGINT)
 RETURNS TEXT LANGUAGE sql IMMUTABLE STRICT AS $$
@@ -293,7 +302,7 @@ CREATE TABLE order_repairs (
     received_at TIMESTAMPTZ,
     received_amount NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (received_amount >= 0),
     received_payment_type TEXT,
-    fixed_measurement_id UUID REFERENCES measurements(id) ON DELETE SET NULL,
+    fixed_measurement_id UUID REFERENCES measurements(id) ON DELETE RESTRICT,
     notes TEXT
 );
 
