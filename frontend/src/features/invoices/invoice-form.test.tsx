@@ -9,7 +9,11 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { InvoiceForm, InvoiceFormPage } from './invoice-form'
 
-import { createEmptyInvoiceForm, createEmptyOrder } from './types/invoice-form'
+import {
+  createEmptyInvoiceForm,
+  createEmptyOrder,
+  createEmptyPayment,
+} from './types/invoice-form'
 import type { InvoiceFormValues } from './types/invoice-form'
 import { apiGetMock } from '@/lib/list-fixtures'
 
@@ -70,6 +74,9 @@ function renderPage() {
 
 function validInvoice(): InvoiceFormValues {
   const values = createEmptyInvoiceForm()
+  values.payments = [
+    { ...createEmptyPayment(), amount: 10, paymentType: 'cash' },
+  ]
   values.customers[0].existingCustomerId = 'customer-1'
   values.customers[0].measurement.type = 'body'
   values.customers[0].measurement.fit = 'medium'
@@ -104,31 +111,62 @@ function renderInvoice(values = validInvoice()) {
 }
 
 describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
+  it('requires the blank opening payment to be filled before saving', async () => {
+    const values = validInvoice()
+    values.payments = [createEmptyPayment()]
+    const save = renderInvoice(values)
+    const payment = within(screen.getByRole('region', { name: 'Payment' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    expect(
+      await payment.findByText('Enter an amount greater than 0.'),
+    ).toBeTruthy()
+    expect(payment.getByText('Pick how this payment was made.')).toBeTruthy()
+    expect(
+      payment
+        .getByRole('combobox', { name: 'Method' })
+        .getAttribute('aria-invalid'),
+    ).toBe('true')
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it('highlights a missing payment method and clears the error after choosing one', async () => {
-    renderInvoice()
-    fireEvent.click(screen.getByRole('button', { name: 'Record payment' }))
-    fireEvent.change(screen.getByLabelText('Amount'), {
+    const values = validInvoice()
+    values.payments = [createEmptyPayment()]
+    const save = renderInvoice(values)
+    // Keep queries out of the large, unrelated order editor.
+    const payment = within(screen.getByRole('region', { name: 'Payment' }))
+    const saveButton = screen.getByRole('button', { name: 'Save invoice' })
+    fireEvent.change(payment.getByLabelText('Amount'), {
       target: { value: '10' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    fireEvent.click(saveButton)
 
     expect(
-      await screen.findByText('Pick how this payment was made.'),
+      await payment.findByText('Pick how this payment was made.'),
     ).toBeTruthy()
-    const method = screen.getByRole('combobox', { name: 'Method' })
+    const method = payment.getByRole('combobox', { name: 'Method' })
     expect(method.getAttribute('aria-invalid')).toBe('true')
+    expect(save).not.toHaveBeenCalled()
 
     fireEvent.click(method)
-    fireEvent.pointerDown(screen.getByRole('option', { name: 'Cash' }), {
+    const cash = within(screen.getByRole('listbox')).getByRole('option', {
+      name: 'Cash',
+    })
+    fireEvent.pointerDown(cash, {
       pointerType: 'mouse',
     })
-    fireEvent.click(screen.getByRole('option', { name: 'Cash' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    fireEvent.click(cash)
+    fireEvent.click(saveButton)
 
     await waitFor(() => {
-      expect(screen.queryByText('Pick how this payment was made.')).toBeNull()
+      expect(payment.queryByText('Pick how this payment was made.')).toBeNull()
       expect(method.getAttribute('aria-invalid')).toBe('false')
+      expect(save).toHaveBeenCalledOnce()
     })
+    expect(
+      (save.mock.calls[0][0] as InvoiceFormValues).payments[0],
+    ).toMatchObject({ amount: 10, paymentType: 'cash' })
   })
 
   it('requires a target date for an urgent order and clears the error when that order becomes regular', async () => {

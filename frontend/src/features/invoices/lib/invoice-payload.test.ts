@@ -5,7 +5,20 @@ import {
   createEmptyCustomer,
   createEmptyOrder,
   createEmptyGiftCardLine,
+  createEmptyPayment,
 } from '../types/invoice-form'
+
+it('omits untouched extra entries while preserving the required payment', () => {
+  const values = createEmptyInvoiceForm()
+  values.payments.push({
+    ...createEmptyPayment(),
+    amount: 10,
+    paymentType: 'cash',
+  })
+  expect(invoicePayload(values).payments).toEqual([
+    { amount: 10, paymentType: 'cash' },
+  ])
+})
 
 describe('invoice material payload', () => {
   it('saves customer addresses, collection, and urgency and clears a regular surcharge', () => {

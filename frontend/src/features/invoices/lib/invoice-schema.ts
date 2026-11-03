@@ -479,3 +479,45 @@ export const invoiceFormSchema = z
       })
     }
   })
+
+/** Creation requires opening tender; edits validate the existing ledger. */
+export const invoiceCreateFormSchema = invoiceFormSchema.superRefine(
+  (value, ctx) => {
+    const hasPayment = value.payments.some(
+      (payment) =>
+        payment.amount !== '' &&
+        payment.amount > 0 &&
+        payment.paymentType !== '',
+    )
+    const hasGiftCardPayment = value.redemptions.some(
+      (redemption) =>
+        redemption.amount !== '' &&
+        redemption.amount > 0 &&
+        redemption.code.trim() !== '',
+    )
+    if (hasPayment || hasGiftCardPayment) return
+
+    if (!value.payments.length) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Add at least one payment.',
+        path: ['payments'],
+      })
+    } else if (
+      value.payments.every(
+        (payment) => payment.amount === '' && payment.paymentType === '',
+      )
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter an amount greater than 0.',
+        path: ['payments', 0, 'amount'],
+      })
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick how this payment was made.',
+        path: ['payments', 0, 'paymentType'],
+      })
+    }
+  },
+)

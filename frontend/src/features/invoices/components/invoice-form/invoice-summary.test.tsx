@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
 import type { Customer } from '@/features/customers/types/customers'
@@ -118,6 +118,77 @@ function rowValue(label: string) {
 // Line prices are gross (VAT included): a 90 order holds 81.82 of net and
 // 8.18 of VAT, and the total is the 90 quoted — never 90 plus tax.
 describe('InvoiceSummary', () => {
+  it('starts with one visible blank payment entry', () => {
+    render(<Harness defaultValues={baseValues()} />)
+    const paymentSection = within(
+      screen.getByRole('region', { name: 'Payment' }),
+    )
+
+    expect(
+      paymentSection.getByLabelText<HTMLInputElement>('Amount').value,
+    ).toBe('')
+    expect(
+      paymentSection.getAllByRole('combobox', { name: /^Method/ }),
+    ).toHaveLength(1)
+    expect(
+      paymentSection.getByRole('combobox', { name: 'Method' }).textContent,
+    ).toContain('Method...')
+    expect(
+      paymentSection.getByRole('button', { name: 'Add Payment' }),
+    ).toBeTruthy()
+    expect(
+      paymentSection.queryByRole('button', { name: 'Record payment' }),
+    ).toBeNull()
+  })
+
+  it('adds and removes extra payments while keeping the last entry', () => {
+    render(<Harness defaultValues={baseValues()} />)
+    const paymentSection = within(
+      screen.getByRole('region', { name: 'Payment' }),
+    )
+    const addPayment = paymentSection.getByRole('button', {
+      name: 'Add Payment',
+    })
+
+    fireEvent.change(paymentSection.getByLabelText('Amount'), {
+      target: { value: '10' },
+    })
+    fireEvent.click(addPayment)
+    expect(
+      paymentSection.getAllByRole('combobox', { name: /^Method/ }),
+    ).toHaveLength(2)
+    expect(
+      paymentSection.getByLabelText<HTMLInputElement>('Amount').value,
+    ).toBe('10')
+    expect(
+      paymentSection.getByLabelText<HTMLInputElement>('Amount 2').value,
+    ).toBe('')
+
+    fireEvent.click(
+      paymentSection.getByRole('button', { name: 'Remove payment 2' }),
+    )
+    expect(paymentSection.queryByLabelText('Amount 2')).toBeNull()
+    expect(
+      paymentSection.getByLabelText<HTMLInputElement>('Amount').value,
+    ).toBe('10')
+    const removeLast = paymentSection.getByRole('button', {
+      name: 'Remove payment 1',
+    })
+    expect(removeLast.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(removeLast)
+    expect(
+      paymentSection.getByLabelText<HTMLInputElement>('Amount').value,
+    ).toBe('10')
+
+    fireEvent.click(addPayment)
+    expect(
+      paymentSection.getAllByRole('combobox', { name: /^Method/ }),
+    ).toHaveLength(2)
+    expect(
+      paymentSection.getByLabelText<HTMLInputElement>('Amount 2').value,
+    ).toBe('')
+  })
+
   it.each([0, 200])(
     'shows a total without VAT for %s of untaxed sales',
     (amount) => {
