@@ -955,8 +955,14 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             """,
             (reserved_max,),
         )
+        cur.execute("SELECT customer_number FROM customers")
+        taken_numbers = {row[0] for row in cur.fetchall()}
         for key, (name, phone) in new_customers.items():
             number = legacy_numbers.get(key)
+            if number is not None and number in taken_numbers:
+                report.anomaly("customers: legacy number already in use (automatic ID used)",
+                               f"{key} -> {number}")
+                number = None
             if number is None:
                 cur.execute(
                     "INSERT INTO customers (name, mobile_no) VALUES (%s, %s) "
@@ -971,6 +977,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                     "ON CONFLICT (name, mobile_no) DO NOTHING",
                     (name, phone, number),
                 )
+                taken_numbers.add(number)
                 report.count("customers assigned legacy measurement numbers")
         report.count("customers created", len(new_customers))
         cur.execute("SELECT name, mobile_no, id FROM customers")

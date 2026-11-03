@@ -373,6 +373,76 @@ class DatabaseIntegrationTests(unittest.TestCase):
                         "VALUES('Next app customer', '36666666') RETURNING customer_number")
             self.assertEqual(cur.fetchone()[0], 10002)
 
+    def test_import_falls_back_when_legacy_number_is_owned_by_an_app_customer(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read(invoices=[], measurements=[
+            [1, fixture.date, "Incoming", "33333333", 42],
+            [7, fixture.date, "Other incoming", "34444444", 40],
+        ])
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name) VALUES('Import test') RETURNING id")
+            branch = cur.fetchone()[0]
+            cur.execute("INSERT INTO customers(name, mobile_no) "
+                        "VALUES('App customer', '35555555') RETURNING customer_number")
+            self.assertEqual(cur.fetchone()[0], 1)
+        perform_insert(self.conn, workbook, branch, report)
+        self.assertEqual(report.numeric[
+            "customers: legacy number already in use (automatic ID used)"
+        ], 1)
+        self.assertEqual(report.numeric["customers assigned automatic numbers"], 1)
+        self.assertEqual(report.numeric["customers assigned legacy measurement numbers"], 1)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT name, customer_number FROM customers")
+            self.assertEqual(dict(cur.fetchall()), {
+                "App customer": 1, "Incoming": 8, "Other incoming": 7,
+            })
+            cur.execute("SELECT readable_measurement_id(c.customer_number, m.measurement_number) "
+                        "FROM measurements m JOIN customers c ON c.id=m.customer_id "
+                        "WHERE c.name='Incoming'")
+            self.assertEqual(cur.fetchone()[0], "C-8-001")
+        rerun = Report()
+        perform_insert(self.conn, workbook, branch, rerun)
+        self.assertEqual(rerun.numeric[
+            "customers: legacy number already in use (automatic ID used)"
+        ], 0)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT name, customer_number FROM customers")
+            self.assertEqual(dict(cur.fetchall()), {
+                "App customer": 1, "Incoming": 8, "Other incoming": 7,
+            })
+            cur.execute("INSERT INTO customers(name, mobile_no) "
+                        "VALUES('Next app customer', '36666666') RETURNING customer_number")
+            self.assertEqual(cur.fetchone()[0], 9)
+
+    def test_later_workbook_falls_back_when_an_earlier_import_took_the_number(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read()
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name) VALUES('Import test') RETURNING id")
+            branch = cur.fetchone()[0]
+        perform_insert(self.conn, workbook, branch, report)
+        later_workbook, later_report = fixture.read(invoices=[], measurements=[
+            [10, fixture.date, "Later customer", "35555555", 38],
+        ])
+        perform_insert(self.conn, later_workbook, branch, later_report)
+        self.assertEqual(later_report.numeric[
+            "customers: legacy number already in use (automatic ID used)"
+        ], 1)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id, name, customer_number FROM customers ORDER BY id")
+            customers = cur.fetchall()
+            self.assertEqual({name: number for _, name, number in customers}, {
+                "Sheet Customer": 9, "Receipt Customer": 10, "Later customer": 11,
+            })
+        perform_insert(self.conn, later_workbook, branch, Report())
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id, name, customer_number FROM customers ORDER BY id")
+            self.assertEqual(cur.fetchall(), customers)
+
     def test_seed_sets_all_emd_prices_and_preserves_staff_changes(self):
         seed = (self.root / "backend/seeds/design_options.sql").read_text()
         with self.conn.cursor() as cur:
