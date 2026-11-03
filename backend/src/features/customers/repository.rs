@@ -22,7 +22,6 @@ const SPEC: ListSpec = ListSpec {
         SELECT
             c.id,
             c.customer_number,
-            'C-' || c.customer_number::text AS customer_code,
             c.name,
             c.mobile_no,
             c.whatsapp_notifications_enabled,
@@ -86,10 +85,6 @@ const SPEC: ListSpec = ListSpec {
             ColumnDef::new("customer_number", ColumnKind::Number),
         ),
         ("name", ColumnDef::new("name", ColumnKind::Text)),
-        (
-            "customerCode",
-            ColumnDef::new("customer_code", ColumnKind::Text),
-        ),
         ("mobileNo", ColumnDef::new("mobile_no", ColumnKind::Text)),
         (
             "lastMeasuredOn",

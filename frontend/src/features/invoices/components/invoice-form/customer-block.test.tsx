@@ -59,10 +59,7 @@ function Harness({ customer }: { customer: InvoiceCustomerDraft }) {
   })
   apiGet.mockImplementation(
     apiGetMock({
-      '/customers': EXISTING_CUSTOMERS.map((row) => ({
-        ...row,
-        customerCode: `C-${row.customerNumber}`,
-      })),
+      '/customers': EXISTING_CUSTOMERS,
     }),
   )
   const client = new QueryClient()
@@ -87,7 +84,7 @@ function Harness({ customer }: { customer: InvoiceCustomerDraft }) {
 
 function searchInput() {
   return screen.getByPlaceholderText<HTMLInputElement>(
-    'Search customer by ID, name or phone...',
+    'Search customer by number, name or phone...',
   )
 }
 
@@ -140,8 +137,8 @@ describe('CustomerBlock', () => {
     )
   })
 
-  it.each(['C-6216', 'c-6216', '6216', 'C-62'])(
-    'searches customer IDs on the server using %s and keeps the UUID as the selection',
+  it.each(['6216', '62'])(
+    'searches customer numbers on the server using %s and keeps the UUID as the selection',
     async (search) => {
       render(<Harness customer={createEmptyCustomer()} />)
       openCustomerSearch()
@@ -166,7 +163,7 @@ describe('CustomerBlock', () => {
               params.get('joinOperator') === 'or' &&
               filters.some(
                 (filter: { id: string; value: string; operator: string }) =>
-                  filter.id === 'customerCode' &&
+                  filter.id === 'customerNumber' &&
                   filter.value === search &&
                   filter.operator === 'iLike',
               )
