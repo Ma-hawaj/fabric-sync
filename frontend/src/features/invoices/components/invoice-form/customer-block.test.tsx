@@ -13,17 +13,20 @@ import type { InvoiceCustomerDraft } from '../../types/invoice-form'
 const EXISTING_CUSTOMERS: Customer[] = [
   {
     id: 'cust-1',
+    customerNumber: 6216,
     name: 'Ahmed Al-Mansoori',
     mobileNo: '+971-50-1234567',
     measurements: [
       {
         id: 'meas-current',
+        readableId: 'C-6216-002',
         customerId: 'cust-1',
         date: new Date('2026-07-01'),
         chest: 108,
       },
       {
         id: 'meas-previous',
+        readableId: 'C-6216-001',
         customerId: 'cust-1',
         date: new Date('2025-06-15'),
         chest: 104,
@@ -33,6 +36,7 @@ const EXISTING_CUSTOMERS: Customer[] = [
   },
   {
     id: 'cust-2',
+    customerNumber: 9179,
     name: 'Fatima Al-Farsi',
     mobileNo: '+971-55-9876543',
     measurements: [],
@@ -53,7 +57,11 @@ function Harness({ customer }: { customer: InvoiceCustomerDraft }) {
   const form = useForm({
     defaultValues: { customers: [customer] },
   })
-  apiGet.mockImplementation(apiGetMock({ '/customers': EXISTING_CUSTOMERS }))
+  apiGet.mockImplementation(
+    apiGetMock({
+      '/customers': EXISTING_CUSTOMERS,
+    }),
+  )
   const client = new QueryClient()
   return (
     <QueryClientProvider client={client}>
@@ -76,7 +84,7 @@ function Harness({ customer }: { customer: InvoiceCustomerDraft }) {
 
 function searchInput() {
   return screen.getByPlaceholderText<HTMLInputElement>(
-    'Search customer by name or phone...',
+    'Search customer by number, name or phone...',
   )
 }
 
@@ -117,22 +125,71 @@ describe('CustomerBlock', () => {
 
     expect(
       await screen.findByRole('option', {
-        name: 'Fatima Al-Farsi — +971-55-9876543',
+        name: 'C-9179 · Fatima Al-Farsi — +971-55-9876543',
       }),
     ).toBeTruthy()
     await waitFor(() =>
       expect(
         screen.queryByRole('option', {
-          name: 'Ahmed Al-Mansoori — +971-50-1234567',
+          name: 'C-6216 · Ahmed Al-Mansoori — +971-50-1234567',
         }),
       ).toBeNull(),
     )
   })
 
+  it.each(['6216', '62'])(
+    'searches customer numbers on the server using %s and keeps the UUID as the selection',
+    async (search) => {
+      render(<Harness customer={createEmptyCustomer()} />)
+      openCustomerSearch()
+      typeSearchText(searchInput(), search)
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {
+            name: 'C-6216 · Ahmed Al-Mansoori — +971-50-1234567',
+          }),
+        ).toBeTruthy()
+        expect(
+          screen.queryByRole('option', {
+            name: 'C-9179 · Fatima Al-Farsi — +971-55-9876543',
+          }),
+        ).toBeNull()
+        expect(
+          apiGet.mock.calls.some(([url]) => {
+            const params = new URL(url, 'http://localhost').searchParams
+            const filters = JSON.parse(params.get('filters') ?? '[]')
+            return (
+              params.get('joinOperator') === 'or' &&
+              filters.some(
+                (filter: { id: string; value: string; operator: string }) =>
+                  filter.id === 'customerNumber' &&
+                  filter.value === search &&
+                  filter.operator === 'iLike',
+              )
+            )
+          }),
+        ).toBe(true)
+      })
+      fireEvent.click(
+        screen.getByRole('option', {
+          name: 'C-6216 · Ahmed Al-Mansoori — +971-50-1234567',
+        }),
+      )
+      await waitFor(() => {
+        const draft = JSON.parse(
+          screen.getByTestId('customer-draft').textContent,
+        )
+        expect(draft.existingCustomerId).toBe('cust-1')
+        expect(draft.measurement.loadedFromId).toBe('meas-current')
+      })
+    },
+  )
+
   it("loads the selected existing customer's current measurement snapshot", async () => {
     render(<Harness customer={createEmptyCustomer()} />)
 
-    await pickCustomer('Ahmed Al-Mansoori — +971-50-1234567')
+    await pickCustomer('C-6216 · Ahmed Al-Mansoori — +971-50-1234567')
 
     const chestInput = await screen.findByLabelText<HTMLInputElement>('Chest')
     expect(chestInput.value).toBe('108')
@@ -141,7 +198,7 @@ describe('CustomerBlock', () => {
   it('loads a blank measurement snapshot for a customer with no history', async () => {
     render(<Harness customer={createEmptyCustomer()} />)
 
-    await pickCustomer('Fatima Al-Farsi — +971-55-9876543')
+    await pickCustomer('C-9179 · Fatima Al-Farsi — +971-55-9876543')
 
     const chestInput = await screen.findByLabelText<HTMLInputElement>('Chest')
     expect(chestInput.value).toBe('')
@@ -150,7 +207,7 @@ describe('CustomerBlock', () => {
   it('clears the previous customer and measurement when switching to a new customer', async () => {
     render(<Harness customer={createEmptyCustomer()} />)
 
-    await pickCustomer('Ahmed Al-Mansoori — +971-50-1234567')
+    await pickCustomer('C-6216 · Ahmed Al-Mansoori — +971-50-1234567')
     expect(screen.getByLabelText<HTMLInputElement>('Chest').value).toBe('108')
     expect(
       JSON.parse(screen.getByTestId('customer-draft').textContent).measurement

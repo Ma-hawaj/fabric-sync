@@ -212,6 +212,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         <DetailCard icon={<Users className="h-3.5 w-3.5" />} title="Customer">
           <dl className="space-y-1 text-sm">
             <div className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">Customer ID</dt>
+              <dd className="font-mono">C-{order.customerNumber}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Name</dt>
               <dd className="font-medium">{order.customerName}</dd>
             </div>
@@ -293,6 +297,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         <SectionHeading icon={<Ruler className="h-3.5 w-3.5" />}>
           Measurements
         </SectionHeading>
+        <p className="font-mono text-sm text-muted-foreground">
+          {order.measurement.readableId}
+        </p>
         <ReadOnlyMeasurement measurement={order.measurement} />
       </section>
 

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            to_jsonb(m) || jsonb_build_object(\n                'readable_id', readable_measurement_id(c.customer_number, m.measurement_number)\n            ) AS \"measurement!: Json<Measurement>\"\n        FROM measurements m\n        JOIN customers c ON c.id = m.customer_id\n        WHERE m.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "measurement!: Json<Measurement>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "37c12c80188f82954e841721997151687a43cad41e322d4aee3d460019bd9c9e"
+}

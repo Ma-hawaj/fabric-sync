@@ -22,6 +22,7 @@ function editFixture(): InvoiceEdit {
     customers: [
       {
         existingCustomerId: '0197fdd2-6a67-7000-8000-000000000002',
+        customerNumber: 23,
         customerName: 'Ahmed',
         customerMobileNo: '0500000000',
         measurementId: '0197fdd2-6a67-7000-8000-000000000009',
@@ -116,6 +117,9 @@ describe('mapInvoiceEditToForm', () => {
     expect(values.customers[0].orders[0].isUrgent).toBe(true)
     expect(values.customers[0].orders[0].urgentCharge).toBe(12.5)
     expect(
+      seeds.customers.get(edit.customers[0].existingCustomerId)?.customerNumber,
+    ).toBe(23)
+    expect(
       seeds.customers.get(edit.customers[0].existingCustomerId)?.address,
     ).toBe('Building 1, Road 2')
   })
@@ -207,7 +211,7 @@ describe('mapInvoiceEditToForm', () => {
     ).toBe('Ahmed')
     expect(
       seeds.customerLabels.get('0197fdd2-6a67-7000-8000-000000000002'),
-    ).toBe('Ahmed — 0500000000')
+    ).toBe('C-23 · Ahmed — 0500000000')
     expect(
       seeds.materials.get('0197fdd2-6a67-7000-8000-000000000003'),
     ).toMatchObject({ name: 'Linen', unit: 'meters' })

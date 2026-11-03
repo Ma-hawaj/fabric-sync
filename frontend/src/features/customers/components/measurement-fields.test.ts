@@ -6,6 +6,7 @@ function makeSnapshot(overrides: Partial<Measurement> = {}): Measurement {
   return {
     id: 'm1',
     customerId: 'c1',
+    readableId: 'C-23-001',
     date: new Date('2026-07-01'),
     chest: 108,
     frontPocketLengthByWidth: '16x14',
@@ -62,14 +63,14 @@ describe('measurementFromSnapshot', () => {
 describe('snapshotLabel', () => {
   it('labels the first entry as Current', () => {
     const snapshot = makeSnapshot({ date: new Date('2026-07-12') })
-    expect(snapshotLabel(snapshot, 0, 3)).toMatch(/^Current \(/)
+    expect(snapshotLabel(snapshot, 0, 3)).toMatch(/^C-23-001 · Current \(/)
   })
 
   it('labels later entries as Previous, counting down from the total', () => {
     const snapshot = makeSnapshot({ date: new Date('2025-10-05') })
     // 3 total snapshots, this one at index 1 -> the 2nd-most-recent -> "Previous #2"
-    expect(snapshotLabel(snapshot, 1, 3)).toMatch(/^Previous #2 \(/)
+    expect(snapshotLabel(snapshot, 1, 3)).toMatch(/^C-23-001 · Previous #2 \(/)
     // index 2 of 3 -> the oldest -> "Previous #1"
-    expect(snapshotLabel(snapshot, 2, 3)).toMatch(/^Previous #1 \(/)
+    expect(snapshotLabel(snapshot, 2, 3)).toMatch(/^C-23-001 · Previous #1 \(/)
   })
 })

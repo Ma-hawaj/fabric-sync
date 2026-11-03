@@ -41,6 +41,8 @@ pub const MEASUREMENT_FITS: &[&str] = &["loose", "fit", "medium"];
 pub struct Measurement {
     pub id: Uuid,
     pub customer_id: Uuid,
+    /// Server-formatted customer ID plus permanent per-customer increment.
+    pub readable_id: String,
     #[serde(rename(deserialize = "measurement_date"))]
     pub date: NaiveDate,
 
@@ -84,6 +86,8 @@ pub struct Measurement {
 pub struct Customer {
     pub whatsapp_notifications_enabled: bool,
     pub id: Uuid,
+    /// Stable, database-assigned number, displayed as C-<number>.
+    pub customer_number: i64,
     pub name: String,
     pub mobile_no: String,
     pub address: Option<String>,
@@ -283,6 +287,7 @@ mod tests {
         let postgres_json = r#"{
             "id": "4b87bb2b-cf72-476c-8446-7b30c46f0ad5",
             "customer_id": "adcdd125-7101-4e93-ba4d-c9a7fe9fca1f",
+            "readable_id": "C-6216-001",
             "measurement_date": "2026-07-01",
             "type": "thobe", "fit": "loose",
             "front_height": 152.5, "back_height": null, "chest": 108.0, "waist": null,
@@ -308,6 +313,7 @@ mod tests {
         assert_eq!(measurement.fit.as_deref(), Some("loose"));
 
         let api_json = serde_json::to_value(&measurement).unwrap();
+        assert_eq!(api_json["readableId"], "C-6216-001");
         assert_eq!(api_json["frontHeight"], 152.5);
         assert!(api_json["fullBody"].is_null());
         assert!(api_json["fo"].is_null());

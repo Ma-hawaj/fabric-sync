@@ -34,7 +34,8 @@ export function snapshotLabel(
   total: number,
 ) {
   const date = new Date(snapshot.date).toLocaleDateString()
-  return idx === 0 ? `Current (${date})` : `Previous #${total - idx} (${date})`
+  const status = idx === 0 ? 'Current' : `Previous #${total - idx}`
+  return `${snapshot.readableId} · ${status} (${date})`
 }
 
 export function measurementFromSnapshot(
@@ -154,9 +155,13 @@ export function MeasurementFields({
                 <SelectTrigger id={field.name} className="w-full sm:w-72">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="w-max max-w-(--available-width)">
                   {history.map((snapshot, idx) => (
-                    <SelectItem key={snapshot.id} value={snapshot.id}>
+                    <SelectItem
+                      key={snapshot.id}
+                      value={snapshot.id}
+                      className="pe-7 [&>:first-child]:min-w-0 [&>:first-child]:shrink [&>:first-child]:wrap-anywhere [&>:first-child]:whitespace-normal"
+                    >
                       {snapshotLabel(snapshot, idx, history.length)}
                     </SelectItem>
                   ))}

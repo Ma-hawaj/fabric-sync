@@ -11,6 +11,11 @@ import {
   MeasurementFields,
 } from '@/features/customers/components/measurement-fields'
 import type { Customer } from '@/features/customers/types/customers'
+import {
+  CUSTOMER_SEARCH_FIELDS,
+  CUSTOMER_SEARCH_PLACEHOLDER,
+  customerOptionLabel,
+} from '@/features/customers/lib/customer-picker'
 import type { Material } from '../../types/materials'
 import { createEmptyOrder } from '../../types/invoice-form'
 import type {
@@ -25,10 +30,6 @@ import {
   MEASUREMENT_FITS,
   MEASUREMENT_TYPES,
 } from '@/features/customers/types/measurement-form'
-
-function customerOptionLabel(customer: Customer) {
-  return `${customer.name} — ${customer.mobileNo}`
-}
 
 interface CustomerBlockProps {
   form: InvoiceFormApi
@@ -209,7 +210,7 @@ export function CustomerBlock({
                           id={idField.name}
                           endpoint="/customers"
                           queryKey="invoice-customer"
-                          searchField={['name', 'mobileNo']}
+                          searchField={CUSTOMER_SEARCH_FIELDS}
                           toOption={(customer) => ({
                             value: customer.id,
                             label: customerOptionLabel(customer),
@@ -236,7 +237,7 @@ export function CustomerBlock({
                               ) as never,
                             )
                           }}
-                          placeholder="Search customer by name or phone..."
+                          placeholder={CUSTOMER_SEARCH_PLACEHOLDER}
                           emptyMessage="No customers found."
                         />
                         <FieldError errors={idField.state.meta.errors} />

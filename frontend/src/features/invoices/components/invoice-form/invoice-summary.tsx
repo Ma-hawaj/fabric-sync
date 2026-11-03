@@ -15,6 +15,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { Customer } from '@/features/customers/types/customers'
+import {
+  CUSTOMER_SEARCH_FIELDS,
+  CUSTOMER_SEARCH_PLACEHOLDER,
+  customerOptionLabel,
+} from '@/features/customers/lib/customer-picker'
 import type { Location } from '@/features/locations/types/location'
 import { ORDER_RECEIVING_FILTERS } from '@/features/locations/lib/location-filters'
 import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
@@ -376,15 +381,15 @@ export function InvoiceSummary({
                   id={field.name}
                   endpoint="/customers"
                   queryKey="invoice-summary-customer"
-                  searchField={['name', 'mobileNo']}
+                  searchField={CUSTOMER_SEARCH_FIELDS}
                   toOption={(customer) => ({
                     value: customer.id,
-                    label: `${customer.name} — ${customer.mobileNo}`,
+                    label: customerOptionLabel(customer),
                   })}
                   getValueLabel={customerLabelForId}
                   value={field.state.value || null}
                   onValueChange={(id) => field.handleChange(id ?? '')}
-                  placeholder="Search customer..."
+                  placeholder={CUSTOMER_SEARCH_PLACEHOLDER}
                   emptyMessage="No customers found."
                 />
               </Field>

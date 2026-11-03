@@ -24,6 +24,14 @@ SQLx applies the files in version order:
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
    return-line lookups and the unique index allowing one closure per garment.
 
+The core schema defines readable customer IDs (`C-6216`) and permanent
+per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.
+Customer numbers use an identity sequence; the workbook importer preserves each
+customer's highest legacy Measurement No and advances the sequence beyond the
+workbook's range. A measurement counter and insert trigger serialize concurrent
+saves and retain used numbers after deletion. Imports and app-created snapshots
+use the same allocation trigger.
+
 The core schema also defines return credits and lines, refund payouts,
 cancellation details, original fabric stock locations, and balance/outcome views.
 Return lines store their chosen restock location with a foreign key and require a

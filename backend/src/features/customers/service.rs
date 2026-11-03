@@ -125,6 +125,45 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn customer_numbers_are_assigned_across_creation_paths_and_survive_edits(
+        pool: sqlx::PgPool,
+    ) {
+        let state = crate::test_support::state(pool.clone(), None, None).await;
+        let customer = create_customer(
+            &state,
+            serde_json::from_value(serde_json::json!({
+                "name": "Numbered customer", "mobileNo": "33112233"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(customer.customer_number, 1);
+        assert_eq!(
+            serde_json::to_value(&customer).unwrap()["customerNumber"],
+            1
+        );
+
+        // Invoice creation uses this same transaction-scoped repository path.
+        let mut tx = pool.begin().await.unwrap();
+        let next = repository::insert_customer(&mut tx, "Next customer", "33112233", true, None)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        assert_eq!(get_customer(&state, next).await.unwrap().customer_number, 2);
+
+        let renamed = update_customer(
+            &state,
+            customer.id,
+            serde_json::from_value(serde_json::json!({"name": "Renamed"})).unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(renamed.customer_number, customer.customer_number);
+        assert_eq!(renamed.id, customer.id);
+    }
+
+    #[sqlx::test]
     async fn measurement_eighths_survive_save_and_reload(pool: sqlx::PgPool) {
         let state = crate::test_support::state(pool, None, None).await;
         let customer = create_customer(
