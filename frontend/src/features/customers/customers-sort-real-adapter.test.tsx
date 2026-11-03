@@ -105,8 +105,8 @@ describe('customers page sorting (real tanstack-router adapter)', () => {
 
     expect(await screen.findByText('Aamal')).toBeTruthy()
     expect(screen.getByText('Zainab')).toBeTruthy()
-    expect(screen.getByText('CSTMR-1')).toBeTruthy()
-    expect(screen.getByText('CSTMR-2')).toBeTruthy()
+    expect(screen.getByText('C-1')).toBeTruthy()
+    expect(screen.getByText('C-2')).toBeTruthy()
     expect(rowOrder()).toEqual(['Zainab', 'Aamal'])
 
     const nameHeader = screen

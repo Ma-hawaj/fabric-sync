@@ -1,7 +1,7 @@
 export interface Measurement {
   id: string
   customerId: string
-  /** Permanent ID within the customer, e.g. CSTMR-6216-001. */
+  /** Permanent ID within the customer, e.g. C-6216-001. */
   readableId: string
   date: Date
   // Record-level choices rather than lengths. Null on legacy snapshots that
@@ -44,7 +44,7 @@ export interface Measurement {
 export interface Customer {
   whatsappNotificationsEnabled?: boolean
   id: string
-  /** Stable, database-assigned number, displayed as CSTMR-<number>. */
+  /** Stable, database-assigned number, displayed as C-<number>. */
   customerNumber: number
   name: string
   nameArabic?: string

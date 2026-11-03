@@ -15,7 +15,7 @@ CREATE TABLE branch (
 
 CREATE TABLE customers (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
-    -- Staff quote CSTMR-<number>; UUIDs remain relational keys. Imports may
+    -- Staff quote C-<number>; UUIDs remain relational keys. Imports may
     -- override the identity with the customer's latest legacy Measurement No.
     customer_number BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
     name TEXT NOT NULL,
@@ -188,7 +188,7 @@ CREATE TRIGGER measurements_retain_history BEFORE DELETE OR TRUNCATE ON measurem
 
 CREATE FUNCTION readable_measurement_id(customer_number BIGINT, measurement_number BIGINT)
 RETURNS TEXT LANGUAGE sql IMMUTABLE STRICT AS $$
-    SELECT 'CSTMR-' || customer_number::text || '-' ||
+    SELECT 'C-' || customer_number::text || '-' ||
         lpad(measurement_number::text, greatest(3, length(measurement_number::text)), '0')
 $$;
 

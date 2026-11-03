@@ -36,17 +36,17 @@ async fn measurements_have_independent_per_customer_ids_in_both_api_projections(
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(saved.readable_id, "CSTMR-6216-001");
+    assert_eq!(saved.readable_id, "C-6216-001");
     assert_eq!(
         serde_json::to_value(saved).unwrap()["readableId"],
-        "CSTMR-6216-001"
+        "C-6216-001"
     );
     let history = super::repository::get_customer(&state, first)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(history.measurements[0].readable_id, "CSTMR-6216-002");
-    assert_eq!(history.measurements[1].readable_id, "CSTMR-6216-001");
+    assert_eq!(history.measurements[0].readable_id, "C-6216-002");
+    assert_eq!(history.measurements[1].readable_id, "C-6216-001");
 
     // Editing a customer's contact details does not change measurement IDs.
     sqlx::query("UPDATE customers SET name='Renamed' WHERE id=$1")
@@ -60,13 +60,13 @@ async fn measurements_have_independent_per_customer_ids_in_both_api_projections(
             .unwrap()
             .unwrap()
             .readable_id,
-        "CSTMR-6216-001"
+        "C-6216-001"
     );
     let large: String = sqlx::query_scalar("SELECT readable_measurement_id(6216,1000)")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(large, "CSTMR-6216-1000");
+    assert_eq!(large, "C-6216-1000");
 }
 
 #[sqlx::test]

@@ -31,7 +31,7 @@ Mapping decisions worth knowing:
    the measurement's customer always owns the order's copy (its phone is the
    one kept).
  * A customer's highest ``Measurments`` Measurement No becomes their
-   ``customers.customer_number`` (6216 prints as CSTMR-6216). Numbers belong
+   ``customers.customer_number`` (6216 prints as C-6216). Numbers belong
    to the measurement's customer, even when the receipt names someone else.
    When a measurement has no identifiable owner, its receipt customer is
    used only if all its receipts agree on that customer. Other customers get
@@ -39,7 +39,7 @@ Mapping decisions worth knowing:
    Existing customer numbers are preserved on re-runs; future app-created
    customers continue above the reserved range.
  * Every saved measurement snapshot gets its own permanent per-customer
-   increment from the database, e.g. CSTMR-6216-001, CSTMR-6216-002. This
+   increment from the database, e.g. C-6216-001, C-6216-002. This
    applies to standalone history and per-order copies alike. Re-running an
    import skips existing snapshots without renumbering them.
  * Measurement No also serves as a lookup key for per-order copies. One
@@ -879,7 +879,7 @@ def legacy_customer_numbers(workbook: dict, report: Report) -> tuple[dict, int]:
     for key, values in candidates.items():
         if len(values) > 1:
             report.anomaly("customers: highest measurement number selected",
-                           f"{key}: {sorted(values)} -> CSTMR-{numbers[key]}")
+                           f"{key}: {sorted(values)} -> C-{numbers[key]}")
     report.count("customers with legacy measurement numbers", len(numbers))
     return numbers, max(reserved, default=0)
 

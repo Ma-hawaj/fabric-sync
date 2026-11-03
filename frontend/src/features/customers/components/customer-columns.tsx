@@ -22,7 +22,7 @@ export const getCustomerColumns = (
           onClick={() => onViewDetails(row.original)}
           className="font-mono font-medium text-info hover:underline"
         >
-          CSTMR-{row.getValue<number>('customerNumber')}
+          C-{row.getValue<number>('customerNumber')}
         </button>
       ),
       enableSorting: true,

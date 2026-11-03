@@ -715,9 +715,9 @@ mod tests {
         };
         let html = test_render(&detail, &branding());
         assert!(html.contains("<dt>Customer ID</dt>"));
-        assert!(html.contains("<dd dir=\"ltr\">CSTMR-23</dd>"));
+        assert!(html.contains("<dd dir=\"ltr\">C-23</dd>"));
         assert!(html.contains("<dt>Measurement ID</dt>"));
-        assert!(html.contains("<dd dir=\"ltr\">CSTMR-23-001</dd>"));
+        assert!(html.contains("<dd dir=\"ltr\">C-23-001</dd>"));
     }
 
     #[sqlx::test]
@@ -747,8 +747,8 @@ mod tests {
             let detail = service::get_order(&state, *order).await.unwrap();
             assert_eq!(detail.order.customer_number, number);
             let html = render_order_document(&state, *order).await.unwrap();
-            assert!(html.contains(&format!("<dd dir=\"ltr\">CSTMR-{number}</dd>")));
-            assert!(html.contains(&format!("<dd dir=\"ltr\">CSTMR-{number}-001</dd>")));
+            assert!(html.contains(&format!("<dd dir=\"ltr\">C-{number}</dd>")));
+            assert!(html.contains(&format!("<dd dir=\"ltr\">C-{number}-001</dd>")));
         }
     }
 
@@ -1227,7 +1227,7 @@ mod tests_support {
         Measurement {
             id: uuid::Uuid::nil(),
             customer_id: uuid::Uuid::nil(),
-            readable_id: "CSTMR-23-001".into(),
+            readable_id: "C-23-001".into(),
             date: chrono::NaiveDate::from_ymd_opt(2026, 7, 30).unwrap(),
             r#type: Some("body".to_string()),
             fit: Some("medium".to_string()),

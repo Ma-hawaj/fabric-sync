@@ -24,8 +24,8 @@ SQLx applies the files in version order:
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
    return-line lookups and the unique index allowing one closure per garment.
 
-The core schema defines readable customer IDs (`CSTMR-6216`) and permanent
-per-customer measurement IDs (`CSTMR-6216-001`) alongside their UUID keys.
+The core schema defines readable customer IDs (`C-6216`) and permanent
+per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.
 Customer numbers use an identity sequence; the workbook importer preserves each
 customer's highest legacy Measurement No and advances the sequence beyond the
 workbook's range. A measurement counter and insert trigger serialize concurrent

@@ -272,7 +272,7 @@ mod tests {
         Measurement {
             id: Uuid::nil(),
             customer_id: Uuid::nil(),
-            readable_id: "CSTMR-23-001".into(),
+            readable_id: "C-23-001".into(),
             date: NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
             r#type: Some("body".to_string()),
             fit: Some("medium".to_string()),

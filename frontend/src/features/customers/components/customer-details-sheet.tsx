@@ -98,7 +98,7 @@ export function CustomerDetailsSheet({
                   </SheetTitle>
                   <SheetDescription className="text-muted-foreground mt-0.5">
                     <span className="font-mono">
-                      CSTMR-{customer.customerNumber}
+                      C-{customer.customerNumber}
                     </span>
                     {' · '}Phone: {customer.mobileNo}
                   </SheetDescription>

@@ -213,7 +213,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           <dl className="space-y-1 text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Customer ID</dt>
-              <dd className="font-mono">CSTMR-{order.customerNumber}</dd>
+              <dd className="font-mono">C-{order.customerNumber}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Name</dt>

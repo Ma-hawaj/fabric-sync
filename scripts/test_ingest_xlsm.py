@@ -317,7 +317,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
                         "ORDER BY m.measurement_number")
             original_measurements = cur.fetchall()
             self.assertEqual([code for _, code in original_measurements],
-                             [f"CSTMR-9-{number:03d}" for number in range(1, 10)])
+                             [f"C-9-{number:03d}" for number in range(1, 10)])
             cur.execute("SELECT total_price, vat_rate, taxable_amount, vat_amount "
                         "FROM invoices WHERE invoice_number = 101")
             self.assertEqual(cur.fetchone(), tuple(map(Decimal,
