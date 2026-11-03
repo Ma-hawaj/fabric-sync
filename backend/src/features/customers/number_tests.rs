@@ -79,7 +79,7 @@ async fn concurrent_measurement_inserts_allocate_distinct_numbers(pool: PgPool) 
 }
 
 #[sqlx::test]
-async fn saved_measurement_identities_cannot_change(pool: PgPool) {
+async fn saved_measurement_numbers_cannot_change_or_be_reused(pool: PgPool) {
     let owner = customer(&pool, "Permanent", 6216).await;
     let other = customer(&pool, "Other", 9179).await;
     let (id, _) = measurement(&pool, owner).await;
@@ -97,74 +97,10 @@ async fn saved_measurement_identities_cannot_change(pool: PgPool) {
             Some("23514")
         );
     }
-    assert_eq!(measurement(&pool, owner).await.1, 2);
-}
-
-#[sqlx::test]
-async fn all_measurement_history_is_retained_after_delete_and_truncate_attempts(pool: PgPool) {
-    let (_, orders, _, _) = crate::test_support::invoice(&pool, 1, false).await;
-    let owner: Uuid = sqlx::query_scalar(
-        "SELECT m.customer_id FROM measurements m JOIN orders o ON o.measurement_id=m.id WHERE o.id=$1",
-    )
-    .bind(orders[0])
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    let (fixed, _) = measurement(&pool, owner).await;
-    let other = customer(&pool, "Unreferenced history", 9179).await;
-    let (unreferenced, _) = measurement(&pool, other).await;
-    let repair: Uuid = sqlx::query_scalar(
-        "INSERT INTO order_repairs(order_id,reason,fixed_measurement_id) VALUES($1,'Preserve correction',$2) RETURNING id",
-    )
-    .bind(orders[0])
-    .bind(fixed)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    let originals: Vec<(Uuid, Uuid, i64)> =
-        sqlx::query_as("SELECT id,customer_id,measurement_number FROM measurements ORDER BY id")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
-
-    for query in [
-        sqlx::query("DELETE FROM measurements WHERE id=$1").bind(unreferenced),
-        sqlx::query("DELETE FROM measurements WHERE id=$1").bind(fixed),
-        sqlx::query("DELETE FROM measurements WHERE customer_id=$1").bind(owner),
-        sqlx::query("DELETE FROM measurements"),
-        sqlx::query("TRUNCATE measurements CASCADE"),
-        sqlx::query("TRUNCATE customers CASCADE"),
-    ] {
-        let error = query.execute(&pool).await.unwrap_err();
-        assert_eq!(
-            error.as_database_error().unwrap().code().as_deref(),
-            Some("23514")
-        );
-        let retained: Vec<(Uuid, Uuid, i64)> = sqlx::query_as(
-            "SELECT id,customer_id,measurement_number FROM measurements ORDER BY id",
-        )
-        .fetch_all(&pool)
-        .await
-        .unwrap();
-        assert_eq!(retained, originals);
-        let saved_fix: Option<Uuid> =
-            sqlx::query_scalar("SELECT fixed_measurement_id FROM order_repairs WHERE id=$1")
-                .bind(repair)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
-        assert_eq!(saved_fix, Some(fixed));
-    }
-
-    let error = sqlx::query("DELETE FROM customers WHERE id=$1")
-        .bind(other)
+    sqlx::query("DELETE FROM measurements WHERE id=$1")
+        .bind(id)
         .execute(&pool)
         .await
-        .unwrap_err();
-    assert_eq!(
-        error.as_database_error().unwrap().code().as_deref(),
-        Some("23503")
-    );
-    assert_eq!(measurement(&pool, other).await.1, 2);
-    assert_eq!(measurement(&pool, owner).await.1, 3);
+        .unwrap();
+    assert_eq!(measurement(&pool, owner).await.1, 2);
 }

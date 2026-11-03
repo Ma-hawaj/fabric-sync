@@ -29,11 +29,8 @@ per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.
 Customer numbers use an identity sequence; the workbook importer preserves each
 customer's highest legacy Measurement No and advances the sequence beyond the
 workbook's range. A measurement counter and insert trigger serialize concurrent
-saves. Imports and app-created snapshots use the same allocation trigger.
-Customer measurement history is permanent: database triggers reject `DELETE`
-and `TRUNCATE`, including bulk operations and cascading truncations. Unreferenced
-snapshots and repair corrections remain on record; customer deletion cannot
-remove their measurements or clear a repair's saved measurement reference.
+saves and retain used numbers after deletion. Imports and app-created snapshots
+use the same allocation trigger.
 
 The core schema also defines return credits and lines, refund payouts,
 cancellation details, original fabric stock locations, and balance/outcome views.
