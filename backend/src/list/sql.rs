@@ -138,6 +138,14 @@ fn predicate(
         ColumnKind::TextArray => array_predicate(&name, filter, binds),
         ColumnKind::Bool => bool_predicate(&name, filter, binds),
         ColumnKind::Text | ColumnKind::Uuid => text_predicate(&name, column, filter, binds),
+        ColumnKind::Number
+            if matches!(
+                filter.operator,
+                FilterOperator::ILike | FilterOperator::NotILike
+            ) =>
+        {
+            text_predicate(&name, column, filter, binds)
+        }
         ColumnKind::Number | ColumnKind::Date => scalar_predicate(&name, column, filter, binds),
     }
 }
@@ -224,10 +232,9 @@ fn text_predicate(
     filter: &FilterItem,
     binds: &mut Vec<BindValue>,
 ) -> Result<String, AppError> {
-    // A uuid column still has to answer the "Filter invoice..." text box, where
-    // staff type the first few characters of an id, so it is compared as text
-    // for the substring operators and as a uuid everywhere else.
-    let as_text = if column.kind == ColumnKind::Uuid {
+    // UUIDs and numbers can be searched by a few characters in a text box.
+    // Cast only for substring operators; exact comparisons keep their types.
+    let as_text = if matches!(column.kind, ColumnKind::Uuid | ColumnKind::Number) {
         format!("{name}::text")
     } else {
         name.to_string()
@@ -657,6 +664,27 @@ mod tests {
     }
 
     #[test]
+    fn number_substring_searches_cast_to_text_and_bind_text() {
+        let cases = [
+            ("iLike", "base.\"total\"::text ILIKE '%' || $1 || '%'"),
+            (
+                "notILike",
+                "(base.\"total\"::text IS NULL OR base.\"total\"::text NOT ILIKE '%' || $1 || '%')",
+            ),
+        ];
+
+        for (operator, expected) in cases {
+            let built = filtered(json!([
+                { "id": "total", "value": "62", "variant": "text", "operator": operator }
+            ]))
+            .unwrap();
+
+            assert!(built.sql.contains(expected), "{operator}: {}", built.sql);
+            assert_eq!(built.binds, vec![BindValue::Text("62".to_string())]);
+        }
+    }
+
+    #[test]
     fn a_uuid_column_binds_a_uuid_for_exact_comparison() {
         let id = "0192f7a0-0000-7000-8000-000000000000";
         let built = filtered(json!([
@@ -816,7 +844,7 @@ mod tests {
         let cases = [
             ("active", "isBetween", "boolean"),
             ("tags", "gt", "multiSelect"),
-            ("total", "iLike", "number"),
+            ("total", "inArray", "number"),
             ("name", "lt", "text"),
         ];
 

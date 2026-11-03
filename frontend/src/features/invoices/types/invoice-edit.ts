@@ -63,6 +63,7 @@ export interface InvoiceEditOrder {
 
 export interface InvoiceEditCustomer {
   existingCustomerId: string
+  customerNumber: number
   customerName: string
   customerMobileNo: string
   customerAddress?: string | null

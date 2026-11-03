@@ -388,6 +388,7 @@ fn assemble_order(
         invoice_number: row.invoice_number,
         invoice_date: row.invoice_date,
         measurement_id: row.measurement_id,
+        customer_number: row.customer_number,
         customer_name: row.customer_name,
         customer_mobile: row.customer_mobile,
         material: row.material,

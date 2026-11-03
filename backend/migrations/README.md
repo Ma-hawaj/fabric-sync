@@ -28,6 +28,14 @@ SQLx applies the files in version order:
    at issue, and redemptions exclude the previously taxed value. There are no
    legacy cards to migrate. See `docs/bahrain-gift-card-vat.md`.
 
+The core schema defines readable customer IDs (`C-6216`) and permanent
+per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.
+Customer numbers use an identity sequence; the workbook importer preserves each
+customer's highest legacy Measurement No and advances the sequence beyond the
+workbook's range. A measurement counter and insert trigger serialize concurrent
+saves and retain used numbers after deletion. Imports and app-created snapshots
+use the same allocation trigger.
+
 The core schema also defines return credits and lines, refund payouts,
 cancellation details, original fabric stock locations, and balance/outcome views.
 Return lines store their chosen restock location with a foreign key and require a

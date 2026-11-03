@@ -7,6 +7,7 @@ function blankMeasurement(): Measurement {
   return {
     id: 'm1',
     customerId: 'c1',
+    readableId: 'C-23-001',
     date: new Date('2026-07-30'),
   }
 }

@@ -97,7 +97,10 @@ export function CustomerDetailsSheet({
                     {customer.name}
                   </SheetTitle>
                   <SheetDescription className="text-muted-foreground mt-0.5">
-                    Phone: {customer.mobileNo}
+                    <span className="font-mono">
+                      C-{customer.customerNumber}
+                    </span>
+                    {' · '}Phone: {customer.mobileNo}
                   </SheetDescription>
                   {customer.address && (
                     <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">
@@ -234,6 +237,7 @@ export function CustomerDetailsSheet({
                             : 'bg-card hover:bg-muted text-muted-foreground border-border/60 hover:text-foreground',
                         )}
                       >
+                        <span className="block font-mono">{m.readableId}</span>
                         {idx === 0 ? (
                           <span className="flex items-center gap-1">
                             <Sparkles className="h-3 w-3" />

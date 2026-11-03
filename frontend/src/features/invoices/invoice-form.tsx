@@ -42,7 +42,10 @@ import { usePricing } from './hooks/use-pricing'
 import { InvoiceVatRateContext } from './components/invoice-form/vat-rate-context'
 import type { CreatedInvoice } from './lib/invoice-payload'
 import type { InvoiceEditSeeds } from './lib/invoice-edit-mapper'
-import { invoiceFormSchema } from './lib/invoice-schema'
+import {
+  invoiceCreateFormSchema,
+  invoiceFormSchema,
+} from './lib/invoice-schema'
 import { downloadInvoicePdf } from './lib/print-invoice'
 import {
   createEmptyCustomer,
@@ -158,11 +161,12 @@ export function InvoiceForm({
   const receivingDefault = useApplicableDefaultLocation('receiving')
   const stockDefault = useApplicableDefaultLocation('stock')
 
+  const schema = editing ? invoiceFormSchema : invoiceCreateFormSchema
   const form = useForm({
     defaultValues,
-    validators: { onSubmit: invoiceFormSchema },
+    validators: { onSubmit: schema },
     onSubmitInvalid: ({ value }) => {
-      const result = invoiceFormSchema.safeParse(value)
+      const result = schema.safeParse(value)
       if (result.success) return
       const issue = result.error.issues[0]
       const path = invoiceFieldPath(issue.path)

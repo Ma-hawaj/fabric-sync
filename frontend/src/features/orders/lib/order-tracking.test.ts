@@ -51,6 +51,7 @@ function order(overrides: Partial<Order>): Order {
     invoiceNumber: 42,
     invoiceDate: new Date('2026-07-01'),
     measurementId: 'measurement-1',
+    customerNumber: 23,
     customerName: 'Abdullah Al-Otaibi',
     customerMobile: '0501234567',
     material: 'Japanese Cotton',

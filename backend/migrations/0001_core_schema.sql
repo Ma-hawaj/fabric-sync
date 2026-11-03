@@ -15,6 +15,9 @@ CREATE TABLE branch (
 
 CREATE TABLE customers (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
+    -- Staff quote C-<number>; UUIDs remain relational keys. Imports may
+    -- override the identity with the customer's latest legacy Measurement No.
+    customer_number BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
     name TEXT NOT NULL,
     mobile_no TEXT NOT NULL,
     address TEXT,
@@ -99,6 +102,8 @@ CREATE TABLE invoices (
 CREATE TABLE measurements (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     customer_id UUID NOT NULL REFERENCES customers(id),
+    -- Assigned by the insert trigger below, independently for each customer.
+    measurement_number BIGINT NOT NULL,
     measurement_date DATE NOT NULL DEFAULT CURRENT_DATE,
 
     -- Three decimal places preserve eighth-inch measurements (⅛ = 0.125),
@@ -135,8 +140,48 @@ CREATE TABLE measurements (
     -- Nullable so rows written before these existed keep reading — every
     -- new write has to set them (see validate_measurement).
     type TEXT CHECK (type IN ('body', 'thobe', 'sample')),
-    fit TEXT CHECK (fit IN ('loose', 'fit', 'medium'))
+    fit TEXT CHECK (fit IN ('loose', 'fit', 'medium')),
+    CONSTRAINT measurements_number_positive CHECK (measurement_number > 0),
+    CONSTRAINT measurements_customer_number_key UNIQUE (customer_id, measurement_number)
 );
+
+-- Keep the counter even if a measurement is deleted so saved IDs are never reused.
+CREATE TABLE customer_measurement_counters (
+    customer_id UUID PRIMARY KEY REFERENCES customers(id) ON DELETE CASCADE,
+    last_number BIGINT NOT NULL CHECK (last_number > 0)
+);
+
+CREATE FUNCTION assign_measurement_number() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.measurement_number IS NOT NULL THEN
+        RAISE EXCEPTION 'measurement number is assigned automatically' USING ERRCODE = '23514';
+    END IF;
+    INSERT INTO customer_measurement_counters (customer_id, last_number)
+    VALUES (NEW.customer_id, 1)
+    ON CONFLICT (customer_id) DO UPDATE
+        SET last_number = customer_measurement_counters.last_number + 1
+    RETURNING last_number INTO NEW.measurement_number;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER measurements_assign_number BEFORE INSERT ON measurements
+    FOR EACH ROW EXECUTE FUNCTION assign_measurement_number();
+
+CREATE FUNCTION preserve_measurement_number() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF (NEW.customer_id, NEW.measurement_number) IS DISTINCT FROM
+       (OLD.customer_id, OLD.measurement_number) THEN
+        RAISE EXCEPTION 'measurement identity cannot change' USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER measurements_preserve_number BEFORE UPDATE OF customer_id, measurement_number
+    ON measurements FOR EACH ROW EXECUTE FUNCTION preserve_measurement_number();
+
+CREATE FUNCTION readable_measurement_id(customer_number BIGINT, measurement_number BIGINT)
+RETURNS TEXT LANGUAGE sql IMMUTABLE STRICT AS $$
+    SELECT 'C-' || customer_number::text || '-' ||
+        lpad(measurement_number::text, greatest(3, length(measurement_number::text)), '0')
+$$;
 
 CREATE TABLE orders (
     id UUID PRIMARY KEY DEFAULT uuidv7(),

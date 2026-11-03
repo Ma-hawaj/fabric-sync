@@ -31,12 +31,14 @@ vi.mock('@tanstack/react-router', () => ({
 
 const CUSTOMER: Customer = {
   id: 'cust-1',
+  customerNumber: 23,
   name: 'Ahmed Al-Mansoori',
   mobileNo: '+971-50-1234567',
   measurements: [
     {
       id: 'meas-1',
       customerId: 'cust-1',
+      readableId: 'C-23-001',
       date: new Date('2026-07-01'),
       chest: 108,
       sleeveLength: 62,
@@ -66,6 +68,12 @@ function renderSheet(customer: Customer | null) {
 }
 
 describe('CustomerDetailsSheet', () => {
+  it('shows the readable customer ID', () => {
+    renderSheet(CUSTOMER)
+    expect(screen.getByText('C-23')).toBeTruthy()
+    expect(screen.getByText('C-23-001')).toBeTruthy()
+  })
+
   it('shows fraction symbols in the grid and thobe sheet', () => {
     renderSheet({
       ...CUSTOMER,

@@ -301,6 +301,7 @@ pub struct InvoiceEditOrder {
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEditCustomer {
     pub existing_customer_id: Uuid,
+    pub customer_number: i64,
     pub customer_name: String,
     pub customer_mobile_no: String,
     pub customer_address: Option<String>,

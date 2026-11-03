@@ -45,6 +45,7 @@ const ORDER: OrderDetail = {
   invoiceId: 'inv-1',
   invoiceDate: new Date('2026-07-28'),
   measurementId: 'm-1',
+  customerNumber: 23,
   customerName: 'Ahmed Al-Mansoori',
   customerMobile: '+973-3311-2233',
   material: 'Japanese Toray Cotton',
@@ -105,6 +106,7 @@ const ORDER: OrderDetail = {
   measurement: {
     id: 'm-1',
     customerId: 'c-1',
+    readableId: 'C-23-001',
     date: new Date('2026-07-28'),
     frontHeight: 120,
     chest: 50,
@@ -236,6 +238,8 @@ describe('OrderDetailPage', () => {
   it('shows the customer and the material the order was cut from', () => {
     renderPage()
 
+    expect(screen.getByText('C-23')).toBeTruthy()
+    expect(screen.getByText('C-23-001')).toBeTruthy()
     expect(screen.queryByText('Ahmed Al-Mansoori')).toBeTruthy()
     expect(screen.queryByText('Japanese Toray Cotton')).toBeTruthy()
     expect(screen.queryByText('3.5 m')).toBeTruthy()
