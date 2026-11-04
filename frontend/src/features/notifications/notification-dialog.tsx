@@ -18,6 +18,7 @@ import { useDiscardNotificationPreview } from './hooks/use-discard-notification-
 import { useNotificationDocument } from './hooks/use-notification-document'
 
 interface Props {
+  repairId?: string
   invoiceId: string | null
   kind: NotificationKind
   onClose: () => void
@@ -27,7 +28,7 @@ interface Props {
 export function NotificationDialog(props: Props) {
   return props.invoiceId ? (
     <Preview
-      key={`${props.invoiceId}:${props.kind}:${props.resendOf ?? ''}`}
+      key={`${props.invoiceId}:${props.kind}:${props.repairId ?? ''}:${props.resendOf ?? ''}`}
       {...props}
       invoiceId={props.invoiceId}
     />
@@ -39,6 +40,7 @@ function Preview({
   kind,
   onClose,
   resendOf,
+  repairId,
 }: Props & { invoiceId: string }) {
   const { mutate: discard } = useDiscardNotificationPreview()
   const selection = useSelectNotificationRecipients()
@@ -76,12 +78,12 @@ function Preview({
   })
   useEffect(() => {
     active.current = true
-    prepare({ invoiceId, kind, requestId, resendOf })
+    prepare({ invoiceId, kind, requestId, resendOf, repairId })
     return () => {
       active.current = false
       if (currentDraft.current) discard(currentDraft.current.id)
     }
-  }, [prepare, discard, invoiceId, kind, requestId, resendOf])
+  }, [prepare, discard, invoiceId, kind, requestId, resendOf, repairId])
   const pdf = useNotificationDocument(draft?.artifactId)
   useEffect(() => {
     if (!pdf.data) {
@@ -112,7 +114,9 @@ function Preview({
     kind === 'invoice_updated'
       ? 'Invoice saved. Send the updated invoice?'
       : kind === 'invoice_ready'
-        ? 'Ready for pickup — notify customers'
+        ? repairId || draft?.snapshot.repairId
+          ? 'Repair ready for pickup — notify customer'
+          : 'Ready for pickup — notify customers'
         : kind === 'invoice_created'
           ? 'Invoice saved — preview WhatsApp notification'
           : 'Resend invoice via WhatsApp'
@@ -131,12 +135,15 @@ function Preview({
           </DialogDescription>
         </DialogHeader>
         {preparing && (
-          <p role="status">Preparing the preview… Your invoice is saved.</p>
+          <p role="status">
+            Preparing the preview…{' '}
+            {repairId ? 'The repair status' : 'Your invoice'} is saved.
+          </p>
         )}
         {prepareError && (
           <p role="alert" className="text-destructive">
-            The invoice is saved, but the preview could not be prepared:{' '}
-            {prepareError.message}
+            {repairId ? 'The repair status' : 'The invoice'} is saved, but the
+            preview could not be prepared: {prepareError.message}
           </p>
         )}
         {draft && (

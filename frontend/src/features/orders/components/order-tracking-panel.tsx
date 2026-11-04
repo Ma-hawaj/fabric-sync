@@ -36,6 +36,9 @@ import { useUpdateOrder } from '../hooks/use-update-order'
 import { useUpdateRepair } from '../hooks/use-update-repair'
 import { printRepairDocument } from '../lib/print-repair'
 import { ReceiveRepairDialog } from './receive-repair-dialog'
+import { NotificationDialog } from '@/features/notifications/notification-dialog'
+import { useAuth } from '@/lib/auth'
+import { canAccess } from '@/lib/permissions'
 import type {
   Order,
   OrderDetail,
@@ -510,6 +513,9 @@ function RepairsSection({
 }
 
 function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
+  const { user } = useAuth()
+  const canNotify = canAccess(user, 'POST', '/invoices/:id/notifications')
+  const [notify, setNotify] = useState(false)
   const updateRepair = useUpdateRepair()
   const [receiveOpen, setReceiveOpen] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
@@ -554,6 +560,7 @@ function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
     } catch {
       return
     }
+    if (status === 'completed' && canNotify) setNotify(true)
   }
 
   const handlePrint = () => {
@@ -641,6 +648,13 @@ function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
           </>
         )}
         {repair.status === 'completed' && (
+          <PermissionGuard method="POST" path="/invoices/:id/notifications">
+            <Button size="sm" variant="ghost" onClick={() => setNotify(true)}>
+              Notify ready for pickup
+            </Button>
+          </PermissionGuard>
+        )}
+        {repair.status === 'completed' && (
           <PermissionGuard
             method="POST"
             path="/orders/:id/repairs/:repairId/receive"
@@ -670,6 +684,14 @@ function RepairCard({ order, repair }: { order: Order; repair: OrderRepair }) {
         repair={receiveOpen ? asListItem(repair) : null}
         onOpenChange={(open) => !open && setReceiveOpen(false)}
       />
+      <PermissionGuard method="POST" path="/invoices/:id/notifications">
+        <NotificationDialog
+          invoiceId={notify ? order.invoiceId : null}
+          repairId={repair.id}
+          kind="invoice_ready"
+          onClose={() => setNotify(false)}
+        />
+      </PermissionGuard>
     </div>
   )
 }

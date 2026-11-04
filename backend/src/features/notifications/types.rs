@@ -24,6 +24,8 @@ pub struct Destination {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
+    #[serde(default)]
+    pub repair_id: Option<Uuid>,
     pub invoice_number: i64,
     pub source_hash: String,
     pub revision: i64,
@@ -37,6 +39,7 @@ pub struct Snapshot {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrepareInput {
+    pub repair_id: Option<Uuid>,
     pub kind: String,
     pub request_id: Uuid,
     pub resend_of: Option<Uuid>,
