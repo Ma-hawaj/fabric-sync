@@ -294,6 +294,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
       key: crypto.randomUUID(),
       code: line.code,
       amount: line.amount,
+      taxedAtIssue: line.taxedAtIssue,
     }),
   )
 

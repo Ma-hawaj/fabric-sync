@@ -54,10 +54,9 @@ export function GiftCardFormPage() {
           Issue Gift Card
         </h1>
         <p className="text-muted-foreground">
-          Issues a card without a sale, for a comp or a replacement. Selling one
-          to a customer is done from the invoice form instead. These cards
-          require a VAT review before redemption; they do not have a paid
-          single-purpose voucher tax invoice.
+          Issue credit without creating an invoice. VAT applies to the goods or
+          services when this credit is used. To sell a paid gift card, use the
+          invoice form.
         </p>
       </div>
 

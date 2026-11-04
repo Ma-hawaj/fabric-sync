@@ -11,6 +11,7 @@ const card: GiftCard = {
   id: 'card-one',
   code: 'GC-7KMP-4RWT-9DXH',
   issuedBy: STAFF_USER.id,
+  taxedAtIssue: false,
   initialAmount: 50,
   balance: 50,
   customerId: null,

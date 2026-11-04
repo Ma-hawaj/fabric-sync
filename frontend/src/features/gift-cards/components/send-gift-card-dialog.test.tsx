@@ -16,6 +16,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn() } }))
 
 const card: GiftCard = {
   issuedBy: null,
+  taxedAtIssue: false,
   id: 'card-1',
   code: 'GC-AUTO',
   initialAmount: 50,

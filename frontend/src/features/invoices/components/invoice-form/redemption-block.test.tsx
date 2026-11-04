@@ -24,17 +24,29 @@ function Harness() {
     },
   })
   return (
-    <RedemptionBlock
-      form={form}
-      lineIndex={0}
-      date="2026-10-24"
-      onRemove={() => {}}
-    />
+    <>
+      <RedemptionBlock
+        form={form}
+        lineIndex={0}
+        date="2026-10-24"
+        onRemove={() => {}}
+      />
+      <form.Subscribe
+        selector={(state) => state.values.redemptions[0].taxedAtIssue}
+      >
+        {(taxedAtIssue) => (
+          <output data-testid="taxed-at-issue">
+            {String(taxedAtIssue ?? false)}
+          </output>
+        )}
+      </form.Subscribe>
+    </>
   )
 }
 
 const card: GiftCard = {
   issuedBy: null,
+  taxedAtIssue: false,
   id: 'card-1',
   code: 'GC-7KMP-4RWT-9DXH',
   initialAmount: 50,
@@ -51,28 +63,35 @@ const card: GiftCard = {
 
 afterEach(cleanup)
 
-it('requires VAT review and does not prefill an uninvoiced card', async () => {
-  const client = new QueryClient()
-  client.setQueryData(['gift-card', '7KMP4RWT9DXH'], {
-    ...card,
-    vatReviewRequired: true,
-  })
-  render(
-    <QueryClientProvider client={client}>
-      <Harness />
-    </QueryClientProvider>,
-  )
-  const code = screen.getByRole('textbox', { name: 'Gift Card Code' })
-  fireEvent.change(code, { target: { value: '7KMP4RWT9DXH' } })
-  expect(
-    await screen.findByText(/VAT review required before redemption/),
-  ).toBeTruthy()
-  expect(code.getAttribute('aria-invalid')).toBe('true')
-  expect(screen.getByRole('textbox', { name: 'Apply (BHD)' })).toHaveProperty(
-    'value',
-    '',
-  )
-})
+it.each([false, true])(
+  'accepts a card with taxedAtIssue=%s and records its preview provenance',
+  async (taxedAtIssue) => {
+    const client = new QueryClient()
+    client.setQueryData(['gift-card', '7KMP4RWT9DXH'], {
+      ...card,
+      taxedAtIssue,
+    })
+    render(
+      <QueryClientProvider client={client}>
+        <Harness />
+      </QueryClientProvider>,
+    )
+    const code = screen.getByRole('textbox', { name: 'Gift Card Code' })
+    fireEvent.change(code, { target: { value: '7KMP4RWT9DXH' } })
+    expect(await screen.findByText('BHD 50.00 available.')).toBeTruthy()
+    expect(code.getAttribute('aria-invalid')).toBe('false')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: 'Apply (BHD)' }),
+      ).toHaveProperty('value', '50'),
+    )
+    expect(screen.getByTestId('taxed-at-issue').textContent).toBe(
+      String(taxedAtIssue),
+    )
+    fireEvent.change(code, { target: { value: '8BNQ5SVX3FYJ' } })
+    expect(screen.getByTestId('taxed-at-issue').textContent).toBe('false')
+  },
+)
 
 it('lets staff type only twelve characters and fills the stored code after lookup', async () => {
   const client = new QueryClient()

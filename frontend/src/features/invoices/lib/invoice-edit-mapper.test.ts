@@ -104,6 +104,22 @@ function editFixture(): InvoiceEdit {
 }
 
 describe('mapInvoiceEditToForm', () => {
+  it('restores prepaid provenance for the preview without sending a tax override', () => {
+    const edit = editFixture()
+    edit.giftCardRedemptions = [
+      { code: 'GC-7KMP-4RWT-9DXH', amount: 55, taxedAtIssue: true },
+      { code: 'GC-8BNQ-5SVX-3FYJ', amount: 55, taxedAtIssue: false },
+    ]
+    const { values } = mapInvoiceEditToForm(edit)
+    expect(values.redemptions.map((line) => line.taxedAtIssue)).toEqual([
+      true,
+      false,
+    ])
+    expect(invoicePayload(values).giftCardRedemptions).toEqual([
+      { code: 'GC-7KMP-4RWT-9DXH', amount: 55 },
+      { code: 'GC-8BNQ-5SVX-3FYJ', amount: 55 },
+    ])
+  })
   it('restores urgency, collection method, and customer addresses when editing', () => {
     const edit = editFixture()
     edit.customers[0].orders[0].isUrgent = true

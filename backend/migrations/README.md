@@ -30,6 +30,10 @@ SQLx applies the files in version order:
 6. `0006_gift_card_issuer.sql` records the authenticated staff subject for cards
    issued without an invoice. Unknown issuers remain null; invoice-backed cards
    resolve their issuer from the invoice's creator when read.
+7. `0007_uninvoiced_gift_card_credit.sql` separates tender from previously taxed
+   value in the reporting view, deriving prepaid value and document kind from
+   saved tax figures. Uninvoiced credit can settle a purchase while the goods
+   retain their VAT; no card types or historical tax reclassification are added.
 
 The core schema defines readable customer IDs (`C-6216`) and permanent
 per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.

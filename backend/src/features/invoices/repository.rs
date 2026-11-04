@@ -49,6 +49,23 @@ pub async fn voucher_has_sale_invoice(
     .await
 }
 
+/// Finalize the tax figures after resolving the redeemed cards' provenance.
+/// This runs in the invoice transaction before any document can be read.
+pub async fn update_tax_snapshot(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    taxable: f64,
+    vat: f64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE invoices SET taxable_amount=$2::float8, vat_amount=$3::float8 WHERE id=$1")
+        .bind(invoice_id)
+        .bind(taxable)
+        .bind(vat)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
 /// The made-to-measure specification, as one line of prose. Every field is
 /// optional and most orders set only some, so the blanks are dropped rather
 /// than printed as empty labels.
@@ -1207,7 +1224,8 @@ pub async fn fetch_invoice_edit(
 
     let redemption_rows = sqlx::query!(
         r#"
-        SELECT g.code, r.amount::float8 AS "amount!"
+        SELECT g.code, r.amount::float8 AS "amount!",
+               EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=g.id AND kind='gift_card') AS "taxed_at_issue!"
         FROM gift_card_redemptions r
         JOIN gift_cards g ON g.id = r.gift_card_id
         WHERE r.invoice_id = $1
@@ -1267,6 +1285,7 @@ pub async fn fetch_invoice_edit(
             .map(|row| InvoiceEditRedemption {
                 code: row.code,
                 amount: row.amount,
+                taxed_at_issue: row.taxed_at_issue,
             })
             .collect(),
     }))

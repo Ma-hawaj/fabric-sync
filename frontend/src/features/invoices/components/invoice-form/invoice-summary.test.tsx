@@ -447,7 +447,12 @@ describe('InvoiceSummary', () => {
         defaultValues={baseValues({
           customers: [customerWithOrder(90)], // total 90.00
           redemptions: [
-            { ...createEmptyRedemption(), code: 'GC-1', amount: 50 },
+            {
+              ...createEmptyRedemption(),
+              code: 'GC-1',
+              amount: 50,
+              taxedAtIssue: true,
+            },
           ],
           payments: [payment(20)],
         })}
@@ -461,6 +466,57 @@ describe('InvoiceSummary', () => {
     expect(rowValue('Gift Card Redeemed')).toBe(`−${CURRENCY} 50.00`)
     // 90 - 50 - 20 = 20
     expect(rowValue('Balance due')).toBe(`${CURRENCY} 20.00`)
+  })
+
+  it('keeps VAT on a purchase fully covered by uninvoiced credit', () => {
+    render(
+      <Harness
+        defaultValues={baseValues({
+          products: [productLine(1, 110)],
+          redemptions: [
+            {
+              ...createEmptyRedemption(),
+              code: 'GC-1',
+              amount: 110,
+              taxedAtIssue: false,
+            },
+          ],
+        })}
+      />,
+    )
+    expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 110.00`)
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 10.00`)
+    expect(rowValue('Total without VAT')).toBe(`${CURRENCY} 100.00`)
+    expect(rowValue('Balance due')).toBe(`${CURRENCY} 0.00`)
+    expect(screen.queryByText('Gift-card value already taxed')).toBeNull()
+  })
+
+  it('excludes only paid-card value when both cards cover the same purchase', () => {
+    render(
+      <Harness
+        defaultValues={baseValues({
+          products: [productLine(1, 132)],
+          redemptions: [
+            {
+              ...createEmptyRedemption(),
+              code: 'GC-1',
+              amount: 55,
+              taxedAtIssue: true,
+            },
+            {
+              ...createEmptyRedemption(),
+              code: 'GC-2',
+              amount: 55,
+              taxedAtIssue: false,
+            },
+          ],
+        })}
+      />,
+    )
+    expect(rowValue('Gift-card value already taxed')).toBe(`${CURRENCY} 55.00`)
+    expect(rowValue('Taxable amount')).toBe(`${CURRENCY} 70.00`)
+    expect(rowValue('VAT (10%)')).toBe(`${CURRENCY} 7.00`)
+    expect(rowValue('Balance due')).toBe(`${CURRENCY} 22.00`)
   })
 
   it('never redeems more than the invoice total', () => {

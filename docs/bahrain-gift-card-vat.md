@@ -1,4 +1,4 @@
-# Bahrain paid gift cards
+# Bahrain gift cards
 
 This flow implements single-purpose vouchers sold at face value, redeemable
 only for supplies in Bahrain with the same VAT treatment. The business confirmed
@@ -38,12 +38,36 @@ totals are BHD 220, merchandise sales are BHD 100, and total VAT is BHD 10.
 External accounting should hold the net BHD 100 as a voucher liability at issue,
 release it to revenue on fulfillment, and record the BHD 10 VAT at issue.
 
-## Complimentary and replacement cards
+## Cards issued without an invoice
 
-The separate **Issue Gift Card** page creates complimentary/replacement records,
-not paid sales. The server records the signed-in operator as `issued_by`; the
-gift-card list displays their staff name. Clients cannot set or edit this field.
-These records have no sale invoice and cannot use the paid
-single-purpose voucher redemption flow. Their VAT treatment must be established
-separately before use. Paid cards sold through an invoice are immediately eligible
-for normal redemption, subject to balance, expiry and active-status checks.
+The **Issue Gift Card** page issues monetary credit without creating a sale or
+an invoice. The server records the signed-in operator as `issued_by`; the list
+displays their staff name. Clients cannot set or edit this field.
+
+There are no card types or manual tax-status choices. The server determines
+whether a card was taxed at issue from its gift-card sale invoice. The read-only
+`taxedAtIssue` field lets the form preview that same calculation; client-supplied
+tax flags and prepaid amounts are ignored when saving an invoice.
+
+Uninvoiced credit settles the customer's balance while the goods/services retain
+their VAT. For BHD 110 of uninvoiced credit applied to BHD 110 of goods, the
+purchase records BHD 100 taxable amount, BHD 10 VAT, no prepaid VAT value, and
+zero balance due. It prints a tax invoice. Issuing the credit creates no invoice.
+
+Cards can be used together. Against BHD 132 of goods, a BHD 55 paid-card redemption
+and BHD 55 uninvoiced-credit redemption record BHD 55 previously taxed value,
+BHD 70 newly taxable amount, BHD 7 new VAT, and BHD 22 balance due. Both balances
+are decremented atomically. Edits restore old tender and resolve the submitted
+cards again, keeping the invoice's original VAT rate.
+
+Migration 0007 derives previously taxed value and document kind from the saved
+tax snapshot. Reprints do not infer tax from the current card record. Sales
+reporting continues to include merchandise and exclude gift-card funding.
+Expiry, voiding, available balance, duplicate-code and overpayment checks still
+apply to every card.
+
+This flow treats uninvoiced value as monetary credit, not as a discount coupon
+or a deemed-supply relief claim. Those promotion rules are separate under NBR
+sections 6 and 13.2. A newly issued uninvoiced card does not inherit another
+card's prepaid VAT or transfer/disable its balance; a tax-linked replacement
+workflow is outside this change.

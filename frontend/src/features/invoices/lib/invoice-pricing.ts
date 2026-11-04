@@ -69,6 +69,20 @@ export function computeRedemptionTotal(
     : 0
 }
 
+export function computePrepaidTotal(
+  redemptions: GiftCardRedemptionDraft[],
+): number {
+  return (
+    Math.round(
+      redemptions.reduce(
+        (sum, line) =>
+          sum + (line.taxedAtIssue ? computeRedemptionTotal(line) : 0),
+        0,
+      ) * 100,
+    ) / 100
+  )
+}
+
 // The net (taxable) part inside a gross figure, and the VAT inside it. The
 // VAT is the remainder — gross minus net — so the two always add back to the
 // gross the customer was quoted, to the fils.
@@ -81,6 +95,7 @@ export function extractVat(gross: number, vatRate: number): number {
 }
 
 export interface InvoiceGrossTotals {
+  prepaidAmount: number
   /** Everything VAT applies to, as entered gross. */
   grossSubtotal: number
   giftCardSales: number
@@ -117,6 +132,7 @@ export function computeInvoiceTotals(input: {
   discountUnit: 'amount' | 'percent'
   urgentCharge?: number
   redeemed: number
+  prepaidAmount?: number
   paid: number
 }): InvoiceGrossTotals {
   const grossSubtotal =
@@ -132,13 +148,19 @@ export function computeInvoiceTotals(input: {
   const giftCardSales = Math.round(input.giftCardSales * 100) / 100
   const total = Math.round((gross + giftCardSales) * 100) / 100
   const redeemed = Math.min(input.redeemed, total)
-  const taxableGross = Math.round(Math.max(total - redeemed, 0) * 100) / 100
+  const prepaidAmount = Math.max(
+    0,
+    Math.min(input.prepaidAmount ?? 0, redeemed),
+  )
+  const taxableGross =
+    Math.round(Math.max(total - prepaidAmount, 0) * 100) / 100
   const taxable = extractNet(taxableGross, input.vatRate)
   const vat = extractVat(taxableGross, input.vatRate)
   const paid = input.paid
   const balanceDue = Math.max(total - redeemed - paid, 0)
 
   return {
+    prepaidAmount,
     grossSubtotal,
     giftCardSales,
     discountAmount,

@@ -3,7 +3,8 @@
 // created it.
 export interface GiftCard {
   issuedBy: string | null
-  vatReviewRequired?: boolean
+  /** Derived from the card's sale invoice. Standalone credit is not prepaid VAT. */
+  taxedAtIssue: boolean
   id: string
   code: string
   initialAmount: number

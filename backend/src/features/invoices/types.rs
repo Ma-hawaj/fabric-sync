@@ -353,6 +353,7 @@ pub struct InvoiceEditGiftCardLine {
 pub struct InvoiceEditRedemption {
     pub code: String,
     pub amount: f64,
+    pub taxed_at_issue: bool,
 }
 
 /// One row of the payments ledger, newest last. `payment_type` is null only

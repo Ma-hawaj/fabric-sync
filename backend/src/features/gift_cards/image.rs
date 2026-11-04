@@ -190,7 +190,7 @@ mod tests {
     fn card() -> GiftCard {
         GiftCard {
             issued_by: None,
-            vat_review_required: false,
+            taxed_at_issue: false,
             id: uuid::Uuid::nil(),
             code: "GC-7KMP-4RWT-9DXH".into(),
             initial_amount: 100.0,

@@ -5,6 +5,7 @@ import type { GiftCard } from '../types/gift-card'
 function card(overrides: Partial<GiftCard> = {}): GiftCard {
   return {
     issuedBy: null,
+    taxedAtIssue: false,
     id: 'gc-1',
     code: 'GC-ABC123',
     initialAmount: 500,

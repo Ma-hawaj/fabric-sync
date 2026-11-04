@@ -47,15 +47,14 @@ export function RedemptionBlock({
   // per resolved card so it doesn't fight a hand-typed amount.
   const prefilledFor = React.useRef<string | null>(null)
   React.useEffect(() => {
-    if (
-      !card ||
-      card.vatReviewRequired ||
-      status !== 'Active' ||
-      prefilledFor.current === card.id
-    )
-      return
+    if (!card || status !== 'Active') return
     const currentCode = form.getFieldValue(`${base}.code` as never) as string
     if (normalizeCode(currentCode) !== lookupCode) return
+    form.setFieldValue(
+      `${base}.taxedAtIssue` as never,
+      card.taxedAtIssue as never,
+    )
+    if (prefilledFor.current === card.id) return
     prefilledFor.current = card.id
     form.setFieldValue(`${base}.code` as never, card.code as never)
     form.setFieldValue(`${base}.amount` as never, card.balance as never)
@@ -66,9 +65,6 @@ export function RedemptionBlock({
       return 'Enter or scan the code. GC and dashes are optional.'
     if (isFetching) return 'Checking…'
     if (!card) return 'No gift card with this code.'
-    if (card.vatReviewRequired)
-      return 'VAT review required before redemption. No taxed gift-card sale is recorded.'
-
     switch (status) {
       case 'Voided':
         return 'This card has been voided and cannot be spent.'
@@ -81,10 +77,7 @@ export function RedemptionBlock({
     }
   }
 
-  const unusable =
-    Boolean(lookupCode) &&
-    !isFetching &&
-    (status !== 'Active' || card?.vatReviewRequired === true)
+  const unusable = Boolean(lookupCode) && !isFetching && status !== 'Active'
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
@@ -108,6 +101,11 @@ export function RedemptionBlock({
               onChange={(event) => {
                 const raw = event.target.value
                 field.handleChange(normalizeCode(raw))
+                form.setFieldValue(
+                  `${base}.taxedAtIssue` as never,
+                  false as never,
+                )
+                prefilledFor.current = null
                 scheduleLookup(normalizeCode(raw))
               }}
             />

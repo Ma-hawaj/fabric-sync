@@ -18,7 +18,7 @@ const SPEC: ListSpec = ListSpec {
                 WHERE item.gift_card_id = g.id AND item.kind = 'gift_card'
                 ORDER BY item.id LIMIT 1
             )) AS issued_by,
-            NOT EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=g.id AND kind='gift_card') AS vat_review_required,
+            EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=g.id AND kind='gift_card') AS taxed_at_issue,
             g.id,
             g.code,
             g.initial_amount::float8 AS initial_amount,
@@ -118,7 +118,7 @@ pub async fn get_gift_card_by_code(
                 WHERE item.gift_card_id = g.id AND item.kind = 'gift_card'
                 ORDER BY item.id LIMIT 1
             )) AS "issued_by?",
-            NOT EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=g.id AND kind='gift_card') AS "vat_review_required!",
+            EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=g.id AND kind='gift_card') AS "taxed_at_issue!",
             g.id,
             g.code,
             g.initial_amount::float8 AS "initial_amount!",

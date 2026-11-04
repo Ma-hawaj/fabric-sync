@@ -7,7 +7,8 @@ use uuid::Uuid;
 pub struct GiftCard {
     /// Authenticated issuer; invoice-backed cards can resolve their creator.
     pub issued_by: Option<String>,
-    pub vat_review_required: bool,
+    /// Derived from the sale invoice, never supplied by the client.
+    pub taxed_at_issue: bool,
     pub id: Uuid,
     pub code: String,
     pub initial_amount: f64,

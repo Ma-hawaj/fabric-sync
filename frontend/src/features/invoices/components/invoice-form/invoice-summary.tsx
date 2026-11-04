@@ -35,6 +35,7 @@ import {
   computeUrgentCharges,
   computeProductLineTotal,
   computeRedemptionTotal,
+  computePrepaidTotal,
 } from '../../lib/invoice-pricing'
 import type {
   InvoiceFormApi,
@@ -83,6 +84,7 @@ function invoiceTotals(values: InvoiceFormValues) {
       (sum, line) => sum + computeRedemptionTotal(line),
       0,
     ),
+    prepaidAmount: computePrepaidTotal(values.redemptions),
     paid: values.payments.reduce(
       (sum, payment) =>
         sum + (payment.amount === '' ? 0 : Math.max(payment.amount, 0)),
@@ -248,7 +250,7 @@ export function InvoiceSummary({
         )}
         {totals ? (
           <InvoicePriceSummary
-            prepaidAmount={totals.redeemed}
+            prepaidAmount={totals.prepaidAmount}
             total={totals.total}
             vat={totals.vat}
             vatRate={values.expectedVatRate as number}
@@ -288,7 +290,7 @@ export function InvoiceSummary({
                   {line.code
                     ? `Gift card ${line.code}`
                     : `Gift card ${index + 1}`}{' '}
-                  (not taxed)
+                  (incl. VAT)
                 </span>
                 <span className="shrink-0 tabular-nums">
                   {CURRENCY} {computeGiftCardLineTotal(line).toFixed(2)}

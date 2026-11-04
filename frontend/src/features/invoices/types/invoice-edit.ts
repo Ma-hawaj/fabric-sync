@@ -108,6 +108,7 @@ export interface InvoiceEditGiftCardLine {
 export interface InvoiceEditRedemption {
   code: string
   amount: number
+  taxedAtIssue: boolean
 }
 
 /** Shape of GET /invoices/:id/edit — the invoice as entered, not as printed. */
