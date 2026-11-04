@@ -108,7 +108,7 @@ pub struct RepairRow {
 /// selected column with no matching field, so they need no counterpart here.
 #[derive(Clone, Debug, sqlx::FromRow)]
 pub struct OrderRow {
-    pub delivery_address: Option<String>,
+    pub customer_address: Option<String>,
     pub id: Uuid,
     /// The tailor-quotable number (`ORD-###`), DB-assigned like
     /// `invoices.invoice_number`.
@@ -223,7 +223,7 @@ pub struct OrderRepair {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderListItem {
-    pub delivery_address: Option<String>,
+    pub customer_address: Option<String>,
     pub collection_method: String,
     pub id: Uuid,
     /// The tailor-quotable number (`ORD-###`), DB-assigned like

@@ -290,7 +290,6 @@ export const invoiceFormSchema = z
       ),
     receivingBranch: z.string(),
     issuingBranch: z.string(),
-    deliveryAddress: z.string(),
     expectedVatRate: z
       .number()
       .finite()
@@ -331,16 +330,6 @@ export const invoiceFormSchema = z
     redemptions: z.array(redemptionDraftSchema),
   })
   .superRefine((value, ctx) => {
-    if (
-      value.collectionMethod === 'delivery' &&
-      !value.deliveryAddress.trim()
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Enter a delivery address.',
-        path: ['deliveryAddress'],
-      })
-    }
     value.customers.forEach((customer, customerIndex) => {
       customer.orders.forEach((order, orderIndex) => {
         if (

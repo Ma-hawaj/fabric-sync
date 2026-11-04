@@ -25,18 +25,16 @@ describe('invoice material payload', () => {
     const values = createEmptyInvoiceForm()
     values.issuingBranch = 'issuer'
     values.receivingBranch = 'pickup'
-    values.deliveryAddress = '  Building 2, Road 3  '
     expect(invoicePayload(values)).toMatchObject({
       issuingBranchId: 'issuer',
       branchId: 'pickup',
-      deliveryAddress: null,
     })
     values.collectionMethod = 'delivery'
     expect(invoicePayload(values)).toMatchObject({
       issuingBranchId: 'issuer',
       branchId: null,
-      deliveryAddress: 'Building 2, Road 3',
     })
+    expect(invoicePayload(values)).not.toHaveProperty('deliveryAddress')
   })
   it('saves customer addresses, collection, and urgency and clears a regular surcharge', () => {
     const values = createEmptyInvoiceForm()

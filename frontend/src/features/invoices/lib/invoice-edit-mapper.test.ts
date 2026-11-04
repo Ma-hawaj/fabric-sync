@@ -124,16 +124,19 @@ describe('mapInvoiceEditToForm', () => {
     ])
   })
 
-  it('restores the saved issuing branch and delivery address independently of pickup', () => {
+  it('restores the issuing branch and each customer’s address for delivery', () => {
+    const edit = editFixture()
+    edit.customers[0].customerAddress = 'Building 2, Road 3'
     const { values, seeds } = mapInvoiceEditToForm({
-      ...editFixture(),
+      ...edit,
       issuingBranchId: 'issuer',
       issuingBranchName: 'Issuing office',
       collectionMethod: 'delivery',
-      deliveryAddress: 'Building 2, Road 3',
     })
     expect(values.issuingBranch).toBe('issuer')
-    expect(values.deliveryAddress).toBe('Building 2, Road 3')
+    expect(
+      seeds.customers.get(values.customers[0].existingCustomerId)?.address,
+    ).toBe('Building 2, Road 3')
     expect(seeds.locationLabels.get('issuer')).toBe('Issuing office')
   })
   it('restores urgency, collection method, and customer addresses when editing', () => {

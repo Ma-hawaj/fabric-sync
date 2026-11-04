@@ -1362,7 +1362,7 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         production_location_inferred: false,
         receiving_location_id: None,
         collection_method: "pickup".into(),
-        delivery_address: None,
+        customer_address: None,
         receiving_location: None,
         stages: Vec::new(),
         current_stage: None,
@@ -1416,5 +1416,63 @@ mod tests_support {
             side_pocket_length_by_width: None,
             mobile_pocket_length_by_width: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod customer_address_tests {
+    use crate::test_support;
+    use sqlx::PgPool;
+    use uuid::Uuid;
+    #[sqlx::test]
+    async fn delivery_orders_and_documents_use_each_customers_saved_address(pool: PgPool) {
+        let (invoice, orders, _, _) = test_support::invoice(&pool, 2, false).await;
+        sqlx::query("UPDATE invoices SET collection_method='delivery',branch_id=NULL WHERE id=$1")
+            .bind(invoice)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let other_customer: Uuid = sqlx::query_scalar("INSERT INTO customers(name,mobile_no,address) VALUES('Other recipient','33556677','Other customer address') RETURNING id").fetch_one(&pool).await.unwrap();
+        let other_measurement: Uuid =
+            sqlx::query_scalar("INSERT INTO measurements(customer_id) VALUES($1) RETURNING id")
+                .bind(other_customer)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        sqlx::query("UPDATE customers c SET address='Building 2 <Road 3>' FROM measurements m JOIN orders o ON o.measurement_id=m.id WHERE c.id=m.customer_id AND o.id=$1").bind(orders[0]).execute(&pool).await.unwrap();
+        sqlx::query("UPDATE orders SET measurement_id=$2 WHERE id=$1")
+            .bind(orders[1])
+            .bind(other_measurement)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let state = test_support::state(pool.clone(), None, None).await;
+        for (order_id, address, escaped) in [
+            (
+                orders[0],
+                "Building 2 <Road 3>",
+                "Building 2 &lt;Road 3&gt;",
+            ),
+            (
+                orders[1],
+                "Other customer address",
+                "Other customer address",
+            ),
+        ] {
+            let detail = crate::features::orders::service::get_order(&state, order_id)
+                .await
+                .unwrap();
+            assert_eq!(detail.order.customer_address.as_deref(), Some(address));
+            assert!(detail.order.receiving_location_id.is_none());
+            let html = crate::features::orders::document::render_order_document(&state, order_id)
+                .await
+                .unwrap();
+            assert!(html.contains(escaped));
+        }
+        let html = crate::features::invoices::document::render_invoice_document(&state, invoice)
+            .await
+            .unwrap();
+        assert!(html.contains("Building 2 &lt;Road 3&gt;"));
+        assert!(html.contains("Other customer address"));
     }
 }

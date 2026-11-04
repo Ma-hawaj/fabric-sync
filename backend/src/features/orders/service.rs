@@ -422,7 +422,7 @@ fn assemble_order(
         production_location_inferred,
         receiving_location_id: row.receiving_location_id,
         collection_method: row.collection_method,
-        delivery_address: row.delivery_address,
+        customer_address: row.customer_address,
         receiving_location: row.receiving_location,
         stages,
         current_stage,

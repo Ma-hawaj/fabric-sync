@@ -117,17 +117,11 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                 ? ` · Issued by ${detail.issuingBranchName}`
                 : ''}
             </p>
-            {detail.collectionMethod === 'delivery'
-              ? detail.deliveryAddress && (
-                  <p className="text-sm text-muted-foreground">
-                    Delivery address: {detail.deliveryAddress}
-                  </p>
-                )
-              : detail.branchName && (
-                  <p className="text-sm text-muted-foreground">
-                    Collection branch: {detail.branchName}
-                  </p>
-                )}
+            {detail.collectionMethod === 'pickup' && detail.branchName && (
+              <p className="text-sm text-muted-foreground">
+                Collection branch: {detail.branchName}
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">
               Created by: <StaffName userId={detail.createdBy} />
             </p>

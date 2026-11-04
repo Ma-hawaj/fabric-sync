@@ -268,14 +268,14 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">
                 {order.collectionMethod === 'delivery'
-                  ? 'Delivery address'
+                  ? 'Customer address'
                   : order.status === 'collected'
                     ? 'Collected from'
                     : 'Collection location'}
               </dt>
               <dd className="font-medium">
                 {(order.collectionMethod === 'delivery'
-                  ? order.deliveryAddress
+                  ? order.customerAddress
                   : order.receivingLocation) ?? 'Not assigned'}
               </dd>
             </div>

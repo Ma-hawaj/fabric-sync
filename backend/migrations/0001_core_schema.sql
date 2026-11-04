@@ -86,7 +86,6 @@ CREATE TABLE invoices (
     -- if the location is renamed later, and leave unknown issuers nullable.
     issuing_branch_id UUID REFERENCES branch(id),
     issuing_branch_name TEXT,
-    delivery_address TEXT,
     discount NUMERIC(10, 2) NOT NULL DEFAULT 0,
     discount_unit TEXT NOT NULL DEFAULT 'amount' CHECK (discount_unit IN ('amount', 'percent')),
     -- A tailoring invoice finds its customer through orders → measurements, but

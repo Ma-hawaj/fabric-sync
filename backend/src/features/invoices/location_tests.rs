@@ -5,7 +5,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 #[sqlx::test]
-async fn issuing_branch_and_delivery_address_survive_edits_independently(pool: PgPool) {
+async fn delivery_uses_the_customer_address_and_keeps_the_issuing_branch(pool: PgPool) {
     let (_, _, stock, _) = test_support::invoice(&pool, 0, false).await;
     let issuer: Uuid =
         sqlx::query_scalar("INSERT INTO branch(name) VALUES('Issuing office') RETURNING id")
@@ -23,10 +23,11 @@ async fn issuing_branch_and_delivery_address_survive_edits_independently(pool: P
         .execute(&pool)
         .await
         .unwrap();
+    let customer: Uuid = sqlx::query_scalar("INSERT INTO customers(name,mobile_no,address) VALUES('Delivery buyer','33445566','Building 2 <Road 3>') RETURNING id").fetch_one(&pool).await.unwrap();
     let state = test_support::state(pool.clone(), None, None).await;
     let mut payload = json!({
         "expectedVatRate": 0.1, "discountUnit": "amount", "issuingBranchId": issuer,
-        "branchId": stock, "collectionMethod": "delivery", "deliveryAddress": "  Building 2 <Road 3>  ",
+        "branchId": stock, "collectionMethod": "delivery", "customerId": customer,
         "products": [{ "productId": product, "branchId": stock, "quantity": 1, "unitPrice": 20 }]
     });
     let created = service::create_invoice(
@@ -41,8 +42,9 @@ async fn issuing_branch_and_delivery_address_survive_edits_independently(pool: P
         .unwrap();
     assert_eq!(saved.issuing_branch_id, Some(issuer));
     assert_eq!(saved.branch_id, None);
+    let detail = service::get_invoice(&state, created.id).await.unwrap();
     assert_eq!(
-        saved.delivery_address.as_deref(),
+        detail.buyer.as_ref().unwrap().address.as_deref(),
         Some("Building 2 <Road 3>")
     );
     let html = super::document::render_invoice_document(&state, created.id)
@@ -69,18 +71,20 @@ async fn issuing_branch_and_delivery_address_survive_edits_independently(pool: P
         detail.issuing_branch_name.as_deref(),
         Some("Issuing office")
     );
-    assert_eq!(detail.delivery_address, None);
     assert!(detail.branch_name.is_some());
     let input: CreateInvoiceInput = serde_json::from_value(payload.clone()).unwrap();
     assert!(matches!(
         service::create_invoice(&state, input, "staff").await,
         Err(AppError::BadRequest(_))
     ));
-    payload["issuingBranchId"] = json!(stock);
-    payload["collectionMethod"] = json!("delivery");
-    payload["deliveryAddress"] = json!("   ");
-    assert!(matches!(
-        service::create_invoice(&state, serde_json::from_value(payload).unwrap(), "staff").await,
-        Err(AppError::BadRequest(_))
-    ));
+    sqlx::query("UPDATE customers SET address='Updated customer address' WHERE id=$1")
+        .bind(customer)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let detail = service::get_invoice(&state, created.id).await.unwrap();
+    assert_eq!(
+        detail.buyer.unwrap().address.as_deref(),
+        Some("Updated customer address")
+    );
 }

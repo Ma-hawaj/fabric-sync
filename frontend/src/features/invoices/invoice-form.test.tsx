@@ -202,19 +202,16 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
     expect(screen.queryByLabelText('Delivery address')).toBeNull()
     fireEvent.click(screen.getByRole('radio', { name: 'Delivery' }))
     expect(screen.queryByLabelText('Collection branch')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
-    expect(await screen.findByText('Enter a delivery address.')).toBeTruthy()
-    expect(save).not.toHaveBeenCalled()
-    fireEvent.change(screen.getByLabelText('Delivery address'), {
-      target: { value: 'Building 2' },
-    })
+    expect(screen.queryByLabelText('Delivery address')).toBeNull()
+    expect(
+      screen.getByText('Delivery uses the customer’s address.'),
+    ).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
     await waitFor(() =>
       expect(save).toHaveBeenCalledWith(
         expect.objectContaining({
           issuingBranch: 'issuer',
           collectionMethod: 'delivery',
-          deliveryAddress: 'Building 2',
         }),
       ),
     )

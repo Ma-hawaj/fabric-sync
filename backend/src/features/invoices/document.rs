@@ -941,7 +941,6 @@ mod tests_support {
             created_at: Utc.with_ymd_and_hms(2026, 7, 30, 9, 30, 0).unwrap(),
             branch_name: None,
             issuing_branch_name: None,
-            delivery_address: None,
             collection_method: "pickup".to_string(),
             buyer: None,
             payment_status: "paid".to_string(),

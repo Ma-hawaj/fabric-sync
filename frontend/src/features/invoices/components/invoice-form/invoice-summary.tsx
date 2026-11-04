@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { MutableRefObject, ReactNode } from 'react'
 import { useStore } from '@tanstack/react-form'
 import { PlusIcon, XIcon } from 'lucide-react'
-import { DateField, NumberField, TextField } from '@/components/form/fields'
+import { DateField, NumberField } from '@/components/form/fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { AsyncCombobox } from '@/components/form/async-combobox'
 import { Button } from '@/components/ui/button'
@@ -394,11 +394,9 @@ export function InvoiceSummary({
               )}
             </form.Field>
           ) : (
-            <TextField
-              form={form}
-              name="deliveryAddress"
-              label="Delivery address"
-            />
+            <p className="text-xs text-muted-foreground">
+              Delivery uses the customer’s address.
+            </p>
           )}
           <DateField
             form={form}

@@ -92,7 +92,6 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         created_by: invoice.created_by,
         branch_name: invoice.branch_name,
         issuing_branch_name: invoice.issuing_branch_name,
-        delivery_address: invoice.delivery_address,
         buyer: invoice.buyer,
         payment_status: invoice.payment_status,
         payment_method: invoice.payment_method,
@@ -757,28 +756,12 @@ fn normalize_fulfilment(input: &mut CreateInvoiceInput) {
         super::types::CollectionMethod::Delivery
     ) {
         input.branch_id = None;
-        input.delivery_address = input
-            .delivery_address
-            .take()
-            .map(|address| address.trim().to_string());
-    } else {
-        input.delivery_address = None;
     }
 }
 
 /// Reject inconsistent invoice lines, urgency, repeated cards, and excess tender.
 /// This checks structure and totals; persisted card provenance is resolved when writing.
 fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
-    if matches!(
-        input.collection_method,
-        super::types::CollectionMethod::Delivery
-    ) && input
-        .delivery_address
-        .as_ref()
-        .is_none_or(|address| address.trim().is_empty())
-    {
-        return Err(AppError::BadRequest("enter a delivery address".into()));
-    }
     let has_urgent_orders = input
         .customers
         .iter()

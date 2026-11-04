@@ -116,7 +116,6 @@ pub async fn fetch_invoice_detail(
             i.invoice_date,
             i.target_date,
             i.issuing_branch_name,
-            i.delivery_address,
             i.urgent_charge::float8 AS "urgent_charge!",
             i.collection_method,
             i.created_at,
@@ -343,7 +342,6 @@ pub async fn fetch_invoice_detail(
             created_by: invoice.created_by,
             branch_name: invoice.branch_name,
             issuing_branch_name: invoice.issuing_branch_name,
-            delivery_address: invoice.delivery_address,
             buyer: invoice
                 .buyer_name
                 .zip(invoice.buyer_mobile_no)
@@ -610,12 +608,12 @@ pub async fn insert_invoice(
             target_date, branch_id, discount, discount_unit,
             total_price, customer_id, gift_card_redeemed,
             urgent_charge, collection_method, created_by, vat_rate, taxable_amount, vat_amount,
-            issuing_branch_id, issuing_branch_name, delivery_address
+            issuing_branch_id, issuing_branch_name
         )
         VALUES (
             $1, $2, $3::float8, $4, $5::float8, $6, $7::float8,
             $8::float8, $9, $10, $11::float8, $12::float8, $13::float8,
-            $14, (SELECT name FROM branch WHERE id = $14), $15
+            $14, (SELECT name FROM branch WHERE id = $14)
         )
         RETURNING id, invoice_date
         "#,
@@ -633,7 +631,6 @@ pub async fn insert_invoice(
         taxable_amount,
         vat_amount,
         input.issuing_branch_id,
-        input.delivery_address,
     )
     .fetch_one(&mut **tx)
     .await
@@ -1025,7 +1022,6 @@ pub async fn fetch_invoice_edit(
             i.branch_id,
             i.issuing_branch_id,
             i.issuing_branch_name,
-            i.delivery_address,
             b.name AS "branch_name?",
             i.discount::float8 AS "discount!",
             i.discount_unit,
@@ -1259,7 +1255,6 @@ pub async fn fetch_invoice_edit(
     Ok(Some(InvoiceEdit {
         issuing_branch_id: header.issuing_branch_id,
         issuing_branch_name: header.issuing_branch_name,
-        delivery_address: header.delivery_address,
         vat_rate: header.vat_rate,
         id: invoice_id,
         invoice_number: header.invoice_number,
@@ -1630,8 +1625,7 @@ pub async fn update_invoice_header(
             vat_amount = $12::float8,
             issuing_branch_id = $13,
             issuing_branch_name = CASE WHEN issuing_branch_id IS NOT DISTINCT FROM $13
-                THEN issuing_branch_name ELSE (SELECT name FROM branch WHERE id = $13) END,
-            delivery_address = $14
+                THEN issuing_branch_name ELSE (SELECT name FROM branch WHERE id = $13) END
         WHERE id = $1
         "#,
         invoice_id,
@@ -1647,7 +1641,6 @@ pub async fn update_invoice_header(
         taxable_amount,
         vat_amount,
         input.issuing_branch_id,
-        input.delivery_address,
     )
     .execute(&mut **tx)
     .await?;

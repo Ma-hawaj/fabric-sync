@@ -41,6 +41,7 @@ const SPEC: ListSpec = ListSpec {
             c.customer_number,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile,
+            c.address AS customer_address,
             COALESCE(mat.name, o.customer_material_description) AS material,
             o.material_source,
             CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END AS material_filter,
@@ -70,7 +71,6 @@ const SPEC: ListSpec = ListSpec {
             prod.name AS production_location,
             CASE WHEN i.collection_method = 'pickup' THEN i.branch_id END AS receiving_location_id,
             i.collection_method,
-            i.delivery_address,
             CASE WHEN i.collection_method = 'pickup' THEN recv.name END AS receiving_location,
             -- What the table shows and filters on: the explicit assignment
             -- when staff set one, otherwise the single-stock-location

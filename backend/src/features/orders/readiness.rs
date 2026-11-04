@@ -237,7 +237,11 @@ mod tests {
     #[sqlx::test]
     async fn delivery_can_be_ready_without_a_pickup_branch_or_branch_transfer(pool: PgPool) {
         let (invoice, orders, production, _) = crate::test_support::invoice(&pool, 1, true).await;
-        sqlx::query("UPDATE invoices SET collection_method='delivery',delivery_address='Building 2',branch_id=NULL WHERE id=$1").bind(invoice).execute(&pool).await.unwrap();
+        sqlx::query("UPDATE invoices SET collection_method='delivery',branch_id=NULL WHERE id=$1")
+            .bind(invoice)
+            .execute(&pool)
+            .await
+            .unwrap();
         sqlx::query("INSERT INTO order_stage_progress(order_id,stage_id,status) SELECT $1,id,'done' FROM order_stages WHERE is_active AND NOT requires_delivery").bind(orders[0]).execute(&pool).await.unwrap();
         let result = confirm(&pool, invoice, None, "staff", true).await.unwrap();
         assert!(result.became_ready);

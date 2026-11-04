@@ -83,7 +83,6 @@ export interface InvoicePayment {
 export interface InvoiceDetail extends ReadinessFields {
   documentKind?: 'tax_invoice' | 'redemption_receipt'
   issuingBranchName?: string | null
-  deliveryAddress?: string | null
   createdBy: string | null
   collectionMethod: 'delivery' | 'pickup'
   id: string

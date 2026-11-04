@@ -107,10 +107,6 @@ export function invoicePayload(values: InvoiceFormValues) {
         ? values.receivingBranch || null
         : null,
     issuingBranchId: values.issuingBranch || null,
-    deliveryAddress:
-      values.collectionMethod === 'delivery'
-        ? values.deliveryAddress.trim() || null
-        : null,
     discount: numberOrZero(values.discount),
     discountUnit: values.discountUnit,
     // Untouched blank rows never reach the server — every payment sent has a

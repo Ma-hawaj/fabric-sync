@@ -615,12 +615,6 @@
               <dd>{{ invoice.branchName }}</dd>
             </div>
           {% endif %}
-          {% if invoice.collectionMethod == 'delivery' and invoice.deliveryAddress %}
-            <div class="row">
-              <dt>عنوان التوصيل<span class="en">Delivery address</span></dt>
-              <dd style="white-space: pre-line">{{ invoice.deliveryAddress }}</dd>
-            </div>
-          {% endif %}
           <div class="row">
             <dt>الاستلام<span class="en">Collection</span></dt>
             <dd>{% if invoice.collectionMethod == 'delivery' %}توصيل <span class="en">Delivery</span>{% else %}استلام <span class="en">Pickup</span>{% endif %}</dd>
