@@ -1,704 +1,180 @@
-{#
-  The order document. Edit this file to change how a printed order looks.
-
-  Set INVOICE_TEMPLATE_DIR to the templates directory and the changes show up
-  on the next request, with no rebuild. Unset, the copy compiled into the
-  binary is used instead (see src/features/orders/document.rs).
-
-  Everything must stay self-contained — inline styles, an `data:` logo URI.
-  The page is printed from an iframe with no origin of its own to resolve
-  relative URLs against, and will later be rendered by a headless browser that
-  may have no network access.
-
-  Available:
-    order     — GET /orders/:id (see types.rs OrderDetail — the measurement
-                snapshot the garment was cut to rides along on `order.measurement`)
-    invoice_date_time — the parent invoice's creation moment with the time of
-                day, pre-formatted day-first in the shop's timezone
-                (TIMEZONE, e.g. "30-07-2026 12:30").
-    measured_on — the measurement date, pre-formatted day-first
-                ("30-07-2026").
-    company   — COMPANY_* env vars (see config.rs InvoiceBranding)
-    amounts   — quantities only: the order sheet is an internal production
-                document, so no money figures are printed; the sole key the
-                template reads is `materialAmount`.
-    designs   — the made-to-measure choices (Thobe / Collar / Sleeve / Front Pocket / Side Pocket / Patti / EMD).
-    design_note — the free-text more-details note, or empty.
-    thob_viewbox — the sheet's viewBox, shared with the frontend thobe sheet.
-    thob_slots — value slots in sheet order: id, key (into `thob_values`),
-                label, x, y, size. The front shoulder slot reads the drop and
-                the back one the plain shoulder width.
-    thob_values — every recorded measurement as a display string, keyed by
-                camelCase field name, shared by the diagram and tables;
-                unrecorded fields are absent, so their slots render nothing.
-    thob_front_paths / thob_back_paths — silhouette strokes: d, grey (faint
-                stitch), dashed.
-    thob_front_ellipses / thob_back_ellipses — collar, cuffs and yoke:
-                cx, cy, rx, ry, optional transform and stroke_width. A back
-                ellipse with show_when renders only when that slot has a
-                recorded value (the yoke circle doubles as the full-body
-                callout anchor).
-    thob_dims — thin dimension/leader lines; thob_arrows — their filled heads.
-#}
-{%- set order_status_labels = {
-  "pending": "In progress",
-  "ready": "Ready for pickup",
-  "collected": "Collected"
-} -%}
-{%- set measurement_labels = {
-  "frontHeight": "Front Height",
-  "backHeight": "Back Height",
-  "shoulder": "Shoulder",
-  "shoulderDown": "Shoulder Down",
-  "chest": "Chest",
-  "chestUp": "Chest (Upper)",
-  "waist": "Waist",
-  "hip": "Hip",
-  "sleeveLength": "Sleeve Length",
-  "neckSize": "Neck Size",
-  "neckWidth": "Neck Width",
-  "openHand": "Open Hand",
-  "cuffWidth": "Cuff Width",
-  "cuffSize": "Cuff Size",
-  "armhole": "Armhole",
-  "foWidth": "FO Width",
-  "fo": "Fo",
-  "bottom": "Bottom",
-  "bottomFold": "Bottom Fold",
-  "fullBody": "Full Body",
-  "sleeveHalf": "Sleeve Half",
-  "openFold": "Open Fold",
-  "frontPocketLength": "Front Pocket Length",
-  "frontPocketLengthByWidth": "Pocket L×W",
-  "sidePocket": "Side Pocket",
-  "sidePocketLengthByWidth": "Side Pocket L×W",
-  "mobilePocketLengthByWidth": "Mobile Pocket L×W",
-  "type": "Type",
-  "fit": "Fit"
-} -%}
-{# Measurement pairs: each pair renders as one row with fixed columns, so
-   related fields (neck | neck width) stay side by side even when a field
-   further up the list wasn't recorded. A single-element pair is padded
-   with "" — `thob_values[""]` is undefined and renders as a blank
-   cell that holds the column. #}
-{%- set body_pairs = [["frontHeight", "backHeight"], ["shoulder", "shoulderDown"], ["chest", "chestUp"], ["waist", "hip"], ["sleeveLength", "sleeveHalf"], ["neckSize", "neckWidth"], ["openHand", ""], ["cuffWidth", "cuffSize"], ["armhole", "bottom"], ["bottomFold", "fullBody"], ["openFold", ""]] -%}
-{%- set pocket_pairs = [["frontPocketLength", "frontPocketLengthByWidth"], ["sidePocket", "sidePocketLengthByWidth"], ["mobilePocketLengthByWidth", ""]] -%}
-{%- set style_pairs = [["foWidth", "fo"], ["type", "fit"]] -%}
-
-{# The thobe sheet: front and back silhouettes in one SVG with every recorded
-   value at its slot. All the drawing data arrives from document.rs (paths,
-   ellipses, dims, arrows, slots) — the template only renders. A slot whose
-   value the snapshot didn't record renders nothing. #}
+{# Self-contained production document. Orders sharing a measurement snapshot
+   use one large diagram with the first order's designs, then compact order rows.
+   `sheets`: order (OrderDetail), invoiceDateTime, thobValues, rows.
+   Each row contains order, thobeType, designs and designNote.
+   `target_date` is the invoice's formatted promised date, or absent. #}
 {%- macro thobe_ellipse(e) -%}
   <ellipse class="thob-garment" cx="{{ e.cx }}" cy="{{ e.cy }}" rx="{{ e.rx }}" ry="{{ e.ry }}"{% if e.transform %} transform="{{ e.transform }}"{% endif %}{% if e.stroke_width %} stroke-width="{{ e.stroke_width }}"{% endif %} />
 {%- endmacro -%}
-{# One design cell: thumbnail above, full caption below. #}
 {%- macro design_cell(chip) -%}
   <div class="design-cell">
+    <span class="design-title">{{ chip.titleEn }}</span>
     {% if chip.image %}
       <img src="{{ chip.image }}" alt="{{ chip.label }}" />
     {% else %}
-      <span class="design-cell-empty"></span>
+      <span class="design-name" dir="auto">{{ chip.label }}</span>
     {% endif %}
-    <span class="design-copy">
-      <span class="design-title">{{ chip.titleEn }}</span>
-      <span class="design-name" dir="ltr">{{ chip.label }}</span>
-    </span>
   </div>
 {%- endmacro -%}
-{# One measurement cell: the recorded value, or a blank placeholder that
-   holds the column so a pair's second field never slides left when the
-   first wasn't recorded. Value and label arrive as arguments because
-   macros can't see the template context. #}
-{%- macro m_cell(value, label) -%}
-  {% if value is defined and value is not none and value != '' %}
-    <div class="m">
-      <span>{{ label }}</span>
-      <span class="num">{{ value }}</span>
-    </div>
-  {% else %}
-    <span class="m-empty"></span>
-  {% endif %}
+{%- macro material_name(item) -%}
+  <span class="material-name">{{ item.material }}</span>
+  {% if item.materialSku %}<strong class="material-sku">SKU: {{ item.materialSku }}</strong>{% endif %}
+  {% if item.materialSource == 'customer' %}<span class="material-source">Customer-provided material</span>{% endif %}
+{%- endmacro -%}
+{%- macro order_reference(item) -%}
+  <span class="order-reference">
+    <strong class="order-number">ORD-{{ item.orderNumber }}</strong>
+    {% if item.isUrgent %}<strong class="urgent">Urgent</strong>{% endif %}
+  </span>
+{%- endmacro -%}
+{%- macro thobe_type(row, compact=false) -%}
+  {% if compact %}
+    <span class="compact-type-heading"><span class="thobe-type-label">Thobe type</span>{{ order_reference(row.order) }}</span>
+  {% else %}<span class="thobe-type-label">Thobe type</span>{% endif %}
+  <strong class="thobe-type-name" dir="auto">{{ row.thobeType or '—' }}</strong>
+{%- endmacro -%}
+{%- macro order_note(row) -%}
+  <span class="design-note" dir="auto">{{ row.designNote or row.order.closureReason or '—' }}{% if row.designNote and row.order.closureReason %}<span class="closure-reason">{{ row.order.closureReason }}</span>{% endif %}</span>
 {%- endmacro -%}
 <!doctype html>
 <html lang="en" dir="ltr">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Order ORD-{{ order.orderNumber }}</title>
+    <title>Production Orders · INV-{{ sheets[0].order.invoiceNumber }}</title>
     <style>
-      /* All seven choices and the complete measurement snapshot share one A4. */
-      @page {
-        size: A4;
-        margin: 8mm;
-      }
-
-      :root {
-        --ink: #151110;
-        --muted: #626660;
-        --rule: #e2dbd5;
-        --accent: #233029;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
+      @page { size: A4; margin: 10mm; }
+      :root { --ink: #202923; --muted: #69716b; --rule: #879087; --accent: #843a45; --note: #286c48; }
+      * { box-sizing: border-box; }
       body {
         margin: 0;
-        padding: 8mm;
-        font-family: 'Noto Sans Arabic', 'IBM Plex Sans Arabic', 'Segoe UI',
-          Tahoma, Arial, sans-serif;
-        font-size: 10px;
-        line-height: 1.35;
+        padding: 10mm;
         color: var(--ink);
         background: #fff;
+        font-family: 'Noto Sans Arabic', 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+        font-size: 11px;
+        line-height: 1.35;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
-
-      @media print {
-        body {
-          padding: 0;
-        }
-      }
-
-      /* Labels are English-only. */
-
-      header {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-        align-items: center;
-        gap: 10px;
-        padding-bottom: 6px;
-        border-bottom: 1.5px solid var(--ink);
-      }
-
-      .logo {
-        grid-column: 2;
-        grid-row: 1;
-        justify-self: center;
-        width: 116px;
-        height: 52px;
-        object-fit: contain;
-      }
-
-      .company-identity {
-        grid-column: 1;
-        grid-row: 1;
-        min-width: 0;
-        overflow-wrap: anywhere;
-      }
-
-      .company-name {
-        margin: 0;
-        font-size: 14px;
-        font-weight: 700;
-        line-height: 1.2;
-      }
-
-      .company-meta {
-        margin-top: 2px;
-        color: var(--muted);
-        font-size: 8.5px;
-        line-height: 1.3;
-      }
-
-      .company-meta div + div {
-        margin-top: 0;
-      }
-
-      .doc-title {
-        grid-column: 3;
-        grid-row: 1;
-        text-align: right;
-      }
-
-      .doc-title h2 {
-        margin: 0;
-        font-size: 13px;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-        white-space: nowrap;
-      }
-
-      .doc-number {
-        margin-top: 2px;
-        font-family: 'SFMono-Regular', Consolas, monospace;
-        font-size: 12px;
-        font-weight: 700;
-        color: var(--accent);
-        direction: ltr;
-        text-align: right;
-      }
-
-      .doc-number .ord {
-        display: block;
-        font-size: 9px;
-        color: var(--muted);
-      }
-
-      .panels {
-        display: flex;
-        gap: 6px;
-        margin-top: 6px;
-      }
-
-      .panel {
-        flex: 1;
-        border: 1px solid var(--rule);
-        border-radius: 4px;
-        padding: 5px 7px;
-        background: #fff;
-      }
-
-      .panel h3 {
-        margin: 0 0 3px;
-        font-size: 8px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--muted);
-      }
-
-      .row {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        gap: 8px;
-      }
-
-      .row + .row {
-        margin-top: 1px;
-      }
-
-      .row dt {
-        margin: 0;
-        color: var(--muted);
-        flex-shrink: 0;
-      }
-
-      .row dd {
-        margin: 0;
-        font-weight: 600;
-        text-align: left;
-        overflow-wrap: anywhere;
-      }
-
-      dl {
-        margin: 0;
-      }
-
-      table {
-        width: 100%;
-        margin-top: 6px;
-        border-collapse: collapse;
-        font-size: 9.5px;
-      }
-
-      thead th {
-        background: var(--ink);
-        color: #fff;
-        font-size: 8.5px;
-        font-weight: 600;
-        text-align: right;
-        padding: 3px 5px;
-      }
-
-      thead {
-        display: table-header-group;
-      }
-
-      tbody tr {
-        break-inside: avoid;
-      }
-
-      tbody td {
-        padding: 3px 5px;
-        border-bottom: 1px solid var(--rule);
-        vertical-align: top;
-      }
-
-      .num {
-        text-align: left;
-        direction: ltr;
-        font-variant-numeric: tabular-nums;
-        white-space: nowrap;
-      }
-
-      .note {
-        display: block;
-        margin-top: 0;
-        color: var(--muted);
-        font-size: 8px;
-      }
-
-      /* Two columns keep every design choice beside the measurement diagram. */
-      .design-and-sheet {
-        display: grid;
-        grid-template-columns: 218px minmax(0, 1fr);
-        gap: 6px;
-        margin-top: 6px;
-        align-items: start;
-      }
-
-      /* One bordered panel for all seven design slots.
-         A catalog match fills its cell with a raster; a legacy value that
-         matches nothing fills the label only, so the sheet reads the same
-         shape either way. The panel never splits across pages. */
-      .design-panel {
-        margin-top: 0;
-        border: 1px solid var(--rule);
-        border-radius: 4px;
-        padding: 5px 7px;
-        background: #fff;
-        break-inside: avoid;
-      }
-
-      .design-panel h3 {
-        margin: 0 0 3px;
-        font-size: 8px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--muted);
-      }
-
-      .design-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 3px;
-      }
-
-      .design-cell {
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 1px;
-        padding: 3px;
-        border: 1px solid var(--rule);
-        border-radius: 3px;
-        background: #fff;
-        min-width: 0;
-        text-align: center;
-      }
-
-      .design-cell img {
-        width: 100%;
-        height: 48px;
-        object-fit: contain;
-      }
-
-      .design-cell-empty {
-        display: none;
-      }
-
-      .design-copy {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        line-height: 1.3;
-        min-width: 0;
-      }
-
-      .design-title {
-        font-size: 9px;
-        color: var(--muted);
-      }
-
-      .design-name {
-        font-size: 10px;
-        font-weight: 600;
-        text-align: center;
-        overflow-wrap: anywhere;
-        max-width: 100%;
-      }
-
-      .design-note {
-        margin-top: 3px;
-        color: var(--muted);
-        font-size: 10px;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-      }
-
-      /* The free-text note under the diagram gets a touch more air than its
-         sidebar sibling since it spans the full sheet width. */
-      .design-note-below {
-        margin-top: 6px;
-      }
-
-      .measurements {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 6px;
-        margin-top: 6px;
-      }
-
-      /* The shorter tables stack in one column beside Body dimensions. The
-         stack stretches to the row height and spreads edge to edge, so both
-         columns read as one height. */
-      .measurement-stack {
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        gap: 6px;
-        min-width: 0;
-      }
-
-      .measurement-group {
-        border: 1px solid var(--rule);
-        border-radius: 4px;
-        padding: 5px 7px;
-        background: #fff;
-        break-inside: avoid;
-      }
-
-      .measurement-group h3 {
-        margin: 0 0 3px;
-        font-size: 8px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--muted);
-      }
-
-      .measurement-grid {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-
-      .m-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-      }
-
-      .measurement-group .m {
-        display: flex;
-        justify-content: space-between;
-        gap: 8px;
-        border-bottom: 1px dotted var(--rule);
-        padding-bottom: 1px;
-      }
-
-      .measurement-group .m span:first-child {
-        color: var(--muted);
-        font-size: 8.5px;
-      }
-
-      .measurement-group .m span:last-child {
-        font-weight: 600;
-        white-space: normal;
-        overflow-wrap: anywhere;
-        min-width: 0;
-      }
-
-      .thob-sheet {
-        margin-top: 0;
-      }
-
-      .thob-panel {
-        border: 1px solid var(--rule);
-        border-radius: 4px;
-        padding: 5px 7px;
-        background: #fff;
-        break-inside: avoid;
-        min-width: 0;
-      }
-
-      .thob-panel h3 {
-        margin: 0 0 2px;
-        font-size: 8px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--muted);
-      }
-
-      .thob-svg {
-        display: block;
-        width: 100%;
-        height: auto;
-        max-height: 380px;
-        margin: 0 auto;
-      }
-
-      .thob-garment {
-        fill: none;
-        stroke: var(--ink);
-        stroke-width: 1.2;
-        stroke-linejoin: round;
-        stroke-linecap: round;
-      }
-
-      .thob-dim {
-        fill: none;
-        stroke: var(--ink);
-        stroke-width: 1;
-      }
-
-      .thob-arrow {
-        fill: var(--ink);
-      }
-
-      .thob-value {
-        font-weight: 600;
-        fill: #000;
-      }
-
-      .closing {
-        break-inside: avoid;
-        margin-top: 6px;
-      }
-
-      footer {
-        margin-top: 6px;
-        padding-top: 4px;
-        border-top: 1px solid var(--rule);
-        text-align: center;
-        color: var(--muted);
-        font-size: 8px;
-        line-height: 1.3;
-      }
+      .production-sheet { max-width: 190mm; margin: 0 auto; }
+      .production-sheet + .production-sheet { break-before: page; margin-top: 12mm; }
+      header { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; margin-bottom: 6px; }
+      .customer-details { grid-column: 1; grid-row: 1; min-width: 0; overflow-wrap: anywhere; }
+      .document-ids { margin: 0 0 3px; }
+      .document-ids div { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; gap: 6px; }
+      .document-ids dt { font-size: 9px; color: var(--muted); }
+      .document-ids dd { margin: 0; font-size: 11px; font-weight: 600; }
+      .document-ids .customer-id dd { color: var(--accent); font-size: 16px; font-weight: 700; }
+      .customer-name, .customer-mobile { display: flex; gap: 6px; align-items: baseline; font-size: 11px; }
+      .customer-label { color: var(--muted); font-size: 9px; }
+      .customer-name strong { font-size: 13px; }
+      .logo { grid-column: 2; grid-row: 1; width: 150px; height: 70px; object-fit: contain; }
+      .doc-title { grid-column: 3; grid-row: 1; text-align: right; }
+      .doc-title h2 { margin: 0; font-size: 16px; font-weight: 700; }
+      .doc-number { margin-top: 3px; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+      .doc-date { margin-top: 2px; font-size: 10px; }
+      .target-date { display: inline-flex; align-items: baseline; gap: 8px; max-width: 100%; margin-top: 5px; padding: 4px 6px; border: 1px solid var(--accent); color: var(--accent); background: #faf3f4; }
+      .target-date span { font-size: 10px; font-weight: 600; }
+      .target-date strong { font-size: 16px; font-weight: 700; }
+      .sheet-summary { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 14px; padding: 3px 0 5px; margin-bottom: 6px; border-bottom: 1px dotted var(--rule); break-after: avoid; }
+      .order-count { font-size: 13px; }
+      .measurement-summary { display: flex; flex-wrap: wrap; gap: 14px; margin: 0; }
+      .measurement-summary div { display: flex; gap: 6px; align-items: baseline; padding-left: 14px; border-left: 1px solid var(--rule); }
+      .measurement-summary dt { font-size: 13px; }
+      .measurement-summary dd { margin: 0; font-size: 16px; font-weight: 700; text-transform: capitalize; overflow-wrap: anywhere; }
+      .order-row { break-inside: avoid; border: 1px solid var(--rule); border-radius: 0; }
+      .order-row + .order-row { margin-top: 8px; }
+      .primary-order { display: grid; grid-template-columns: 140px minmax(0, 1fr); grid-template-rows: auto auto 1fr; }
+      .primary-material { grid-column: 1; grid-row: 1; padding: 4px 6px; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); text-align: center; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+      .material-name { display: block; }
+      .material-sku { display: block; color: var(--accent); font-size: 11px; font-weight: 700; }
+      .material-source { display: block; color: var(--muted); font-size: 8px; font-weight: 400; }
+      .primary-type { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 12px; padding: 4px 8px; border-bottom: 1px solid var(--rule); }
+      .primary-note { grid-column: 2; grid-row: 2; display: flex; align-items: baseline; gap: 12px; padding: 4px 8px; border-bottom: 1px solid var(--rule); }
+      .note-label { flex-shrink: 0; font-size: 10px; }
+      .design-note { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+      .primary-note .design-note { color: var(--note); font-size: 12px; }
+      .thobe-type-label { flex-shrink: 0; font-size: 10px; }
+      .thobe-type-name { min-width: 0; color: var(--accent); font-size: 17px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+      .primary-designs { grid-column: 1; grid-row: 2 / 4; display: grid; grid-auto-rows: 1fr; border-right: 1px solid var(--rule); min-width: 0; }
+      .primary-designs .design-cell { display: flex; flex-direction: column; justify-content: center; padding: 3px 4px; min-height: 0; }
+      .primary-designs .design-cell + .design-cell { border-top: 1px solid var(--rule); }
+      .primary-designs .design-cell img { height: min(100px, calc(526px / var(--design-count, 4) - 22px)); }
+      .primary-designs .empty-design { padding: 8px; text-align: center; }
+      .primary-diagram { grid-column: 2; grid-row: 3; min-width: 0; padding: 4px; }
+      .thob-svg { display: block; width: 100%; height: 500px; margin: 0 auto; }
+      .thob-garment { fill: none; stroke: var(--ink); stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; }
+      .thob-dim { fill: none; stroke: var(--ink); stroke-width: 1; }
+      .thob-arrow { fill: var(--ink); }
+      .thob-value { font-weight: 600; fill: #000; }
+      .compact-heading { display: grid; grid-template-columns: 140px 140px minmax(0, 1fr); border-bottom: 1px solid var(--rule); }
+      .compact-heading > div { min-width: 0; padding: 3px 6px; overflow-wrap: anywhere; }
+      .compact-heading > div + div { border-left: 1px solid var(--rule); }
+      .compact-type .thobe-type-label { display: block; font-size: 8px; }
+      .compact-type .thobe-type-name { font-size: 13px; }
+      .compact-type-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px; }
+      .compact-material { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
+      .compact-note { display: flex; align-items: baseline; gap: 8px; }
+      .compact-designs { display: grid; grid-template-columns: repeat(var(--design-count, 1), minmax(0, 1fr)); }
+      .compact-designs .design-cell { padding: 3px 5px; }
+      .compact-designs .design-cell + .design-cell { border-left: 1px solid var(--rule); }
+      .compact-designs .empty-design { padding: 8px; }
+      .design-cell { min-width: 0; text-align: center; }
+      .design-title { display: block; margin-bottom: 2px; color: var(--muted); font-size: 8px; line-height: 1.2; }
+      .design-cell img { display: block; width: 100%; height: 62px; object-fit: contain; }
+      .design-name { display: block; font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
+      .order-reference { display: inline-flex; align-items: baseline; flex-shrink: 0; gap: 4px; white-space: nowrap; font-size: 8px; }
+      .primary-type > .order-reference { margin-left: auto; }
+      .order-number { color: var(--ink); font-size: 9px; }
+      .urgent { color: var(--accent); }
+      .closure-reason { display: block; color: var(--muted); font-size: 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
+      footer { margin-top: 4px; color: var(--muted); font-size: 8px; }
+      @media print { body { padding: 0; } .production-sheet + .production-sheet { margin-top: 0; } }
     </style>
   </head>
-  <body data-print-height="281" style="--page-width: 194mm">
-    <main class="print-page">
-    <header>
-      <div class="company-identity">
-        <h1 class="company-name">{{ company.nameEn }}</h1>
-        <div class="company-meta">
-          {% if company.phone %}<div dir="ltr">{{ company.phone }}</div>{% endif %}
-          {% if company.email %}<div dir="ltr">{{ company.email }}</div>{% endif %}
+  <body>
+    {% for sheet in sheets %}
+    {% set order = sheet.order %}
+    {% set thob_values = sheet.thobValues %}
+    <main class="production-sheet">
+      <header>
+        <div class="customer-details">
+          <dl class="document-ids">
+            <div class="customer-id"><dt>Customer ID</dt><dd dir="ltr">C-{{ order.customerNumber }}</dd></div>
+          </dl>
+          <div class="customer-name"><span class="customer-label">Name</span><strong dir="auto">{{ order.customerName }}</strong></div>
+          <div class="customer-mobile"><span class="customer-label">Phone</span><strong dir="ltr">{{ order.customerMobile }}</strong></div>
         </div>
-      </div>
-
-      {% if company.logoDataUrl %}
-        <img class="logo" src="{{ company.logoDataUrl }}" alt="" />
-      {% endif %}
-
-      <div class="doc-title">
-        <h2>Production Order</h2>
-        <div class="doc-number">
-          INV-{{ order.invoiceNumber }}
-          <span class="ord" dir="ltr">ORD-{{ order.orderNumber }}</span>
+        {% if company.logoDataUrl %}<img class="logo" src="{{ company.logoDataUrl }}" alt="" />{% endif %}
+        <div class="doc-title">
+          <h2>Orders No</h2>
+          <div class="doc-number">INV-{{ order.invoiceNumber }}</div>
+          <div class="doc-date">{{ sheet.invoiceDateTime }}</div>
+          <div class="target-date"><span>Target date</span><strong dir="ltr">{{ target_date or 'Not set' }}</strong></div>
         </div>
-      </div>
-    </header>
-
-    <section class="panels">
-      <div class="panel">
-        <h3>Order details</h3>
-        <dl>
-          <div class="row">
-            <dt>Invoice date</dt>
-            <dd dir="ltr">{{ invoice_date_time }}</dd>
-          </div>
-          <div class="row">
-            <dt>Customer</dt>
-            <dd>{{ order.customerName }}</dd>
-          </div>
-          <div class="row">
-            <dt>Customer ID</dt>
-            <dd dir="ltr">C-{{ order.customerNumber }}</dd>
-          </div>
-          <div class="row">
-            <dt>Measurement ID</dt>
-            <dd dir="ltr">{{ order.measurement.readableId }}</dd>
-          </div>
-          <div class="row">
-            <dt>Mobile</dt>
-            <dd dir="ltr">{{ order.customerMobile }}</dd>
-          </div>
-          <div class="row">
-            <dt>Order status</dt>
-            <dd>
-              {%- set status = order_status_labels[order.status] -%}
-              {% if order.outcome == "cancelled" %}
-                Cancelled
-              {% elif order.outcome == "returned" %}
-                Returned
-              {% elif status %}
-                {{ status }}
-              {% else %}
-                {{ order.status }}
-              {% endif %}
-            </dd>
-          </div>
-          {% if order.isUrgent %}
-          <div class="row">
-            <dt>Priority</dt>
-            <dd>Urgent</dd>
-          </div>
-          {% endif %}
-          {% if order.closureReason %}
-          <div class="row">
-            <dt>Closure reason</dt>
-            <dd>{{ order.closureReason }}</dd>
-          </div>
-          {% endif %}
+      </header>
+      <section class="sheet-summary">
+        <span class="order-count">Customer orders · <strong>{{ sheet.rows | length }}</strong></span>
+        <dl class="measurement-summary" aria-label="Type and fit">
+          <div><dt>Type</dt><dd>{{ thob_values.type or '—' }}</dd></div>
+          <div><dt>Fit</dt><dd>{{ thob_values.fit or '—' }}</dd></div>
         </dl>
-      </div>
-
-      <div class="panel">
-        <h3>Material</h3>
-        <dl>
-          <div class="row">
-            <dt>Material / SKU</dt>
-            <dd dir="ltr">{% if order.materialSource == "customer" %}Customer-provided material: {% endif %}{% if order.materialSku %}{{ order.materialSku }}{% else %}{{ order.material }}{% endif %}</dd>
-          </div>
-          <div class="row">
-            <dt>Quantity</dt>
-            <dd class="num">{{ amounts.materialAmount }}</dd>
-          </div>
-          <div class="row">
-            <dt>Made at</dt>
-            <dd>
-              {% if order.productionLocation %}
-                {{ order.productionLocation }}
-                {% if order.productionLocationInferred %}<span class="note">Inferred from stock</span>{% endif %}
-              {% else %}
-                Not assigned
-              {% endif %}
-            </dd>
-          </div>
-          <div class="row">
-            <dt>Collection</dt>
-            <dd>
-              {% if order.receivingLocation %}
-                {{ order.receivingLocation }}
-              {% else %}
-                Not assigned
-              {% endif %}
-            </dd>
-          </div>
-        </dl>
-      </div>
-    </section>
-
-    {# Side-by-side production spec: the design choices stack as a narrow
-       column on the left while the thobe sheet takes the remaining width.
-       One snapshot per order — the measurements the garment was cut to. #}
-    <div class="design-and-sheet">
-      <section class="design-panel">
-        <h3>Design</h3>
-        {% if designs %}
-          <div class="design-grid">
-            {% for chip in designs %}
-              {{ design_cell(chip) }}
-            {% endfor %}
-          </div>
-        {% else %}
-          <div class="design-note">No design choices recorded</div>
-        {% endif %}
       </section>
-
-      <div class="thob-sheet">
-        <div class="thob-panel">
-          <h3>Thobe Sheet</h3>
+      <section aria-label="Customer orders">
+        {% for row in sheet.rows %}
+        {% set item = row.order %}
+        <article class="order-row" data-order-id="{{ item.id }}" aria-label="Order ORD-{{ item.orderNumber }}">
+          {% if loop.first %}
+          <div class="primary-order">
+            <div class="primary-material" dir="auto">{{ material_name(item) }}</div>
+            <div class="primary-type">{{ thobe_type(row) }}{{ order_reference(item) }}</div>
+            <div class="primary-note"><span class="note-label">More details</span>{{ order_note(row) }}</div>
+            <div class="primary-designs" style="--design-count: {{ row.designs | length or 1 }}">
+              {% if row.designs %}{% for chip in row.designs %}{{ design_cell(chip) }}{% endfor %}
+              {% else %}<span class="empty-design">No design choices recorded</span>{% endif %}
+            </div>
+            <div class="primary-diagram" aria-label="Thobe Sheet">
           <svg class="thob-svg" viewBox="{{ thob_viewbox }}" role="img" aria-label="Thobe measurement sheet">
           <g>
             {%- for e in thob_front_ellipses %}
@@ -739,78 +215,24 @@
             {%- endfor %}
           </g>
         </svg>
-        </div>
-        {% if design_note %}
-          <div class="design-note design-note-below">{{ design_note }}</div>
-        {% endif %}
-      </div>
-    </div>
-    <div class="measurements">
-      <div class="measurement-group">
-        <h3>Body dimensions</h3>
-        <div class="measurement-grid">
-          {% for pair in body_pairs %}
-            {% set m0 = thob_values[pair[0]] %}
-            {% set m1 = thob_values[pair[1]] %}
-            {% if (m0 is defined and m0 is not none and m0 != '') or (m1 is defined and m1 is not none and m1 != '') %}
-              <div class="m-row">
-                {{ m_cell(m0, measurement_labels[pair[0]]) }}
-                {{ m_cell(m1, measurement_labels[pair[1]]) }}
-              </div>
-            {% endif %}
-          {% endfor %}
-        </div>
-      </div>
-      <div class="measurement-stack">
-      <div class="measurement-group">
-        <h3>Pockets</h3>
-        <div class="measurement-grid">
-          {% for pair in pocket_pairs %}
-            {% set m0 = thob_values[pair[0]] %}
-            {% set m1 = thob_values[pair[1]] %}
-            {% if (m0 is defined and m0 is not none and m0 != '') or (m1 is defined and m1 is not none and m1 != '') %}
-              <div class="m-row">
-                {{ m_cell(m0, measurement_labels[pair[0]]) }}
-                {{ m_cell(m1, measurement_labels[pair[1]]) }}
-              </div>
-            {% endif %}
-          {% endfor %}
-        </div>
-      </div>
-      <div class="measurement-group">
-        <h3>Style & finishing</h3>
-        <div class="measurement-grid">
-          {% for pair in style_pairs %}
-            {% set m0 = thob_values[pair[0]] %}
-            {% set m1 = thob_values[pair[1]] %}
-            {% if (m0 is defined and m0 is not none and m0 != '') or (m1 is defined and m1 is not none and m1 != '') %}
-              <div class="m-row">
-                {{ m_cell(m0, measurement_labels[pair[0]]) }}
-                {{ m_cell(m1, measurement_labels[pair[1]]) }}
-              </div>
-            {% endif %}
-          {% endfor %}
-        </div>
-      </div>
-      <div class="measurement-group">
-        <h3>Recorded</h3>
-        <div class="measurement-grid">
-          <div class="m">
-            <span>Measured on</span>
-            <span class="num" dir="ltr">{{ measured_on }}</span>
+            </div>
           </div>
-        </div>
-      </div>
-      </div>
-    </div>
-
-    <div class="closing">
-      <footer>
-        Thank you for your business
-        <div dir="ltr">ORD-{{ order.orderNumber }} · {{ invoice_date_time }}</div>
-      </footer>
-    </div>
+          {% else %}
+          <div class="compact-heading">
+            <div class="compact-type">{{ thobe_type(row, true) }}</div>
+            <div class="compact-material" dir="auto">{{ material_name(item) }}</div>
+            <div class="compact-note"><span class="note-label">More details</span>{{ order_note(row) }}</div>
+          </div>
+          <div class="compact-designs" style="--design-count: {{ row.designs | length or 1 }}">
+            {% if row.designs %}{% for chip in row.designs %}{{ design_cell(chip) }}{% endfor %}
+            {% else %}<span class="empty-design">No design choices recorded</span>{% endif %}
+          </div>
+          {% endif %}
+        </article>
+        {% endfor %}
+      </section>
+      <footer>INV-{{ order.invoiceNumber }} · Production orders</footer>
     </main>
-    {% include "print-fit.html" %}
+    {% endfor %}
   </body>
 </html>

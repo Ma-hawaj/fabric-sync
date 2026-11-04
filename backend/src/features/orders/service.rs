@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use uuid::Uuid;
 
 use crate::features::customers;
@@ -532,6 +532,42 @@ pub(crate) async fn get_order(state: &AppState, order_id: Uuid) -> Result<OrderD
         invoice_number: row.invoice_number,
         measurement,
     })
+}
+
+/// All production orders for the selected customer on the selected invoice.
+/// Keep each garment's own snapshot so documents can group matching diagrams,
+/// together with the invoice's promised target date.
+pub(crate) async fn order_document_details(
+    state: &AppState,
+    order_id: Uuid,
+) -> Result<(Vec<OrderDetail>, Option<NaiveDate>), AppError> {
+    let selected = get_order(state, order_id).await?;
+    let target_date = repository::invoice_target_date(state, selected.order.invoice_id).await?;
+    let rows = repository::customer_invoice_orders(
+        state,
+        selected.order.invoice_id,
+        selected.measurement.customer_id,
+    )
+    .await?;
+    let orders = assemble(state, rows).await?;
+    let mut measurements = HashMap::from([(selected.measurement.id, selected.measurement)]);
+    let mut details = Vec::with_capacity(orders.len());
+    for order in orders {
+        if !measurements.contains_key(&order.measurement_id) {
+            let measurement = customers::repository::get_measurement(state, order.measurement_id)
+                .await?
+                .ok_or_else(|| {
+                    AppError::NotFound(format!("measurement {} not found", order.measurement_id))
+                })?;
+            measurements.insert(order.measurement_id, measurement);
+        }
+        details.push(OrderDetail {
+            invoice_number: order.invoice_number,
+            measurement: measurements[&order.measurement_id].clone(),
+            order,
+        });
+    }
+    Ok((details, target_date))
 }
 
 /// Marks an order collected and records the payment taken at that pickup.
