@@ -70,14 +70,16 @@ pub async fn issue_gift_card(
     tx: &mut sqlx::PgTransaction<'_>,
     input: &CreateGiftCardInput,
     region: &str,
+    issued_by: Option<&str>,
 ) -> Result<(Uuid, String), AppError> {
-    issue_with_generator(tx, input, region, generate_code).await
+    issue_with_generator(tx, input, region, issued_by, generate_code).await
 }
 
 pub(super) async fn issue_with_generator(
     tx: &mut sqlx::PgTransaction<'_>,
     input: &CreateGiftCardInput,
     region: &str,
+    issued_by: Option<&str>,
     mut generate: impl FnMut() -> String,
 ) -> Result<(Uuid, String), AppError> {
     validate_amount(input.amount)?;
@@ -92,6 +94,7 @@ pub(super) async fn issue_with_generator(
             input.expires_on,
             input.bought_for.as_deref(),
             &phone,
+            issued_by,
         )
         .await?
         {
@@ -157,10 +160,16 @@ pub async fn get_gift_card_by_code(state: &AppState, code: &str) -> Result<GiftC
 pub async fn create_gift_card(
     state: &AppState,
     input: CreateGiftCardInput,
+    actor: &str,
 ) -> Result<GiftCard, AppError> {
     let mut tx = state.db().begin().await?;
-    let (gift_card_id, _) =
-        issue_gift_card(&mut tx, &input, &state.notifications().default_region).await?;
+    let (gift_card_id, _) = issue_gift_card(
+        &mut tx,
+        &input,
+        &state.notifications().default_region,
+        Some(actor),
+    )
+    .await?;
 
     tx.commit().await?;
 

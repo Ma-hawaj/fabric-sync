@@ -27,6 +27,9 @@ SQLx applies the files in version order:
    document-kind view for Bahrain single-purpose vouchers. Paid cards are taxed
    at issue, and redemptions exclude the previously taxed value. There are no
    legacy cards to migrate. See `docs/bahrain-gift-card-vat.md`.
+6. `0006_gift_card_issuer.sql` records the authenticated staff subject for cards
+   issued without an invoice. Unknown issuers remain null; invoice-backed cards
+   resolve their issuer from the invoice's creator when read.
 
 The core schema defines readable customer IDs (`C-6216`) and permanent
 per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.

@@ -12,6 +12,12 @@ use super::types::{GiftCard, GiftCardBalance};
 const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
+            COALESCE(g.issued_by, (
+                SELECT i.created_by FROM invoice_items item
+                JOIN invoices i ON i.id = item.invoice_id
+                WHERE item.gift_card_id = g.id AND item.kind = 'gift_card'
+                ORDER BY item.id LIMIT 1
+            )) AS issued_by,
             NOT EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=g.id AND kind='gift_card') AS vat_review_required,
             g.id,
             g.code,
@@ -106,6 +112,12 @@ pub async fn get_gift_card_by_code(
         GiftCard,
         r#"
         SELECT
+            COALESCE(g.issued_by, (
+                SELECT i.created_by FROM invoice_items item
+                JOIN invoices i ON i.id = item.invoice_id
+                WHERE item.gift_card_id = g.id AND item.kind = 'gift_card'
+                ORDER BY item.id LIMIT 1
+            )) AS "issued_by?",
             NOT EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=g.id AND kind='gift_card') AS "vat_review_required!",
             g.id,
             g.code,
@@ -171,15 +183,16 @@ pub async fn try_insert_generated_gift_card(
     expires_on: Option<NaiveDate>,
     bought_for: Option<&str>,
     recipient_phone: &str,
+    issued_by: Option<&str>,
 ) -> Result<Option<Uuid>, AppError> {
     Ok(sqlx::query_scalar!(
         r#"
-        INSERT INTO gift_cards (code, initial_amount, balance, customer_id, expires_on, bought_for, recipient_phone)
-        VALUES ($1, $2::float8, $2::float8, $3, $4, NULLIF(BTRIM($5), ''), $6)
+        INSERT INTO gift_cards (code, initial_amount, balance, customer_id, expires_on, bought_for, recipient_phone, issued_by)
+        VALUES ($1, $2::float8, $2::float8, $3, $4, NULLIF(BTRIM($5), ''), $6, $7)
         ON CONFLICT (code) DO NOTHING
         RETURNING id
         "#,
-        code, amount, customer_id, expires_on, bought_for, recipient_phone,
+        code, amount, customer_id, expires_on, bought_for, recipient_phone, issued_by,
     ).fetch_optional(&mut **tx).await?)
 }
 

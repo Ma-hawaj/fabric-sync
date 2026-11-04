@@ -41,7 +41,9 @@ release it to revenue on fulfillment, and record the BHD 10 VAT at issue.
 ## Complimentary and replacement cards
 
 The separate **Issue Gift Card** page creates complimentary/replacement records,
-not paid sales. These records have no sale invoice and cannot use the paid
+not paid sales. The server records the signed-in operator as `issued_by`; the
+gift-card list displays their staff name. Clients cannot set or edit this field.
+These records have no sale invoice and cannot use the paid
 single-purpose voucher redemption flow. Their VAT treatment must be established
 separately before use. Paid cards sold through an invoice are immediately eligible
 for normal redemption, subject to balance, expiry and active-status checks.

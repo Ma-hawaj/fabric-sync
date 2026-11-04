@@ -74,7 +74,9 @@ fn send(preview: &delivery::Preview, request_id: Uuid) -> delivery::SendInput {
 #[sqlx::test]
 async fn short_code_lookup_and_redemption_accept_compact_input(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
-    let card = service::create_gift_card(&state, input()).await.unwrap();
+    let card = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
     let payload = card.code.strip_prefix("GC-").unwrap().replace('-', "");
     let spaced = payload
         .as_bytes()
@@ -121,7 +123,9 @@ async fn short_code_lookup_and_redemption_accept_compact_input(pool: PgPool) {
 #[sqlx::test]
 async fn generated_code_collisions_retry_without_aborting_the_transaction(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
-    let existing = service::create_gift_card(&state, input()).await.unwrap();
+    let existing = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
     let fresh = loop {
         let code = service::generate_code();
         if code != existing.code {
@@ -130,20 +134,29 @@ async fn generated_code_collisions_retry_without_aborting_the_transaction(pool: 
     };
     let mut attempts = 0;
     let mut tx = pool.begin().await.unwrap();
-    let (id, code) = service::issue_with_generator(&mut tx, &input(), "BH", || {
-        attempts += 1;
-        if attempts == 1 {
-            existing.code.clone()
-        } else {
-            fresh.clone()
-        }
-    })
-    .await
-    .unwrap();
+    let (id, code) =
+        service::issue_with_generator(&mut tx, &input(), "BH", Some("retry-issuer"), || {
+            attempts += 1;
+            if attempts == 1 {
+                existing.code.clone()
+            } else {
+                fresh.clone()
+            }
+        })
+        .await
+        .unwrap();
     assert_eq!(attempts, 2);
     assert_eq!(code, fresh);
     tx.commit().await.unwrap();
     assert_ne!(id, existing.id);
+    assert_eq!(
+        service::get_gift_card_by_code(&state, &code)
+            .await
+            .unwrap()
+            .issued_by
+            .as_deref(),
+        Some("retry-issuer")
+    );
     assert_eq!(
         service::get_gift_card_by_code(&state, &existing.code)
             .await
@@ -156,15 +169,18 @@ async fn generated_code_collisions_retry_without_aborting_the_transaction(pool: 
 #[sqlx::test]
 async fn repeated_collisions_stop_without_poisoning_the_transaction(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
-    let existing = service::create_gift_card(&state, input()).await.unwrap();
+    let existing = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
     let mut attempts = 0;
     let mut tx = pool.begin().await.unwrap();
-    let error = service::issue_with_generator(&mut tx, &input(), "BH", || {
-        attempts += 1;
-        existing.code.clone()
-    })
-    .await
-    .unwrap_err();
+    let error =
+        service::issue_with_generator(&mut tx, &input(), "BH", Some("retry-issuer"), || {
+            attempts += 1;
+            existing.code.clone()
+        })
+        .await
+        .unwrap_err();
     assert!(matches!(error, AppError::Conflict(_)));
     assert_eq!(attempts, 8);
     let usable: i32 = sqlx::query_scalar("SELECT 1")
@@ -178,7 +194,9 @@ async fn repeated_collisions_stop_without_poisoning_the_transaction(pool: PgPool
 #[sqlx::test]
 async fn invalid_code_formats_are_not_looked_up_or_redeemed(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
-    let card = service::create_gift_card(&state, input()).await.unwrap();
+    let card = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
     let mut tx = pool.begin().await.unwrap();
     for code in ["GC-ABC123", "GC-0123456789ABCDEF0123456789ABCDEF"] {
         assert!(matches!(
@@ -203,8 +221,12 @@ async fn invalid_code_formats_are_not_looked_up_or_redeemed(pool: PgPool) {
 #[sqlx::test]
 async fn codes_are_generated_and_recipient_is_separate_from_buyer(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
-    let first = service::create_gift_card(&state, input()).await.unwrap();
-    let second = service::create_gift_card(&state, input()).await.unwrap();
+    let first = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
+    let second = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
     assert!(first.code.starts_with("GC-"));
     assert_eq!(first.code.len(), 17);
     assert_ne!(first.code, "USER-SUPPLIED");
@@ -223,7 +245,7 @@ async fn codes_are_generated_and_recipient_is_separate_from_buyer(pool: PgPool) 
         let mut invalid = input();
         invalid.recipient_phone = phone.into();
         assert!(matches!(
-            service::create_gift_card(&state, invalid).await,
+            service::create_gift_card(&state, invalid, "test-staff").await,
             Err(AppError::BadRequest(_))
         ));
     }
@@ -233,7 +255,9 @@ async fn codes_are_generated_and_recipient_is_separate_from_buyer(pool: PgPool) 
 async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks(pool: PgPool) {
     let (url, mock) = mock_server().await;
     let state = test_support::state(pool.clone(), None, Some(url)).await;
-    let card = service::create_gift_card(&state, input()).await.unwrap();
+    let card = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
     let preview = delivery::preview(&state, card.id).await.unwrap();
     assert!(preview.body.contains(&card.code));
     assert!(preview.body.contains("Gift Recipient"));
@@ -323,8 +347,12 @@ async fn unconfigured_queued_parameter_does_not_block_later_deliveries(pool: PgP
 async fn assert_invalid_preview_does_not_block_queue(pool: PgPool, invalid_phone: bool) {
     let (url, mock) = mock_server().await;
     let state = test_support::state(pool.clone(), None, Some(url)).await;
-    let invalid = service::create_gift_card(&state, input()).await.unwrap();
-    let valid = service::create_gift_card(&state, input()).await.unwrap();
+    let invalid = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
+    let valid = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
     for card in [&invalid, &valid] {
         let preview = delivery::preview(&state, card.id).await.unwrap();
         delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff")
@@ -378,7 +406,9 @@ async fn assert_invalid_preview_does_not_block_queue(pool: PgPool, invalid_phone
 async fn changed_recipient_invalidates_preview_and_cancels_queued_delivery(pool: PgPool) {
     let (url, mock) = mock_server().await;
     let state = test_support::state(pool.clone(), None, Some(url)).await;
-    let card = service::create_gift_card(&state, input()).await.unwrap();
+    let card = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
     let preview = delivery::preview(&state, card.id).await.unwrap();
     let changes: UpdateGiftCardInput =
         serde_json::from_value(json!({"boughtFor":"New Recipient","recipientPhone":"33991122"}))
@@ -418,7 +448,9 @@ async fn changed_recipient_invalidates_preview_and_cancels_queued_delivery(pool:
 async fn retries_known_failures_but_never_replays_an_unknown_submission(pool: PgPool) {
     let (url, mock) = mock_server().await;
     let state = test_support::state(pool.clone(), None, Some(url)).await;
-    let card = service::create_gift_card(&state, input()).await.unwrap();
+    let card = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
     let preview = delivery::preview(&state, card.id).await.unwrap();
     delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff")
         .await
@@ -462,7 +494,9 @@ async fn retries_known_failures_but_never_replays_an_unknown_submission(pool: Pg
 async fn image_upload_failure_retries_without_submitting_a_message(pool: PgPool) {
     let (url, mock) = mock_server().await;
     let state = test_support::state(pool.clone(), None, Some(url)).await;
-    let card = service::create_gift_card(&state, input()).await.unwrap();
+    let card = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
     let preview = delivery::preview(&state, card.id).await.unwrap();
     delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff")
         .await
@@ -483,7 +517,9 @@ async fn image_upload_failure_retries_without_submitting_a_message(pool: PgPool)
 async fn damaged_approved_image_is_never_uploaded(pool: PgPool) {
     let (url, mock) = mock_server().await;
     let state = test_support::state(pool.clone(), None, Some(url)).await;
-    let card = service::create_gift_card(&state, input()).await.unwrap();
+    let card = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
     let preview = delivery::preview(&state, card.id).await.unwrap();
     delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff")
         .await
@@ -512,7 +548,9 @@ async fn damaged_approved_image_is_never_uploaded(pool: PgPool) {
 #[sqlx::test]
 async fn image_download_works_without_whatsapp_setup(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
-    let card = service::create_gift_card(&state, input()).await.unwrap();
+    let card = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
     let image = image::get(&state, card.id).await.unwrap();
     assert!(image.png.starts_with(b"\x89PNG\r\n\x1a\n"));
     assert_eq!(image.filename, format!("gift-card-{}.png", card.id));
@@ -683,7 +721,9 @@ async fn invoice_sales_generate_codes_and_keep_them_on_edit_until_delivery(pool:
 #[sqlx::test]
 async fn invoice_edits_generate_new_codes_for_foreign_or_invalid_submissions(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
-    let foreign = service::create_gift_card(&state, input()).await.unwrap();
+    let foreign = service::create_gift_card(&state, input(), "test-staff")
+        .await
+        .unwrap();
     let mut sale = json!({"expectedVatRate":0.1,"discountUnit":"amount","giftCards":[
         {"amount":50,"recipientPhone":"33112233"},
         {"amount":75,"recipientPhone":"33998877"}

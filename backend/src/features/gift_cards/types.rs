@@ -5,6 +5,8 @@ use uuid::Uuid;
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct GiftCard {
+    /// Authenticated issuer; invoice-backed cards can resolve their creator.
+    pub issued_by: Option<String>,
     pub vat_review_required: bool,
     pub id: Uuid,
     pub code: String,

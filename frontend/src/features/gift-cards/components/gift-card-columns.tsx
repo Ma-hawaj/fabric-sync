@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
 import { CURRENCY } from '@/lib/currency'
+import { StaffName } from '@/features/users/components/staff-name'
 import { giftCardStatus } from '../lib/gift-card-status'
 import type { GiftCard } from '../types/gift-card'
 
@@ -43,6 +44,15 @@ export const getGiftCardColumns = (
         placeholder: 'Filter code...',
         variant: 'text',
       },
+    },
+    {
+      accessorKey: 'issuedBy',
+      size: 180,
+      header: 'Issued by',
+      cell: ({ row }) => <StaffName userId={row.original.issuedBy} />,
+      enableSorting: false,
+      enableColumnFilter: false,
+      meta: { label: 'Issued by' },
     },
     {
       accessorKey: 'initialAmount',

@@ -186,6 +186,7 @@ async fn uninvoiced_cards_require_separate_vat_treatment_without_spending(pool: 
     let comp = crate::features::gift_cards::service::create_gift_card(
         &state,
         serde_json::from_value(json!({"amount":55,"recipientPhone":"33112233"})).unwrap(),
+        "test-staff",
     )
     .await
     .unwrap();

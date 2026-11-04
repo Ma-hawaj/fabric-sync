@@ -34,6 +34,7 @@ function Harness() {
 }
 
 const card: GiftCard = {
+  issuedBy: null,
   id: 'card-1',
   code: 'GC-7KMP-4RWT-9DXH',
   initialAmount: 50,

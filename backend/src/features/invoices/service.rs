@@ -2131,7 +2131,7 @@ async fn write_gift_card_sales(
                 bought_for: card.bought_for.clone(),
                 recipient_phone: card.recipient_phone.clone(),
             };
-            gift_cards_service::issue_gift_card(tx, &input, region).await?
+            gift_cards_service::issue_gift_card(tx, &input, region, None).await?
         } else {
             // Existing invoice lines retain their issued code when rebuilt.
             let code = gift_cards_service::normalize_code(&card.code)?;

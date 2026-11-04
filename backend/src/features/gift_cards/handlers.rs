@@ -73,10 +73,16 @@ pub async fn get_gift_card_by_code(
 
 pub async fn create_gift_card(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(input): Json<CreateGiftCardInput>,
 ) -> Result<Json<GiftCard>, AppError> {
-    Ok(Json(service::create_gift_card(&state, input).await?))
+    let actor = user
+        .subject()
+        .filter(|subject| !subject.trim().is_empty())
+        .ok_or_else(|| {
+            AppError::Unauthorized("a user identity is required to issue a gift card".into())
+        })?;
+    Ok(Json(service::create_gift_card(&state, input, actor).await?))
 }
 
 pub async fn update_gift_card(
