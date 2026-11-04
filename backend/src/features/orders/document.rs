@@ -14,9 +14,7 @@ use serde::Serialize;
 
 use crate::{
     config::InvoiceBranding,
-    document::{
-        format_amount, format_date, format_datetime, format_measurement, format_quantity, CURRENCY,
-    },
+    document::{format_date, format_datetime, format_measurement},
     error::AppError,
     features::design_options::{service as design_catalog, types::DesignAsset as CatalogAsset},
     state::AppState,
@@ -147,8 +145,8 @@ fn design_pairs(order: &OrderListItem) -> Vec<(String, String)> {
     .collect()
 }
 
-/// The chips for the order, in fixed slot order, so a thobe always prints its
-/// type first regardless of which fields were filled in.
+/// Design choices in fixed slot order. Thobe type is text in the order column,
+/// never an illustration in the design grid.
 fn order_designs(
     order: &OrderListItem,
     catalog: &HashMap<(String, String), CatalogAsset>,
@@ -156,6 +154,7 @@ fn order_designs(
     SLOT_TITLES
         .iter()
         .enumerate()
+        .skip(1)
         .filter_map(|(slot, (title_ar, title_en))| {
             let raw = design_value(order, slot)?;
             let (label, image) = resolve_design(SLOT_SECTIONS[slot], raw, catalog);
@@ -192,46 +191,93 @@ fn environment(branding: &InvoiceBranding) -> Result<Environment<'static>, AppEr
     crate::document::template_environment(branding, TEMPLATE_NAME, DEFAULT_TEMPLATE)
 }
 
+/// One complete production row; no financial fields are printed.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProductionRow<'a> {
+    order: &'a OrderListItem,
+    thobe_type: Option<String>,
+    designs: Vec<DesignChip<'static>>,
+    design_note: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProductionSheet<'a> {
+    order: &'a OrderDetail,
+    invoice_date_time: String,
+    thob_values: BTreeMap<String, String>,
+    rows: Vec<ProductionRow<'a>>,
+}
+
+fn production_sheets<'a>(
+    details: &'a [OrderDetail],
+    catalog: &HashMap<(String, String), CatalogAsset>,
+    timezone: chrono_tz::Tz,
+) -> Vec<ProductionSheet<'a>> {
+    let mut sheets: Vec<ProductionSheet<'a>> = Vec::new();
+    for detail in details {
+        let row = ProductionRow {
+            order: &detail.order,
+            thobe_type: design_value(&detail.order, 0)
+                .map(|raw| resolve_design("thob_type", raw, catalog).0),
+            designs: order_designs(&detail.order, catalog),
+            design_note: design_note(&detail.order),
+        };
+        // Different snapshots must never share a diagram, even for the same
+        // customer. Preserve the order-number ordering supplied by the query.
+        if let Some(sheet) = sheets
+            .iter_mut()
+            .find(|sheet| sheet.order.measurement.id == detail.measurement.id)
+        {
+            sheet.rows.push(row);
+        } else {
+            sheets.push(ProductionSheet {
+                order: detail,
+                invoice_date_time: format_datetime(&detail.order.invoice_date, timezone),
+                thob_values: formatted_measurement(detail),
+                rows: vec![row],
+            });
+        }
+    }
+    sheets
+}
+
 pub async fn render_order_document(
     state: &AppState,
     order_id: uuid::Uuid,
 ) -> Result<String, AppError> {
-    let detail = service::get_order(state, order_id).await?;
-    let branding = state.invoice_branding();
-    let timezone = state.timezone()?;
-    let thob_values = formatted_measurement(&detail);
-
-    // The catalog rows behind every stored design value, in one batched query.
-    let pairs: HashSet<(String, String)> = design_pairs(&detail.order).into_iter().collect();
+    let (details, target_date) = service::order_document_details(state, order_id).await?;
+    // Resolve every order's catalog choices in a single batch.
+    let pairs: HashSet<(String, String)> = details
+        .iter()
+        .flat_map(|detail| design_pairs(&detail.order))
+        .collect();
     let catalog = design_catalog::lookup_map(state, &pairs).await?;
+    render_document(
+        &details,
+        state.invoice_branding(),
+        &catalog,
+        state.timezone()?,
+        target_date,
+    )
+}
 
+fn render_document(
+    details: &[OrderDetail],
+    branding: &InvoiceBranding,
+    catalog: &HashMap<(String, String), CatalogAsset>,
+    timezone: chrono_tz::Tz,
+    target_date: Option<chrono::NaiveDate>,
+) -> Result<String, AppError> {
     let env = environment(branding)?;
     let template = env.get_template(TEMPLATE_NAME)?;
     Ok(template.render(context! {
-        order => minijinja::Value::from_serialize(&detail),
-        // The parent invoice's creation moment with the time of day, and the
-        // measurement date — pre-formatted day-first in the shop's timezone,
-        // since the raw timestamp serializes as RFC 3339 and the raw date as
-        // year-first ISO.
-        invoice_date_time => format_datetime(&detail.order.invoice_date, timezone),
-        measured_on => format_date(&detail.measurement.date),
+        sheets => minijinja::Value::from_serialize(production_sheets(details, catalog, timezone)),
         company => minijinja::Value::from_serialize(branding),
-        currency => CURRENCY,
-        // Amounts are pre-formatted rather than left to the template, so that
-        // editing the design can't accidentally change how money is written.
-        amounts => minijinja::Value::from_serialize(formatted_amounts(&detail)),
-        // The design chips and the free-text note, so the order sheet carries
-        // the same made-to-measure specification the invoice document prints
-        // per line — a tailor cutting from this sheet must see every choice.
-        designs => minijinja::Value::from_serialize(order_designs(&detail.order, &catalog)),
-        design_note => minijinja::Value::from_serialize(design_note(&detail.order)),
-        // The thobe sheet: fixed slot geometry shared with the frontend
-        // (`thob-diagram.tsx` THOBE_VALUE_SLOTS). Values print as plain
-        // numbers at their slots, so there is nothing to lay out — the
-        // template skips whatever the snapshot didn't record.
+        target_date => target_date.as_ref().map(format_date),
         thob_viewbox => THOB_VIEWBOX,
         thob_slots => minijinja::Value::from_serialize(thobe_slots()),
-        thob_values => minijinja::Value::from_serialize(&thob_values),
         thob_front_paths => minijinja::Value::from_serialize(thobe_front_paths()),
         thob_front_ellipses => minijinja::Value::from_serialize(thobe_front_ellipses()),
         thob_back_paths => minijinja::Value::from_serialize(thobe_back_paths()),
@@ -239,34 +285,6 @@ pub async fn render_order_document(
         thob_dims => minijinja::Value::from_serialize(thobe_dims()),
         thob_arrows => minijinja::Value::from_serialize(thobe_arrows()),
     })?)
-}
-
-fn formatted_amounts(detail: &OrderDetail) -> BTreeMap<String, String> {
-    let mut amounts = BTreeMap::new();
-
-    amounts.insert(
-        "materialAmount".into(),
-        format_quantity(detail.order.material_amount),
-    );
-    amounts.insert("price".into(), format_amount(detail.order.price));
-    amounts.insert(
-        "total".into(),
-        format_amount(detail.order.invoice_total_price),
-    );
-    amounts.insert(
-        "amountPaid".into(),
-        format_amount(detail.order.invoice_amount_paid),
-    );
-    amounts.insert(
-        "balanceDue".into(),
-        format_amount(detail.order.invoice_balance_due),
-    );
-
-    for (index, repair) in detail.order.repairs.iter().enumerate() {
-        amounts.insert(format!("repair{index}"), format_amount(repair.charge));
-    }
-
-    amounts
 }
 
 fn push_number(values: &mut BTreeMap<String, String>, key: &str, value: Option<f64>) {
@@ -285,9 +303,8 @@ fn push_text(values: &mut BTreeMap<String, String>, key: &str, value: &Option<St
 }
 
 /// Every recorded measurement as a display string, keyed by its camelCase
-/// field name (the same keys `measurement_labels` and the sheet slots use in
-/// the template). Only fields the snapshot actually captured appear — the
-/// sheet renders a slot only for recorded values.
+/// field name (the same keys the sheet slots use in the template). Only fields
+/// the snapshot actually captured appear.
 fn formatted_measurement(detail: &OrderDetail) -> BTreeMap<String, String> {
     let m = &detail.measurement;
     let mut values = BTreeMap::new();
@@ -716,8 +733,9 @@ mod tests {
         let html = test_render(&detail, &branding());
         assert!(html.contains("<dt>Customer ID</dt>"));
         assert!(html.contains("<dd dir=\"ltr\">C-23</dd>"));
-        assert!(html.contains("<dt>Measurement ID</dt>"));
-        assert!(html.contains("<dd dir=\"ltr\">C-23-001</dd>"));
+        assert!(!html.contains("Measurement ID"));
+        assert!(!html.contains("C-23-001"));
+        assert!(!html.contains("Measured on"));
     }
 
     #[sqlx::test]
@@ -748,26 +766,8 @@ mod tests {
             assert_eq!(detail.order.customer_number, number);
             let html = render_order_document(&state, *order).await.unwrap();
             assert!(html.contains(&format!("<dd dir=\"ltr\">C-{number}</dd>")));
-            assert!(html.contains(&format!("<dd dir=\"ltr\">C-{number}-001</dd>")));
+            assert!(!html.contains("Measurement ID"));
         }
-    }
-
-    #[test]
-    fn amounts_are_pre_formatted_and_balance_is_floored_at_zero() {
-        let detail = OrderDetail {
-            order: services_order(),
-            invoice_number: 7,
-            measurement: tests_support::measurement(),
-        };
-
-        let amounts = formatted_amounts(&detail);
-        assert_eq!(amounts["materialAmount"], "3.5");
-        assert_eq!(amounts["price"], "100.000");
-        assert_eq!(amounts["total"], "300.000");
-        assert_eq!(amounts["amountPaid"], "120.000");
-        // The balance arrives floored at zero from the query — a document
-        // never prints a negative due, even on an overpaid legacy invoice.
-        assert_eq!(amounts["balanceDue"], "180.000");
     }
 
     #[test]
@@ -806,41 +806,24 @@ mod tests {
             measurement: tests_support::measurement(),
         };
         let html = test_render(&detail, &branding());
-        assert!(html.contains("Customer-provided material:"));
+        assert!(html.contains("Customer-provided material"));
         assert!(html.contains("White &lt;linen&gt;"));
         assert!(html.contains("Urgent"));
     }
 
     fn test_render(detail: &OrderDetail, branding: &InvoiceBranding) -> String {
-        let env = environment(branding).unwrap();
-        let template = env.get_template(TEMPLATE_NAME).unwrap();
-        let timezone = chrono_tz::Asia::Bahrain;
-        let thob_values = formatted_measurement(detail);
-        template
-            .render(context! {
-                order => minijinja::Value::from_serialize(detail),
-                invoice_date_time => format_datetime(&detail.order.invoice_date, timezone),
-                measured_on => format_date(&detail.measurement.date),
-                company => minijinja::Value::from_serialize(branding),
-                currency => CURRENCY,
-                amounts => minijinja::Value::from_serialize(formatted_amounts(detail)),
-                designs => minijinja::Value::from_serialize(order_designs(&detail.order, &empty_catalog())),
-                design_note => minijinja::Value::from_serialize(design_note(&detail.order)),
-                thob_viewbox => THOB_VIEWBOX,
-                thob_slots => minijinja::Value::from_serialize(thobe_slots()),
-                thob_values => minijinja::Value::from_serialize(&thob_values),
-                thob_front_paths => minijinja::Value::from_serialize(thobe_front_paths()),
-                thob_front_ellipses => minijinja::Value::from_serialize(thobe_front_ellipses()),
-                thob_back_paths => minijinja::Value::from_serialize(thobe_back_paths()),
-                thob_back_ellipses => minijinja::Value::from_serialize(thobe_back_ellipses()),
-                thob_dims => minijinja::Value::from_serialize(thobe_dims()),
-                thob_arrows => minijinja::Value::from_serialize(thobe_arrows()),
-            })
-            .unwrap()
+        render_document(
+            std::slice::from_ref(detail),
+            branding,
+            &empty_catalog(),
+            chrono_tz::Asia::Bahrain,
+            Some(chrono::NaiveDate::from_ymd_opt(2026, 8, 6).unwrap()),
+        )
+        .unwrap()
     }
 
     #[test]
-    fn fraction_values_match_between_diagram_and_measurement_tables() {
+    fn fraction_values_and_escaped_text_stay_on_the_diagram() {
         let mut measurement = tests_support::measurement();
         measurement.waist = Some(38.5);
         measurement.front_pocket_length = Some(6.125);
@@ -854,20 +837,18 @@ mod tests {
             measurement,
         };
         let html = test_render(&detail, &branding());
-        let (diagram, tables) = html.split_once("<div class=\"measurements\">").unwrap();
+        let diagram = &html;
 
         for value in ["38 ½", "6 ⅛", "3 ¾", "7.13", "0", "No &lt;16x14&gt;"] {
             assert!(
                 diagram.contains(&format!(">{value}</text>")),
                 "diagram: {value}"
             );
-            assert!(
-                tables.contains(&format!("<span class=\"num\">{value}</span>")),
-                "table: {value}"
-            );
         }
-        assert!(tables.contains("<span class=\"num\">body</span>"));
-        assert!(tables.contains("<span class=\"num\">medium</span>"));
+        assert!(html.contains("<dt>Type</dt><dd>body</dd>"));
+        assert!(html.contains("<dt>Fit</dt><dd>medium</dd>"));
+        assert!(!html.contains("measurement-grid"));
+        assert!(!html.contains("Body dimensions"));
     }
 
     #[test]
@@ -886,8 +867,7 @@ mod tests {
         // One sheet, front and back together.
         assert!(html.contains("Thobe Sheet"));
         assert!(html.contains("0 -32 800 667"));
-        // The shorter tables stack in one column beside Body dimensions.
-        assert!(html.contains("<div class=\"measurement-stack\">"));
+        assert!(!html.contains("measurement-stack"));
         // Every drawn ellipse (collars, cuffs) carries the garment class —
         // without it SVG falls back to a solid black fill on the paper.
         // Six here: the yoke is gated on fullBody, which isn't recorded.
@@ -895,9 +875,12 @@ mod tests {
         // The document is titled by the order's own readable number, not an
         // id prefix.
         assert!(html.contains("ORD-12"));
-        // The material prints as its SKU, not its name.
+        // The material name and SKU both remain on the production sheet.
         assert!(html.contains("CTN-001"));
-        assert!(!html.contains("Cotton"));
+        assert!(html.contains("Cotton"));
+        assert!(!html.contains("Quantity:"));
+        assert!(!html.contains("Made at:"));
+        assert!(!html.contains("Collection:"));
         // Recorded values print as plain numbers at their slots, whole
         // numbers trimmed.
         assert!(html.contains(">120</text>"));
@@ -907,9 +890,7 @@ mod tests {
         assert!(html.contains("No 16x14"));
         // No units ride the slots.
         assert!(!html.contains("inch"));
-        // Unrecorded fields render nothing on the sheet — no slot group at
-        // all. (Cuff Size appears nowhere else on the page: the measurement
-        // table only lists recorded fields.)
+        // Unrecorded fields render no slot group on the diagram.
         assert!(!html.contains("<title>Cuff Size</title>"));
         // The yoke circle doubles as the full-body anchor: hidden until that
         // value is recorded...
@@ -947,20 +928,12 @@ mod tests {
         let chips = order_designs(&order, &empty_catalog());
         assert_eq!(
             chips.iter().map(|c| c.title_en).collect::<Vec<_>>(),
-            vec![
-                "Thobe",
-                "Collar",
-                "Sleeve",
-                "Pocket",
-                "Side Pocket",
-                "Patti",
-                "EMD"
-            ]
+            vec!["Collar", "Sleeve", "Pocket", "Side Pocket", "Patti", "EMD"]
         );
         // Catalog slugs resolve to their display labels.
         assert_eq!(
             chips.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(),
-            vec!["Thobx", "3", "Open", "Round", "type-2", "Normal", "6"]
+            vec!["3", "Open", "Round", "type-2", "Normal", "6"]
         );
     }
 
@@ -979,11 +952,11 @@ mod tests {
     #[test]
     fn a_catalog_design_carries_a_webp_data_uri() {
         let mut order = services_order();
-        order.thobe_type = Some("thobx".to_string());
+        order.sleeve = Some("open".to_string());
 
         let chips = order_designs(&order, &empty_catalog());
         assert_eq!(chips.len(), 1);
-        assert_eq!(chips[0].label, "Thobx");
+        assert_eq!(chips[0].label, "Open");
         let image = chips[0].image.as_deref().unwrap();
         assert!(image.starts_with("data:image/webp;base64,"));
         assert!(!image.split_once(',').unwrap().1.is_empty());
@@ -999,11 +972,11 @@ mod tests {
         order.sleeve = Some("Cuff".to_string());
 
         let chips = order_designs(&order, &empty_catalog());
-        assert_eq!(chips.len(), 3);
+        assert_eq!(chips.len(), 2);
         for chip in &chips {
             assert!(chip.image.is_none());
         }
-        assert_eq!(chips[2].label, "Cuff");
+        assert_eq!(chips[1].label, "Cuff");
     }
 
     #[test]
@@ -1050,12 +1023,12 @@ mod tests {
         // would look the chip up as missing and render an empty title next to
         // the image, leaving no clue which slot the image belongs to.
         let mut order = services_order();
-        order.thobe_type = Some("thobx".to_string());
+        order.sleeve = Some("open".to_string());
 
         let value = serde_json::to_value(order_designs(&order, &empty_catalog())).unwrap();
-        assert_eq!(value[0]["titleAr"], "النوع");
-        assert_eq!(value[0]["titleEn"], "Thobe");
-        assert_eq!(value[0]["label"], "Thobx");
+        assert_eq!(value[0]["titleAr"], "الكم");
+        assert_eq!(value[0]["titleEn"], "Sleeve");
+        assert_eq!(value[0]["label"], "Open");
         assert!(value[0]["image"].as_str().is_some());
     }
 
@@ -1076,24 +1049,21 @@ mod tests {
         // identifiable even when the stored value itself is cryptic ("3").
         assert!(html.contains("Thobe"));
         assert!(html.contains("Collar"));
-        // Catalog matches print their display label with the raster...
+        // Thobe type prints as text above the diagram.
         assert!(html.contains("Thobx"));
         // ...while legacy values print as text-only chips rather than
         // disappearing.
         assert!(html.contains("Saudi"));
         assert!(html.contains("double stitching"));
-        // The free-text note prints below the diagram, not in the sidebar.
-        let svg_end = html.find("</svg>").unwrap();
+        // The first order note is directly above its measurement diagram.
+        let svg_start = html.find("<svg ").unwrap();
         let note = html.find("double stitching").unwrap();
-        assert!(note > svg_end);
-        // Two choices fit the sidebar — no overflow strip is rendered below
-        // the sheet. (Matched on the div: the stylesheet always names the
-        // class.)
-        assert!(!html.contains("<div class=\"design-overflow\">"));
+        assert!(note < svg_start);
+        assert!(!html.contains("alt=\"Thobx\""));
     }
 
     #[test]
-    fn all_seven_design_choices_stay_together_beside_the_sheet() {
+    fn first_order_designs_sit_beside_the_sheet_and_thobe_type_is_text_only() {
         let mut order = services_order();
         order.thobe_type = Some("thobx".to_string());
         order.collar = Some("Saudi".to_string());
@@ -1109,39 +1079,224 @@ mod tests {
         };
         let html = test_render(&detail, &branding());
 
-        assert_eq!(html.matches("<div class=\"design-cell\">").count(), 7);
-        assert!(html.find("with button").unwrap() < html.find("<svg").unwrap());
+        assert_eq!(html.matches("<div class=\"design-cell\">").count(), 6);
+        assert!(html.contains("<span class=\"thobe-type-label\">Thobe type</span>"));
+        assert!(html.contains("<strong class=\"thobe-type-name\" dir=\"auto\">Thobx</strong>"));
+        assert!(html.find("with button").unwrap() < html.find("<svg ").unwrap());
     }
 
     #[test]
-    fn paired_measurements_share_a_row_despite_gaps_above() {
-        // neckSize recorded while sleeveHalf (two rows up) is not: neck size
-        // must still sit beside neck width instead of sliding up the grid.
-        let mut measurement = tests_support::measurement();
-        measurement.neck_size = Some(22.0);
-        measurement.neck_width = Some(18.0);
-        measurement.front_pocket_length_by_width = Some("No 16x14".to_string());
+    fn designs_render_an_image_or_text_without_a_duplicate_caption() {
+        let mut order = services_order();
+        order.collar = Some("3".into());
+        order.emd = Some("Custom <EMD>".into());
+        let detail = OrderDetail {
+            order,
+            invoice_number: 7,
+            measurement: tests_support::measurement(),
+        };
+        let html = test_render(&detail, &branding());
+        let cells: Vec<_> = html.split("<div class=\"design-cell\">").skip(1).collect();
+        assert!(cells[0].contains("<img "));
+        assert!(!cells[0].contains("class=\"design-name\""));
+        assert!(cells[1].contains("Custom &lt;EMD&gt;"));
+        assert!(!cells[1].contains("<img"));
+    }
+
+    #[test]
+    fn shared_measurements_produce_one_diagram_with_all_order_rows() {
+        let first = OrderDetail {
+            order: services_order(),
+            invoice_number: 7,
+            measurement: tests_support::measurement(),
+        };
+        let mut second = first.clone();
+        second.order.id = uuid::Uuid::new_v4();
+        second.order.order_number = 13;
+        second.order.material_sku = Some("LIN-002".into());
+        second.order.material_amount = 4.0;
+        second.order.emd = Some("6".into());
+        second.order.more_details = Some("Second order only".into());
+        let html = render_document(
+            &[first, second],
+            &branding(),
+            &empty_catalog(),
+            chrono_tz::Asia::Bahrain,
+            Some(chrono::NaiveDate::from_ymd_opt(2026, 8, 6).unwrap()),
+        )
+        .unwrap();
+        assert_eq!(html.matches("<svg ").count(), 1);
+        assert_eq!(html.matches("class=\"order-row\"").count(), 2);
+        let rows: Vec<_> = html.split("<article class=\"order-row\"").skip(1).collect();
+        assert!(rows[0].contains("ORD-12"));
+        assert!(rows[0].contains("CTN-001"));
+        assert!(!rows[0].contains("LIN-002"));
+        assert!(!rows[0].contains("Second order only"));
+        assert!(rows[1].contains("ORD-13"));
+        assert!(rows[1].contains("LIN-002"));
+        assert!(!rows[1].contains("Quantity:"));
+        assert!(rows[1].contains("Second order only"));
+    }
+
+    #[test]
+    fn different_snapshots_keep_their_own_diagrams_and_orders() {
+        let first = OrderDetail {
+            order: services_order(),
+            invoice_number: 7,
+            measurement: tests_support::measurement(),
+        };
+        let mut second = first.clone();
+        second.order.order_number = 13;
+        second.order.measurement_id = uuid::Uuid::new_v4();
+        second.measurement.id = second.order.measurement_id;
+        second.measurement.readable_id = "C-23-002".into();
+        second.measurement.fit = Some("loose".into());
+        second.measurement.front_height = Some(130.0);
+        let html = render_document(
+            &[first, second],
+            &branding(),
+            &empty_catalog(),
+            chrono_tz::Asia::Bahrain,
+            Some(chrono::NaiveDate::from_ymd_opt(2026, 8, 6).unwrap()),
+        )
+        .unwrap();
+        let sheets: Vec<_> = html
+            .split("<main class=\"production-sheet\">")
+            .skip(1)
+            .collect();
+        assert_eq!(sheets.len(), 2);
+        assert!(sheets[0].contains("<dd>medium</dd>"));
+        assert!(sheets[0].contains(">120</text>"));
+        assert!(sheets[0].contains("ORD-12"));
+        assert!(!sheets[0].contains("ORD-13"));
+        assert!(sheets[1].contains("<dd>loose</dd>"));
+        assert!(sheets[1].contains(">130</text>"));
+        assert!(sheets[1].contains("ORD-13"));
+    }
+
+    #[sqlx::test]
+    async fn document_loads_all_customer_orders_only_from_the_selected_invoice(db: sqlx::PgPool) {
+        let (invoice, orders, _, _) = crate::test_support::invoice(&db, 4, false).await;
+        let promised_date = chrono::NaiveDate::from_ymd_opt(2026, 8, 6).unwrap();
+        sqlx::query("UPDATE invoices SET target_date = $1 WHERE id = $2")
+            .bind(promised_date)
+            .bind(invoice)
+            .execute(&db)
+            .await
+            .unwrap();
+        let state = crate::test_support::state(db.clone(), None, None).await;
+        let selected = service::get_order(&state, orders[0]).await.unwrap();
+
+        // A different snapshot for the same customer still belongs in the
+        // export, but must use a separate diagram.
+        let another_snapshot: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO measurements(customer_id, fit) VALUES($1, 'loose') RETURNING id",
+        )
+        .bind(selected.measurement.customer_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        sqlx::query("UPDATE orders SET measurement_id = $1 WHERE id = $2")
+            .bind(another_snapshot)
+            .bind(orders[2])
+            .execute(&db)
+            .await
+            .unwrap();
+
+        // A second customer can appear on the same invoice. A shared contact
+        // number must not cause their orders to be grouped together.
+        let other_customer: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO customers(name, mobile_no) VALUES('Second Customer', '33112233') RETURNING id",
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        let other_snapshot: uuid::Uuid =
+            sqlx::query_scalar("INSERT INTO measurements(customer_id) VALUES($1) RETURNING id")
+                .bind(other_customer)
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        sqlx::query("UPDATE orders SET measurement_id = $1 WHERE id = $2")
+            .bind(other_snapshot)
+            .bind(orders[3])
+            .execute(&db)
+            .await
+            .unwrap();
+
+        // A previous invoice for this customer must not enter today's sheet.
+        let previous_invoice: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO invoices(branch_id,total_price,vat_rate,taxable_amount,vat_amount)
+             SELECT branch_id,total_price,vat_rate,taxable_amount,vat_amount
+             FROM invoices WHERE id = $1 RETURNING id",
+        )
+        .bind(invoice)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        let previous_order: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO orders(invoice_id,measurement_id,material_source,
+                                customer_material_description,material_amount,price)
+             VALUES($1,$2,'customer','Previous cotton',3,100) RETURNING id",
+        )
+        .bind(previous_invoice)
+        .bind(selected.measurement.id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+
+        let (details, saved_target_date) = service::order_document_details(&state, orders[0])
+            .await
+            .unwrap();
+        assert_eq!(details.len(), 3);
+        assert_eq!(saved_target_date, Some(promised_date));
+        assert!(details
+            .iter()
+            .all(|detail| detail.order.invoice_id == invoice));
+        assert!(details
+            .iter()
+            .all(|detail| { detail.measurement.customer_id == selected.measurement.customer_id }));
+        assert!(details
+            .windows(2)
+            .all(|pair| { pair[0].order.order_number < pair[1].order.order_number }));
+        let html = render_order_document(&state, orders[0]).await.unwrap();
+        assert!(html.contains("<strong dir=\"ltr\">06-08-2026</strong>"));
+        assert!(!html.contains("Quantity:"));
+        assert!(!html.contains("Made at:"));
+        assert!(!html.contains("Collection:"));
+        assert_eq!(html.matches("class=\"order-row\"").count(), 3);
+        assert_eq!(html.matches("<svg ").count(), 2);
+        for id in &orders[..3] {
+            assert!(html.contains(&format!("data-order-id=\"{id}\"")));
+        }
+        for id in [orders[3], previous_order] {
+            assert!(!html.contains(&format!("data-order-id=\"{id}\"")));
+        }
+        sqlx::query("UPDATE invoices SET target_date = NULL WHERE id = $1")
+            .bind(invoice)
+            .execute(&db)
+            .await
+            .unwrap();
+        let unscheduled = render_order_document(&state, orders[0]).await.unwrap();
+        assert!(unscheduled.contains("<strong dir=\"ltr\">Not set</strong>"));
+    }
+
+    #[test]
+    fn a_missing_target_date_is_explicit_instead_of_using_another_date() {
         let detail = OrderDetail {
             order: services_order(),
             invoice_number: 7,
-            measurement,
+            measurement: tests_support::measurement(),
         };
-        let html = test_render(&detail, &branding());
-
-        // Labels match the entry form, including the L×W pocket fields.
-        assert!(html.contains(">Neck Size</span>"));
-        assert!(html.contains(">Neck Width</span>"));
-        assert!(html.contains("Pocket L×W"));
-        // Neck size and neck width share one row: no further row starts between
-        // the two cells. (The stylesheet's own `.m-row` sits before the
-        // body, so the search starts at the neck cell.)
-        let neck = html.find(">Neck Size</span>").unwrap();
-        let neck_width = html.find(">Neck Width</span>").unwrap();
-        let next_row = neck + html[neck..].find("m-row").unwrap();
-        assert!(neck_width < next_row);
-        // The unrecorded half of the sleeve row renders as a blank
-        // placeholder that holds the column.
-        assert!(html.contains("m-empty"));
+        let html = render_document(
+            &[detail],
+            &branding(),
+            &empty_catalog(),
+            chrono_tz::Asia::Bahrain,
+            None,
+        )
+        .unwrap();
+        assert!(html.contains("<strong dir=\"ltr\">Not set</strong>"));
     }
 
     #[test]

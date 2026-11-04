@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use uuid::Uuid;
 
 use crate::{
@@ -224,6 +224,39 @@ pub async fn list_orders(
 
 pub async fn get_order(state: &AppState, order_id: Uuid) -> Result<Option<OrderRow>, AppError> {
     list::fetch_by_id(state.db(), &SPEC, order_id).await
+}
+
+/// The promised date belongs to the invoice shared by the production orders.
+pub async fn invoice_target_date(
+    state: &AppState,
+    invoice_id: Uuid,
+) -> Result<Option<NaiveDate>, AppError> {
+    sqlx::query_scalar::<_, Option<NaiveDate>>("SELECT target_date FROM invoices WHERE id = $1")
+        .bind(invoice_id)
+        .fetch_optional(state.db())
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))
+}
+
+/// Unpaginated production rows for one customer on one invoice. Match the
+/// customer through measurements, including separate snapshots on that invoice.
+pub async fn customer_invoice_orders(
+    state: &AppState,
+    invoice_id: Uuid,
+    customer_id: Uuid,
+) -> Result<Vec<OrderRow>, AppError> {
+    let sql = format!(
+        "SELECT * FROM ({}) AS production_orders
+         WHERE invoice_id = $1 AND measurement_id IN (
+             SELECT id FROM measurements WHERE customer_id = $2
+         ) ORDER BY order_number, id",
+        SPEC.base_sql
+    );
+    Ok(sqlx::query_as::<_, OrderRow>(&sql)
+        .bind(invoice_id)
+        .bind(customer_id)
+        .fetch_all(state.db())
+        .await?)
 }
 
 /// Materials stocked at exactly one location that's actually usable (active,
