@@ -91,6 +91,8 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         created_at: invoice.created_at,
         created_by: invoice.created_by,
         branch_name: invoice.branch_name,
+        issuing_branch_name: invoice.issuing_branch_name,
+        delivery_address: invoice.delivery_address,
         buyer: invoice.buyer,
         payment_status: invoice.payment_status,
         payment_method: invoice.payment_method,
@@ -727,9 +729,56 @@ fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
     }
 }
 
+// Preserve historical choices, including retired branches, while validating
+// newly selected issuing and collection locations against their capabilities.
+async fn validate_invoice_locations(
+    tx: &mut sqlx::PgTransaction<'_>,
+    input: &CreateInvoiceInput,
+    invoice_id: Option<Uuid>,
+) -> Result<(), AppError> {
+    for (location_id, receiving) in [(input.issuing_branch_id, false), (input.branch_id, true)] {
+        let Some(location_id) = location_id else {
+            continue;
+        };
+        if !repository::invoice_location_usable(tx, location_id, receiving, invoice_id).await? {
+            return Err(AppError::BadRequest(if receiving {
+                "choose an active collection branch".into()
+            } else {
+                "choose an active issuing branch".into()
+            }));
+        }
+    }
+    Ok(())
+}
+
+fn normalize_fulfilment(input: &mut CreateInvoiceInput) {
+    if matches!(
+        input.collection_method,
+        super::types::CollectionMethod::Delivery
+    ) {
+        input.branch_id = None;
+        input.delivery_address = input
+            .delivery_address
+            .take()
+            .map(|address| address.trim().to_string());
+    } else {
+        input.delivery_address = None;
+    }
+}
+
 /// Reject inconsistent invoice lines, urgency, repeated cards, and excess tender.
 /// This checks structure and totals; persisted card provenance is resolved when writing.
 fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
+    if matches!(
+        input.collection_method,
+        super::types::CollectionMethod::Delivery
+    ) && input
+        .delivery_address
+        .as_ref()
+        .is_none_or(|address| address.trim().is_empty())
+    {
+        return Err(AppError::BadRequest("enter a delivery address".into()));
+    }
     let has_urgent_orders = input
         .customers
         .iter()
@@ -2224,6 +2273,8 @@ pub async fn create_invoice(
         card.code.clear();
     }
     let mut tx = state.db().begin().await?;
+    normalize_fulfilment(&mut input);
+    validate_invoice_locations(&mut tx, &input, None).await?;
     resolve_order_prices(
         &mut tx,
         &mut input,
@@ -2361,6 +2412,8 @@ pub async fn update_invoice(
     let locked = repository::lock_invoice(&mut tx, invoice_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
+    normalize_fulfilment(&mut input);
+    validate_invoice_locations(&mut tx, &input, Some(invoice_id)).await?;
     validate_expected_vat(input.expected_vat_rate, locked.vat_rate)?;
     let saved: HashMap<_, _> = repository::saved_order_prices(&mut tx, invoice_id)
         .await?

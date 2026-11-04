@@ -110,7 +110,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 : order.status === 'collected'
                   ? 'Collected'
                   : order.status === 'ready'
-                    ? 'Ready for pickup'
+                    ? `Ready for ${order.collectionMethod === 'delivery' ? 'delivery' : 'pickup'}`
                     : 'Pending'}
             </StatusBadge>
             <StatusBadge
@@ -145,6 +145,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               id={order.id}
               invoiceId={order.invoiceId}
               scope="orders"
+              collectionMethod={order.collectionMethod}
               status={order.status}
               readyAt={order.readyAt}
               readyBy={order.readyBy}
@@ -266,12 +267,16 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">
-                {order.status === 'collected'
-                  ? 'Collected from'
-                  : 'Collection location'}
+                {order.collectionMethod === 'delivery'
+                  ? 'Delivery address'
+                  : order.status === 'collected'
+                    ? 'Collected from'
+                    : 'Collection location'}
               </dt>
               <dd className="font-medium">
-                {order.receivingLocation ?? 'Not assigned'}
+                {(order.collectionMethod === 'delivery'
+                  ? order.deliveryAddress
+                  : order.receivingLocation) ?? 'Not assigned'}
               </dd>
             </div>
             {(closed || order.currentStage) && (

@@ -157,6 +157,8 @@ export interface Order {
   /** True when productionLocation was inferred rather than assigned by staff. */
   productionLocationInferred: boolean
   /** Where the customer collects, taken from the invoice's branch. */
+  collectionMethod?: 'delivery' | 'pickup'
+  deliveryAddress?: string | null
   receivingLocationId: string | null
   receivingLocation: string | null
   stages: OrderStageEntry[]

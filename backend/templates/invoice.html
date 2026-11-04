@@ -603,10 +603,22 @@
             <dd dir="ltr">{{ invoice.targetDate }}</dd>
           </div>
           {% endif %}
-          {% if invoice.branchName %}
+          {% if invoice.issuingBranchName %}
             <div class="row">
-              <dt>الفرع<span class="en">Branch</span></dt>
+              <dt>فرع إصدار الفاتورة<span class="en">Issuing branch</span></dt>
+              <dd>{{ invoice.issuingBranchName }}</dd>
+            </div>
+          {% endif %}
+          {% if invoice.collectionMethod == 'pickup' and invoice.branchName %}
+            <div class="row">
+              <dt>فرع الاستلام<span class="en">Collection branch</span></dt>
               <dd>{{ invoice.branchName }}</dd>
+            </div>
+          {% endif %}
+          {% if invoice.collectionMethod == 'delivery' and invoice.deliveryAddress %}
+            <div class="row">
+              <dt>عنوان التوصيل<span class="en">Delivery address</span></dt>
+              <dd style="white-space: pre-line">{{ invoice.deliveryAddress }}</dd>
             </div>
           {% endif %}
           <div class="row">

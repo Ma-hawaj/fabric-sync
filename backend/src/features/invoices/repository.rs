@@ -115,6 +115,8 @@ pub async fn fetch_invoice_detail(
             i.invoice_number,
             i.invoice_date,
             i.target_date,
+            i.issuing_branch_name,
+            i.delivery_address,
             i.urgent_charge::float8 AS "urgent_charge!",
             i.collection_method,
             i.created_at,
@@ -155,7 +157,7 @@ pub async fn fetch_invoice_detail(
             -- The `?` suffixes are for sqlx: it reads nullability off the
             -- column definition, which says NOT NULL, and can't see that a
             -- LEFT JOIN may not match.
-            b.name AS "branch_name?",
+            CASE WHEN i.collection_method = 'pickup' THEN b.name END AS "branch_name?",
             c.name AS "buyer_name?",
             c.mobile_no AS "buyer_mobile_no?",
             c.address AS "buyer_address?"
@@ -340,6 +342,8 @@ pub async fn fetch_invoice_detail(
             created_at: invoice.created_at,
             created_by: invoice.created_by,
             branch_name: invoice.branch_name,
+            issuing_branch_name: invoice.issuing_branch_name,
+            delivery_address: invoice.delivery_address,
             buyer: invoice
                 .buyer_name
                 .zip(invoice.buyer_mobile_no)
@@ -427,8 +431,8 @@ const SPEC: ListSpec = ListSpec {
             ready.readiness_status, ready.ready_order_count, ready.pending_order_count, ready.readiness_generation,
             COALESCE(agg.collected_order_count, 0) AS collected_order_count,
             balance.net_gift_card_redeemed::float8 AS gift_card_redeemed,
-            i.branch_id AS receiving_location_id,
-            recv.name AS receiving_location,
+            CASE WHEN i.collection_method = 'pickup' THEN i.branch_id END AS receiving_location_id,
+            CASE WHEN i.collection_method = 'pickup' THEN recv.name END AS receiving_location,
             COALESCE(agg.production_locations, '[]') AS production_locations,
             COALESCE(agg.production_location_names, ARRAY[]::text[]) AS production_location_names,
             COALESCE(agg.item_count, 0) + COALESCE(items.item_count, 0) AS item_count,
@@ -605,11 +609,13 @@ pub async fn insert_invoice(
         INSERT INTO invoices (
             target_date, branch_id, discount, discount_unit,
             total_price, customer_id, gift_card_redeemed,
-            urgent_charge, collection_method, created_by, vat_rate, taxable_amount, vat_amount
+            urgent_charge, collection_method, created_by, vat_rate, taxable_amount, vat_amount,
+            issuing_branch_id, issuing_branch_name, delivery_address
         )
         VALUES (
             $1, $2, $3::float8, $4, $5::float8, $6, $7::float8,
-            $8::float8, $9, $10, $11::float8, $12::float8, $13::float8
+            $8::float8, $9, $10, $11::float8, $12::float8, $13::float8,
+            $14, (SELECT name FROM branch WHERE id = $14), $15
         )
         RETURNING id, invoice_date
         "#,
@@ -626,6 +632,8 @@ pub async fn insert_invoice(
         vat_rate,
         taxable_amount,
         vat_amount,
+        input.issuing_branch_id,
+        input.delivery_address,
     )
     .fetch_one(&mut **tx)
     .await
@@ -1015,6 +1023,9 @@ pub async fn fetch_invoice_edit(
             i.urgent_charge::float8 AS "urgent_charge!",
             i.collection_method,
             i.branch_id,
+            i.issuing_branch_id,
+            i.issuing_branch_name,
+            i.delivery_address,
             b.name AS "branch_name?",
             i.discount::float8 AS "discount!",
             i.discount_unit,
@@ -1246,6 +1257,9 @@ pub async fn fetch_invoice_edit(
     let payments = list_payments(state, invoice_id).await?;
 
     Ok(Some(InvoiceEdit {
+        issuing_branch_id: header.issuing_branch_id,
+        issuing_branch_name: header.issuing_branch_name,
+        delivery_address: header.delivery_address,
         vat_rate: header.vat_rate,
         id: invoice_id,
         invoice_number: header.invoice_number,
@@ -1613,7 +1627,11 @@ pub async fn update_invoice_header(
             urgent_charge = $9::float8,
             collection_method = $10,
             taxable_amount = $11::float8,
-            vat_amount = $12::float8
+            vat_amount = $12::float8,
+            issuing_branch_id = $13,
+            issuing_branch_name = CASE WHEN issuing_branch_id IS NOT DISTINCT FROM $13
+                THEN issuing_branch_name ELSE (SELECT name FROM branch WHERE id = $13) END,
+            delivery_address = $14
         WHERE id = $1
         "#,
         invoice_id,
@@ -1628,6 +1646,8 @@ pub async fn update_invoice_header(
         input.collection_method.as_str(),
         taxable_amount,
         vat_amount,
+        input.issuing_branch_id,
+        input.delivery_address,
     )
     .execute(&mut **tx)
     .await?;
@@ -1643,6 +1663,26 @@ pub async fn is_production_location(
         "SELECT EXISTS(SELECT 1 FROM branch WHERE id = $1 AND is_active AND holds_stock) AS \"usable!\"",
         location_id,
     ).fetch_one(&mut **tx).await?)
+}
+
+/// Whether a location is eligible now or is already saved on this invoice.
+pub async fn invoice_location_usable(
+    tx: &mut sqlx::PgTransaction<'_>,
+    location_id: Uuid,
+    receiving: bool,
+    invoice_id: Option<Uuid>,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM branch b WHERE b.id=$1 AND
+            ((b.is_active AND (NOT $2 OR b.receives_orders)) OR EXISTS(
+                SELECT 1 FROM invoices i WHERE i.id=$3 AND
+                CASE WHEN $2 THEN i.branch_id ELSE i.issuing_branch_id END = b.id)))",
+    )
+    .bind(location_id)
+    .bind(receiving)
+    .bind(invoice_id)
+    .fetch_one(&mut **tx)
+    .await
 }
 
 /// Material metadata is stored on the sale rather than read from the catalog

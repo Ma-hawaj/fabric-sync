@@ -17,6 +17,9 @@ const ACTIVE_FILTER: PickerFilter = {
   operator: 'eq',
 }
 
+/** Any active branch can issue an invoice, independently of fulfilment. */
+export const ISSUING_BRANCH_FILTERS: readonly PickerFilter[] = [ACTIVE_FILTER]
+
 /** Locations a customer can collect a finished order from (server-side). */
 export const ORDER_RECEIVING_FILTERS: readonly PickerFilter[] = [
   ACTIVE_FILTER,
@@ -36,6 +39,11 @@ export const STOCK_FILTERS: readonly PickerFilter[] = [
  * one place that changes rather than every picker.
  */
 export const PRODUCTION_FILTERS: readonly PickerFilter[] = STOCK_FILTERS
+
+/** Any active location may issue invoices, independently of fulfilment. */
+export function issuingLocations(locations: Location[]): Location[] {
+  return locations.filter((location) => location.isActive)
+}
 
 /** Locations a customer can collect a finished order from. */
 export function orderReceivingLocations(locations: Location[]): Location[] {

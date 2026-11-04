@@ -97,6 +97,9 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
   if (edit.branchId) {
     seeds.locationLabels.set(edit.branchId, edit.branchName ?? '')
   }
+  if (edit.issuingBranchId) {
+    seeds.locationLabels.set(edit.issuingBranchId, edit.issuingBranchName ?? '')
+  }
 
   const customers: InvoiceCustomerDraft[] = edit.customers.map((block) => {
     seeds.customers.set(block.existingCustomerId, {
@@ -316,6 +319,8 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
     targetDate: edit.targetDate ?? '',
     collectionMethod: edit.collectionMethod,
     receivingBranch: edit.branchId ?? '',
+    issuingBranch: edit.issuingBranchId ?? '',
+    deliveryAddress: edit.deliveryAddress ?? '',
     customerId: edit.customerId ?? '',
     productBranch,
     // A zero discount reads as blank, the way a fresh form does — the payload

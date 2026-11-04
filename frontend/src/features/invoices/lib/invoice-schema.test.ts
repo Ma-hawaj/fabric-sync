@@ -155,6 +155,20 @@ describe('invoiceCreateFormSchema payments', () => {
 })
 
 describe('invoiceFormSchema', () => {
+  it('requires an address for delivery and allows pickup without one', () => {
+    const input = values({
+      collectionMethod: 'delivery',
+      deliveryAddress: '   ',
+      products: [validProductLine()],
+      productBranch: 'stock',
+    })
+    expect(firstErrorFor(input)?.path).toEqual(['deliveryAddress'])
+    input.deliveryAddress = 'Building 2, Road 3'
+    expect(firstErrorFor(input)).toBeNull()
+    input.collectionMethod = 'pickup'
+    input.deliveryAddress = ''
+    expect(firstErrorFor(input)).toBeNull()
+  })
   it('requires a target date when any order is urgent', () => {
     const input = values({
       customers: [

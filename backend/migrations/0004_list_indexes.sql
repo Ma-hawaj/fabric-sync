@@ -27,6 +27,7 @@ CREATE INDEX orders_production_branch_id_idx ON orders (production_branch_id);
 CREATE INDEX measurements_customer_id_idx ON measurements (customer_id);
 CREATE INDEX invoice_items_invoice_id_idx ON invoice_items (invoice_id);
 CREATE INDEX invoices_customer_id_idx ON invoices (customer_id);
+CREATE INDEX invoices_issuing_branch_id_idx ON invoices (issuing_branch_id);
 -- The per-invoice ledger aggregates (`SUM(amount)`, the latest method) run
 -- once per row of the invoices list and once per order row's invoice join.
 CREATE INDEX invoice_payments_invoice_id_idx ON invoice_payments (invoice_id);

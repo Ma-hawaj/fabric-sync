@@ -143,11 +143,14 @@ describe('MaterialBlock stock locations', () => {
       apiGet.mock.calls.every(([url]) => !String(url).startsWith('/locations')),
     ).toBe(true)
   })
-  it('clears the sold-from location when the material changes', async () => {
+  it('replaces the old stock location with the new material’s sole option', async () => {
     render(<Harness line={{ materialId: 'linen', branchId: 'stock-1' }} />)
     await pickMaterial('Cotton')
     await waitFor(() =>
-      expect(draft()).toMatchObject({ materialId: 'cotton', branchId: '' }),
+      expect(draft()).toMatchObject({
+        materialId: 'cotton',
+        branchId: 'stock-2',
+      }),
     )
     openInput('Sold From')
     expect(
@@ -155,10 +158,10 @@ describe('MaterialBlock stock locations', () => {
     ).toBeTruthy()
     expect(screen.queryByRole('option', { name: /Linen Store/ })).toBeNull()
   })
-  it('applies the default only when the chosen material is stocked there', async () => {
+  it('uses the sole stock location when the user default cannot supply the material', async () => {
     render(<Harness defaultLocationId="stock-2" />)
     await pickMaterial('Linen')
-    expect(draft().branchId).toBe('')
+    await waitFor(() => expect(draft().branchId).toBe('stock-1'))
     await pickMaterial('Cotton')
     await waitFor(() => expect(draft().branchId).toBe('stock-2'))
   })

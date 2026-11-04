@@ -1361,6 +1361,8 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         production_location: None,
         production_location_inferred: false,
         receiving_location_id: None,
+        collection_method: "pickup".into(),
+        delivery_address: None,
         receiving_location: None,
         stages: Vec::new(),
         current_stage: None,

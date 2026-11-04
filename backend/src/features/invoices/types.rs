@@ -216,6 +216,10 @@ pub struct CreateInvoiceInput {
     #[serde(default)]
     pub branch_id: Option<Uuid>,
     #[serde(default)]
+    pub issuing_branch_id: Option<Uuid>,
+    #[serde(default)]
+    pub delivery_address: Option<String>,
+    #[serde(default)]
     pub discount: f64,
     pub discount_unit: DiscountUnit,
     // Payments taken up front, in the order they were taken. May be empty;
@@ -379,6 +383,9 @@ pub struct InvoicePayment {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEdit {
+    pub issuing_branch_id: Option<Uuid>,
+    pub issuing_branch_name: Option<String>,
+    pub delivery_address: Option<String>,
     pub vat_rate: f64,
     pub urgent_charge: f64,
     pub collection_method: String,
@@ -594,6 +601,8 @@ pub struct InvoiceTotalsBreakdown {
 /// the table no longer stores them.
 #[derive(Clone, Debug)]
 pub struct InvoiceRecord {
+    pub issuing_branch_name: Option<String>,
+    pub delivery_address: Option<String>,
     pub vat_rate: f64,
     pub taxable_amount: f64,
     pub vat_amount: f64,
@@ -644,6 +653,8 @@ pub struct InvoiceRecord {
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceDetail {
     pub document_kind: String,
+    pub issuing_branch_name: Option<String>,
+    pub delivery_address: Option<String>,
     pub created_by: Option<String>,
     #[serde(flatten)]
     pub readiness: crate::features::orders::readiness::Summary,

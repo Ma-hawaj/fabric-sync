@@ -182,8 +182,14 @@ function ProductionLocationPicker({ order }: { order: Order }) {
         }}
       />
       <p className="text-xs text-muted-foreground">
-        Collected from {order.receivingLocation ?? 'an unassigned branch'}. A
-        delivery stage only applies while these two differ.
+        {order.collectionMethod === 'delivery' ? (
+          'Delivered to the customer after production.'
+        ) : (
+          <>
+            Collected from {order.receivingLocation ?? 'an unassigned branch'}.
+            A delivery stage only applies while these two differ.
+          </>
+        )}
       </p>
       {showDefaultOffer && stockDefault && (
         <Button

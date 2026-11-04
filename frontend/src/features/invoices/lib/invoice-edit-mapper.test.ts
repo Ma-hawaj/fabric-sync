@@ -123,6 +123,19 @@ describe('mapInvoiceEditToForm', () => {
       { code: 'GC-8BNQ-5SVX-3FYJ', amount: 55 },
     ])
   })
+
+  it('restores the saved issuing branch and delivery address independently of pickup', () => {
+    const { values, seeds } = mapInvoiceEditToForm({
+      ...editFixture(),
+      issuingBranchId: 'issuer',
+      issuingBranchName: 'Issuing office',
+      collectionMethod: 'delivery',
+      deliveryAddress: 'Building 2, Road 3',
+    })
+    expect(values.issuingBranch).toBe('issuer')
+    expect(values.deliveryAddress).toBe('Building 2, Road 3')
+    expect(seeds.locationLabels.get('issuer')).toBe('Issuing office')
+  })
   it('restores urgency, collection method, and customer addresses when editing', () => {
     const edit = editFixture()
     edit.customers[0].orders[0].isUrgent = true

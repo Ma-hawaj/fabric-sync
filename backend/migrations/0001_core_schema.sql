@@ -80,7 +80,13 @@ CREATE TABLE invoices (
     urgent_charge NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (urgent_charge >= 0),
     collection_method TEXT NOT NULL DEFAULT 'pickup'
         CHECK (collection_method IN ('delivery', 'pickup')),
+    -- Customer pickup destination; unused for delivery invoices.
     branch_id UUID REFERENCES branch(id),
+    -- Issuing is independent of fulfilment. Keep the issued branch name stable
+    -- if the location is renamed later, and leave unknown issuers nullable.
+    issuing_branch_id UUID REFERENCES branch(id),
+    issuing_branch_name TEXT,
+    delivery_address TEXT,
     discount NUMERIC(10, 2) NOT NULL DEFAULT 0,
     discount_unit TEXT NOT NULL DEFAULT 'amount' CHECK (discount_unit IN ('amount', 'percent')),
     -- A tailoring invoice finds its customer through orders → measurements, but

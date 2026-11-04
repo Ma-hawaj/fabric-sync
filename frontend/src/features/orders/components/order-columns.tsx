@@ -22,7 +22,7 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 
 const statusOptions = [
   { label: 'Pending', value: 'pending' },
-  { label: 'Ready for pickup', value: 'ready' },
+  { label: 'Ready', value: 'ready' },
   { label: 'Collected', value: 'collected' },
 ]
 
@@ -206,7 +206,7 @@ export function getOrderColumns(
       accessorKey: 'receivingLocation',
       size: 114,
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} label="Receiving" />
+        <DataTableColumnHeader column={column} label="Collection branch" />
       ),
       cell: ({ row }) => (
         <div>{row.getValue<string | null>('receivingLocation') ?? '—'}</div>
@@ -214,8 +214,8 @@ export function getOrderColumns(
       enableSorting: true,
       enableColumnFilter: true,
       meta: {
-        label: 'Receiving',
-        placeholder: 'Filter receiving...',
+        label: 'Collection branch',
+        placeholder: 'Filter collection branches...',
         variant: 'multiSelect',
         options: receivingOptions,
       },
@@ -284,7 +284,7 @@ export function getOrderColumns(
             {status === 'collected'
               ? 'Collected'
               : status === 'ready'
-                ? 'Ready for pickup'
+                ? `Ready for ${row.original.collectionMethod === 'delivery' ? 'delivery' : 'pickup'}`
                 : 'Pending'}
           </StatusBadge>
         )

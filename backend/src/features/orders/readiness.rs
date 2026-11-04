@@ -25,6 +25,7 @@ pub(super) struct ReadyOrder {
     pub(super) status: String,
     pub(super) production_branch_id: Option<Uuid>,
     pub(super) branch_id: Option<Uuid>,
+    pub(super) collection_method: String,
 }
 
 #[derive(Debug, FromRow)]
@@ -46,7 +47,7 @@ fn blockers(order: &ReadyOrder, stages: &[Stage], has_repair: bool) -> Vec<Strin
     if order.production_branch_id.is_none() {
         errors.push("Assign the production location".into());
     }
-    if order.branch_id.is_none() {
+    if order.collection_method == "pickup" && order.branch_id.is_none() {
         errors.push("Choose a pickup branch".into());
     }
     if has_repair {
@@ -106,7 +107,7 @@ pub async fn confirm(
 ) -> Result<ReadyResult, AppError> {
     if !confirmed {
         return Err(AppError::BadRequest(
-            "Confirm that the garments are available at the pickup branch.".into(),
+            "Confirm that the garments are ready for the selected fulfilment method.".into(),
         ));
     }
     let mut tx = db.begin().await?;
@@ -189,6 +190,7 @@ mod tests {
             status: "pending".into(),
             production_branch_id: Some(Uuid::from_u128(1)),
             branch_id: Some(Uuid::from_u128(2)),
+            collection_method: "pickup".into(),
         }
     }
     fn stage(delivery: bool, status: &str, location: Option<Uuid>) -> Stage {
@@ -231,6 +233,21 @@ mod tests {
         assert!(!blockers(&local, &[stage(false, "done", None)], true).is_empty());
         local.production_branch_id = None;
         assert!(!blockers(&local, &[stage(false, "done", None)], false).is_empty());
+    }
+    #[sqlx::test]
+    async fn delivery_can_be_ready_without_a_pickup_branch_or_branch_transfer(pool: PgPool) {
+        let (invoice, orders, production, _) = crate::test_support::invoice(&pool, 1, true).await;
+        sqlx::query("UPDATE invoices SET collection_method='delivery',delivery_address='Building 2',branch_id=NULL WHERE id=$1").bind(invoice).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO order_stage_progress(order_id,stage_id,status) SELECT $1,id,'done' FROM order_stages WHERE is_active AND NOT requires_delivery").bind(orders[0]).execute(&pool).await.unwrap();
+        let result = confirm(&pool, invoice, None, "staff", true).await.unwrap();
+        assert!(result.became_ready);
+        let location: Option<Uuid> =
+            sqlx::query_scalar("SELECT ready_location_id FROM orders WHERE id=$1")
+                .bind(orders[0])
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(location, Some(production));
     }
     #[sqlx::test]
     async fn confirmation_is_idempotent_and_serializes_concurrent_staff(pool: PgPool) {

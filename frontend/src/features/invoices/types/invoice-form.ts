@@ -132,6 +132,8 @@ export interface InvoiceFormValues {
   // date is server-set at creation and never enters the form.
   targetDate: string
   receivingBranch: string
+  issuingBranch: string
+  deliveryAddress: string
   // Who a sale with no tailoring orders is billed to; a tailoring invoice
   // finds its customer through the orders instead.
   customerId: string
@@ -213,6 +215,8 @@ export function createEmptyInvoiceForm(): InvoiceFormValues {
     targetDate: '',
     collectionMethod: 'pickup',
     receivingBranch: '',
+    issuingBranch: '',
+    deliveryAddress: '',
     customerId: '',
     productBranch: '',
     discount: '',

@@ -68,8 +68,10 @@ const SPEC: ListSpec = ListSpec {
             o.more_details,
             o.production_branch_id AS production_location_id,
             prod.name AS production_location,
-            i.branch_id AS receiving_location_id,
-            recv.name AS receiving_location,
+            CASE WHEN i.collection_method = 'pickup' THEN i.branch_id END AS receiving_location_id,
+            i.collection_method,
+            i.delivery_address,
+            CASE WHEN i.collection_method = 'pickup' THEN recv.name END AS receiving_location,
             -- What the table shows and filters on: the explicit assignment
             -- when staff set one, otherwise the single-stock-location
             -- inference below (the same material location the Made At picker
@@ -144,6 +146,7 @@ const SPEC: ListSpec = ListSpec {
                   NOT s.requires_delivery
                   OR (
                       COALESCE(o.production_branch_id, inferred.branch_id) IS NOT NULL
+                      AND i.collection_method = 'pickup'
                       AND i.branch_id IS NOT NULL
                       AND COALESCE(o.production_branch_id, inferred.branch_id) <> i.branch_id
                   )

@@ -40,6 +40,11 @@ pub(crate) async fn source(
     }
     let (revision, generation) = repository::revision(state.db(), invoice_id).await?;
     let detail = invoices::service::get_invoice(state, invoice_id).await?;
+    if kind == "invoice_ready" && detail.collection_method == "delivery" {
+        return Err(AppError::BadRequest(
+            "Pickup notifications are only available for pickup invoices.".into(),
+        ));
+    }
     if kind == "invoice_ready" && detail.readiness.readiness_status != "ready" {
         return Err(AppError::Conflict(
             "This invoice is not ready for pickup. Refresh its orders first.".into(),

@@ -113,6 +113,9 @@ export interface InvoiceEditRedemption {
 
 /** Shape of GET /invoices/:id/edit — the invoice as entered, not as printed. */
 export interface InvoiceEdit {
+  issuingBranchId?: string | null
+  issuingBranchName?: string | null
+  deliveryAddress?: string | null
   vatRate: number
   urgentCharge: number
   collectionMethod: 'delivery' | 'pickup'

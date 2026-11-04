@@ -32,6 +32,7 @@ import { CURRENCY } from '@/lib/currency'
 import { useDesignOptions } from '@/features/design-options/hooks/use-design-options'
 import type { Location } from '@/features/locations/types/location'
 import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
+import { useInvoiceLocationDefault } from '../../hooks/use-invoice-location-default'
 import { GrossVatHint } from './gross-vat-hint'
 import { DesignPicker } from './design-picker'
 import {
@@ -117,6 +118,7 @@ export function OrderBlock({
   // Shop fabric needs stock at the default location. Customer fabric can use
   // the active production default directly. Never overwrite a chosen location.
   const stockDefault = useApplicableDefaultLocation('stock')
+  const productionDefault = useInvoiceLocationDefault('production')
   // The whole design catalog, shared across every order block on the form —
   // one cached request for all seven pickers, however many orders there are.
   const {
@@ -157,26 +159,28 @@ export function OrderBlock({
     ? pickedMaterial
     : (currentMaterial ?? null)
   React.useEffect(() => {
-    if (!stockDefault || (materialSource === 'shop' && !resolvedMaterial)) {
-      return
-    }
-    const stocked =
-      materialSource === 'customer' ||
-      resolvedMaterial?.locations.some(
-        (stock) => stock.locationId === stockDefault.id && stock.quantity > 0,
-      )
+    const locations =
+      resolvedMaterial?.locations.filter((stock) => stock.quantity > 0) ?? []
+    const preferredStock =
+      locations.find((stock) => stock.locationId === stockDefault?.id) ??
+      (locations.length === 1 ? locations[0] : null)
+    const defaultId =
+      materialSource === 'customer'
+        ? productionDefault?.id
+        : preferredStock?.locationId
     if (
-      stocked &&
+      defaultId &&
       form.state.values.customers[customerIndex]?.orders[orderIndex]
         ?.productionLocationId === ''
     ) {
       form.setFieldValue(
         `${base}.productionLocationId` as never,
-        stockDefault.id as never,
+        defaultId as never,
       )
     }
   }, [
     stockDefault,
+    productionDefault,
     resolvedMaterial,
     form,
     base,
@@ -489,7 +493,9 @@ export function OrderBlock({
                           })}
                           getValueLabel={(id) =>
                             locationLabelForId?.(id) ??
-                            (id === stockDefault?.id ? stockDefault.name : null)
+                            (id === productionDefault?.id
+                              ? productionDefault.name
+                              : null)
                           }
                           value={field.state.value || null}
                           onValueChange={(value) =>

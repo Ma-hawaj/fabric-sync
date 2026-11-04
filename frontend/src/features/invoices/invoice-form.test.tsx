@@ -91,12 +91,12 @@ function validInvoice(): InvoiceFormValues {
   return values
 }
 
-function renderInvoice(values = validInvoice()) {
+function renderInvoice(values = validInvoice(), client = clientForForm()) {
   const save = vi
     .fn()
     .mockResolvedValue({ id: 'saved-invoice', totalPrice: 40 })
   render(
-    <QueryClientProvider client={clientForForm()}>
+    <QueryClientProvider client={client}>
       <InvoiceForm
         defaultValues={values}
         title="New Invoice"
@@ -144,6 +144,81 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
     expect(save).not.toHaveBeenCalled()
   })
 
+  it('automatically selects the sole eligible location for each invoice role', async () => {
+    const client = clientForForm()
+    apiGet.mockImplementation(
+      apiGetMock({
+        '/locations': [
+          {
+            id: 'only-location',
+            name: 'Only branch',
+            isActive: true,
+            receivesOrders: true,
+            holdsStock: true,
+          },
+        ],
+      }),
+    )
+    const values = validInvoice()
+    values.customers[0].orders[0].productionLocationId = ''
+    const save = renderInvoice(values, client)
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText<HTMLInputElement>('Issuing branch').value,
+      ).toBe('Only branch'),
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText<HTMLInputElement>('Collection branch').value,
+      ).toBe('Only branch'),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issuingBranch: 'only-location',
+          receivingBranch: 'only-location',
+          productBranch: 'only-location',
+          customers: [
+            expect.objectContaining({
+              orders: [
+                expect.objectContaining({
+                  productionLocationId: 'only-location',
+                }),
+              ],
+            }),
+          ],
+        }),
+      ),
+    )
+  })
+  it('shows fulfilment-specific fields while preserving the issuing branch', async () => {
+    const save = renderInvoice({
+      ...validInvoice(),
+      issuingBranch: 'issuer',
+      receivingBranch: 'pickup',
+    })
+    expect(screen.getByLabelText('Collection branch')).toBeTruthy()
+    expect(screen.queryByLabelText('Delivery address')).toBeNull()
+    fireEvent.click(screen.getByRole('radio', { name: 'Delivery' }))
+    expect(screen.queryByLabelText('Collection branch')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    expect(await screen.findByText('Enter a delivery address.')).toBeTruthy()
+    expect(save).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Delivery address'), {
+      target: { value: 'Building 2' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issuingBranch: 'issuer',
+          collectionMethod: 'delivery',
+          deliveryAddress: 'Building 2',
+        }),
+      ),
+    )
+  })
   it('highlights a missing payment method and clears the error after choosing one', async () => {
     const values = validInvoice()
     values.payments = [createEmptyPayment()]

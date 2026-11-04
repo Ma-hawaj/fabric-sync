@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            i.invoice_number,\n            i.vat_rate::float8 AS \"vat_rate!\",\n            i.invoice_date,\n            i.target_date,\n            i.urgent_charge::float8 AS \"urgent_charge!\",\n            i.collection_method,\n            i.branch_id,\n            b.name AS \"branch_name?\",\n            i.discount::float8 AS \"discount!\",\n            i.discount_unit,\n            i.customer_id\n        FROM invoices i\n        LEFT JOIN branch b ON b.id = i.branch_id\n        WHERE i.id = $1\n        ",
+  "query": "\n        SELECT\n            i.invoice_number,\n            i.vat_rate::float8 AS \"vat_rate!\",\n            i.invoice_date,\n            i.target_date,\n            i.urgent_charge::float8 AS \"urgent_charge!\",\n            i.collection_method,\n            i.branch_id,\n            i.issuing_branch_id,\n            i.issuing_branch_name,\n            i.delivery_address,\n            b.name AS \"branch_name?\",\n            i.discount::float8 AS \"discount!\",\n            i.discount_unit,\n            i.customer_id\n        FROM invoices i\n        LEFT JOIN branch b ON b.id = i.branch_id\n        WHERE i.id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -40,21 +40,36 @@
       },
       {
         "ordinal": 7,
-        "name": "branch_name?",
-        "type_info": "Text"
+        "name": "issuing_branch_id",
+        "type_info": "Uuid"
       },
       {
         "ordinal": 8,
-        "name": "discount!",
-        "type_info": "Float8"
+        "name": "issuing_branch_name",
+        "type_info": "Text"
       },
       {
         "ordinal": 9,
-        "name": "discount_unit",
+        "name": "delivery_address",
         "type_info": "Text"
       },
       {
         "ordinal": 10,
+        "name": "branch_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "discount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 12,
+        "name": "discount_unit",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
         "name": "customer_id",
         "type_info": "Uuid"
       }
@@ -72,11 +87,14 @@
       null,
       false,
       true,
+      true,
+      true,
+      true,
       false,
       null,
       false,
       true
     ]
   },
-  "hash": "38d25a4e04930f2ce86af2eb08782ff6562b778ad457f261903f1ad8e58ab360"
+  "hash": "5e683245966b55001ca387afa9e32a14009e42abfde4f95f02dbdf7ec7f6d51d"
 }

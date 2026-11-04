@@ -35,7 +35,7 @@ pub async fn lock_orders(
     invoice: Uuid,
     order: Option<Uuid>,
 ) -> Result<Vec<ReadyOrder>, AppError> {
-    Ok(sqlx::query_as("SELECT o.id,o.order_number,o.status,o.production_branch_id,i.branch_id FROM orders o JOIN invoices i ON i.id=o.invoice_id WHERE o.invoice_id=$1 AND ($2::uuid IS NULL OR o.id=$2) AND NOT EXISTS (SELECT 1 FROM invoice_return_lines l WHERE l.order_id=o.id) AND ($2::uuid IS NOT NULL OR o.status <> 'collected') ORDER BY o.id FOR UPDATE OF o").bind(invoice).bind(order).fetch_all(conn).await?)
+    Ok(sqlx::query_as("SELECT o.id,o.order_number,o.status,o.production_branch_id,CASE WHEN i.collection_method='pickup' THEN i.branch_id END AS branch_id,i.collection_method FROM orders o JOIN invoices i ON i.id=o.invoice_id WHERE o.invoice_id=$1 AND ($2::uuid IS NULL OR o.id=$2) AND NOT EXISTS (SELECT 1 FROM invoice_return_lines l WHERE l.order_id=o.id) AND ($2::uuid IS NOT NULL OR o.status <> 'collected') ORDER BY o.id FOR UPDATE OF o").bind(invoice).bind(order).fetch_all(conn).await?)
 }
 
 pub async fn stages(conn: &mut PgConnection, order: Uuid) -> Result<Vec<Stage>, AppError> {
@@ -52,7 +52,7 @@ pub async fn mark_ready(
     actor: &str,
     invoice: Uuid,
 ) -> Result<(), AppError> {
-    sqlx::query("UPDATE orders SET status='ready',ready_at=now(),ready_by=$2,ready_location_id=(SELECT branch_id FROM invoices WHERE id=$3),readiness_version=readiness_version+1 WHERE id=ANY($1) AND status='pending'").bind(ids).bind(actor).bind(invoice).execute(conn).await?;
+    sqlx::query("UPDATE orders SET status='ready',ready_at=now(),ready_by=$2,ready_location_id=CASE WHEN (SELECT collection_method FROM invoices WHERE id=$3)='pickup' THEN (SELECT branch_id FROM invoices WHERE id=$3) ELSE production_branch_id END,readiness_version=readiness_version+1 WHERE id=ANY($1) AND status='pending'").bind(ids).bind(actor).bind(invoice).execute(conn).await?;
     Ok(())
 }
 
@@ -80,7 +80,7 @@ pub async fn locations(
     conn: &mut PgConnection,
     order: Uuid,
 ) -> Result<(Option<Uuid>, Option<Uuid>), AppError> {
-    Ok(sqlx::query_as("SELECT o.production_branch_id,i.branch_id FROM orders o JOIN invoices i ON i.id=o.invoice_id WHERE o.id=$1").bind(order).fetch_one(conn).await?)
+    Ok(sqlx::query_as("SELECT o.production_branch_id,CASE WHEN i.collection_method='pickup' THEN i.branch_id END FROM orders o JOIN invoices i ON i.id=o.invoice_id WHERE o.id=$1").bind(order).fetch_one(conn).await?)
 }
 
 pub async fn progress(conn: &mut PgConnection, order: Uuid) -> Result<Vec<ProgressRow>, AppError> {

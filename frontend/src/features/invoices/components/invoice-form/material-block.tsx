@@ -42,14 +42,16 @@ export function MaterialBlock({
   )
   const stockDefault = useApplicableDefaultLocation('stock')
   useEffect(() => {
-    if (
-      stockDefault &&
-      picked?.locations.some(
-        (stock) => stock.locationId === stockDefault.id && stock.quantity > 0,
-      ) &&
-      !form.state.values.materials[lineIndex]?.branchId
-    ) {
-      form.setFieldValue(`${base}.branchId` as never, stockDefault.id as never)
+    const locations =
+      picked?.locations.filter((stock) => stock.quantity > 0) ?? []
+    const preferred =
+      locations.find((stock) => stock.locationId === stockDefault?.id) ??
+      (locations.length === 1 ? locations[0] : null)
+    if (preferred && !form.state.values.materials[lineIndex]?.branchId) {
+      form.setFieldValue(
+        `${base}.branchId` as never,
+        preferred.locationId as never,
+      )
     }
   }, [stockDefault, picked, form, lineIndex, base])
 
