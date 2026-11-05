@@ -194,6 +194,7 @@ describe('InvoiceSummary', () => {
     [200, '181.82', '18.18'],
   ] as const)(
     'extracts VAT at issue from %s of gift-card funding',
+    /** Cover both zero funding and a VAT-inclusive card without merchandise. */
     (amount, net, vat) => {
       render(
         <Harness

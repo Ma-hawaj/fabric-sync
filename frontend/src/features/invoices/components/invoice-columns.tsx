@@ -40,6 +40,7 @@ const PAYMENT_STATUS_TONE: Record<PaymentStatus, StatusTone> = {
   paid: 'success',
 }
 
+/** Build invoice columns that distinguish transaction totals from merchandise sales. */
 export const getInvoiceColumns = (
   materialOptions: { label: string; value: string }[],
   receivingOptions: { label: string; value: string }[],
@@ -503,6 +504,7 @@ export const getInvoiceColumns = (
       header: ({ column }) => (
         <DataTableColumnHeader column={column} label="Sales excl. VAT" />
       ),
+      /** Show a placeholder for missing accounting data instead of implying zero sales. */
       cell: ({ row }) => (
         <div className="text-end tabular-nums">
           {row.original.salesAmount == null

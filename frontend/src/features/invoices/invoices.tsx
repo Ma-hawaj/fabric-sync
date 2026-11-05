@@ -23,6 +23,7 @@ import {
 import { downloadInvoicePdf } from './lib/print-invoice'
 import type { Invoice } from './types/invoices'
 
+/** List invoices with merchandise-sales totals, transaction totals, and till actions. */
 export function InvoicesPage() {
   const [collectInvoice, setCollectInvoice] = useState<Invoice | null>(null)
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null)

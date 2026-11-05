@@ -24,6 +24,10 @@ interface RedemptionBlockProps {
   onRemove: () => void
 }
 
+/**
+ * Look up a presented card, validate its status, and populate its redemption preview.
+ * Tax provenance comes from the lookup and is cleared whenever the code changes.
+ */
 export function RedemptionBlock({
   form,
   lineIndex,
@@ -60,6 +64,7 @@ export function RedemptionBlock({
     form.setFieldValue(`${base}.amount` as never, card.balance as never)
   }, [card, status, form, base, lookupCode])
 
+  /** Describe lookup progress or usability using expiry on the invoice date. */
   function hint() {
     if (!lookupCode)
       return 'Enter or scan the code. GC and dashes are optional.'

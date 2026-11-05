@@ -75,6 +75,10 @@ export interface InvoiceEditSeeds {
   soldFromBranchName: string
 }
 
+/**
+ * Restore saved lines, prices, tender, and picker labels into an editable draft.
+ * Redemption tax provenance is retained for the preview, not sent as a tax override.
+ */
 export function mapInvoiceEditToForm(edit: InvoiceEdit): {
   values: InvoiceFormValues
   seeds: InvoiceEditSeeds

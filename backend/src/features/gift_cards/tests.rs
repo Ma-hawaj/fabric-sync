@@ -71,6 +71,7 @@ fn send(preview: &delivery::Preview, request_id: Uuid) -> delivery::SendInput {
     }
 }
 
+/// Exercise the same compact-code normalization through lookup and transactional spending.
 #[sqlx::test]
 async fn short_code_lookup_and_redemption_accept_compact_input(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
@@ -120,6 +121,7 @@ async fn short_code_lookup_and_redemption_accept_compact_input(pool: PgPool) {
     );
 }
 
+/// Force collisions in a live transaction and verify that retries retain the issuer.
 #[sqlx::test]
 async fn generated_code_collisions_retry_without_aborting_the_transaction(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
@@ -166,6 +168,7 @@ async fn generated_code_collisions_retry_without_aborting_the_transaction(pool: 
     );
 }
 
+/// Exhaust the retry budget and prove the surrounding transaction remains usable.
 #[sqlx::test]
 async fn repeated_collisions_stop_without_poisoning_the_transaction(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
@@ -191,6 +194,7 @@ async fn repeated_collisions_stop_without_poisoning_the_transaction(pool: PgPool
     tx.rollback().await.unwrap();
 }
 
+/// Reject malformed codes consistently without altering an existing card's balance.
 #[sqlx::test]
 async fn invalid_code_formats_are_not_looked_up_or_redeemed(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
@@ -218,6 +222,7 @@ async fn invalid_code_formats_are_not_looked_up_or_redeemed(pool: PgPool) {
     );
 }
 
+/// Keep the buyer relationship independent of recipient details on generated cards.
 #[sqlx::test]
 async fn codes_are_generated_and_recipient_is_separate_from_buyer(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
@@ -251,6 +256,7 @@ async fn codes_are_generated_and_recipient_is_separate_from_buyer(pool: PgPool) 
     }
 }
 
+/// Verify preview/approval boundaries and idempotent delivery using local provider mocks.
 #[sqlx::test]
 async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks(pool: PgPool) {
     let (url, mock) = mock_server().await;
@@ -344,6 +350,7 @@ async fn unconfigured_queued_parameter_does_not_block_later_deliveries(pool: PgP
     assert_invalid_preview_does_not_block_queue(pool, false).await;
 }
 
+/// Corrupt one approved job and ensure the worker still delivers the valid queued card.
 async fn assert_invalid_preview_does_not_block_queue(pool: PgPool, invalid_phone: bool) {
     let (url, mock) = mock_server().await;
     let state = test_support::state(pool.clone(), None, Some(url)).await;
@@ -444,6 +451,7 @@ async fn changed_recipient_invalidates_preview_and_cancels_queued_delivery(pool:
     );
 }
 
+/// Retry confirmed provider failures while preventing duplicate sends after an unknown result.
 #[sqlx::test]
 async fn retries_known_failures_but_never_replays_an_unknown_submission(pool: PgPool) {
     let (url, mock) = mock_server().await;
@@ -718,6 +726,7 @@ async fn invoice_sales_generate_codes_and_keep_them_on_edit_until_delivery(pool:
     );
 }
 
+/// Keep only this invoice's original card codes when rebuilding its sale lines.
 #[sqlx::test]
 async fn invoice_edits_generate_new_codes_for_foreign_or_invalid_submissions(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;

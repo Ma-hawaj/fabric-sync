@@ -266,6 +266,7 @@ const paymentDraftSchema = z
     }
   })
 
+/** Validate invoice lines and cross-field tender limits before submitting a draft. */
 export const invoiceFormSchema = z
   .object({
     // The promised delivery date, if one was promised at all. Blank means

@@ -9,6 +9,7 @@ use axum::{extract::State, routing::post, Extension, Json, Router};
 use serde_json::json;
 use sqlx::PgPool;
 
+/// Obtain a real authenticated-user value from a local introspection mock.
 async fn identity(subject: Option<&str>) -> AuthenticatedUser {
     let body = json!({"active":true,"sub":subject,"aud":["test-project"]});
     let provider = Router::new().route(
@@ -98,6 +99,7 @@ async fn standalone_issuer_is_authenticated_immutable_and_available_on_every_rea
     assert_eq!(invoices, 0);
 }
 
+/// Missing, empty, and whitespace identities must leave the card table untouched.
 #[sqlx::test]
 async fn standalone_issuance_requires_a_named_identity_before_writing(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;

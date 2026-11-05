@@ -69,12 +69,14 @@ export function computeRedemptionTotal(
     : 0
 }
 
+/** Sum rounded redemption amounts only for cards verified as taxed at issue. */
 export function computePrepaidTotal(
   redemptions: GiftCardRedemptionDraft[],
 ): number {
   return (
     Math.round(
       redemptions.reduce(
+        /** Include only the portion whose lookup established prepaid VAT. */
         (sum, line) =>
           sum + (line.taxedAtIssue ? computeRedemptionTotal(line) : 0),
         0,
@@ -120,9 +122,11 @@ function discountOf(
   return Math.max(0, Math.min(Math.round(raw * 100) / 100, grossSubtotal))
 }
 
-// The same arithmetic the backend's breakdown runs, for live form totals:
-// Bahrain single-purpose vouchers are taxed at issue. Redeemed prepaid value
-// is excluded from the new tax base; merchandise discounts do not reach cards.
+/**
+ * Mirror backend gross pricing for the live preview using the supplied VAT rate.
+ * Discounts affect merchandise; only verified prepaid value reduces new VAT.
+ * All redeemed credit reduces the balance due, including uninvoiced credit.
+ */
 export function computeInvoiceTotals(input: {
   vatRate: number
   orderTotal: number

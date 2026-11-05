@@ -71,6 +71,8 @@ pub async fn get_gift_card_by_code(
     Ok(Json(service::get_gift_card_by_code(&state, &code).await?))
 }
 
+/// Issue standalone credit using the authenticated subject, rejecting missing identities.
+/// Client input cannot supply the issuer or establish prepaid VAT.
 pub async fn create_gift_card(
     State(state): State<AppState>,
     Extension(user): Extension<AuthenticatedUser>,

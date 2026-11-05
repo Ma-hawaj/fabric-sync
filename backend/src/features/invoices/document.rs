@@ -336,8 +336,7 @@ fn billed_customers(detail: &InvoiceDetail) -> Vec<&InvoiceParty> {
         .collect()
 }
 
-/// Every amount on the document, written out once. Keyed by the name the
-/// template refers to it by.
+/// Format a saved VAT rate as a percentage without redundant trailing zeroes.
 fn format_vat_percent(rate: f64) -> String {
     format!("{:.4}", rate * 100.0)
         .trim_end_matches('0')
@@ -345,6 +344,8 @@ fn format_vat_percent(rate: f64) -> String {
         .to_string()
 }
 
+/// Format saved invoice and line amounts once, keyed by their template names.
+/// Prepaid value stays separate, and total without new VAT uses the saved VAT amount.
 fn formatted_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<String, String> {
     let totals = &detail.totals;
     let mut amounts = std::collections::BTreeMap::new();
@@ -573,6 +574,7 @@ mod tests {
             .unwrap()
     }
 
+    /// Cover mixed funding, discounts, urgency, and payments without recalculating saved VAT.
     #[test]
     fn printed_totals_without_vat_use_saved_tax_and_ignore_payments() {
         for (total, vat, gift_cards, discount, urgent_charge, paid, expected_net) in [

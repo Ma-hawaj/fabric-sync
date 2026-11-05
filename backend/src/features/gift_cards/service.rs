@@ -66,6 +66,8 @@ pub fn generate_code() -> String {
     code
 }
 
+/// Create a card and return its id/code within the caller's transaction.
+/// Standalone issuers are stored directly; invoice-backed issuers resolve from the sale.
 pub async fn issue_gift_card(
     tx: &mut sqlx::PgTransaction<'_>,
     input: &CreateGiftCardInput,
@@ -75,6 +77,8 @@ pub async fn issue_gift_card(
     issue_with_generator(tx, input, region, issued_by, generate_code).await
 }
 
+/// Validate amount/phone and retry generated-code collisions without aborting the transaction.
+/// Stop with a conflict after the bounded retry budget, preserving issuer attribution.
 pub(super) async fn issue_with_generator(
     tx: &mut sqlx::PgTransaction<'_>,
     input: &CreateGiftCardInput,
@@ -157,6 +161,7 @@ pub async fn get_gift_card_by_code(state: &AppState, code: &str) -> Result<GiftC
         .ok_or_else(|| AppError::NotFound(format!("no gift card with code {code}")))
 }
 
+/// Commit standalone credit with the supplied authenticated issuer and no sale invoice.
 pub async fn create_gift_card(
     state: &AppState,
     input: CreateGiftCardInput,

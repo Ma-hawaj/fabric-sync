@@ -19,6 +19,7 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: CURRENCY,
 })
 
+/** Build gift-card columns with staff-name attribution and permission-aware actions. */
 export const getGiftCardColumns = (
   onToggleActive: (card: GiftCard) => void,
   isToggling: boolean,

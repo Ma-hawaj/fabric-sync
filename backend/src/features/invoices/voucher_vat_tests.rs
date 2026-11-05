@@ -37,6 +37,7 @@ fn merchandise(product: Uuid, branch: Uuid, price: f64, code: &str, redeemed: f6
         "giftCardRedemptions":[{"code":code,"amount":redeemed}]})
 }
 
+/// Ensure demo funding has sale provenance and its redemption documents match saved tax.
 #[sqlx::test]
 async fn demo_paid_cards_have_issuance_invoices_and_consistent_tax_snapshots(pool: PgPool) {
     crate::seed::run_reference_data(&pool).await.unwrap();
@@ -347,6 +348,7 @@ async fn mixed_paid_and_uninvoiced_cards_exclude_only_prepaid_value(pool: PgPool
     assert_eq!(restored.balance, 55.0);
 }
 
+/// A later expired card must roll back earlier credit spending and merchandise stock changes.
 #[sqlx::test]
 async fn invalid_uninvoiced_card_rolls_back_all_tender_stock_and_invoice_writes(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;

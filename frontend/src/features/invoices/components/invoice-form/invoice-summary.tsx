@@ -56,6 +56,7 @@ const PAYMENT_TYPE_OPTIONS: { value: PaymentType; label: string }[] = [
   { value: 'card', label: 'Card' },
 ]
 
+/** Preview gross totals and tender, excluding only verified prepaid value from new VAT. */
 function invoiceTotals(values: InvoiceFormValues) {
   if (typeof values.expectedVatRate !== 'number') return null
   return computeInvoiceTotals({
@@ -105,6 +106,7 @@ interface InvoiceSummaryProps {
   children?: ReactNode
 }
 
+/** Show the invoice preview and tender controls using the configured VAT rate. */
 export function InvoiceSummary({
   form,
   customerNames,

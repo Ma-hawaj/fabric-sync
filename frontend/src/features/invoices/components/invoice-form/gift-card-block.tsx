@@ -14,6 +14,7 @@ interface GiftCardBlockProps {
   onRemove: () => void
 }
 
+/** Edit a paid-card sale line whose face value includes VAT accounted for at issue. */
 export function GiftCardBlock({
   form,
   lineIndex,

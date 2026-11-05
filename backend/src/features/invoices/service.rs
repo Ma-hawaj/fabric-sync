@@ -427,6 +427,8 @@ struct InvoiceTotals {
     urgent_charge: f64,
 }
 
+/// Price all lines with the applicable rate and server-resolved prepaid amount.
+/// Total card tender settles the balance independently of the new VAT calculation.
 fn compute_totals(input: &CreateInvoiceInput, vat_rate: f64, prepaid_amount: f64) -> InvoiceTotals {
     let urgent_charge = round2(
         input
@@ -725,6 +727,8 @@ fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
     }
 }
 
+/// Reject inconsistent invoice lines, urgency, repeated cards, and excess tender.
+/// This checks structure and totals; persisted card provenance is resolved when writing.
 fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
     let has_urgent_orders = input
         .customers
@@ -2116,6 +2120,7 @@ async fn write_product_lines(
     Ok(())
 }
 
+/// Issue paid cards and their sale lines atomically, retaining allowed codes on invoice edits.
 async fn write_gift_card_sales(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
@@ -2168,6 +2173,8 @@ async fn write_gift_card_sales(
     Ok(issued)
 }
 
+/// Spend valid cards and record tender atomically, returning only sale-backed prepaid value.
+/// Standalone credit settles the purchase while leaving VAT on the supplied goods/services.
 async fn write_redemptions(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
@@ -2191,6 +2198,8 @@ async fn write_redemptions(
     Ok(round2(prepaid_amount))
 }
 
+/// Create lines, stock movements, payments, and card tender in one transaction.
+/// Finalize saved tax figures from actual card provenance before committing the invoice.
 pub async fn create_invoice(
     state: &AppState,
     mut input: CreateInvoiceInput,

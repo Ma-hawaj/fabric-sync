@@ -54,6 +54,7 @@ const LINE_KIND_LABELS: Record<InvoiceLine['kind'], string> = {
   gift_card: 'Gift Card',
 }
 
+/** Render saved tax, prepaid value, tender, and the document kind for one invoice. */
 export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
   const { data: detail, isLoading, isError } = useInvoice(invoiceId)
   const { data: adjustments } = useReturns(invoiceId)

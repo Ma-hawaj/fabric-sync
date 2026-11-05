@@ -21,6 +21,7 @@ import {
   customerOptionLabel,
 } from '@/features/customers/lib/customer-picker'
 
+/** Issue standalone credit without creating an invoice; the server records its issuer. */
 export function GiftCardFormPage() {
   const navigate = useNavigate()
   const createGiftCard = useCreateGiftCard()

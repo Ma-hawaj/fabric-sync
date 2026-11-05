@@ -29,6 +29,7 @@ pub struct VoucherAccounting {
     pub sales_amount: f64,
 }
 
+/// Read merchandise sales, prepaid value, and document kind from saved invoice figures.
 pub async fn voucher_accounting(
     db: &sqlx::PgPool,
     invoice_id: Uuid,
@@ -37,6 +38,7 @@ pub async fn voucher_accounting(
         .bind(invoice_id).fetch_one(db).await
 }
 
+/// Check for the gift-card sale line that establishes prepaid VAT for redemption.
 pub async fn voucher_has_sale_invoice(
     tx: &mut sqlx::PgTransaction<'_>,
     gift_card_id: Uuid,
@@ -101,6 +103,7 @@ fn order_specification(
     (!parts.is_empty()).then(|| parts.join(" · "))
 }
 
+/// Assemble invoice party, saved pricing, merchandise/card lines, and redemption records.
 pub async fn fetch_invoice_detail(
     state: &AppState,
     invoice_id: Uuid,
@@ -997,6 +1000,7 @@ pub struct OldMeasurementRef {
     pub customer_id: Uuid,
 }
 
+/// Load editable lines with their original references, stock hints, and card tax provenance.
 pub async fn fetch_invoice_edit(
     state: &AppState,
     invoice_id: Uuid,
