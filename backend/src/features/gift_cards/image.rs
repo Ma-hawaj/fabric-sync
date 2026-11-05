@@ -191,6 +191,10 @@ mod tests {
         GiftCard {
             issued_by: None,
             taxed_at_issue: false,
+            replaces_card_id: None,
+            replaces_card_code: None,
+            replaced_by_card_id: None,
+            replaced_by_card_code: None,
             id: uuid::Uuid::nil(),
             code: "GC-7KMP-4RWT-9DXH".into(),
             initial_amount: 100.0,

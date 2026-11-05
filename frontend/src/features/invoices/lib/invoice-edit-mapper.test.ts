@@ -115,6 +115,9 @@ describe('mapInvoiceEditToForm', () => {
       true,
       false,
     ])
+    expect(values.redemptions.map((line) => line.originalCode)).toEqual(
+      edit.giftCardRedemptions.map((line) => line.code),
+    )
     expect(invoicePayload(values).giftCardRedemptions).toEqual([
       { code: 'GC-7KMP-4RWT-9DXH', amount: 55 },
       { code: 'GC-8BNQ-5SVX-3FYJ', amount: 55 },

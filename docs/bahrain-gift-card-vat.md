@@ -25,8 +25,8 @@ consideration. A fully voucher-covered purchase requires no second tax invoice.
 - Discounts affect merchandise only. Card values are neither discounted nor
   increased to add VAT. Mixed merchandise/card sales use the same calculation.
 - Tax amounts are saved on the invoice; reprints use the saved figures. Edits
-  keep the original VAT rate. Migration 0005 adds the reporting view without
-  changing saved tax amounts.
+  keep the original VAT rate. The original core migration includes the reporting
+  view; reading it does not change saved tax amounts.
 - `invoice_voucher_accounting.sales_amount` and the **Sales excl. VAT** column
   exclude card funding, include merchandise bought using cards, and subtract
   return credits. **Transaction Total** includes card funding and is not a
@@ -60,7 +60,7 @@ BHD 70 newly taxable amount, BHD 7 new VAT, and BHD 22 balance due. Both balance
 are decremented atomically. Edits restore old tender and resolve the submitted
 cards again, keeping the invoice's original VAT rate.
 
-Migration 0007 derives previously taxed value and document kind from the saved
+The accounting view derives previously taxed value and document kind from the saved
 tax snapshot. Reprints do not infer tax from the current card record. Sales
 reporting continues to include merchandise and exclude gift-card funding.
 Expiry, voiding, available balance, duplicate-code and overpayment checks still
@@ -68,6 +68,26 @@ apply to every card.
 
 This flow treats uninvoiced value as monetary credit, not as a discount coupon
 or a deemed-supply relief claim. Those promotion rules are separate under NBR
-sections 6 and 13.2. A newly issued uninvoiced card does not inherit another
-card's prepaid VAT or transfer/disable its balance; a tax-linked replacement
-workflow is outside this change.
+sections 6 and 13.2.
+
+## Replacing a card
+
+Managers use **Replace card** on an existing card. The server locks that card,
+issues a fresh code for its remaining balance, stores `replaces_card_id` on the
+new record, and sets the old balance to zero and the old code inactive. It keeps
+the recipient, customer, and expiry, and records the replacement operator as
+`issued_by`. The list displays both sides of the relationship. No new invoice,
+new value, or card type is created. A replaced code cannot be restored or spent
+on a new purchase.
+
+VAT provenance follows the replacement chain to the original card's sale
+invoice. Replacing paid value does not tax it again; replacing uninvoiced credit
+does not turn it into prepaid VAT. The original sale cannot be rebuilt after a
+replacement, even if none of the balance has yet been redeemed.
+
+Returns/refunds restore credit to the latest replacement and keep original
+tender references for the audit trail. Editing an invoice can reapply its own
+previously redeemed code against that current balance; a new redemption cannot
+use a retired code. Card locks serialize these operations with further
+replacement requests and spending. The original four migrations contain the
+schema; no incremental gift-card migration files are needed for this baseline.

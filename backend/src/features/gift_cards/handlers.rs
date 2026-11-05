@@ -78,13 +78,28 @@ pub async fn create_gift_card(
     Extension(user): Extension<AuthenticatedUser>,
     Json(input): Json<CreateGiftCardInput>,
 ) -> Result<Json<GiftCard>, AppError> {
-    let actor = user
-        .subject()
+    let actor = issuer(&user)?;
+    Ok(Json(service::create_gift_card(&state, input, actor).await?))
+}
+
+/// Replace a card using the signed-in operator as issuer; no new sale invoice is created.
+pub async fn replace_gift_card(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<GiftCard>, AppError> {
+    Ok(Json(
+        service::replace_gift_card(&state, id, issuer(&user)?).await?,
+    ))
+}
+
+/// Require a nonblank staff identity for both standalone and replacement issuance.
+fn issuer(user: &AuthenticatedUser) -> Result<&str, AppError> {
+    user.subject()
         .filter(|subject| !subject.trim().is_empty())
         .ok_or_else(|| {
             AppError::Unauthorized("a user identity is required to issue a gift card".into())
-        })?;
-    Ok(Json(service::create_gift_card(&state, input, actor).await?))
+        })
 }
 
 pub async fn update_gift_card(

@@ -2180,11 +2180,23 @@ async fn write_redemptions(
     invoice_id: Uuid,
     date: NaiveDate,
     redemptions: &[GiftCardRedemptionInput],
+    previous_card_ids: &[Uuid],
 ) -> Result<f64, AppError> {
     let mut prepaid_amount = 0.0;
     for redemption in redemptions {
         let code = gift_cards_service::normalize_code(&redemption.code)?;
-        let gift_card_id = gift_cards_service::redeem(tx, &code, redemption.amount, date).await?;
+        let gift_card_id = if previous_card_ids.is_empty() {
+            gift_cards_service::redeem(tx, &code, redemption.amount, date).await?
+        } else {
+            gift_cards_service::redeem_for_invoice_edit(
+                tx,
+                &code,
+                redemption.amount,
+                date,
+                previous_card_ids,
+            )
+            .await?
+        };
         // Only an actual sale invoice establishes previously accounted VAT.
         // Standalone credit settles the balance without reducing the tax base.
         if repository::voucher_has_sale_invoice(tx, gift_card_id).await? {
@@ -2277,6 +2289,7 @@ pub async fn create_invoice(
         // Expiry is a calendar date; the sale's moment carries a time.
         invoice_date.date_naive(),
         &input.gift_card_redemptions,
+        &[],
     )
     .await?;
 
@@ -2516,6 +2529,10 @@ pub async fn update_invoice(
         invoice_id,
         locked.invoice_date.date_naive(),
         &input.gift_card_redemptions,
+        &redemptions
+            .iter()
+            .map(|r| r.gift_card_id)
+            .collect::<Vec<_>>(),
     )
     .await?;
 

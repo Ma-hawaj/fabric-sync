@@ -59,6 +59,10 @@ export function GiftCardFormPage() {
           services when this credit is used. To sell a paid gift card, use the
           invoice form.
         </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          To replace a lost card, choose Replace card from the existing card’s
+          actions.
+        </p>
       </div>
 
       <form

@@ -44,7 +44,7 @@ pub async fn voucher_has_sale_invoice(
     gift_card_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=$1 AND kind='gift_card')",
+        "SELECT EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=gift_card_original_id($1) AND kind='gift_card')",
     )
     .bind(gift_card_id)
     .fetch_one(&mut **tx)
@@ -1229,7 +1229,7 @@ pub async fn fetch_invoice_edit(
     let redemption_rows = sqlx::query!(
         r#"
         SELECT g.code, r.amount::float8 AS "amount!",
-               EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=g.id AND kind='gift_card') AS "taxed_at_issue!"
+               EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=gift_card_original_id(g.id) AND kind='gift_card') AS "taxed_at_issue!"
         FROM gift_card_redemptions r
         JOIN gift_cards g ON g.id = r.gift_card_id
         WHERE r.invoice_id = $1
@@ -1429,9 +1429,8 @@ pub async fn old_measurement_refs(
     .await
 }
 
-/// True once a sold card has been spent anywhere — including on the invoice
-/// that sold it. A spent card belongs to two invoices' histories, so it can
-/// neither be deleted nor re-issued by an edit.
+/// True once a sold card has been spent or replaced, making its original sale immutable.
+/// Its history and replacement links must survive rather than being rebuilt by an edit.
 pub async fn sold_card_was_used(
     tx: &mut sqlx::PgTransaction<'_>,
     gift_card_id: Uuid,
@@ -1441,7 +1440,7 @@ pub async fn sold_card_was_used(
         SELECT EXISTS(
             SELECT 1 FROM gift_card_redemptions
             WHERE gift_card_id = $1
-        ) AS "exists!"
+        ) OR EXISTS(SELECT 1 FROM gift_cards WHERE replaces_card_id=$1) AS "exists!"
         "#,
         gift_card_id,
     )
@@ -1515,20 +1514,21 @@ pub async fn restore_product_stock(
     Ok(())
 }
 
-/// Pays tender back onto the card when the redemption that spent it is
-/// deleted.
+/// Restore tender to the latest card in its replacement chain without reviving old codes.
 pub async fn refund_gift_card(
     tx: &mut sqlx::PgTransaction<'_>,
     gift_card_id: Uuid,
     amount: f64,
 ) -> Result<(), sqlx::Error> {
+    let current =
+        crate::features::gift_cards::repository::lock_current_card(tx, gift_card_id).await?;
     sqlx::query!(
         r#"
         UPDATE gift_cards
         SET balance = balance + $2::float8
         WHERE id = $1
         "#,
-        gift_card_id,
+        current.id,
         amount,
     )
     .execute(&mut **tx)

@@ -109,6 +109,8 @@ export interface GiftCardRedemptionDraft {
   key: string
   code: string
   amount: NumberInput
+  /** Existing invoice tender may retain a code that has since been replaced. */
+  originalCode?: string
   /** Preview only; the server resolves this from the card's sale invoice. */
   taxedAtIssue?: boolean
 }

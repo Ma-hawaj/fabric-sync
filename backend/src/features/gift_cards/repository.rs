@@ -18,7 +18,11 @@ const SPEC: ListSpec = ListSpec {
                 WHERE item.gift_card_id = g.id AND item.kind = 'gift_card'
                 ORDER BY item.id LIMIT 1
             )) AS issued_by,
-            EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=g.id AND kind='gift_card') AS taxed_at_issue,
+            EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=gift_card_original_id(g.id) AND kind='gift_card') AS taxed_at_issue,
+            g.replaces_card_id,
+            original.code AS replaces_card_code,
+            replacement.id AS replaced_by_card_id,
+            replacement.code AS replaced_by_card_code,
             g.id,
             g.code,
             g.initial_amount::float8 AS initial_amount,
@@ -32,15 +36,18 @@ const SPEC: ListSpec = ListSpec {
             g.expires_on,
             g.is_active,
             -- Mirrors `giftCardStatus` in the frontend and `check_redeemable`
-            -- in this feature's service: a card can be unusable for three
-            -- separate reasons, and the list filters on the combined status.
+            -- in this feature's service, including permanently retired codes
+            -- with a replacement. The list filters on the combined status.
             CASE
+                WHEN replacement.id IS NOT NULL THEN 'replaced'
                 WHEN NOT g.is_active THEN 'voided'
                 WHEN g.balance <= 0 THEN 'spent'
                 WHEN g.expires_on IS NOT NULL AND g.expires_on < CURRENT_DATE THEN 'expired'
                 ELSE 'active'
             END AS status
         FROM gift_cards g
+        LEFT JOIN gift_cards original ON original.id = g.replaces_card_id
+        LEFT JOIN gift_cards replacement ON replacement.replaces_card_id = g.id
         LEFT JOIN customers c ON c.id = g.customer_id
         LEFT JOIN LATERAL (
             SELECT state, last_error FROM gift_card_deliveries
@@ -118,7 +125,11 @@ pub async fn get_gift_card_by_code(
                 WHERE item.gift_card_id = g.id AND item.kind = 'gift_card'
                 ORDER BY item.id LIMIT 1
             )) AS "issued_by?",
-            EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=g.id AND kind='gift_card') AS "taxed_at_issue!",
+            EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=gift_card_original_id(g.id) AND kind='gift_card') AS "taxed_at_issue!",
+            g.replaces_card_id,
+            original.code AS "replaces_card_code?",
+            replacement.id AS "replaced_by_card_id?",
+            replacement.code AS "replaced_by_card_code?",
             g.id,
             g.code,
             g.initial_amount::float8 AS "initial_amount!",
@@ -132,6 +143,8 @@ pub async fn get_gift_card_by_code(
             g.expires_on,
             g.is_active
         FROM gift_cards g
+        LEFT JOIN gift_cards original ON original.id = g.replaces_card_id
+        LEFT JOIN gift_cards replacement ON replacement.replaces_card_id = g.id
         LEFT JOIN customers c ON c.id = g.customer_id
         LEFT JOIN LATERAL (
             SELECT state, last_error FROM gift_card_deliveries
@@ -197,7 +210,7 @@ pub async fn try_insert_generated_gift_card(
 }
 
 pub async fn update_gift_card(
-    state: &AppState,
+    tx: &mut sqlx::PgTransaction<'_>,
     gift_card_id: Uuid,
     is_active: Option<bool>,
     bought_for: Option<&str>,
@@ -217,8 +230,60 @@ pub async fn update_gift_card(
         bought_for,
         recipient_phone,
     )
-    .fetch_optional(state.db())
+    .fetch_optional(&mut **tx)
     .await
+}
+
+/// Lock a card before replacement, recipient/status edits, or forwarding a refund.
+pub async fn lock_by_id(
+    tx: &mut sqlx::PgTransaction<'_>,
+    id: Uuid,
+) -> Result<Option<GiftCardBalance>, sqlx::Error> {
+    sqlx::query_as!(
+        GiftCardBalance,
+        r#"SELECT id, balance::float8 AS "balance!", is_active, expires_on
+           FROM gift_cards WHERE id=$1 FOR UPDATE"#,
+        id,
+    )
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+/// Find the latest replacement while locking each predecessor before following its link.
+pub async fn lock_current_card(
+    tx: &mut sqlx::PgTransaction<'_>,
+    mut id: Uuid,
+) -> Result<GiftCardBalance, sqlx::Error> {
+    loop {
+        let card = lock_by_id(tx, id).await?.ok_or(sqlx::Error::RowNotFound)?;
+        let next: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM gift_cards WHERE replaces_card_id=$1")
+                .bind(id)
+                .fetch_optional(&mut **tx)
+                .await?;
+        match next {
+            Some(next) => id = next,
+            None => return Ok(card),
+        }
+    }
+}
+
+/// Link a fresh card to its predecessor and retire the old balance in the same transaction.
+pub async fn transfer_replacement(
+    tx: &mut sqlx::PgTransaction<'_>,
+    original: Uuid,
+    replacement: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE gift_cards SET replaces_card_id=$2 WHERE id=$1")
+        .bind(replacement)
+        .bind(original)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query("UPDATE gift_cards SET balance=0, is_active=false WHERE id=$1")
+        .bind(original)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
 }
 
 // FOR UPDATE is what stops two invoices spending the same balance at once: the

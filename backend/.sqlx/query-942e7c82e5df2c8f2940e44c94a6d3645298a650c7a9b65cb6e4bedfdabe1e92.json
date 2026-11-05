@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            COALESCE(g.issued_by, (\n                SELECT i.created_by FROM invoice_items item\n                JOIN invoices i ON i.id = item.invoice_id\n                WHERE item.gift_card_id = g.id AND item.kind = 'gift_card'\n                ORDER BY item.id LIMIT 1\n            )) AS \"issued_by?\",\n            EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=gift_card_original_id(g.id) AND kind='gift_card') AS \"taxed_at_issue!\",\n            g.replaces_card_id,\n            original.code AS \"replaces_card_code?\",\n            replacement.id AS \"replaced_by_card_id?\",\n            replacement.code AS \"replaced_by_card_code?\",\n            g.id,\n            g.code,\n            g.initial_amount::float8 AS \"initial_amount!\",\n            g.balance::float8 AS \"balance!\",\n            g.customer_id,\n            c.name AS \"customer_name?\",\n            g.bought_for,\n            g.recipient_phone,\n            delivery.state AS \"delivery_status?\",\n            delivery.last_error AS \"delivery_error?\",\n            g.expires_on,\n            g.is_active\n        FROM gift_cards g\n        LEFT JOIN gift_cards original ON original.id = g.replaces_card_id\n        LEFT JOIN gift_cards replacement ON replacement.replaces_card_id = g.id\n        LEFT JOIN customers c ON c.id = g.customer_id\n        LEFT JOIN LATERAL (\n            SELECT state, last_error FROM gift_card_deliveries\n            WHERE gift_card_id = g.id ORDER BY created_at DESC, id DESC LIMIT 1\n        ) delivery ON TRUE\n        WHERE g.code = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "issued_by?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "taxed_at_issue!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "replaces_card_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "replaces_card_code?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "replaced_by_card_id?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "replaced_by_card_code?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 7,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "initial_amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 9,
+        "name": "balance!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 10,
+        "name": "customer_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 11,
+        "name": "customer_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "bought_for",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "recipient_phone",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 14,
+        "name": "delivery_status?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "delivery_error?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 16,
+        "name": "expires_on",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 17,
+        "name": "is_active",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "942e7c82e5df2c8f2940e44c94a6d3645298a650c7a9b65cb6e4bedfdabe1e92"
+}

@@ -5,6 +5,10 @@ export interface GiftCard {
   issuedBy: string | null
   /** Derived from the card's sale invoice. Standalone credit is not prepaid VAT. */
   taxedAtIssue: boolean
+  replacesCardId: string | null
+  replacesCardCode: string | null
+  replacedByCardId: string | null
+  replacedByCardCode: string | null
   id: string
   code: string
   initialAmount: number

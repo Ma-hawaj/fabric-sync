@@ -39,7 +39,8 @@ async fn identity(subject: Option<&str>) -> AuthenticatedUser {
 
 fn input() -> CreateGiftCardInput {
     serde_json::from_value(json!({"amount":50,"recipientPhone":"33112233",
-        "issuedBy":"forged-client-issuer","issued_by":"also-forged"}))
+        "issuedBy":"forged-client-issuer","issued_by":"also-forged",
+        "replacesCardId":"00000000-0000-4000-8000-000000000001","taxedAtIssue":true}))
     .unwrap()
 }
 
@@ -52,6 +53,8 @@ async fn standalone_issuer_is_authenticated_immutable_and_available_on_every_rea
             .await
             .unwrap();
     assert_eq!(created.issued_by.as_deref(), Some("original-issuer"));
+    assert!(created.replaces_card_id.is_none());
+    assert!(!created.taxed_at_issue);
     let stored: Option<String> = sqlx::query_scalar("SELECT issued_by FROM gift_cards WHERE id=$1")
         .bind(created.id)
         .fetch_one(&pool)

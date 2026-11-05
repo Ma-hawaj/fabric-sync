@@ -320,6 +320,11 @@
     "roles": ["sales"]
   },
   {
+    "method": "POST",
+    "path": "/gift-cards/:id/replace",
+    "roles": ["manager"]
+  },
+  {
     "method": "PATCH",
     "path": "/gift-cards/:id",
     "roles": ["manager"]

@@ -220,6 +220,7 @@ const redemptionDraftSchema = z
     key: z.string(),
     code: z.string(),
     amount: numberInputSchema,
+    originalCode: z.string().optional(),
     taxedAtIssue: z.boolean().optional(),
   })
   .superRefine((redemption, ctx) => {

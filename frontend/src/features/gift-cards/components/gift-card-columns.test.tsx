@@ -12,6 +12,10 @@ const card: GiftCard = {
   code: 'GC-7KMP-4RWT-9DXH',
   issuedBy: STAFF_USER.id,
   taxedAtIssue: false,
+  replacesCardId: null,
+  replacesCardCode: null,
+  replacedByCardId: null,
+  replacedByCardCode: null,
   initialAmount: 50,
   balance: 50,
   customerId: null,
@@ -31,6 +35,7 @@ const columns = getGiftCardColumns(
   vi.fn(),
   vi.fn(),
   false,
+  vi.fn(),
 )
 
 function GiftCardTable({ data }: { data: GiftCard[] }) {
@@ -53,6 +58,18 @@ function renderTable(value: GiftCard) {
 }
 
 describe('gift-card issuer column', () => {
+  it('shows the original code and the replacement relationship without a card type', () => {
+    renderTable({
+      ...card,
+      replacesCardId: 'old-card',
+      replacesCardCode: 'GC-8BNQ-5SVX-3FYJ',
+    })
+    expect(
+      screen.getByRole('columnheader', { name: /Replacement link/ }),
+    ).toBeTruthy()
+    expect(screen.getByText('GC-8BNQ-5SVX-3FYJ')).toBeTruthy()
+    expect(screen.queryByRole('columnheader', { name: 'Type' })).toBeNull()
+  })
   it('shows the issuing staff name instead of the authentication subject', () => {
     renderTable(card)
     expect(screen.getByRole('columnheader', { name: /Issued by/ })).toBeTruthy()

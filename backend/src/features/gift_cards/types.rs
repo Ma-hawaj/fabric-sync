@@ -9,6 +9,10 @@ pub struct GiftCard {
     pub issued_by: Option<String>,
     /// Derived from the sale invoice, never supplied by the client.
     pub taxed_at_issue: bool,
+    pub replaces_card_id: Option<Uuid>,
+    pub replaces_card_code: Option<String>,
+    pub replaced_by_card_id: Option<Uuid>,
+    pub replaced_by_card_code: Option<String>,
     pub id: Uuid,
     pub code: String,
     pub initial_amount: f64,

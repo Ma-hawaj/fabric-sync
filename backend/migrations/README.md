@@ -14,7 +14,10 @@ SQLx applies the files in version order:
    eighth-inch fractions. Gift card recipient names and phone numbers are
    declared here. Direct material sales are invoice items with a material reference,
    the stock location, and a description/unit snapshot; they share the existing
-   return-credit and refund tables.
+   return-credit and refund tables. Gift-card issuer attribution, replacement
+   links, original-card traversal, and the invoice voucher-accounting view are
+   part of this original baseline. A card may have at most one direct replacement;
+   sale history stays attached to the original card.
 2. `0002_notification_schema.sql` creates immutable PDF artifacts, notification
    previews and approvals, recipients, delivery attempts, webhook storage, and
    the staff-approved gift card delivery queue with its immutable PNG attachments.
@@ -23,17 +26,6 @@ SQLx applies the files in version order:
    Readiness excludes closed orders, and credits/refunds invalidate previews.
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
    return-line lookups and the unique index allowing one closure per garment.
-5. `0005_bahrain_single_purpose_vouchers.sql` adds a merchandise-sales and
-   document-kind view for Bahrain single-purpose vouchers. Paid cards are taxed
-   at issue, and redemptions exclude the previously taxed value. There are no
-   legacy cards to migrate. See `docs/bahrain-gift-card-vat.md`.
-6. `0006_gift_card_issuer.sql` records the authenticated staff subject for cards
-   issued without an invoice. Unknown issuers remain null; invoice-backed cards
-   resolve their issuer from the invoice's creator when read.
-7. `0007_uninvoiced_gift_card_credit.sql` separates tender from previously taxed
-   value in the reporting view, deriving prepaid value and document kind from
-   saved tax figures. Uninvoiced credit can settle a purchase while the goods
-   retain their VAT; no card types or historical tax reclassification are added.
 
 The core schema defines readable customer IDs (`C-6216`) and permanent
 per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.

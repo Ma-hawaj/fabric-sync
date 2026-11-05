@@ -6,6 +6,10 @@ function card(overrides: Partial<GiftCard> = {}): GiftCard {
   return {
     issuedBy: null,
     taxedAtIssue: false,
+    replacesCardId: null,
+    replacesCardCode: null,
+    replacedByCardId: null,
+    replacedByCardCode: null,
     id: 'gc-1',
     code: 'GC-ABC123',
     initialAmount: 500,
@@ -23,6 +27,14 @@ function card(overrides: Partial<GiftCard> = {}): GiftCard {
 }
 
 describe('giftCardStatus', () => {
+  it('reports replaced ahead of voided or spent for an old code', () => {
+    expect(
+      giftCardStatus(
+        card({ isActive: false, balance: 0, replacedByCardId: 'new-card' }),
+        '2026-11-05',
+      ),
+    ).toBe('Replaced')
+  })
   it('is active for a card with a balance and no expiry', () => {
     expect(giftCardStatus(card(), '2026-07-28')).toBe('Active')
   })
