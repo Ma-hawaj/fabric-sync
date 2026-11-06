@@ -33,3 +33,15 @@ export const giftCardFormSchema = z
       })
     }
   })
+
+/** Validate a renewal date while allowing an explicit non-expiring replacement. */
+export function giftCardReplacementSchema(today: string) {
+  return z.object({
+    expiresOn: z
+      .union([z.literal(''), z.iso.date()])
+      .refine(
+        (value) => value === '' || value >= today,
+        'Choose an expiry date today or later, or leave it blank for no expiry.',
+      ),
+  })
+}

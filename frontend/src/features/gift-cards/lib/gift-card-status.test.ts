@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { giftCardStatus } from './gift-card-status'
+import { canReplaceGiftCard, giftCardStatus } from './gift-card-status'
 import type { GiftCard } from '../types/gift-card'
 
 function card(overrides: Partial<GiftCard> = {}): GiftCard {
   return {
+    issuedBy: null,
+    taxedAtIssue: false,
+    replacesCardId: null,
+    replacesCardCode: null,
+    replacedByCardId: null,
+    replacedByCardCode: null,
     id: 'gc-1',
     code: 'GC-ABC123',
     initialAmount: 500,
@@ -21,6 +27,33 @@ function card(overrides: Partial<GiftCard> = {}): GiftCard {
 }
 
 describe('giftCardStatus', () => {
+  it.each([false, true])(
+    'allows expired cards with taxedAtIssue=%s to renew only with a usable balance',
+    (taxedAtIssue) => {
+      const expired = card({ expiresOn: '2000-01-01', taxedAtIssue })
+      expect(canReplaceGiftCard(expired, '2026-11-06')).toBe(true)
+      expect(
+        canReplaceGiftCard({ ...expired, isActive: false }, '2026-11-06'),
+      ).toBe(false)
+      expect(canReplaceGiftCard({ ...expired, balance: 0 }, '2026-11-06')).toBe(
+        false,
+      )
+      expect(
+        canReplaceGiftCard(
+          { ...expired, replacedByCardId: 'replacement' },
+          '2026-11-06',
+        ),
+      ).toBe(false)
+    },
+  )
+  it('reports replaced ahead of voided or spent for an old code', () => {
+    expect(
+      giftCardStatus(
+        card({ isActive: false, balance: 0, replacedByCardId: 'new-card' }),
+        '2026-11-05',
+      ),
+    ).toBe('Replaced')
+  })
   it('is active for a card with a balance and no expiry', () => {
     expect(giftCardStatus(card(), '2026-07-28')).toBe('Active')
   })

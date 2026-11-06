@@ -14,11 +14,13 @@ import { useUpdateGiftCard } from './hooks/use-update-gift-card'
 import { useDownloadGiftCardImage } from './hooks/use-download-gift-card-image'
 import { GiftCardRecipientDialog } from './components/gift-card-recipient-dialog'
 import { SendGiftCardDialog } from './components/send-gift-card-dialog'
+import { ReplaceGiftCardDialog } from './components/replace-gift-card-dialog'
 import type { GiftCard } from './types/gift-card'
 
 export function GiftCardsPage() {
   const [editing, setEditing] = useState<GiftCard | null>(null)
   const [sending, setSending] = useState<GiftCard | null>(null)
+  const [replacing, setReplacing] = useState<GiftCard | null>(null)
   const updateGiftCard = useUpdateGiftCard()
   const download = useDownloadGiftCardImage()
   const today = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
@@ -59,6 +61,7 @@ export function GiftCardsPage() {
           })
         },
         download.isPending,
+        setReplacing,
       ),
     [toggleActive, updateGiftCard.isPending, today, download],
   )
@@ -122,6 +125,12 @@ export function GiftCardsPage() {
           key={sending.id}
           card={sending}
           onClose={() => setSending(null)}
+        />
+      )}
+      {replacing && (
+        <ReplaceGiftCardDialog
+          card={replacing}
+          onClose={() => setReplacing(null)}
         />
       )}
     </div>

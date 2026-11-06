@@ -158,8 +158,9 @@ pub struct CreateGiftCardLineInput {
     pub expires_on: Option<NaiveDate>,
 }
 
-/// A gift card spent on this invoice. Tender rather than a discount, so it is
-/// applied after VAT and does not change `total_price`.
+/// A gift card spent on this invoice. Tender rather than a discount, so it
+/// does not change `total_price`. Its value was taxed at issue and is excluded
+/// from the new VAT base after the issuance record has been verified.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GiftCardRedemptionInput {
@@ -352,6 +353,7 @@ pub struct InvoiceEditGiftCardLine {
 pub struct InvoiceEditRedemption {
     pub code: String,
     pub amount: f64,
+    pub taxed_at_issue: bool,
 }
 
 /// One row of the payments ledger, newest last. `payment_type` is null only
@@ -514,8 +516,7 @@ pub struct InvoiceDetailLine {
     pub unit: Option<String>,
     pub unit_price: f64,
     pub line_total: f64,
-    /// False only for gift card sales — selling stored value is not a taxable
-    /// supply, so the document has to be able to mark the line as excluded.
+    /// Merchandise and paid single-purpose voucher sales are taxable.
     pub taxable: bool,
     /// The raw design choices the order line was created with, so the printed
     /// document can render one chip per slot. Skipped from the REST payload —
@@ -558,6 +559,10 @@ pub struct InvoiceRedemptionLine {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceTotalsBreakdown {
+    /// Value already taxed when the single-purpose vouchers were issued.
+    pub prepaid_amount: f64,
+    /// Merchandise sales excluding VAT, voucher funding and return credits.
+    pub sales_amount: f64,
     pub urgent_charge: f64,
     pub subtotal: f64,
     pub discount: f64,
@@ -638,6 +643,7 @@ pub struct InvoiceRecord {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceDetail {
+    pub document_kind: String,
     pub created_by: Option<String>,
     #[serde(flatten)]
     pub readiness: crate::features::orders::readiness::Summary,
@@ -679,6 +685,8 @@ pub struct InvoiceDetail {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceListItem {
+    pub document_kind: String,
+    pub sales_amount: f64,
     pub created_by: Option<String>,
     #[sqlx(flatten)]
     #[serde(flatten)]

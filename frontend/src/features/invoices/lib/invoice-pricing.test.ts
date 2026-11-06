@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
+  computePrepaidTotal,
   computeOrderLineTotal,
   computeUrgentCharges,
   computeProductLineTotal,
@@ -152,11 +153,12 @@ describe('computeInvoiceTotals', () => {
       urgentCharge: 20,
       giftCardSales: 50,
       redeemed: 10,
+      prepaidAmount: 10,
       paid: 30,
     })
     expect(totals.discountAmount).toBe(10)
-    expect(totals.taxable).toBe(100)
-    expect(totals.vat).toBe(10)
+    expect(totals.taxable).toBe(136.36)
+    expect(totals.vat).toBe(13.64)
     expect(totals.total).toBe(160)
     expect(totals.balanceDue).toBe(120)
   })
@@ -189,6 +191,43 @@ describe('computeInvoiceTotals', () => {
     const totals = computeInvoiceTotals({ ...base, redeemed: 50, paid: 60 })
     expect(totals.balanceDue).toBe(90)
   })
+
+  it.each([
+    [0, 100, 10],
+    [55, 50, 5],
+    [110, 0, 0],
+  ])(
+    'separates prepaid value %s from all redeemed tender',
+    (prepaidAmount, taxable, vat) => {
+      const totals = computeInvoiceTotals({
+        ...base,
+        orderTotal: 110,
+        productTotal: 0,
+        redeemed: 110,
+        prepaidAmount,
+      })
+      expect(totals.prepaidAmount).toBe(prepaidAmount)
+      expect(totals.taxable).toBe(taxable)
+      expect(totals.vat).toBe(vat)
+      expect(totals.balanceDue).toBe(0)
+    },
+  )
+
+  it('does not assume an unverified card has prepaid VAT', () => {
+    const totals = computeInvoiceTotals({ ...base, redeemed: 200 })
+    expect(totals.prepaidAmount).toBe(0)
+    expect(totals.vat).toBe(18.18)
+  })
+})
+
+it('sums prepaid value only from verified card lookups', () => {
+  expect(
+    computePrepaidTotal([
+      { key: 'paid', code: 'GC-1', amount: 55, taxedAtIssue: true },
+      { key: 'credit', code: 'GC-2', amount: 55, taxedAtIssue: false },
+      { key: 'unknown', code: 'GC-3', amount: 55 },
+    ]),
+  ).toBe(55)
 })
 
 describe('computeGiftCardLineTotal', () => {

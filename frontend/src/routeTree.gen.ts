@@ -38,6 +38,7 @@ import { Route as AuthenticatedLocationsNewRouteImport } from './routes/_authent
 import { Route as AuthenticatedInvoicesNewRouteImport } from './routes/_authenticated/invoices/new'
 import { Route as AuthenticatedInventoryNewRouteImport } from './routes/_authenticated/inventory/new'
 import { Route as AuthenticatedGiftCardsNewRouteImport } from './routes/_authenticated/gift-cards/new'
+import { Route as AuthenticatedGiftCardsCodeRouteImport } from './routes/_authenticated/gift-cards/$code'
 import { Route as AuthenticatedDesignOptionsNewRouteImport } from './routes/_authenticated/design-options/new'
 import { Route as AuthenticatedCustomersNewRouteImport } from './routes/_authenticated/customers/new'
 import { Route as AuthenticatedInvoicesInvoiceIdRouteRouteImport } from './routes/_authenticated/invoices/$invoiceId/route'
@@ -219,6 +220,12 @@ const AuthenticatedGiftCardsNewRoute =
     path: '/new',
     getParentRoute: () => AuthenticatedGiftCardsRouteRoute,
   } as any)
+const AuthenticatedGiftCardsCodeRoute =
+  AuthenticatedGiftCardsCodeRouteImport.update({
+    id: '/$code',
+    path: '/$code',
+    getParentRoute: () => AuthenticatedGiftCardsRouteRoute,
+  } as any)
 const AuthenticatedDesignOptionsNewRoute =
   AuthenticatedDesignOptionsNewRouteImport.update({
     id: '/new',
@@ -295,6 +302,7 @@ export interface FileRoutesByFullPath {
   '/invoices/$invoiceId': typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
   '/customers/new': typeof AuthenticatedCustomersNewRoute
   '/design-options/new': typeof AuthenticatedDesignOptionsNewRoute
+  '/gift-cards/$code': typeof AuthenticatedGiftCardsCodeRoute
   '/gift-cards/new': typeof AuthenticatedGiftCardsNewRoute
   '/inventory/new': typeof AuthenticatedInventoryNewRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
@@ -325,6 +333,7 @@ export interface FileRoutesByTo {
   '/users': typeof AuthenticatedUsersRoute
   '/customers/new': typeof AuthenticatedCustomersNewRoute
   '/design-options/new': typeof AuthenticatedDesignOptionsNewRoute
+  '/gift-cards/$code': typeof AuthenticatedGiftCardsCodeRoute
   '/gift-cards/new': typeof AuthenticatedGiftCardsNewRoute
   '/inventory/new': typeof AuthenticatedInventoryNewRoute
   '/invoices/new': typeof AuthenticatedInvoicesNewRoute
@@ -367,6 +376,7 @@ export interface FileRoutesById {
   '/_authenticated/invoices/$invoiceId': typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
   '/_authenticated/customers/new': typeof AuthenticatedCustomersNewRoute
   '/_authenticated/design-options/new': typeof AuthenticatedDesignOptionsNewRoute
+  '/_authenticated/gift-cards/$code': typeof AuthenticatedGiftCardsCodeRoute
   '/_authenticated/gift-cards/new': typeof AuthenticatedGiftCardsNewRoute
   '/_authenticated/inventory/new': typeof AuthenticatedInventoryNewRoute
   '/_authenticated/invoices/new': typeof AuthenticatedInvoicesNewRoute
@@ -409,6 +419,7 @@ export interface FileRouteTypes {
     | '/invoices/$invoiceId'
     | '/customers/new'
     | '/design-options/new'
+    | '/gift-cards/$code'
     | '/gift-cards/new'
     | '/inventory/new'
     | '/invoices/new'
@@ -439,6 +450,7 @@ export interface FileRouteTypes {
     | '/users'
     | '/customers/new'
     | '/design-options/new'
+    | '/gift-cards/$code'
     | '/gift-cards/new'
     | '/inventory/new'
     | '/invoices/new'
@@ -480,6 +492,7 @@ export interface FileRouteTypes {
     | '/_authenticated/invoices/$invoiceId'
     | '/_authenticated/customers/new'
     | '/_authenticated/design-options/new'
+    | '/_authenticated/gift-cards/$code'
     | '/_authenticated/gift-cards/new'
     | '/_authenticated/inventory/new'
     | '/_authenticated/invoices/new'
@@ -716,6 +729,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedGiftCardsNewRouteImport
       parentRoute: typeof AuthenticatedGiftCardsRouteRoute
     }
+    '/_authenticated/gift-cards/$code': {
+      id: '/_authenticated/gift-cards/$code'
+      path: '/$code'
+      fullPath: '/gift-cards/$code'
+      preLoaderRoute: typeof AuthenticatedGiftCardsCodeRouteImport
+      parentRoute: typeof AuthenticatedGiftCardsRouteRoute
+    }
     '/_authenticated/design-options/new': {
       id: '/_authenticated/design-options/new'
       path: '/new'
@@ -828,12 +848,14 @@ const AuthenticatedDesignOptionsRouteRouteWithChildren =
   )
 
 interface AuthenticatedGiftCardsRouteRouteChildren {
+  AuthenticatedGiftCardsCodeRoute: typeof AuthenticatedGiftCardsCodeRoute
   AuthenticatedGiftCardsNewRoute: typeof AuthenticatedGiftCardsNewRoute
   AuthenticatedGiftCardsIndexRoute: typeof AuthenticatedGiftCardsIndexRoute
 }
 
 const AuthenticatedGiftCardsRouteRouteChildren: AuthenticatedGiftCardsRouteRouteChildren =
   {
+    AuthenticatedGiftCardsCodeRoute: AuthenticatedGiftCardsCodeRoute,
     AuthenticatedGiftCardsNewRoute: AuthenticatedGiftCardsNewRoute,
     AuthenticatedGiftCardsIndexRoute: AuthenticatedGiftCardsIndexRoute,
   }

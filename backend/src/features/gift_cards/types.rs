@@ -5,6 +5,14 @@ use uuid::Uuid;
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct GiftCard {
+    /// Authenticated issuer; invoice-backed cards can resolve their creator.
+    pub issued_by: Option<String>,
+    /// Derived from the sale invoice, never supplied by the client.
+    pub taxed_at_issue: bool,
+    pub replaces_card_id: Option<Uuid>,
+    pub replaces_card_code: Option<String>,
+    pub replaced_by_card_id: Option<Uuid>,
+    pub replaced_by_card_code: Option<String>,
     pub id: Uuid,
     pub code: String,
     pub initial_amount: f64,
@@ -41,6 +49,14 @@ pub struct CreateGiftCardInput {
     #[serde(default)]
     pub customer_id: Option<Uuid>,
     #[serde(default)]
+    pub expires_on: Option<NaiveDate>,
+}
+
+/// Replacement expiry is explicit: a date sets it, null makes the replacement non-expiring.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReplaceGiftCardInput {
+    #[serde(deserialize_with = "Option::<NaiveDate>::deserialize")]
     pub expires_on: Option<NaiveDate>,
 }
 

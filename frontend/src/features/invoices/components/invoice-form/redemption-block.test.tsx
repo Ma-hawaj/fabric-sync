@@ -15,25 +15,59 @@ import {
   createEmptyRedemption,
 } from '../../types/invoice-form'
 import type { GiftCard } from '@/features/gift-cards/types/gift-card'
+import type { InvoiceFormValues } from '../../types/invoice-form'
 
-function Harness() {
-  const form = useForm({
-    defaultValues: {
-      ...createEmptyInvoiceForm(),
-      redemptions: [createEmptyRedemption()],
-    },
-  })
+function Harness({
+  originalCode,
+  amount = '',
+}: { originalCode?: string; amount?: number | '' } = {}) {
+  const defaultValues: InvoiceFormValues = {
+    ...createEmptyInvoiceForm(),
+    redemptions: [{ ...createEmptyRedemption(), originalCode, amount }],
+  }
+  const form = useForm({ defaultValues })
   return (
-    <RedemptionBlock
-      form={form}
-      lineIndex={0}
-      date="2026-10-24"
-      onRemove={() => {}}
-    />
+    <>
+      <RedemptionBlock
+        form={form}
+        lineIndex={0}
+        date="2026-10-24"
+        onRemove={() => {}}
+      />
+      <button
+        onClick={() =>
+          form.setFieldValue('redemptions[0].originalCode', card.code)
+        }
+      >
+        Set existing tender
+      </button>
+      <button
+        onClick={() =>
+          form.setFieldValue('redemptions[0].originalCode', undefined)
+        }
+      >
+        Clear existing tender
+      </button>
+      <form.Subscribe
+        selector={(state) => state.values.redemptions[0].taxedAtIssue}
+      >
+        {(taxedAtIssue) => (
+          <output data-testid="taxed-at-issue">
+            {String(taxedAtIssue ?? false)}
+          </output>
+        )}
+      </form.Subscribe>
+    </>
   )
 }
 
 const card: GiftCard = {
+  issuedBy: null,
+  taxedAtIssue: false,
+  replacesCardId: null,
+  replacesCardCode: null,
+  replacedByCardId: null,
+  replacedByCardCode: null,
   id: 'card-1',
   code: 'GC-7KMP-4RWT-9DXH',
   initialAmount: 50,
@@ -49,6 +83,118 @@ const card: GiftCard = {
 }
 
 afterEach(cleanup)
+
+it('updates replacement eligibility when the original tender reference changes', async () => {
+  const client = new QueryClient()
+  client.setQueryData(['gift-card', '7KMP4RWT9DXH'], {
+    ...card,
+    balance: 0,
+    isActive: false,
+    taxedAtIssue: true,
+    replacedByCardId: 'new-card',
+    replacedByCardCode: 'GC-8BNQ-5SVX-3FYJ',
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <Harness amount={33} />
+    </QueryClientProvider>,
+  )
+  const code = screen.getByRole('textbox', { name: 'Gift Card Code' })
+  fireEvent.change(code, { target: { value: '7KMP4RWT9DXH' } })
+  expect(await screen.findByText(/This card was replaced\. Use/)).toBeTruthy()
+  expect(code.getAttribute('aria-invalid')).toBe('true')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Set existing tender' }))
+  expect(
+    await screen.findByText(
+      /Existing redemption\. Changes apply to replacement/,
+    ),
+  ).toBeTruthy()
+  expect(code.getAttribute('aria-invalid')).toBe('false')
+  expect(screen.getByRole('textbox', { name: 'Apply (BHD)' })).toHaveProperty(
+    'value',
+    '33',
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'Clear existing tender' }))
+  expect(await screen.findByText(/This card was replaced\. Use/)).toBeTruthy()
+  expect(code.getAttribute('aria-invalid')).toBe('true')
+})
+
+it.each([false, true])(
+  'accepts a replaced code only when it is existing invoice tender: %s',
+  async (existing) => {
+    const client = new QueryClient()
+    client.setQueryData(['gift-card', '7KMP4RWT9DXH'], {
+      ...card,
+      balance: 0,
+      isActive: false,
+      taxedAtIssue: true,
+      replacedByCardId: 'new-card',
+      replacedByCardCode: 'GC-8BNQ-5SVX-3FYJ',
+    })
+    render(
+      <QueryClientProvider client={client}>
+        <Harness
+          originalCode={existing ? card.code : undefined}
+          amount={existing ? 33 : ''}
+        />
+      </QueryClientProvider>,
+    )
+    const code = screen.getByRole('textbox', { name: 'Gift Card Code' })
+    fireEvent.change(code, { target: { value: '7KMP4RWT9DXH' } })
+    if (existing) {
+      expect(
+        await screen.findByText(
+          /Existing redemption\. Changes apply to replacement/,
+        ),
+      ).toBeTruthy()
+      await waitFor(() =>
+        expect(screen.getByTestId('taxed-at-issue').textContent).toBe('true'),
+      )
+      expect(
+        screen.getByRole('textbox', { name: 'Apply (BHD)' }),
+      ).toHaveProperty('value', '33')
+      expect(code.getAttribute('aria-invalid')).toBe('false')
+    } else {
+      expect(
+        await screen.findByText(/This card was replaced\. Use/),
+      ).toBeTruthy()
+      expect(screen.getByTestId('taxed-at-issue').textContent).toBe('false')
+      expect(code.getAttribute('aria-invalid')).toBe('true')
+    }
+  },
+)
+
+it.each([false, true])(
+  'accepts a card with taxedAtIssue=%s and records its preview provenance',
+  async (taxedAtIssue) => {
+    const client = new QueryClient()
+    client.setQueryData(['gift-card', '7KMP4RWT9DXH'], {
+      ...card,
+      taxedAtIssue,
+    })
+    render(
+      <QueryClientProvider client={client}>
+        <Harness />
+      </QueryClientProvider>,
+    )
+    const code = screen.getByRole('textbox', { name: 'Gift Card Code' })
+    fireEvent.change(code, { target: { value: '7KMP4RWT9DXH' } })
+    expect(await screen.findByText('BHD 50.00 available.')).toBeTruthy()
+    expect(code.getAttribute('aria-invalid')).toBe('false')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: 'Apply (BHD)' }),
+      ).toHaveProperty('value', '50'),
+    )
+    expect(screen.getByTestId('taxed-at-issue').textContent).toBe(
+      String(taxedAtIssue),
+    )
+    fireEvent.change(code, { target: { value: '8BNQ5SVX3FYJ' } })
+    expect(screen.getByTestId('taxed-at-issue').textContent).toBe('false')
+  },
+)
 
 it('lets staff type only twelve characters and fills the stored code after lookup', async () => {
   const client = new QueryClient()

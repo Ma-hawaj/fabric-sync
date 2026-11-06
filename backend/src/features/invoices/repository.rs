@@ -22,6 +22,52 @@ pub struct InvoiceDetailRows {
     pub redemptions: Vec<InvoiceRedemptionLine>,
 }
 
+#[derive(sqlx::FromRow)]
+pub struct VoucherAccounting {
+    pub prepaid_amount: f64,
+    pub document_kind: String,
+    pub sales_amount: f64,
+}
+
+/// Read merchandise sales, prepaid value, and document kind from saved invoice figures.
+pub async fn voucher_accounting(
+    db: &sqlx::PgPool,
+    invoice_id: Uuid,
+) -> Result<VoucherAccounting, sqlx::Error> {
+    sqlx::query_as("SELECT prepaid_amount::float8 AS prepaid_amount, document_kind, sales_amount::float8 AS sales_amount FROM invoice_voucher_accounting WHERE invoice_id=$1")
+        .bind(invoice_id).fetch_one(db).await
+}
+
+/// Check for the gift-card sale line that establishes prepaid VAT for redemption.
+pub async fn voucher_has_sale_invoice(
+    tx: &mut sqlx::PgTransaction<'_>,
+    gift_card_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=gift_card_original_id($1) AND kind='gift_card')",
+    )
+    .bind(gift_card_id)
+    .fetch_one(&mut **tx)
+    .await
+}
+
+/// Finalize the tax figures after resolving the redeemed cards' provenance.
+/// This runs in the invoice transaction before any document can be read.
+pub async fn update_tax_snapshot(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    taxable: f64,
+    vat: f64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE invoices SET taxable_amount=$2::float8, vat_amount=$3::float8 WHERE id=$1")
+        .bind(invoice_id)
+        .bind(taxable)
+        .bind(vat)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
 /// The made-to-measure specification, as one line of prose. Every field is
 /// optional and most orders set only some, so the blanks are dropped rather
 /// than printed as empty labels.
@@ -57,6 +103,7 @@ fn order_specification(
     (!parts.is_empty()).then(|| parts.join(" · "))
 }
 
+/// Assemble invoice party, saved pricing, merchandise/card lines, and redemption records.
 pub async fn fetch_invoice_detail(
     state: &AppState,
     invoice_id: Uuid,
@@ -277,7 +324,7 @@ pub async fn fetch_invoice_detail(
             unit: row.unit,
             unit_price: row.unit_price,
             line_total: row.line_total,
-            taxable: !is_gift_card,
+            taxable: true,
             design_values: None,
         }
     }));
@@ -349,6 +396,8 @@ pub async fn fetch_invoice_detail(
 const SPEC: ListSpec = ListSpec {
     base_sql: r#"
         SELECT
+            voucher.document_kind,
+            voucher.sales_amount::float8 AS sales_amount,
             i.id,
             i.invoice_number,
             i.invoice_date,
@@ -408,6 +457,7 @@ const SPEC: ListSpec = ListSpec {
         FROM invoices i
         LEFT JOIN branch recv ON recv.id = i.branch_id
         JOIN invoice_readiness ready ON ready.invoice_id = i.id
+        JOIN invoice_voucher_accounting voucher ON voucher.invoice_id = i.id
         LEFT JOIN LATERAL (
             SELECT
                 count(*) AS item_count,
@@ -460,6 +510,10 @@ const SPEC: ListSpec = ListSpec {
             ColumnDef::new("invoice_number", ColumnKind::Number),
         ),
         ("date", ColumnDef::new("invoice_date", ColumnKind::Date)),
+        (
+            "salesAmount",
+            ColumnDef::new("sales_amount", ColumnKind::Number),
+        ),
         (
             "collectionMethod",
             ColumnDef::new("collection_method", ColumnKind::Text),
@@ -946,6 +1000,7 @@ pub struct OldMeasurementRef {
     pub customer_id: Uuid,
 }
 
+/// Load editable lines with their original references, stock hints, and card tax provenance.
 pub async fn fetch_invoice_edit(
     state: &AppState,
     invoice_id: Uuid,
@@ -1173,7 +1228,8 @@ pub async fn fetch_invoice_edit(
 
     let redemption_rows = sqlx::query!(
         r#"
-        SELECT g.code, r.amount::float8 AS "amount!"
+        SELECT g.code, r.amount::float8 AS "amount!",
+               EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=gift_card_original_id(g.id) AND kind='gift_card') AS "taxed_at_issue!"
         FROM gift_card_redemptions r
         JOIN gift_cards g ON g.id = r.gift_card_id
         WHERE r.invoice_id = $1
@@ -1233,6 +1289,7 @@ pub async fn fetch_invoice_edit(
             .map(|row| InvoiceEditRedemption {
                 code: row.code,
                 amount: row.amount,
+                taxed_at_issue: row.taxed_at_issue,
             })
             .collect(),
     }))
@@ -1372,9 +1429,8 @@ pub async fn old_measurement_refs(
     .await
 }
 
-/// True once a sold card has been spent anywhere — including on the invoice
-/// that sold it. A spent card belongs to two invoices' histories, so it can
-/// neither be deleted nor re-issued by an edit.
+/// True once a sold card has been spent or replaced, making its original sale immutable.
+/// Its history and replacement links must survive rather than being rebuilt by an edit.
 pub async fn sold_card_was_used(
     tx: &mut sqlx::PgTransaction<'_>,
     gift_card_id: Uuid,
@@ -1384,7 +1440,7 @@ pub async fn sold_card_was_used(
         SELECT EXISTS(
             SELECT 1 FROM gift_card_redemptions
             WHERE gift_card_id = $1
-        ) AS "exists!"
+        ) OR EXISTS(SELECT 1 FROM gift_cards WHERE replaces_card_id=$1) AS "exists!"
         "#,
         gift_card_id,
     )
@@ -1458,20 +1514,21 @@ pub async fn restore_product_stock(
     Ok(())
 }
 
-/// Pays tender back onto the card when the redemption that spent it is
-/// deleted.
+/// Restore tender to the latest card in its replacement chain without reviving old codes.
 pub async fn refund_gift_card(
     tx: &mut sqlx::PgTransaction<'_>,
     gift_card_id: Uuid,
     amount: f64,
 ) -> Result<(), sqlx::Error> {
+    let current =
+        crate::features::gift_cards::repository::lock_current_card(tx, gift_card_id).await?;
     sqlx::query!(
         r#"
         UPDATE gift_cards
         SET balance = balance + $2::float8
         WHERE id = $1
         "#,
-        gift_card_id,
+        current.id,
         amount,
     )
     .execute(&mut **tx)

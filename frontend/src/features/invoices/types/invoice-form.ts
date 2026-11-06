@@ -84,8 +84,7 @@ export interface InvoiceProductDraft {
   unitPrice: NumberInput
 }
 
-// A gift card sold on this invoice. Selling stored value is not a taxable
-// supply, so its amount is added to the total outside the VAT base.
+// Direct material sales use VAT-inclusive unit prices.
 export interface InvoiceMaterialDraft {
   key: string
   originalItemId?: string
@@ -110,6 +109,10 @@ export interface GiftCardRedemptionDraft {
   key: string
   code: string
   amount: NumberInput
+  /** Existing invoice tender may retain a code that has since been replaced. */
+  originalCode?: string
+  /** Preview only; the server resolves this from the card's sale invoice. */
+  taxedAtIssue?: boolean
 }
 
 // One payment taken up front with the invoice. Later payments go through the

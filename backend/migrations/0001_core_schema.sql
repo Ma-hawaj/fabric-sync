@@ -384,9 +384,25 @@ CREATE TABLE gift_cards (
     customer_id UUID REFERENCES customers(id),
     bought_for TEXT,
     recipient_phone TEXT,
+    issued_by TEXT CHECK (issued_by IS NULL OR BTRIM(issued_by) <> ''),
+    replaces_card_id UUID UNIQUE REFERENCES gift_cards(id),
     expires_on DATE,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    CHECK (replaces_card_id IS NULL OR replaces_card_id <> id)
 );
+
+-- Follow replacement links to the original card without rewriting sale history.
+-- UNION also bounds traversal if data outside the application contains a cycle.
+CREATE FUNCTION gift_card_original_id(card_id UUID) RETURNS UUID
+LANGUAGE SQL STABLE AS $$
+    WITH RECURSIVE ancestors AS (
+        SELECT id, replaces_card_id FROM gift_cards WHERE id = card_id
+        UNION
+        SELECT g.id, g.replaces_card_id FROM gift_cards g
+        JOIN ancestors a ON g.id = a.replaces_card_id
+    )
+    SELECT id FROM ancestors WHERE replaces_card_id IS NULL
+$$;
 
 -- Audit trail of every redemption; gift_cards.balance is the running total the
 -- redemptions add up to.
@@ -567,3 +583,23 @@ FROM orders o
 LEFT JOIN invoice_return_lines l ON l.order_id = o.id
 LEFT JOIN invoice_returns r ON r.id = l.return_id
 LEFT JOIN order_cancellations c ON c.order_id = o.id;
+
+-- Tender and previously taxed value are different: uninvoiced credit settles
+-- the customer's balance while VAT remains due on the supplied goods/services.
+-- Derive prepaid value from the issued tax snapshot so reprints are stable.
+CREATE VIEW invoice_voucher_accounting AS
+SELECT i.id AS invoice_id,
+       COALESCE(cards.amount, 0)::numeric(10,2) AS gift_card_sales,
+       (i.total_price - i.taxable_amount - i.vat_amount)::numeric(10,2) AS prepaid_amount,
+       CASE WHEN i.gift_card_redeemed > 0
+                  AND i.gift_card_redeemed = i.total_price
+                  AND i.taxable_amount = 0 AND i.vat_amount = 0
+            THEN 'redemption_receipt' ELSE 'tax_invoice' END AS document_kind,
+       ROUND(GREATEST(balance.net_total - COALESCE(cards.amount, 0), 0)
+             / (1 + i.vat_rate), 2) AS sales_amount
+FROM invoices i
+JOIN invoice_balances balance ON balance.invoice_id = i.id
+LEFT JOIN LATERAL (
+    SELECT SUM(line_total) AS amount FROM invoice_items
+    WHERE invoice_id = i.id AND kind = 'gift_card'
+) cards ON true;

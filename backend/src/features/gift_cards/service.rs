@@ -9,7 +9,9 @@ use crate::{
 
 use super::{
     repository,
-    types::{CreateGiftCardInput, GiftCard, GiftCardBalance, UpdateGiftCardInput},
+    types::{
+        CreateGiftCardInput, GiftCard, GiftCardBalance, ReplaceGiftCardInput, UpdateGiftCardInput,
+    },
 };
 
 // A power-of-two alphabet avoids modulo bias and omits 0/O and 1/I.
@@ -66,18 +68,24 @@ pub fn generate_code() -> String {
     code
 }
 
+/// Create a card and return its id/code within the caller's transaction.
+/// Standalone issuers are stored directly; invoice-backed issuers resolve from the sale.
 pub async fn issue_gift_card(
     tx: &mut sqlx::PgTransaction<'_>,
     input: &CreateGiftCardInput,
     region: &str,
+    issued_by: Option<&str>,
 ) -> Result<(Uuid, String), AppError> {
-    issue_with_generator(tx, input, region, generate_code).await
+    issue_with_generator(tx, input, region, issued_by, generate_code).await
 }
 
+/// Validate amount/phone and retry generated-code collisions without aborting the transaction.
+/// Stop with a conflict after the bounded retry budget, preserving issuer attribution.
 pub(super) async fn issue_with_generator(
     tx: &mut sqlx::PgTransaction<'_>,
     input: &CreateGiftCardInput,
     region: &str,
+    issued_by: Option<&str>,
     mut generate: impl FnMut() -> String,
 ) -> Result<(Uuid, String), AppError> {
     validate_amount(input.amount)?;
@@ -92,6 +100,7 @@ pub(super) async fn issue_with_generator(
             input.expires_on,
             input.bought_for.as_deref(),
             &phone,
+            issued_by,
         )
         .await?
         {
@@ -154,13 +163,20 @@ pub async fn get_gift_card_by_code(state: &AppState, code: &str) -> Result<GiftC
         .ok_or_else(|| AppError::NotFound(format!("no gift card with code {code}")))
 }
 
+/// Commit standalone credit with the supplied authenticated issuer and no sale invoice.
 pub async fn create_gift_card(
     state: &AppState,
     input: CreateGiftCardInput,
+    actor: &str,
 ) -> Result<GiftCard, AppError> {
     let mut tx = state.db().begin().await?;
-    let (gift_card_id, _) =
-        issue_gift_card(&mut tx, &input, &state.notifications().default_region).await?;
+    let (gift_card_id, _) = issue_gift_card(
+        &mut tx,
+        &input,
+        &state.notifications().default_region,
+        Some(actor),
+    )
+    .await?;
 
     tx.commit().await?;
 
@@ -175,18 +191,29 @@ pub async fn create_gift_card(
         .expect("gift card was just created"))
 }
 
+/// Correct recipient/status details while preventing restoration of a replaced code.
 pub async fn update_gift_card(
     state: &AppState,
     gift_card_id: Uuid,
     input: UpdateGiftCardInput,
 ) -> Result<GiftCard, AppError> {
+    let mut tx = state.db().begin().await?;
+    repository::lock_by_id(&mut tx, gift_card_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("gift card not found".into()))?;
+    let card = repository::get_gift_card_in_tx(&mut tx, gift_card_id).await?;
+    if input.is_active == Some(true) && card.replaced_by_card_id.is_some() {
+        return Err(AppError::Conflict(
+            "A replaced card cannot be restored. Use its replacement.".into(),
+        ));
+    }
     let phone = input
         .recipient_phone
         .as_deref()
         .map(|raw| recipient_phone(raw, &state.notifications().default_region))
         .transpose()?;
     repository::update_gift_card(
-        state,
+        &mut tx,
         gift_card_id,
         input.is_active,
         input.bought_for.as_deref(),
@@ -194,6 +221,8 @@ pub async fn update_gift_card(
     )
     .await?
     .ok_or_else(|| AppError::NotFound(format!("gift card {gift_card_id} not found")))?;
+
+    tx.commit().await?;
 
     tracing::info!(
         gift_card_id = %gift_card_id,
@@ -206,6 +235,60 @@ pub async fn update_gift_card(
         .expect("gift card was just updated"))
 }
 
+/// Transfer remaining value to a new code, preserving recipient and VAT lineage.
+/// All cards can receive a new expiry after expiration without changing their VAT history.
+/// Locking the source serializes replacement against spending, refunds, and repeated requests.
+pub async fn replace_gift_card(
+    state: &AppState,
+    original_id: Uuid,
+    input: ReplaceGiftCardInput,
+    actor: &str,
+) -> Result<GiftCard, AppError> {
+    let mut tx = state.db().begin().await?;
+    let locked = repository::lock_by_id(&mut tx, original_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("gift card not found".into()))?;
+    let original = repository::get_gift_card_in_tx(&mut tx, original_id).await?;
+    if original.replaced_by_card_id.is_some() {
+        return Err(AppError::Conflict(
+            "This card has already been replaced.".into(),
+        ));
+    }
+    validate_amount(locked.balance)?;
+    let today = chrono::Utc::now().date_naive();
+    if input.expires_on.is_some_and(|expiry| expiry < today) {
+        return Err(AppError::BadRequest(
+            "Choose an expiry date today or later, or no expiry.".into(),
+        ));
+    }
+    let replacement_balance = GiftCardBalance {
+        expires_on: input.expires_on,
+        ..locked.clone()
+    };
+    check_redeemable(&replacement_balance, &original.code, locked.balance, today)?;
+    let input = CreateGiftCardInput {
+        amount: locked.balance,
+        bought_for: original.bought_for,
+        recipient_phone: original.recipient_phone.ok_or_else(|| {
+            AppError::BadRequest("Add a recipient phone number before replacing this card.".into())
+        })?,
+        customer_id: original.customer_id,
+        expires_on: input.expires_on,
+    };
+    let (replacement_id, _) = issue_gift_card(
+        &mut tx,
+        &input,
+        &state.notifications().default_region,
+        Some(actor),
+    )
+    .await?;
+    repository::transfer_replacement(&mut tx, original_id, replacement_id).await?;
+    tx.commit().await?;
+    repository::get_gift_card(state, replacement_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("replacement card not found".into()))
+}
+
 /// Spends `amount` off the card with this code and returns its id, so the
 /// caller can record the redemption against an invoice. Tx-scoped: invoices
 /// calls this inside its own transaction, and a later failure rolls the balance
@@ -216,18 +299,35 @@ pub async fn redeem(
     amount: f64,
     on: NaiveDate,
 ) -> Result<Uuid, AppError> {
+    redeem_for_invoice_edit(tx, code, amount, on, &[]).await
+}
+
+/// Reapply old invoice tender through its latest replacement while retaining the original code.
+/// Only ids from that invoice's locked redemption records may follow a retired code.
+pub async fn redeem_for_invoice_edit(
+    tx: &mut sqlx::PgTransaction<'_>,
+    code: &str,
+    amount: f64,
+    on: NaiveDate,
+    previous_card_ids: &[Uuid],
+) -> Result<Uuid, AppError> {
     let code = normalize_code(code)?;
-    let card = repository::lock_by_code(tx, &code)
+    let original = repository::lock_by_code(tx, &code)
         .await?
         .ok_or_else(|| AppError::BadRequest(format!("no gift card with code {code}")))?;
 
+    let card = if previous_card_ids.contains(&original.id) {
+        repository::lock_current_card(tx, original.id).await?
+    } else {
+        original.clone()
+    };
     check_redeemable(&card, &code, amount, on)?;
 
     repository::decrement_balance(tx, card.id, amount).await?;
 
     tracing::info!(gift_card_id = %card.id, code = %code, amount, "gift card redeemed");
 
-    Ok(card.id)
+    Ok(original.id)
 }
 
 #[cfg(test)]

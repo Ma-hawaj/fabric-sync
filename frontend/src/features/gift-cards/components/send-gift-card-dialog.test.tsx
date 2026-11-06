@@ -15,6 +15,12 @@ vi.mock('@/lib/api', () => ({ apiClient: { get: vi.fn(), post: vi.fn() } }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn() } }))
 
 const card: GiftCard = {
+  issuedBy: null,
+  taxedAtIssue: false,
+  replacesCardId: null,
+  replacesCardCode: null,
+  replacedByCardId: null,
+  replacedByCardCode: null,
   id: 'card-1',
   code: 'GC-AUTO',
   initialAmount: 50,

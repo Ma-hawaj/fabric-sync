@@ -10,4 +10,8 @@ pub mod types;
 pub use routes::router;
 
 #[cfg(test)]
+mod attribution_tests;
+#[cfg(test)]
+mod replacement_tests;
+#[cfg(test)]
 mod tests;

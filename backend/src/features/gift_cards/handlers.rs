@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     delivery, image, service,
-    types::{CreateGiftCardInput, GiftCard, UpdateGiftCardInput},
+    types::{CreateGiftCardInput, GiftCard, ReplaceGiftCardInput, UpdateGiftCardInput},
 };
 
 pub async fn download_image(
@@ -71,12 +71,36 @@ pub async fn get_gift_card_by_code(
     Ok(Json(service::get_gift_card_by_code(&state, &code).await?))
 }
 
+/// Issue standalone credit using the authenticated subject, rejecting missing identities.
+/// Client input cannot supply the issuer or establish prepaid VAT.
 pub async fn create_gift_card(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(input): Json<CreateGiftCardInput>,
 ) -> Result<Json<GiftCard>, AppError> {
-    Ok(Json(service::create_gift_card(&state, input).await?))
+    let actor = issuer(&user)?;
+    Ok(Json(service::create_gift_card(&state, input, actor).await?))
+}
+
+/// Replace a card using the signed-in operator as issuer; no new sale invoice is created.
+pub async fn replace_gift_card(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(id): Path<Uuid>,
+    Json(input): Json<ReplaceGiftCardInput>,
+) -> Result<Json<GiftCard>, AppError> {
+    Ok(Json(
+        service::replace_gift_card(&state, id, input, issuer(&user)?).await?,
+    ))
+}
+
+/// Require a nonblank staff identity for both standalone and replacement issuance.
+fn issuer(user: &AuthenticatedUser) -> Result<&str, AppError> {
+    user.subject()
+        .filter(|subject| !subject.trim().is_empty())
+        .ok_or_else(|| {
+            AppError::Unauthorized("a user identity is required to issue a gift card".into())
+        })
 }
 
 pub async fn update_gift_card(

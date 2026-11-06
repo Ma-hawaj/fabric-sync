@@ -21,6 +21,7 @@ import {
   customerOptionLabel,
 } from '@/features/customers/lib/customer-picker'
 
+/** Issue standalone credit without creating an invoice; the server records its issuer. */
 export function GiftCardFormPage() {
   const navigate = useNavigate()
   const createGiftCard = useCreateGiftCard()
@@ -54,8 +55,13 @@ export function GiftCardFormPage() {
           Issue Gift Card
         </h1>
         <p className="text-muted-foreground">
-          Issues a card without a sale, for a comp or a replacement. Selling one
-          to a customer is done from the invoice form instead.
+          Issue credit without creating an invoice. VAT applies to the goods or
+          services when this credit is used. To sell a paid gift card, use the
+          invoice form.
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          To replace a lost card, choose Replace card from the existing card’s
+          actions.
         </p>
       </div>
 

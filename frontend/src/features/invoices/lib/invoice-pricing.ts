@@ -69,6 +69,22 @@ export function computeRedemptionTotal(
     : 0
 }
 
+/** Sum rounded redemption amounts only for cards verified as taxed at issue. */
+export function computePrepaidTotal(
+  redemptions: GiftCardRedemptionDraft[],
+): number {
+  return (
+    Math.round(
+      redemptions.reduce(
+        /** Include only the portion whose lookup established prepaid VAT. */
+        (sum, line) =>
+          sum + (line.taxedAtIssue ? computeRedemptionTotal(line) : 0),
+        0,
+      ) * 100,
+    ) / 100
+  )
+}
+
 // The net (taxable) part inside a gross figure, and the VAT inside it. The
 // VAT is the remainder — gross minus net — so the two always add back to the
 // gross the customer was quoted, to the fils.
@@ -81,6 +97,7 @@ export function extractVat(gross: number, vatRate: number): number {
 }
 
 export interface InvoiceGrossTotals {
+  prepaidAmount: number
   /** Everything VAT applies to, as entered gross. */
   grossSubtotal: number
   giftCardSales: number
@@ -105,9 +122,11 @@ function discountOf(
   return Math.max(0, Math.min(Math.round(raw * 100) / 100, grossSubtotal))
 }
 
-// The same arithmetic the backend's breakdown runs, for live form totals:
-// discount off the gross, VAT extracted from the discounted gross, gift
-// cards joining the total untaxed, tender netted off the balance.
+/**
+ * Mirror backend gross pricing for the live preview using the supplied VAT rate.
+ * Discounts affect merchandise; only verified prepaid value reduces new VAT.
+ * All redeemed credit reduces the balance due, including uninvoiced credit.
+ */
 export function computeInvoiceTotals(input: {
   vatRate: number
   orderTotal: number
@@ -117,6 +136,7 @@ export function computeInvoiceTotals(input: {
   discountUnit: 'amount' | 'percent'
   urgentCharge?: number
   redeemed: number
+  prepaidAmount?: number
   paid: number
 }): InvoiceGrossTotals {
   const grossSubtotal =
@@ -129,15 +149,22 @@ export function computeInvoiceTotals(input: {
   const urgentCharge = Math.round((input.urgentCharge ?? 0) * 100) / 100
   const gross =
     Math.round((grossSubtotal - discountAmount + urgentCharge) * 100) / 100
-  const taxable = extractNet(gross, input.vatRate)
-  const vat = extractVat(gross, input.vatRate)
   const giftCardSales = Math.round(input.giftCardSales * 100) / 100
   const total = Math.round((gross + giftCardSales) * 100) / 100
   const redeemed = Math.min(input.redeemed, total)
+  const prepaidAmount = Math.max(
+    0,
+    Math.min(input.prepaidAmount ?? 0, redeemed),
+  )
+  const taxableGross =
+    Math.round(Math.max(total - prepaidAmount, 0) * 100) / 100
+  const taxable = extractNet(taxableGross, input.vatRate)
+  const vat = extractVat(taxableGross, input.vatRate)
   const paid = input.paid
   const balanceDue = Math.max(total - redeemed - paid, 0)
 
   return {
+    prepaidAmount,
     grossSubtotal,
     giftCardSales,
     discountAmount,

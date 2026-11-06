@@ -35,6 +35,7 @@ import {
   computeUrgentCharges,
   computeProductLineTotal,
   computeRedemptionTotal,
+  computePrepaidTotal,
 } from '../../lib/invoice-pricing'
 import type {
   InvoiceFormApi,
@@ -55,6 +56,7 @@ const PAYMENT_TYPE_OPTIONS: { value: PaymentType; label: string }[] = [
   { value: 'card', label: 'Card' },
 ]
 
+/** Preview gross totals and tender, excluding only verified prepaid value from new VAT. */
 function invoiceTotals(values: InvoiceFormValues) {
   if (typeof values.expectedVatRate !== 'number') return null
   return computeInvoiceTotals({
@@ -83,6 +85,7 @@ function invoiceTotals(values: InvoiceFormValues) {
       (sum, line) => sum + computeRedemptionTotal(line),
       0,
     ),
+    prepaidAmount: computePrepaidTotal(values.redemptions),
     paid: values.payments.reduce(
       (sum, payment) =>
         sum + (payment.amount === '' ? 0 : Math.max(payment.amount, 0)),
@@ -103,6 +106,7 @@ interface InvoiceSummaryProps {
   children?: ReactNode
 }
 
+/** Show the invoice preview and tender controls using the configured VAT rate. */
 export function InvoiceSummary({
   form,
   customerNames,
@@ -248,6 +252,7 @@ export function InvoiceSummary({
         )}
         {totals ? (
           <InvoicePriceSummary
+            prepaidAmount={totals.prepaidAmount}
             total={totals.total}
             vat={totals.vat}
             vatRate={values.expectedVatRate as number}
@@ -287,7 +292,7 @@ export function InvoiceSummary({
                   {line.code
                     ? `Gift card ${line.code}`
                     : `Gift card ${index + 1}`}{' '}
-                  (not taxed)
+                  (incl. VAT)
                 </span>
                 <span className="shrink-0 tabular-nums">
                   {CURRENCY} {computeGiftCardLineTotal(line).toFixed(2)}

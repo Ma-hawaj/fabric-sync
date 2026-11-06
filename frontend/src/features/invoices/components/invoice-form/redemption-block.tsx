@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useState } from 'react'
+import { useStore } from '@tanstack/react-form'
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
@@ -24,6 +25,10 @@ interface RedemptionBlockProps {
   onRemove: () => void
 }
 
+/**
+ * Look up a presented card, validate its status, and populate its redemption preview.
+ * Tax provenance comes from the lookup and is cleared whenever the code changes.
+ */
 export function RedemptionBlock({
   form,
   lineIndex,
@@ -42,26 +47,45 @@ export function RedemptionBlock({
 
   const { data: card, isFetching } = useGiftCardByCode(lookupCode)
   const status = card ? giftCardStatus(card, date) : null
+  const originalCode = useStore(
+    form.store,
+    (state) => state.values.redemptions[lineIndex]?.originalCode,
+  )
+  const existingReplacement =
+    status === 'Replaced' && card?.code === originalCode
 
   // Prefilling the full remaining balance is the common case; only do it once
   // per resolved card so it doesn't fight a hand-typed amount.
   const prefilledFor = React.useRef<string | null>(null)
   React.useEffect(() => {
-    if (!card || status !== 'Active' || prefilledFor.current === card.id) return
+    if (!card || (status !== 'Active' && !existingReplacement)) return
     const currentCode = form.getFieldValue(`${base}.code` as never) as string
     if (normalizeCode(currentCode) !== lookupCode) return
+    form.setFieldValue(
+      `${base}.taxedAtIssue` as never,
+      card.taxedAtIssue as never,
+    )
+    if (existingReplacement) {
+      form.setFieldValue(`${base}.code` as never, card.code as never)
+      return
+    }
+    if (prefilledFor.current === card.id) return
     prefilledFor.current = card.id
     form.setFieldValue(`${base}.code` as never, card.code as never)
     form.setFieldValue(`${base}.amount` as never, card.balance as never)
-  }, [card, status, form, base, lookupCode])
+  }, [card, status, form, base, lookupCode, existingReplacement])
 
+  /** Describe lookup progress or usability using expiry on the invoice date. */
   function hint() {
     if (!lookupCode)
       return 'Enter or scan the code. GC and dashes are optional.'
     if (isFetching) return 'Checking…'
     if (!card) return 'No gift card with this code.'
-
+    if (existingReplacement)
+      return `Existing redemption. Changes apply to replacement ${card.replacedByCardCode}.`
     switch (status) {
+      case 'Replaced':
+        return `This card was replaced. Use ${card.replacedByCardCode}.`
       case 'Voided':
         return 'This card has been voided and cannot be spent.'
       case 'Spent':
@@ -73,7 +97,11 @@ export function RedemptionBlock({
     }
   }
 
-  const unusable = Boolean(lookupCode) && !isFetching && status !== 'Active'
+  const unusable =
+    Boolean(lookupCode) &&
+    !isFetching &&
+    status !== 'Active' &&
+    !existingReplacement
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
@@ -97,6 +125,11 @@ export function RedemptionBlock({
               onChange={(event) => {
                 const raw = event.target.value
                 field.handleChange(normalizeCode(raw))
+                form.setFieldValue(
+                  `${base}.taxedAtIssue` as never,
+                  false as never,
+                )
+                prefilledFor.current = null
                 scheduleLookup(normalizeCode(raw))
               }}
             />

@@ -14,6 +14,9 @@ export interface InvoiceCustomer {
 // payments (the ledger). The invoice total stays at the original sale value;
 // `netTotal` and tender account for credits and refunds separately.
 export interface Invoice extends ReadinessFields {
+  documentKind?: 'tax_invoice' | 'redemption_receipt'
+  /** Merchandise sales excluding VAT, voucher funding and return credits. */
+  salesAmount?: number
   createdBy: string | null
   urgentCharge: number
   collectionMethod: 'delivery' | 'pickup'

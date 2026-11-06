@@ -12,6 +12,7 @@ import {
   computeUrgentCharges,
   computeProductLineTotal,
   computeRedemptionTotal,
+  computePrepaidTotal,
 } from './invoice-pricing'
 
 // A blank string means "not entered yet" — mirrors NumberInput in
@@ -215,6 +216,8 @@ const redemptionDraftSchema = z
     key: z.string(),
     code: z.string(),
     amount: numberInputSchema,
+    originalCode: z.string().optional(),
+    taxedAtIssue: z.boolean().optional(),
   })
   .superRefine((redemption, ctx) => {
     if (!redemption.code.trim()) {
@@ -260,6 +263,7 @@ const paymentDraftSchema = z
     }
   })
 
+/** Validate invoice lines and cross-field tender limits before submitting a draft. */
 export const invoiceFormSchema = z
   .object({
     // The promised delivery date, if one was promised at all. Blank means
@@ -461,6 +465,7 @@ export const invoiceFormSchema = z
         (sum, redemption) => sum + computeRedemptionTotal(redemption),
         0,
       ),
+      prepaidAmount: computePrepaidTotal(value.redemptions),
       paid: value.payments.reduce(
         (sum, payment) =>
           sum + (payment.amount === '' ? 0 : Math.max(payment.amount, 0)),

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { giftCardFormSchema } from './gift-card-schema'
+import {
+  giftCardFormSchema,
+  giftCardReplacementSchema,
+} from './gift-card-schema'
 import { createEmptyGiftCardForm } from '../types/gift-card-form'
 import type { GiftCardFormValues } from '../types/gift-card-form'
 
@@ -52,4 +55,27 @@ describe('giftCardFormSchema', () => {
       expect(error?.path).toEqual(['amount'])
     }
   })
+})
+
+describe('giftCardReplacementSchema', () => {
+  it.each(['', '2026-11-06', '2027-01-01'])(
+    'accepts renewal expiry %j',
+    (expiresOn) => {
+      expect(
+        giftCardReplacementSchema('2026-11-06').safeParse({ expiresOn })
+          .success,
+      ).toBe(true)
+    },
+  )
+  it.each(['2026-11-05', 'not-a-date', '2027-02-30'])(
+    'rejects invalid renewal expiry %j',
+    (expiresOn) => {
+      const result = giftCardReplacementSchema('2026-11-06').safeParse({
+        expiresOn,
+      })
+      expect(result.success).toBe(false)
+      if (!result.success)
+        expect(result.error.issues[0].path).toEqual(['expiresOn'])
+    },
+  )
 })

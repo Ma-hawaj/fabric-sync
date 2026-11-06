@@ -4,13 +4,16 @@ import {
   SendIcon,
   PencilIcon,
   DownloadIcon,
+  RefreshCwIcon,
 } from 'lucide-react'
 import { defineColumns } from '@/lib/define-columns'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { RowActions } from '@/components/data-table/row-actions'
 import { CURRENCY } from '@/lib/currency'
-import { giftCardStatus } from '../lib/gift-card-status'
+import { StaffName } from '@/features/users/components/staff-name'
+import { Link } from '@tanstack/react-router'
+import { canReplaceGiftCard, giftCardStatus } from '../lib/gift-card-status'
 import type { GiftCard } from '../types/gift-card'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -18,6 +21,7 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: CURRENCY,
 })
 
+/** Build gift-card columns with staff-name attribution and permission-aware actions. */
 export const getGiftCardColumns = (
   onToggleActive: (card: GiftCard) => void,
   isToggling: boolean,
@@ -26,6 +30,7 @@ export const getGiftCardColumns = (
   onSend: (card: GiftCard) => void,
   onDownload: (card: GiftCard) => void,
   isDownloading: boolean,
+  onReplace: (card: GiftCard) => void,
 ) =>
   defineColumns<GiftCard>()([
     {
@@ -34,7 +39,13 @@ export const getGiftCardColumns = (
         <DataTableColumnHeader column={column} label="Code" />
       ),
       cell: ({ row }) => (
-        <div className="font-mono font-medium">{row.getValue('code')}</div>
+        <Link
+          to="/gift-cards/$code"
+          params={{ code: row.original.code }}
+          className="font-mono font-medium underline-offset-4 hover:underline"
+        >
+          {row.original.code}
+        </Link>
       ),
       enableSorting: true,
       enableColumnFilter: true,
@@ -42,6 +53,57 @@ export const getGiftCardColumns = (
         label: 'Code',
         placeholder: 'Filter code...',
         variant: 'text',
+      },
+    },
+    {
+      accessorKey: 'issuedBy',
+      size: 180,
+      header: 'Issued by',
+      cell: ({ row }) => <StaffName userId={row.original.issuedBy} />,
+      enableSorting: false,
+      enableColumnFilter: false,
+      meta: { label: 'Issued by' },
+    },
+    {
+      id: 'replacement',
+      header: 'Replacement link',
+      size: 250,
+      enableSorting: false,
+      enableColumnFilter: false,
+      meta: { label: 'Replacement link' },
+      cell: ({ row }) => {
+        const card = row.original
+        return (
+          <div className="space-y-1 text-xs">
+            {card.replacesCardCode && (
+              <p>
+                Replaces{' '}
+                <Link
+                  to="/gift-cards/$code"
+                  params={{ code: card.replacesCardCode }}
+                  className="font-mono underline underline-offset-4"
+                >
+                  {card.replacesCardCode}
+                </Link>
+              </p>
+            )}
+            {card.replacedByCardCode && (
+              <p>
+                Replaced by{' '}
+                <Link
+                  to="/gift-cards/$code"
+                  params={{ code: card.replacedByCardCode }}
+                  className="font-mono underline underline-offset-4"
+                >
+                  {card.replacedByCardCode}
+                </Link>
+              </p>
+            )}
+            {!card.replacesCardCode && !card.replacedByCardCode && (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </div>
+        )
       },
     },
     {
@@ -167,8 +229,8 @@ export const getGiftCardColumns = (
       ),
       cell: ({ row }) => {
         const status = giftCardStatus(row.original, today)
-        // Only a spendable card gets the filled badge; the three ways a card
-        // can be unusable all read as muted outlines.
+        // Only a spendable card gets the filled badge; retired and unusable
+        // codes read as muted outlines.
         return status === 'Active' ? (
           <Badge variant="secondary">Active</Badge>
         ) : (
@@ -188,6 +250,7 @@ export const getGiftCardColumns = (
           { label: 'Spent', value: 'spent' },
           { label: 'Expired', value: 'expired' },
           { label: 'Voided', value: 'voided' },
+          { label: 'Replaced', value: 'replaced' },
         ],
       },
     },
@@ -224,10 +287,17 @@ export const getGiftCardColumns = (
                 onClick: () => onSend(card),
               },
               {
+                label: 'Replace card',
+                permission: { method: 'POST', path: '/gift-cards/:id/replace' },
+                icon: RefreshCwIcon,
+                disabled: !canReplaceGiftCard(card, today),
+                onClick: () => onReplace(card),
+              },
+              {
                 label: card.isActive ? 'Void' : 'Restore',
                 permission: { method: 'PATCH', path: '/gift-cards/:id' },
                 icon: card.isActive ? BanIcon : RotateCcwIcon,
-                disabled: isToggling,
+                disabled: isToggling || Boolean(card.replacedByCardId),
                 destructive: card.isActive,
                 onClick: () => onToggleActive(card),
               },

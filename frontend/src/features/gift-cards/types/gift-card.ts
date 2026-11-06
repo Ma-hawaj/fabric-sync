@@ -2,6 +2,13 @@
 // to spend and is decremented across invoices, so it outlives the sale that
 // created it.
 export interface GiftCard {
+  issuedBy: string | null
+  /** Derived from the card's sale invoice. Standalone credit is not prepaid VAT. */
+  taxedAtIssue: boolean
+  replacesCardId: string | null
+  replacesCardCode: string | null
+  replacedByCardId: string | null
+  replacedByCardCode: string | null
   id: string
   code: string
   initialAmount: number
