@@ -12,7 +12,10 @@ import {
 } from '../../lib/garment-pricing'
 import { usePricing } from '../../hooks/use-pricing'
 import { SegmentedOptions } from '@/components/form/segmented-options'
-import { PRODUCTION_FILTERS } from '@/features/locations/lib/location-filters'
+import {
+  PRODUCTION_FILTERS,
+  productionLocations,
+} from '@/features/locations/lib/location-filters'
 import { CheckIcon, ChevronDownIcon, CopyIcon, XIcon } from 'lucide-react'
 import { NumberField, TextField } from '@/components/form/fields'
 import { AsyncCombobox } from '@/components/form/async-combobox'
@@ -32,6 +35,7 @@ import { CURRENCY } from '@/lib/currency'
 import { useDesignOptions } from '@/features/design-options/hooks/use-design-options'
 import type { Location } from '@/features/locations/types/location'
 import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
+import { useLocation } from '@/features/locations/hooks/use-location'
 import { useInvoiceLocationDefault } from '../../hooks/use-invoice-location-default'
 import { GrossVatHint } from './gross-vat-hint'
 import { DesignPicker } from './design-picker'
@@ -120,7 +124,8 @@ export function OrderBlock({
       ? (initialMaterialForId?.(storedMaterialId) ?? null)
       : null,
   )
-  // Stock and production defaults are independent and never overwrite a choice.
+  // Stock keeps its own default; production prefers the selected stock source
+  // when that location can produce orders.
   const stockDefault = useApplicableDefaultLocation('stock')
   const productionDefault = useInvoiceLocationDefault('production')
   // The whole design catalog, shared across every order block on the form —
@@ -135,6 +140,20 @@ export function OrderBlock({
     (state): InvoiceOrderDraft | undefined =>
       state.values.customers[customerIndex]?.orders[orderIndex],
   )
+  const [productionChosen, setProductionChosen] = useState(
+    !!draft?.productionLocationId,
+  )
+  const materialLocationId =
+    materialSource === 'shop' && draft?.materialId
+      ? draft.materialLocationId || null
+      : null
+  const materialLocation = useLocation(
+    productionChosen ? null : materialLocationId,
+  )
+  const preferredProduction =
+    (materialLocation.data &&
+      productionLocations([materialLocation.data])[0]) ||
+    productionDefault
   const preservePricing = !!draft && preservesOriginalOrderPricing(draft)
   const selectedId = draft?.materialId ?? ''
   const pickedMatches = pickedMaterial?.id === selectedId
@@ -177,23 +196,38 @@ export function OrderBlock({
     ) {
       form.setFieldValue(stockField, preferredStock.locationId as never)
     }
-    if (
-      productionDefault &&
-      !form.state.values.customers[customerIndex]?.orders[orderIndex]
-        ?.productionLocationId
-    ) {
-      form.setFieldValue(
-        `${base}.productionLocationId` as never,
-        productionDefault.id as never,
-      )
-    }
   }, [
     stockDefault,
-    productionDefault,
     resolvedMaterial,
     form,
     base,
     materialSource,
+    customerIndex,
+    orderIndex,
+  ])
+  React.useEffect(() => {
+    // An early user/sole-branch default can be replaced once the material
+    // source resolves. Saved and manually selected branches always win.
+    if (
+      productionChosen ||
+      (materialLocationId && materialLocation.isPending)
+    ) {
+      return
+    }
+    const next = preferredProduction?.id ?? ''
+    if (
+      form.state.values.customers[customerIndex]?.orders[orderIndex]
+        ?.productionLocationId !== next
+    ) {
+      form.setFieldValue(`${base}.productionLocationId` as never, next as never)
+    }
+  }, [
+    productionChosen,
+    materialLocationId,
+    materialLocation.isPending,
+    preferredProduction,
+    form,
+    base,
     customerIndex,
     orderIndex,
   ])
@@ -571,12 +605,15 @@ export function OrderBlock({
                       })}
                       getValueLabel={(id) =>
                         locationLabelForId?.(id) ??
-                        (id === productionDefault?.id
-                          ? productionDefault.name
+                        (id === preferredProduction?.id
+                          ? preferredProduction.name
                           : null)
                       }
                       value={field.state.value || null}
-                      onValueChange={(value) => field.handleChange(value ?? '')}
+                      onValueChange={(value) => {
+                        setProductionChosen(true)
+                        field.handleChange(value ?? '')
+                      }}
                       placeholder="Search production location..."
                       emptyMessage="No active production locations found."
                     />
