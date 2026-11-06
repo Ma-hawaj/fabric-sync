@@ -164,6 +164,27 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn custom_fits_survive_save_and_reload(pool: sqlx::PgPool) {
+        let state = crate::test_support::state(pool, None, None).await;
+        for fit in ["Slim with extra chest room", "واسع", "42", "medium"] {
+            let customer = create_customer(
+                &state,
+                serde_json::from_value(serde_json::json!({
+                    "name": format!("Custom fit customer {fit}"), "mobileNo": "33112233",
+                    "measurement": {
+                        "date": "2026-11-06", "type": "thobe", "fit": fit,
+                    },
+                }))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+            let reloaded = get_customer(&state, customer.id).await.unwrap();
+            assert_eq!(reloaded.measurements[0].fit.as_deref(), Some(fit));
+        }
+    }
+
+    #[sqlx::test]
     async fn measurement_eighths_survive_save_and_reload(pool: sqlx::PgPool) {
         let state = crate::test_support::state(pool, None, None).await;
         let customer = create_customer(

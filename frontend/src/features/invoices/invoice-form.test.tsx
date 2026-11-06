@@ -111,6 +111,20 @@ function renderInvoice(values = validInvoice()) {
 }
 
 describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
+  it('treats a custom fit as ready and preserves it when saving', async () => {
+    const values = validInvoice()
+    values.customers[0].measurement.fit = 'Slim with extra chest room'
+    const save = renderInvoice(values)
+    expect(
+      screen.getByText('Type: body · Fit: Slim with extra chest room'),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    await waitFor(() => expect(save).toHaveBeenCalledOnce())
+    expect(
+      (save.mock.calls[0][0] as InvoiceFormValues).customers[0].measurement.fit,
+    ).toBe('Slim with extra chest room')
+  })
+
   it('requires the blank opening payment to be filled before saving', async () => {
     const values = validInvoice()
     values.payments = [createEmptyPayment()]

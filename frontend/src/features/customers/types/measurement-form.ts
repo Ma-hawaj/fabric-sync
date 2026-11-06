@@ -6,10 +6,6 @@ export type NumberInput = number | ''
 export const MEASUREMENT_TYPES = ['body', 'thobe', 'sample'] as const
 export type MeasurementType = (typeof MEASUREMENT_TYPES)[number]
 
-// How the garment should be cut: loose, fitted, or somewhere in between.
-export const MEASUREMENT_FITS = ['loose', 'fit', 'medium'] as const
-export type MeasurementFit = (typeof MEASUREMENT_FITS)[number]
-
 // Field names match the thobe diagram slots wherever the drawing has a slot:
 // frontHeight/backHeight (lengths), neckSize, hip (singular), armhole
 // (lowercase), bottomFold, frontPocketLength, sidePocket, cuffSize. The pocket L×W
@@ -21,7 +17,8 @@ export interface MeasurementDraft {
   // record, whether loaded from history or started blank.
   loadedFromId: string | null
   date: string
-  // Record-level choices rather than lengths. Blank means "not picked yet" —
+  // Record-level details rather than lengths. Fit accepts custom text.
+  // Blank means "not entered yet" —
   // the form requires both before saving (legacy snapshots predate them and
   // arrive blank, so the next edit picks them up).
   type: string

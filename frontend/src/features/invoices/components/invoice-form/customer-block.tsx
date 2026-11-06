@@ -26,10 +26,7 @@ import type {
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 import { OrderBlock } from './order-block'
 import { useInvoiceWorkspace } from './invoice-workspace'
-import {
-  MEASUREMENT_FITS,
-  MEASUREMENT_TYPES,
-} from '@/features/customers/types/measurement-form'
+import { MEASUREMENT_TYPES } from '@/features/customers/types/measurement-form'
 
 interface CustomerBlockProps {
   form: InvoiceFormApi
@@ -75,7 +72,7 @@ export function CustomerBlock({
   )
   const isMeasurementReady = (measurement: MeasurementDraft) =>
     (MEASUREMENT_TYPES as readonly string[]).includes(measurement.type) &&
-    (MEASUREMENT_FITS as readonly string[]).includes(measurement.fit)
+    measurement.fit.trim().length > 0
   const [measurementsOpen, setMeasurementsOpen] = useState(
     !draft || !isMeasurementReady(draft.measurement),
   )
@@ -301,7 +298,7 @@ export function CustomerBlock({
                   <p className="text-xs text-muted-foreground">
                     {ready
                       ? `Type: ${draft.measurement.type} · Fit: ${draft.measurement.fit}`
-                      : 'Choose a measurement type and fit before saving.'}
+                      : 'Choose a measurement type and enter a fit before saving.'}
                   </p>
                 </div>
                 {ready && (
@@ -332,7 +329,7 @@ export function CustomerBlock({
                 />
                 {measurementAttempted && !ready && (
                   <p role="alert" className="mt-3 text-sm text-destructive">
-                    Pick a measurement type and fit.
+                    Choose a measurement type and enter a fit.
                   </p>
                 )}
                 <div className="mt-4 flex justify-end">
