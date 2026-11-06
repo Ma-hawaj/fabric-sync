@@ -13,7 +13,7 @@ export const Route = createFileRoute('/_authenticated/users')({
 })
 
 function Users() {
-  const { data: users = [], isLoading } = useUsers()
+  const { data: users = [], isLoading, isFetching } = useUsers()
 
   const { table } = useDataTable({
     data: users,
@@ -37,7 +37,7 @@ function Users() {
         </p>
       </div>
 
-      <DataTable isLoading={isLoading} table={table}>
+      <DataTable isLoading={isLoading} isFetching={isFetching} table={table}>
         <DataTableToolbar table={table} />
       </DataTable>
     </div>

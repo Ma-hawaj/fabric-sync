@@ -53,6 +53,7 @@ export function ProductsPage() {
     pageCount,
     total,
     isLoading,
+    isFetching,
   } = useProducts(searchParams)
 
   const { table } = useDataTable({
@@ -89,7 +90,7 @@ export function ProductsPage() {
         </PermissionGuard>
       </div>
 
-      <DataTable isLoading={isLoading} table={table}>
+      <DataTable isLoading={isLoading} isFetching={isFetching} table={table}>
         <DataTableAdvancedToolbar
           table={table}
           defaultSearchColumnId="name"

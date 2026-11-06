@@ -41,6 +41,7 @@ export function CustomersPage() {
     pageCount,
     total,
     isLoading,
+    isFetching,
   } = useCustomers(searchParams)
 
   const { table } = useDataTable({
@@ -75,7 +76,7 @@ export function CustomersPage() {
         </Button>
       </div>
 
-      <DataTable isLoading={isLoading} table={table}>
+      <DataTable isLoading={isLoading} isFetching={isFetching} table={table}>
         <DataTableAdvancedToolbar
           table={table}
           defaultSearchColumnId="mobileNo"

@@ -47,6 +47,7 @@ export function LocationsPage() {
     pageCount,
     total,
     isLoading,
+    isFetching,
   } = useLocations(searchParams)
 
   const { table } = useDataTable({
@@ -83,7 +84,7 @@ export function LocationsPage() {
         </PermissionGuard>
       </div>
 
-      <DataTable isLoading={isLoading} table={table}>
+      <DataTable isLoading={isLoading} isFetching={isFetching} table={table}>
         <DataTableAdvancedToolbar
           table={table}
           defaultSearchColumnId="name"

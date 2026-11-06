@@ -37,6 +37,7 @@ export function RepairsPage() {
     pageCount,
     total,
     isLoading,
+    isFetching,
   } = useRepairs(searchParams)
 
   const { table } = useDataTable({
@@ -61,7 +62,7 @@ export function RepairsPage() {
         </p>
       </div>
 
-      <DataTable table={table} isLoading={isLoading}>
+      <DataTable table={table} isLoading={isLoading} isFetching={isFetching}>
         <DataTableToolbar table={table} />
       </DataTable>
 

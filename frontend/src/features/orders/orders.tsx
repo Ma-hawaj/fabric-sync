@@ -64,7 +64,13 @@ export function OrdersPage() {
   }, [materials, stages, locations, navigate])
 
   const { searchParams } = useListParams({ columns })
-  const { data: orders, pageCount, total, isLoading } = useOrders(searchParams)
+  const {
+    data: orders,
+    pageCount,
+    total,
+    isLoading,
+    isFetching,
+  } = useOrders(searchParams)
 
   const { table } = useDataTable({
     data: orders,
@@ -102,7 +108,7 @@ export function OrdersPage() {
         </p>
       </div>
 
-      <DataTable isLoading={isLoading} table={table}>
+      <DataTable isLoading={isLoading} isFetching={isFetching} table={table}>
         <DataTableAdvancedToolbar
           table={table}
           defaultSearchColumnId="customerMobile"

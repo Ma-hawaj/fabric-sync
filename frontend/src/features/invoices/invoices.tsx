@@ -87,6 +87,7 @@ export function InvoicesPage() {
     pageCount,
     total,
     isLoading,
+    isFetching,
   } = useInvoices(searchParams)
 
   const { table } = useDataTable({
@@ -148,6 +149,7 @@ export function InvoicesPage() {
 
       <DataTable
         isLoading={isLoading}
+        isFetching={isFetching}
         table={table}
         renderExpandedRow={(row) => (
           <InvoiceOrderBreakdown invoiceId={row.original.id} />

@@ -13,7 +13,7 @@ import { useUpdateDesignOption } from './hooks/use-update-design-option'
 import type { DesignOption } from './types/design-option'
 
 export function DesignOptionsPage() {
-  const { data: options = [], isLoading } = useDesignOptions()
+  const { data: options = [], isLoading, isFetching } = useDesignOptions()
   const updateOption = useUpdateDesignOption()
 
   const toggleActive = React.useCallback(
@@ -77,7 +77,7 @@ export function DesignOptionsPage() {
         </PermissionGuard>
       </div>
 
-      <DataTable isLoading={isLoading} table={table}>
+      <DataTable isLoading={isLoading} isFetching={isFetching} table={table}>
         <DataTableToolbar table={table} />
       </DataTable>
     </div>

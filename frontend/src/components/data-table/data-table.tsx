@@ -22,6 +22,7 @@ interface DataTableProps<TData> extends React.ComponentProps<'div'> {
   actionBar?: React.ReactNode
   renderExpandedRow?: (row: Row<TData>) => React.ReactNode
   isLoading?: boolean
+  isFetching?: boolean
 }
 
 export function DataTable<TData>({
@@ -31,6 +32,7 @@ export function DataTable<TData>({
   children,
   className,
   isLoading = false,
+  isFetching = false,
   ...props
 }: DataTableProps<TData>) {
   const tableRef = useRef<HTMLTableElement>(null)
@@ -61,9 +63,9 @@ export function DataTable<TData>({
     <TableAppearanceContext.Provider value={{ density, setDensity }}>
       <div
         data-density={density}
-        aria-busy={isLoading}
+        aria-busy={isLoading || isFetching}
         className={cn(
-          'flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-xs',
+          'relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-xs',
           '[&>[data-slot=table-container]]:min-h-0 [&>[data-slot=table-container]]:flex-1 [&>[data-slot=table-container]]:overflow-auto [&>[data-slot=table-container]]:overscroll-contain',
           '[&_[data-slot=table-head]]:h-9 [&_[data-slot=table-head]]:bg-muted [&_[data-slot=table-head]]:px-2.5 [&_[data-slot=table-head]]:text-xs',
           '[&_[data-slot=table-cell]]:overflow-hidden [&_[data-slot=table-cell]]:px-2.5 [&_[data-slot=table-cell]]:text-ellipsis',
@@ -78,6 +80,15 @@ export function DataTable<TData>({
         )}
         {...props}
       >
+        {isFetching && !isLoading && (
+          <div
+            role="progressbar"
+            aria-label="Updating records"
+            className="pointer-events-none absolute inset-x-0 top-0 z-30 h-1 bg-primary/20"
+          >
+            <div className="h-full bg-primary motion-safe:animate-pulse" />
+          </div>
+        )}
         {children}
         <Table
           ref={tableRef}
