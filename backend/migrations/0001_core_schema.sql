@@ -135,12 +135,12 @@ CREATE TABLE measurements (
     side_pocket NUMERIC(7, 3),
     side_pocket_length_by_width TEXT,
     mobile_pocket_length_by_width TEXT,
-    -- Record-level choices rather than lengths: what was measured (the
-    -- customer's body, an existing thobe, a sample) and how to cut it.
+    -- Record-level details rather than lengths: what was measured (the
+    -- customer's body, an existing thobe, a sample) and custom fit text.
     -- Nullable so rows written before these existed keep reading — every
     -- new write has to set them (see validate_measurement).
     type TEXT CHECK (type IN ('body', 'thobe', 'sample')),
-    fit TEXT CHECK (fit IN ('loose', 'fit', 'medium')),
+    fit TEXT,
     CONSTRAINT measurements_number_positive CHECK (measurement_number > 0),
     CONSTRAINT measurements_customer_number_key UNIQUE (customer_id, measurement_number)
 );

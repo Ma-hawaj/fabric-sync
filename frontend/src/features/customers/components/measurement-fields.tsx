@@ -11,6 +11,7 @@ import { SegmentedOptions } from '@/components/form/segmented-options'
 import type { AnyFormApi } from '@/components/form/fields'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { ThobDiagram } from './thob-diagram'
 import type { MeasurementValues } from './thob-diagram'
 import {
@@ -41,8 +42,7 @@ export function snapshotLabel(
 export function measurementFromSnapshot(
   snapshot: Measurement | null,
 ): MeasurementDraft {
-  // Start from a blank draft so an unset field stays '' rather than
-  // undefined, then copy across whatever the snapshot actually recorded.
+  // Start from draft defaults, then copy across whatever the snapshot recorded.
   const draft = createEmptyMeasurement() as MeasurementDraft &
     Record<string, unknown>
   draft.loadedFromId = snapshot?.id ?? null
@@ -58,9 +58,8 @@ export function measurementFromSnapshot(
       if (value !== undefined) draft[name as string] = value
     }
     // Type and fit live on the draft but outside the diagram catalog (plain
-    // choices, no sketch callouts), so they don't ride the loop above.
-    // A legacy snapshot predates them and arrives null — blank, for the form
-    // to require before saving.
+    // details, no sketch callouts), so they don't ride the loop above.
+    // Loaded snapshots keep missing values blank; defaults are only for new drafts.
     draft.type = snapshot.type ?? ''
     draft.fit = snapshot.fit ?? ''
   }
@@ -180,43 +179,72 @@ export function MeasurementFields({
       <div className="@container">
         <div className="grid gap-5 @2xl:grid-cols-[minmax(16rem,35%)_1fr]">
           <div className="order-2 space-y-5 @2xl:order-1">
-            {/* Record-level choices, not lengths: what was measured and how
-                to cut it. Segmented choices with no sketch callout — they
+            {/* Record-level details, not lengths: what was measured and how
+                to cut it. These have no sketch callout — they
                 describe the record rather than a point on the garment. */}
             <div className="space-y-2.5">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Record Details
               </h4>
               <div className="grid gap-3">
-                {[
-                  { name: 'type', label: 'Type', options: MEASUREMENT_TYPES },
-                  { name: 'fit', label: 'Fit', options: MEASUREMENT_FITS },
-                ].map(({ name, label, options }) => (
-                  <form.Field key={name} name={`${base}.${name}` as never}>
-                    {(field: any) => (
-                      <Field data-invalid={field.state.meta.errors.length > 0}>
-                        <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
-                        <SegmentedOptions
-                          id={field.name}
-                          ariaLabel={label}
-                          columns={3}
-                          options={options.map(
-                            (option) =>
-                              option.charAt(0).toUpperCase() + option.slice(1),
-                          )}
-                          value={
-                            field.state.value.charAt(0).toUpperCase() +
-                            field.state.value.slice(1)
-                          }
-                          onChange={(value) =>
-                            field.handleChange(value.toLowerCase())
-                          }
-                        />
-                        <FieldError errors={field.state.meta.errors} />
-                      </Field>
-                    )}
-                  </form.Field>
-                ))}
+                <form.Field name={`${base}.type` as never}>
+                  {(field: any) => (
+                    <Field data-invalid={field.state.meta.errors.length > 0}>
+                      <FieldLabel htmlFor={field.name}>Type</FieldLabel>
+                      <SegmentedOptions
+                        id={field.name}
+                        ariaLabel="Type"
+                        columns={3}
+                        options={MEASUREMENT_TYPES.map(
+                          (option) =>
+                            option.charAt(0).toUpperCase() + option.slice(1),
+                        )}
+                        value={
+                          field.state.value.charAt(0).toUpperCase() +
+                          field.state.value.slice(1)
+                        }
+                        onChange={(value) =>
+                          field.handleChange(value.toLowerCase())
+                        }
+                      />
+                      <FieldError errors={field.state.meta.errors} />
+                    </Field>
+                  )}
+                </form.Field>
+                <form.Field name={`${base}.fit` as never}>
+                  {(field: any) => (
+                    <Field data-invalid={field.state.meta.errors.length > 0}>
+                      <FieldLabel htmlFor={field.name}>Fit</FieldLabel>
+                      <SegmentedOptions
+                        id={`${field.name}.options`}
+                        ariaLabel="Fit"
+                        columns={3}
+                        options={MEASUREMENT_FITS.map(
+                          (option) =>
+                            option.charAt(0).toUpperCase() + option.slice(1),
+                        )}
+                        value={
+                          field.state.value.charAt(0).toUpperCase() +
+                          field.state.value.slice(1)
+                        }
+                        onChange={(value) =>
+                          field.handleChange(value.toLowerCase())
+                        }
+                      />
+                      <Input
+                        id={field.name}
+                        placeholder="Or enter a custom fit"
+                        value={field.state.value}
+                        aria-invalid={field.state.meta.errors.length > 0}
+                        onBlur={field.handleBlur}
+                        onChange={(event) =>
+                          field.handleChange(event.target.value)
+                        }
+                      />
+                      <FieldError errors={field.state.meta.errors} />
+                    </Field>
+                  )}
+                </form.Field>
               </div>
             </div>
             {MEASUREMENT_GROUPS.map((group) => (

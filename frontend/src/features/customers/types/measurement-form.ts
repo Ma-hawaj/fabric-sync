@@ -6,9 +6,8 @@ export type NumberInput = number | ''
 export const MEASUREMENT_TYPES = ['body', 'thobe', 'sample'] as const
 export type MeasurementType = (typeof MEASUREMENT_TYPES)[number]
 
-// How the garment should be cut: loose, fitted, or somewhere in between.
-export const MEASUREMENT_FITS = ['loose', 'fit', 'medium'] as const
-export type MeasurementFit = (typeof MEASUREMENT_FITS)[number]
+// Quick choices for fit; custom text is also accepted.
+export const MEASUREMENT_FITS = ['fit', 'medium', 'loose'] as const
 
 // Field names match the thobe diagram slots wherever the drawing has a slot:
 // frontHeight/backHeight (lengths), neckSize, hip (singular), armhole
@@ -21,9 +20,8 @@ export interface MeasurementDraft {
   // record, whether loaded from history or started blank.
   loadedFromId: string | null
   date: string
-  // Record-level choices rather than lengths. Blank means "not picked yet" —
-  // the form requires both before saving (legacy snapshots predate them and
-  // arrive blank, so the next edit picks them up).
+  // Record-level details rather than lengths. New drafts default to body and
+  // medium fit. Fit also accepts custom text. Both fields are required.
   type: string
   fit: string
 
@@ -60,8 +58,8 @@ export function createEmptyMeasurement(): MeasurementDraft {
   return {
     loadedFromId: null,
     date: new Date().toISOString().slice(0, 10),
-    type: '',
-    fit: '',
+    type: 'body',
+    fit: 'medium',
     frontHeight: '',
     backHeight: '',
     chest: '',

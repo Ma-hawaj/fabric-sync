@@ -6,10 +6,7 @@ import {
   measurementFromSnapshot,
 } from '@/features/customers/components/measurement-fields'
 import { SegmentedOptions } from '@/components/form/segmented-options'
-import {
-  MEASUREMENT_TYPES,
-  MEASUREMENT_FITS,
-} from '@/features/customers/types/measurement-form'
+import { MEASUREMENT_TYPES } from '@/features/customers/types/measurement-form'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -66,11 +63,11 @@ export function LogRepairDialog({ order, onOpenChange }: LogRepairDialogProps) {
       (!MEASUREMENT_TYPES.includes(
         measurement.type as (typeof MEASUREMENT_TYPES)[number],
       ) ||
-        !MEASUREMENT_FITS.includes(
-          measurement.fit as (typeof MEASUREMENT_FITS)[number],
-        ))
+        !measurement.fit.trim())
     ) {
-      setMeasurementError('Pick a measurement type and fit before saving.')
+      setMeasurementError(
+        'Choose a measurement type and enter a fit before saving.',
+      )
       return
     }
     setMeasurementError('')

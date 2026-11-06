@@ -26,10 +26,8 @@ pub(super) fn normalized_field(value: &str, label: &str) -> Result<String, AppEr
 }
 
 // What a measurement snapshot describes: the customer's body as measured, an
-// existing thobe copied stitch-for-stitch, or a sample kept on file. How the
-// garment should be cut: loose, fitted, or somewhere in between.
+// existing thobe copied stitch-for-stitch, or a sample kept on file.
 pub const MEASUREMENT_TYPES: &[&str] = &["body", "thobe", "sample"];
-pub const MEASUREMENT_FITS: &[&str] = &["loose", "fit", "medium"];
 
 // Decoded from Postgres' `to_jsonb(measurements)` (see repository.rs), whose
 // keys are the raw column names, then re-serialized to the frontend as
@@ -46,8 +44,8 @@ pub struct Measurement {
     #[serde(rename(deserialize = "measurement_date"))]
     pub date: NaiveDate,
 
-    // Record-level choices rather than lengths: what was measured and how to
-    // cut it. Nullable so legacy rows (written before these existed) keep
+    // Record-level details rather than lengths: what was measured and custom
+    // text describing the fit. Nullable so legacy rows keep
     // reading — every new write has to set them (see validate_measurement).
     pub r#type: Option<String>,
     pub fit: Option<String>,
@@ -204,9 +202,9 @@ pub fn validate_measurement(measurement: &CreateMeasurementInput) -> Result<(), 
     }
 
     let fit = measurement.fit.as_deref().unwrap_or("");
-    if !MEASUREMENT_FITS.contains(&fit) {
+    if fit.trim().is_empty() {
         return Err(AppError::BadRequest(
-            "a measurement needs a fit of loose, fit, or medium".to_string(),
+            "a measurement needs a non-empty fit".to_string(),
         ));
     }
 
@@ -328,9 +326,17 @@ mod tests {
     }
 
     #[test]
-    fn validate_measurement_accepts_known_types_and_fits() {
+    fn validate_measurement_accepts_known_types_and_custom_fits() {
         for r#type in MEASUREMENT_TYPES {
-            for fit in MEASUREMENT_FITS {
+            for fit in [
+                "loose",
+                "fit",
+                "medium",
+                "Slim with extra chest room",
+                "واسع",
+                "42",
+                " medium ",
+            ] {
                 let mut m = measurement(None, None);
                 m.r#type = Some(r#type.to_string());
                 m.fit = Some(fit.to_string());
@@ -358,16 +364,8 @@ mod tests {
     }
 
     #[test]
-    fn validate_measurement_rejects_a_missing_or_noncanonical_fit() {
-        for fit in [
-            None,
-            Some(""),
-            Some("tight"),
-            Some("LOOSE"),
-            Some(" loose"),
-            Some("fit "),
-            Some("\tmedium\n"),
-        ] {
+    fn validate_measurement_rejects_a_missing_or_blank_fit() {
+        for fit in [None, Some(""), Some("   "), Some("\t\n"), Some("\u{2003}")] {
             let mut m = measurement(None, None);
             m.fit = fit.map(str::to_string);
             let error = validate_measurement(&m).unwrap_err();

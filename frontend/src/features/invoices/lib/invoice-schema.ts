@@ -4,10 +4,7 @@ import { customerIdentitySchema } from '@/features/customers/lib/customer-schema
 import { measurementPayload } from '@/features/customers/hooks/use-create-customer'
 import { isMoney } from '@/lib/money'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
-import {
-  MEASUREMENT_FITS,
-  MEASUREMENT_TYPES,
-} from '@/features/customers/types/measurement-form'
+import { MEASUREMENT_TYPES } from '@/features/customers/types/measurement-form'
 import {
   computeGiftCardLineTotal,
   computeInvoiceTotals,
@@ -24,12 +21,11 @@ const numberInputSchema = z.union([z.number(), z.literal('')])
 // Numeric and text measurement fields have no validation rules — every one
 // is optional free text/numbers — so there's nothing for zod to check there
 // and `z.custom` keeps the real MeasurementDraft type flowing through without
-// enumerating them. The record-level type/fit choices are required instead,
+// enumerating them. The record-level type and fit are required instead,
 // checked in customerDraftSchema's superRefine below.
 const measurementDraftSchema = z.custom<MeasurementDraft>()
 
 const MEASUREMENT_TYPE_VALUES = MEASUREMENT_TYPES as readonly string[]
-const MEASUREMENT_FIT_VALUES = MEASUREMENT_FITS as readonly string[]
 
 export const orderDraftSchema = z
   .object({
@@ -141,7 +137,7 @@ const customerDraftSchema = z
 
     // Type and fit describe the measurement record itself, so they are the
     // only measurement fields the form requires — a legacy snapshot predates
-    // them and arrives blank, to be picked before saving. Checked for both
+    // them and arrives blank, to be entered before saving. Checked for both
     // new and existing customers, after the identity checks above so those
     // keep reporting first: either block writes a snapshot.
     if (!MEASUREMENT_TYPE_VALUES.includes(customer.measurement.type)) {
@@ -151,10 +147,10 @@ const customerDraftSchema = z
         path: ['measurement', 'type'],
       })
     }
-    if (!MEASUREMENT_FIT_VALUES.includes(customer.measurement.fit)) {
+    if (!customer.measurement.fit.trim()) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Pick a fit.',
+        message: 'Enter a fit.',
         path: ['measurement', 'fit'],
       })
     }

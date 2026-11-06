@@ -38,23 +38,23 @@ describe('customerFormSchema', () => {
     expect(error?.path).toEqual(['measurement', 'type'])
   })
 
-  it('rejects a measurement without a fit', () => {
+  it.each(['', '   ', '\t\n', '\u2003'])('rejects a blank fit: %j', (fit) => {
     const input = values({
       addMeasurement: true,
       measurement: {
         ...createEmptyCustomerForm().measurement,
         type: 'body',
-        fit: '',
+        fit,
       },
     })
     const error = issues(input).find((issue) =>
       issue.path.join('.').endsWith('fit'),
     )
-    expect(error?.message).toMatch(/pick a fit/i)
+    expect(error?.message).toMatch(/enter a fit/i)
     expect(error?.path).toEqual(['measurement', 'fit'])
   })
 
-  it('rejects a measurement with an unknown type or fit', () => {
+  it('rejects a measurement with an unknown type', () => {
     const blank = createEmptyCustomerForm().measurement
     const badType = issues(
       values({
@@ -65,25 +65,23 @@ describe('customerFormSchema', () => {
     expect(
       badType.some((issue) => issue.path.join('.') === 'measurement.type'),
     ).toBe(true)
-
-    const badFit = issues(
-      values({
-        addMeasurement: true,
-        measurement: { ...blank, type: 'body', fit: 'tight' },
-      }),
-    )
-    expect(
-      badFit.some((issue) => issue.path.join('.') === 'measurement.fit'),
-    ).toBe(true)
   })
 
-  it('passes a measurement with a known type and fit', () => {
+  it.each([
+    'loose',
+    'fit',
+    'medium',
+    'Slim with extra chest room',
+    'واسع',
+    '42',
+    ' medium ',
+  ])('accepts a custom fit: %s', (fit) => {
     const input = values({
       addMeasurement: true,
       measurement: {
         ...createEmptyCustomerForm().measurement,
         type: 'thobe',
-        fit: 'loose',
+        fit,
       },
     })
     expect(issues(input)).toEqual([])

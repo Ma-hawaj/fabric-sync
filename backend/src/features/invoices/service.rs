@@ -1689,14 +1689,14 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_measurement_without_a_canonical_type_and_fit() {
+    fn rejects_a_measurement_without_a_canonical_type_or_nonblank_fit() {
         for measurement in [
             serde_json::json!({ "date": "2026-07-19", "fit": "medium" }),
             serde_json::json!({ "date": "2026-07-19", "type": "sample" }),
             serde_json::json!({ "date": "2026-07-19", "type": "shirt", "fit": "medium" }),
-            serde_json::json!({ "date": "2026-07-19", "type": "body", "fit": "tight" }),
+            serde_json::json!({ "date": "2026-07-19", "type": "body", "fit": "" }),
             serde_json::json!({ "date": "2026-07-19", "type": " body ", "fit": "medium" }),
-            serde_json::json!({ "date": "2026-07-19", "type": "body", "fit": " medium " }),
+            serde_json::json!({ "date": "2026-07-19", "type": "body", "fit": " \t\n " }),
         ] {
             let invoice = invoice(
                 0.0,

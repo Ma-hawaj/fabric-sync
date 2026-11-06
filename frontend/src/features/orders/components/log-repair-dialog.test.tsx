@@ -4,6 +4,7 @@ import {
   screen,
   waitFor,
   cleanup,
+  within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LogRepairDialog } from './log-repair-dialog'
@@ -61,13 +62,34 @@ describe('LogRepairDialog', () => {
     )
   })
 
-  it('sends edited measurements with the repair in a single save', async () => {
+  it('offers the existing fits and saves a typed custom fit with edited measurements', async () => {
     render(<LogRepairDialog order={order} onOpenChange={vi.fn()} />)
     enterReason()
     fireEvent.click(screen.getByRole('radio', { name: 'Update measurements' }))
     const chest = screen.getByLabelText('Chest')
     expect((chest as HTMLInputElement).value).toBe('42')
     fireEvent.change(chest, { target: { value: '44' } })
+    const fit = screen.getByRole<HTMLInputElement>('textbox', { name: 'Fit' })
+    expect(fit.value).toBe('fit')
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Fit' }))
+        .getAllByRole('radio')
+        .map((option) => option.textContent),
+    ).toEqual(['Fit', 'Medium', 'Loose'])
+    for (const option of ['Fit', 'Medium', 'Loose']) {
+      const preset = screen.getByRole('radio', { name: option, exact: true })
+      fireEvent.click(preset)
+      expect(fit.value).toBe(option.toLowerCase())
+      expect(preset.getAttribute('aria-checked')).toBe('true')
+    }
+    fireEvent.change(screen.getByRole('textbox', { name: 'Fit' }), {
+      target: { value: 'Slim with extra chest room' },
+    })
+    expect(
+      screen
+        .getByRole('radio', { name: 'Loose', exact: true })
+        .getAttribute('aria-checked'),
+    ).toBe('false')
     fireEvent.click(screen.getByRole('button', { name: 'Log Repair' }))
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1))
     expect(mutateAsync).toHaveBeenCalledWith(
@@ -75,7 +97,7 @@ describe('LogRepairDialog', () => {
         measurement: expect.objectContaining({
           chest: 44,
           type: 'body',
-          fit: 'fit',
+          fit: 'Slim with extra chest room',
         }),
       }),
     )
