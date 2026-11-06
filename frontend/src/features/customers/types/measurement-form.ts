@@ -20,8 +20,8 @@ export interface MeasurementDraft {
   // record, whether loaded from history or started blank.
   loadedFromId: string | null
   date: string
-  // Record-level details rather than lengths. Fit accepts custom text and
-  // defaults to medium for new drafts. Both fields are required before saving.
+  // Record-level details rather than lengths. New drafts default to body and
+  // medium fit. Fit also accepts custom text. Both fields are required.
   type: string
   fit: string
 
@@ -58,7 +58,7 @@ export function createEmptyMeasurement(): MeasurementDraft {
   return {
     loadedFromId: null,
     date: new Date().toISOString().slice(0, 10),
-    type: '',
+    type: 'body',
     fit: 'medium',
     frontHeight: '',
     backHeight: '',

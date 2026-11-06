@@ -39,14 +39,15 @@ describe('measurementFromSnapshot', () => {
     expect(draft.frontPocketLengthByWidth).toBe('')
   })
 
-  it('returns a new draft with medium fit and no loadedFromId when given null', () => {
+  it('returns a new draft with body type, medium fit and no loadedFromId when given null', () => {
     const draft = measurementFromSnapshot(null)
     expect(draft.loadedFromId).toBeNull()
     expect(draft.chest).toBe('')
+    expect(draft.type).toBe('body')
     expect(draft.fit).toBe('medium')
   })
 
-  it('preserves saved fits and defaults legacy snapshots to medium', () => {
+  it('preserves saved values and defaults legacy snapshots to body and medium', () => {
     const draft = measurementFromSnapshot(
       makeSnapshot({ type: 'thobe', fit: 'loose' }),
     )
@@ -56,7 +57,7 @@ describe('measurementFromSnapshot', () => {
     const legacy = measurementFromSnapshot(
       makeSnapshot({ type: undefined, fit: undefined }),
     )
-    expect(legacy.type).toBe('')
+    expect(legacy.type).toBe('body')
     expect(legacy.fit).toBe('medium')
   })
 })

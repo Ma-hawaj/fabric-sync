@@ -59,8 +59,8 @@ export function measurementFromSnapshot(
     }
     // Type and fit live on the draft but outside the diagram catalog (plain
     // details, no sketch callouts), so they don't ride the loop above.
-    // A legacy snapshot may arrive null: require its type and use the default fit.
-    draft.type = snapshot.type ?? ''
+    // Use draft defaults when legacy snapshots have no recorded type or fit.
+    draft.type = snapshot.type ?? draft.type
     draft.fit = snapshot.fit ?? draft.fit
   }
 
