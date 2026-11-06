@@ -46,7 +46,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-function show() {
+function show(card: GiftCard = original) {
   const client = new QueryClient({
     defaultOptions: { mutations: { retry: false } },
   })
@@ -54,7 +54,7 @@ function show() {
   const invalidate = vi.spyOn(client, 'invalidateQueries')
   render(
     <QueryClientProvider client={client}>
-      <ReplaceGiftCardDialog card={original} onClose={close} />
+      <ReplaceGiftCardDialog card={card} onClose={close} />
     </QueryClientProvider>,
   )
   return { close, invalidate }
@@ -69,7 +69,12 @@ it('transfers via the source-card endpoint and displays the actual issued code a
   expect(
     await screen.findByRole('heading', { name: 'Replacement card issued' }),
   ).toBeTruthy()
-  expect(post).toHaveBeenCalledWith('/gift-cards/old-card/replace')
+  expect(post).toHaveBeenCalledWith('/gift-cards/old-card/replace', {
+    expiresOn: null,
+  })
+  expect(
+    screen.queryByRole('button', { name: 'New expiry date (optional)' }),
+  ).toBeNull()
   expect(screen.getByLabelText('New gift card code').textContent).toBe(
     replacement.code,
   )
@@ -114,4 +119,60 @@ it('prevents repeated clicks while the transfer is pending', async () => {
   expect(
     await screen.findByRole('heading', { name: 'Replacement card issued' }),
   ).toBeTruthy()
+})
+
+it('allows expired uninvoiced credit to be renewed with no expiry', async () => {
+  post.mockResolvedValue({
+    data: { ...replacement, taxedAtIssue: false, expiresOn: null },
+  })
+  show({ ...original, taxedAtIssue: false, expiresOn: '2000-01-01' })
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Clear New expiry date (optional)' }),
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Replace card' }))
+  expect(
+    await screen.findByRole('heading', { name: 'Replacement card issued' }),
+  ).toBeTruthy()
+  expect(post).toHaveBeenCalledWith('/gift-cards/old-card/replace', {
+    expiresOn: null,
+  })
+  expect(screen.getByText('Never')).toBeTruthy()
+  expect(screen.queryByText('2000-01-01')).toBeNull()
+})
+
+it('submits the chosen new expiry and displays the date returned for the replacement', async () => {
+  const year = new Date().getFullYear() + 1
+  const newExpiry = `${year}-01-15`
+  post.mockResolvedValue({
+    data: { ...replacement, taxedAtIssue: false, expiresOn: newExpiry },
+  })
+  show({ ...original, taxedAtIssue: false, expiresOn: `${year}-01-01` })
+  fireEvent.click(
+    screen.getByRole('button', { name: 'New expiry date (optional)' }),
+  )
+  await screen.findByRole('grid')
+  fireEvent.change(screen.getByRole('combobox', { name: 'Choose the Year' }), {
+    target: { value: String(year) },
+  })
+  fireEvent.change(screen.getByRole('combobox', { name: 'Choose the Month' }), {
+    target: { value: '0' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: /January 15/i }))
+  fireEvent.click(screen.getByRole('button', { name: 'Replace card' }))
+  expect(
+    await screen.findByRole('heading', { name: 'Replacement card issued' }),
+  ).toBeTruthy()
+  expect(post).toHaveBeenCalledWith('/gift-cards/old-card/replace', {
+    expiresOn: newExpiry,
+  })
+  expect(screen.getByText(newExpiry)).toBeTruthy()
+})
+
+it('asks for a valid new expiry before sending an expired date', async () => {
+  show({ ...original, taxedAtIssue: false, expiresOn: '2000-01-01' })
+  fireEvent.click(screen.getByRole('button', { name: 'Replace card' }))
+  expect(
+    await screen.findByText(/Choose an expiry date today or later/),
+  ).toBeTruthy()
+  expect(post).not.toHaveBeenCalled()
 })

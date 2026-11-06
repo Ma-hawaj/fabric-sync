@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useForm } from '@tanstack/react-form'
+import { DateField } from '@/components/form/fields'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,6 +13,7 @@ import {
 import { CURRENCY } from '@/lib/currency'
 import { useReplaceGiftCard } from '../hooks/use-replace-gift-card'
 import type { GiftCard } from '../types/gift-card'
+import { giftCardReplacementSchema } from '../lib/gift-card-schema'
 
 /** Replace a lost code without issuing additional value or creating another invoice. */
 export function ReplaceGiftCardDialog({
@@ -23,18 +26,27 @@ export function ReplaceGiftCardDialog({
   const replace = useReplaceGiftCard()
   const [problem, setProblem] = useState('')
   const replacement = replace.data
-  async function submit() {
-    setProblem('')
-    try {
-      await replace.mutateAsync(card.id)
-    } catch (error) {
-      setProblem(
-        error instanceof Error
-          ? error.message
-          : 'Could not replace this card. Please try again.',
-      )
-    }
-  }
+  const today = new Date().toISOString().slice(0, 10)
+  const form = useForm({
+    defaultValues: { expiresOn: card.expiresOn ?? '' },
+    validators: card.taxedAtIssue
+      ? undefined
+      : { onSubmit: giftCardReplacementSchema(today) },
+    onSubmit: async ({ value }) => {
+      try {
+        await replace.mutateAsync({
+          id: card.id,
+          expiresOn: value.expiresOn || null,
+        })
+      } catch (error) {
+        setProblem(
+          error instanceof Error
+            ? error.message
+            : 'Could not replace this card. Please try again.',
+        )
+      }
+    },
+  })
   return (
     <Dialog
       open
@@ -85,11 +97,25 @@ export function ReplaceGiftCardDialog({
           </div>
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">Expires</dt>
-            <dd>{card.expiresOn ?? 'Never'}</dd>
+            <dd>{(replacement ?? card).expiresOn ?? 'Never'}</dd>
           </div>
         </dl>
+        {!card.taxedAtIssue && !replacement && (
+          <div className="space-y-2">
+            <DateField
+              form={form}
+              name="expiresOn"
+              label="New expiry date (optional)"
+            />
+            <p className="text-xs text-muted-foreground">
+              Choose today or a future date. Leave blank for no expiry.
+            </p>
+          </div>
+        )}
         <p className="text-sm text-muted-foreground">
-          Recipient details, expiry, and the original VAT treatment carry over.
+          {card.taxedAtIssue
+            ? 'Recipient details, expiry, and the original VAT treatment carry over.'
+            : 'Recipient details and the original VAT treatment carry over.'}{' '}
           No new invoice is created.
         </p>
         {problem && (
@@ -110,7 +136,10 @@ export function ReplaceGiftCardDialog({
                 Cancel
               </Button>
               <Button
-                onClick={() => void submit()}
+                onClick={() => {
+                  setProblem('')
+                  void form.handleSubmit()
+                }}
                 disabled={replace.isPending}
               >
                 {replace.isPending ? 'Replacing…' : 'Replace card'}

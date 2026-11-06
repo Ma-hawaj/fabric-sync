@@ -6,6 +6,28 @@ import { DataTable } from '@/components/data-table/data-table'
 import { STAFF_USER } from '@/features/users/test-fixtures'
 import type { GiftCard } from '../types/gift-card'
 import { getGiftCardColumns } from './gift-card-columns'
+import type { ReactNode } from 'react'
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    to,
+    params,
+    children,
+    className,
+  }: {
+    to: string
+    params?: { code: string }
+    children: ReactNode
+    className?: string
+  }) => (
+    <a
+      href={to.replace('$code', encodeURIComponent(params?.code ?? ''))}
+      className={className}
+    >
+      {children}
+    </a>
+  ),
+}))
 
 const card: GiftCard = {
   id: 'card-one',
@@ -68,7 +90,27 @@ describe('gift-card issuer column', () => {
       screen.getByRole('columnheader', { name: /Replacement link/ }),
     ).toBeTruthy()
     expect(screen.getByText('GC-8BNQ-5SVX-3FYJ')).toBeTruthy()
+    expect(
+      screen
+        .getByRole('link', { name: 'GC-8BNQ-5SVX-3FYJ' })
+        .getAttribute('href'),
+    ).toBe('/gift-cards/GC-8BNQ-5SVX-3FYJ')
     expect(screen.queryByRole('columnheader', { name: 'Type' })).toBeNull()
+  })
+  it('links Replaced by to the replacement card details', () => {
+    renderTable({
+      ...card,
+      isActive: false,
+      balance: 0,
+      replacedByCardId: 'replacement',
+      replacedByCardCode: 'GC-6CZR-2HKT-8WPM',
+    })
+    expect(screen.getByText('Replaced by')).toBeTruthy()
+    expect(
+      screen
+        .getByRole('link', { name: 'GC-6CZR-2HKT-8WPM' })
+        .getAttribute('href'),
+    ).toBe('/gift-cards/GC-6CZR-2HKT-8WPM')
   })
   it('shows the issuing staff name instead of the authentication subject', () => {
     renderTable(card)

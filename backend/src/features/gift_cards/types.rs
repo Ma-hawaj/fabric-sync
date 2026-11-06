@@ -52,6 +52,14 @@ pub struct CreateGiftCardInput {
     pub expires_on: Option<NaiveDate>,
 }
 
+/// Replacement expiry is explicit: a date sets it, null makes uninvoiced credit non-expiring.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReplaceGiftCardInput {
+    #[serde(deserialize_with = "Option::<NaiveDate>::deserialize")]
+    pub expires_on: Option<NaiveDate>,
+}
+
 /// Recipient details can be corrected without changing the card's code or value.
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]

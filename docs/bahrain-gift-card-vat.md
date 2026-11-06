@@ -75,10 +75,20 @@ sections 6 and 13.2.
 Managers use **Replace card** on an existing card. The server locks that card,
 issues a fresh code for its remaining balance, stores `replaces_card_id` on the
 new record, and sets the old balance to zero and the old code inactive. It keeps
-the recipient, customer, and expiry, and records the replacement operator as
+the recipient and customer, and records the replacement operator as
 `issued_by`. The list displays both sides of the relationship. No new invoice,
 new value, or card type is created. A replaced code cannot be restored or spent
 on a new purchase.
+
+Uninvoiced credit can receive a new expiry date, including renewal of an expired
+remaining balance. Managers choose today or a future date, or clear the date for
+no expiry. The original record retains its historical expiry. Cards backed by a
+sale invoice retain their existing expiry rules, including through replacements.
+The replacement request supplies `expiresOn` explicitly as a date or null.
+
+Card codes and both **Replaces**/**Replaced by** references open the selected
+card's details page. Staff can follow the replacement history in either direction
+and see each card's current balance, expiry, status, and issuer.
 
 VAT provenance follows the replacement chain to the original card's sale
 invoice. Replacing paid value does not tax it again; replacing uninvoiced credit

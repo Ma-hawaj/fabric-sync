@@ -29,6 +29,7 @@ export function useUpdateGiftCard() {
       // each holds an envelope rather than a bare array, so there is no
       // single list to splice into. Prefix matching refreshes them all.
       void queryClient.invalidateQueries({ queryKey: ['gift-cards'] })
+      void queryClient.invalidateQueries({ queryKey: ['gift-card'] })
     },
   })
 }

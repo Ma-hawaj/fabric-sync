@@ -1,4 +1,7 @@
-use super::{repository, service, types::GiftCard};
+use super::{
+    repository, service,
+    types::{GiftCard, ReplaceGiftCardInput},
+};
 use crate::{
     error::AppError,
     features::{invoices, returns},
@@ -8,6 +11,10 @@ use crate::{
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
+
+fn replacement_input(expires_on: Option<chrono::NaiveDate>) -> ReplaceGiftCardInput {
+    serde_json::from_value(json!({"expiresOn":expires_on})).unwrap()
+}
 
 async fn standalone(state: &AppState, amount: f64) -> GiftCard {
     service::create_gift_card(
@@ -83,9 +90,14 @@ async fn paid_replacement_chain_preserves_balances_links_and_tax(pool: PgPool) {
     )
     .await
     .unwrap();
-    let replacement = service::replace_gift_card(&state, original.id, "replacement-issuer")
-        .await
-        .unwrap();
+    let replacement = service::replace_gift_card(
+        &state,
+        original.id,
+        replacement_input(None),
+        "replacement-issuer",
+    )
+    .await
+    .unwrap();
     assert_eq!(replacement.balance, 55.0);
     assert_eq!(replacement.initial_amount, 55.0);
     assert_eq!(replacement.replaces_card_id, Some(original.id));
@@ -136,9 +148,14 @@ async fn paid_replacement_chain_preserves_balances_links_and_tax(pool: PgPool) {
     )
     .await
     .unwrap();
-    let final_card = service::replace_gift_card(&state, replacement.id, "next-issuer")
-        .await
-        .unwrap();
+    let final_card = service::replace_gift_card(
+        &state,
+        replacement.id,
+        replacement_input(None),
+        "next-issuer",
+    )
+    .await
+    .unwrap();
     assert_eq!(final_card.replaces_card_id, Some(replacement.id));
     assert_eq!(final_card.balance, 33.0);
     assert!(final_card.taxed_at_issue);
@@ -192,9 +209,10 @@ async fn paid_replacement_chain_preserves_balances_links_and_tax(pool: PgPool) {
 async fn uninvoiced_replacement_is_linked_without_creating_a_sale(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
     let original = standalone(&state, 110.0).await;
-    let replacement = service::replace_gift_card(&state, original.id, "new-issuer")
-        .await
-        .unwrap();
+    let replacement =
+        service::replace_gift_card(&state, original.id, replacement_input(None), "new-issuer")
+            .await
+            .unwrap();
     assert!(!replacement.taxed_at_issue);
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM invoices")
         .fetch_one(&pool)
@@ -232,12 +250,14 @@ async fn edits_and_returns_restore_value_to_the_current_replacement(pool: PgPool
     )
     .await
     .unwrap();
-    let replacement = service::replace_gift_card(&state, original.id, "issuer")
-        .await
-        .unwrap();
-    let current = service::replace_gift_card(&state, replacement.id, "issuer")
-        .await
-        .unwrap();
+    let replacement =
+        service::replace_gift_card(&state, original.id, replacement_input(None), "issuer")
+            .await
+            .unwrap();
+    let current =
+        service::replace_gift_card(&state, replacement.id, replacement_input(None), "issuer")
+            .await
+            .unwrap();
     let edit = invoices::service::get_invoice_for_edit(&state, created.id)
         .await
         .unwrap();
@@ -290,7 +310,7 @@ async fn edits_and_returns_restore_value_to_the_current_replacement(pool: PgPool
 async fn replaced_sale_cannot_be_rebuilt_even_before_any_redemption(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
     let (invoice, original) = paid(&state).await;
-    service::replace_gift_card(&state, original.id, "issuer")
+    service::replace_gift_card(&state, original.id, replacement_input(None), "issuer")
         .await
         .unwrap();
     let result=invoices::service::update_invoice(&state,invoice,serde_json::from_value(json!({
@@ -307,8 +327,8 @@ async fn concurrent_replacement_requests_have_one_winner(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
     let original = standalone(&state, 110.0).await;
     let (a, b) = tokio::join!(
-        service::replace_gift_card(&state, original.id, "issuer-a"),
-        service::replace_gift_card(&state, original.id, "issuer-b")
+        service::replace_gift_card(&state, original.id, replacement_input(None), "issuer-a"),
+        service::replace_gift_card(&state, original.id, replacement_input(None), "issuer-b")
     );
     assert_eq!(usize::from(a.is_ok()) + usize::from(b.is_ok()), 1);
     let rows = service::list_gift_cards(&state, &Default::default())
@@ -341,7 +361,7 @@ async fn concurrent_spending_and_replacement_preserve_value(pool: PgPool) {
     };
     let (spend, replacement) = tokio::join!(
         spend,
-        service::replace_gift_card(&state, original.id, "issuer")
+        service::replace_gift_card(&state, original.id, replacement_input(None), "issuer")
     );
     let replacement = replacement.unwrap();
     assert_eq!(
@@ -361,16 +381,14 @@ async fn concurrent_spending_and_replacement_preserve_value(pool: PgPool) {
 #[sqlx::test]
 async fn invalid_replacements_leave_the_source_untouched(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
-    for changes in [
-        json!({"balance":0}),
-        json!({"is_active":false}),
-        json!({"expires_on":"2020-01-01"}),
-    ] {
+    for changes in [json!({"balance":0}), json!({"is_active":false})] {
         let card = standalone(&state, 110.0).await;
         sqlx::query("UPDATE gift_cards SET balance=COALESCE(($2->>'balance')::numeric,balance),is_active=COALESCE(($2->>'is_active')::boolean,is_active),expires_on=COALESCE(($2->>'expires_on')::date,expires_on) WHERE id=$1").bind(card.id).bind(changes).execute(&pool).await.unwrap();
-        assert!(service::replace_gift_card(&state, card.id, "issuer")
-            .await
-            .is_err());
+        assert!(
+            service::replace_gift_card(&state, card.id, replacement_input(None), "issuer")
+                .await
+                .is_err()
+        );
         assert!(repository::get_gift_card(&state, card.id)
             .await
             .unwrap()
@@ -382,5 +400,177 @@ async fn invalid_replacements_leave_the_source_untouched(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(count, 3);
+    assert_eq!(count, 2);
+}
+
+/// Renew an expired uninvoiced balance without changing its original expiry or VAT history.
+#[sqlx::test]
+async fn expired_uninvoiced_credit_can_be_replaced_with_a_new_expiry(pool: PgPool) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let original = service::create_gift_card(
+        &state,
+        serde_json::from_value(json!({
+            "amount":110,"recipientPhone":"33112233","expiresOn":"2000-01-01"
+        }))
+        .unwrap(),
+        "issuer",
+    )
+    .await
+    .unwrap();
+    let future = chrono::Utc::now().date_naive() + chrono::Duration::days(365);
+    let renewed = service::replace_gift_card(
+        &state,
+        original.id,
+        replacement_input(Some(future)),
+        "renewing-manager",
+    )
+    .await
+    .unwrap();
+    assert_eq!(renewed.expires_on, Some(future));
+    assert_eq!(renewed.balance, 110.0);
+    assert_eq!(renewed.replaces_card_id, Some(original.id));
+    assert_eq!(renewed.issued_by.as_deref(), Some("renewing-manager"));
+    assert!(!renewed.taxed_at_issue);
+    let retired = service::get_gift_card_by_code(&state, &original.code)
+        .await
+        .unwrap();
+    assert_eq!(retired.expires_on, original.expires_on);
+    assert_eq!(
+        (
+            retired.balance,
+            retired.is_active,
+            retired.replaced_by_card_id
+        ),
+        (0.0, false, Some(renewed.id))
+    );
+    assert_eq!(
+        retired.replaced_by_card_code.as_deref(),
+        Some(renewed.code.as_str())
+    );
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM invoices")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    let (product, branch) = stock(&pool).await;
+    let purchase = invoices::service::create_invoice(
+        &state,
+        serde_json::from_value(purchase(product, branch, &renewed, 33.0)).unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
+    let detail = invoices::service::get_invoice(&state, purchase.id)
+        .await
+        .unwrap();
+    assert_eq!(
+        (detail.totals.vat, detail.totals.prepaid_amount),
+        (3.0, 0.0)
+    );
+}
+
+/// Expiry renewal stays available through an uninvoiced replacement chain, including no expiry.
+#[sqlx::test]
+async fn expired_uninvoiced_replacement_can_receive_no_expiry(pool: PgPool) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let original = standalone(&state, 55.0).await;
+    let first = service::replace_gift_card(&state, original.id, replacement_input(None), "issuer")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE gift_cards SET expires_on='2000-01-01' WHERE id=$1")
+        .bind(first.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let renewed = service::replace_gift_card(&state, first.id, replacement_input(None), "manager")
+        .await
+        .unwrap();
+    assert_eq!(renewed.expires_on, None);
+    assert_eq!(renewed.balance, 55.0);
+    assert!(!renewed.taxed_at_issue);
+    assert_eq!(renewed.replaces_card_id, Some(first.id));
+}
+
+/// Reject a requested past expiry atomically rather than issuing another expired code.
+#[sqlx::test]
+async fn past_replacement_expiry_is_rejected_without_transferring_value(pool: PgPool) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let original = standalone(&state, 55.0).await;
+    let yesterday = chrono::Utc::now().date_naive() - chrono::Duration::days(1);
+    let result = service::replace_gift_card(
+        &state,
+        original.id,
+        replacement_input(Some(yesterday)),
+        "manager",
+    )
+    .await;
+    assert!(
+        matches!(result, Err(AppError::BadRequest(message)) if message.contains("expiry date today or later"))
+    );
+    let source = service::get_gift_card_by_code(&state, &original.code)
+        .await
+        .unwrap();
+    assert_eq!(
+        (source.balance, source.is_active, source.replaced_by_card_id),
+        (55.0, true, None)
+    );
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM gift_cards")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+/// A paid replacement retains its expiry rules even though its own record has no sale invoice.
+#[sqlx::test]
+async fn paid_value_cannot_bypass_expiry_through_a_replacement_chain(pool: PgPool) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let (_, original) = paid(&state).await;
+    let replacement =
+        service::replace_gift_card(&state, original.id, replacement_input(None), "manager")
+            .await
+            .unwrap();
+    let future = chrono::Utc::now().date_naive() + chrono::Duration::days(365);
+    let result = service::replace_gift_card(
+        &state,
+        replacement.id,
+        replacement_input(Some(future)),
+        "manager",
+    )
+    .await;
+    assert!(
+        matches!(result, Err(AppError::BadRequest(message)) if message.contains("without a sale invoice"))
+    );
+    sqlx::query("UPDATE gift_cards SET expires_on='2000-01-01' WHERE id=$1")
+        .bind(replacement.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let expired: chrono::NaiveDate = "2000-01-01".parse().unwrap();
+    let result = service::replace_gift_card(
+        &state,
+        replacement.id,
+        replacement_input(Some(expired)),
+        "manager",
+    )
+    .await;
+    assert!(matches!(result, Err(AppError::BadRequest(message)) if message.contains("expired")));
+    let source = service::get_gift_card_by_code(&state, &replacement.code)
+        .await
+        .unwrap();
+    assert_eq!(source.balance, 110.0);
+    assert!(source.replaced_by_card_id.is_none());
+}
+
+#[test]
+fn replacement_request_requires_an_explicit_nullable_expiry() {
+    assert!(serde_json::from_value::<ReplaceGiftCardInput>(json!({})).is_err());
+    assert!(
+        serde_json::from_value::<ReplaceGiftCardInput>(json!({"expiresOn":"not-a-date"})).is_err()
+    );
+    assert!(serde_json::from_value::<ReplaceGiftCardInput>(
+        json!({"expiresOn":null,"taxedAtIssue":false})
+    )
+    .is_err());
+    assert!(serde_json::from_value::<ReplaceGiftCardInput>(json!({"expiresOn":null})).is_ok());
 }

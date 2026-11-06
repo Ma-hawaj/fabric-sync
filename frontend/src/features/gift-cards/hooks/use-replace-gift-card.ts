@@ -6,9 +6,16 @@ import type { GiftCard } from '../types/gift-card'
 export function useReplaceGiftCard() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({
+      id,
+      expiresOn,
+    }: {
+      id: string
+      expiresOn: string | null
+    }) => {
       const response = await apiClient.post<GiftCard>(
         `/gift-cards/${id}/replace`,
+        { expiresOn },
       )
       return response.data
     },

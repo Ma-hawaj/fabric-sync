@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { giftCardStatus } from './gift-card-status'
+import { canReplaceGiftCard, giftCardStatus } from './gift-card-status'
 import type { GiftCard } from '../types/gift-card'
 
 function card(overrides: Partial<GiftCard> = {}): GiftCard {
@@ -27,6 +27,25 @@ function card(overrides: Partial<GiftCard> = {}): GiftCard {
 }
 
 describe('giftCardStatus', () => {
+  it('allows renewal of expired uninvoiced credit only when a usable balance remains', () => {
+    const expired = card({ expiresOn: '2000-01-01', taxedAtIssue: false })
+    expect(canReplaceGiftCard(expired, '2026-11-06')).toBe(true)
+    expect(
+      canReplaceGiftCard({ ...expired, taxedAtIssue: true }, '2026-11-06'),
+    ).toBe(false)
+    expect(
+      canReplaceGiftCard({ ...expired, isActive: false }, '2026-11-06'),
+    ).toBe(false)
+    expect(canReplaceGiftCard({ ...expired, balance: 0 }, '2026-11-06')).toBe(
+      false,
+    )
+    expect(
+      canReplaceGiftCard(
+        { ...expired, replacedByCardId: 'replacement' },
+        '2026-11-06',
+      ),
+    ).toBe(false)
+  })
   it('reports replaced ahead of voided or spent for an old code', () => {
     expect(
       giftCardStatus(

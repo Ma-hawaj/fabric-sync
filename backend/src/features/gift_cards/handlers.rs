@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     delivery, image, service,
-    types::{CreateGiftCardInput, GiftCard, UpdateGiftCardInput},
+    types::{CreateGiftCardInput, GiftCard, ReplaceGiftCardInput, UpdateGiftCardInput},
 };
 
 pub async fn download_image(
@@ -87,9 +87,10 @@ pub async fn replace_gift_card(
     State(state): State<AppState>,
     Extension(user): Extension<AuthenticatedUser>,
     Path(id): Path<Uuid>,
+    Json(input): Json<ReplaceGiftCardInput>,
 ) -> Result<Json<GiftCard>, AppError> {
     Ok(Json(
-        service::replace_gift_card(&state, id, issuer(&user)?).await?,
+        service::replace_gift_card(&state, id, input, issuer(&user)?).await?,
     ))
 }
 

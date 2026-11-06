@@ -9,7 +9,9 @@ use crate::{
 
 use super::{
     repository,
-    types::{CreateGiftCardInput, GiftCard, GiftCardBalance, UpdateGiftCardInput},
+    types::{
+        CreateGiftCardInput, GiftCard, GiftCardBalance, ReplaceGiftCardInput, UpdateGiftCardInput,
+    },
 };
 
 // A power-of-two alphabet avoids modulo bias and omits 0/O and 1/I.
@@ -233,11 +235,13 @@ pub async fn update_gift_card(
         .expect("gift card was just updated"))
 }
 
-/// Transfer remaining value to a new code, preserving recipient, expiry, and VAT lineage.
+/// Transfer remaining value to a new code, preserving recipient and VAT lineage.
+/// Uninvoiced credit can receive a new expiry even after expiration; paid value keeps its expiry.
 /// Locking the source serializes replacement against spending, refunds, and repeated requests.
 pub async fn replace_gift_card(
     state: &AppState,
     original_id: Uuid,
+    input: ReplaceGiftCardInput,
     actor: &str,
 ) -> Result<GiftCard, AppError> {
     let mut tx = state.db().begin().await?;
@@ -251,12 +255,22 @@ pub async fn replace_gift_card(
         ));
     }
     validate_amount(locked.balance)?;
-    check_redeemable(
-        &locked,
-        &original.code,
-        locked.balance,
-        chrono::Utc::now().date_naive(),
-    )?;
+    let today = chrono::Utc::now().date_naive();
+    if original.taxed_at_issue && input.expires_on != original.expires_on {
+        return Err(AppError::BadRequest(
+            "Only cards issued without a sale invoice can receive a new expiry date.".into(),
+        ));
+    }
+    if !original.taxed_at_issue && input.expires_on.is_some_and(|expiry| expiry < today) {
+        return Err(AppError::BadRequest(
+            "Choose an expiry date today or later, or no expiry.".into(),
+        ));
+    }
+    let replacement_balance = GiftCardBalance {
+        expires_on: input.expires_on,
+        ..locked.clone()
+    };
+    check_redeemable(&replacement_balance, &original.code, locked.balance, today)?;
     let input = CreateGiftCardInput {
         amount: locked.balance,
         bought_for: original.bought_for,
@@ -264,7 +278,7 @@ pub async fn replace_gift_card(
             AppError::BadRequest("Add a recipient phone number before replacing this card.".into())
         })?,
         customer_id: original.customer_id,
-        expires_on: original.expires_on,
+        expires_on: input.expires_on,
     };
     let (replacement_id, _) = issue_gift_card(
         &mut tx,

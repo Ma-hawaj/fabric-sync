@@ -12,7 +12,8 @@ import { DataTableColumnHeader } from '@/components/data-table/data-table-column
 import { RowActions } from '@/components/data-table/row-actions'
 import { CURRENCY } from '@/lib/currency'
 import { StaffName } from '@/features/users/components/staff-name'
-import { giftCardStatus } from '../lib/gift-card-status'
+import { Link } from '@tanstack/react-router'
+import { canReplaceGiftCard, giftCardStatus } from '../lib/gift-card-status'
 import type { GiftCard } from '../types/gift-card'
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -38,7 +39,13 @@ export const getGiftCardColumns = (
         <DataTableColumnHeader column={column} label="Code" />
       ),
       cell: ({ row }) => (
-        <div className="font-mono font-medium">{row.getValue('code')}</div>
+        <Link
+          to="/gift-cards/$code"
+          params={{ code: row.original.code }}
+          className="font-mono font-medium underline-offset-4 hover:underline"
+        >
+          {row.original.code}
+        </Link>
       ),
       enableSorting: true,
       enableColumnFilter: true,
@@ -71,13 +78,25 @@ export const getGiftCardColumns = (
             {card.replacesCardCode && (
               <p>
                 Replaces{' '}
-                <span className="font-mono">{card.replacesCardCode}</span>
+                <Link
+                  to="/gift-cards/$code"
+                  params={{ code: card.replacesCardCode }}
+                  className="font-mono underline underline-offset-4"
+                >
+                  {card.replacesCardCode}
+                </Link>
               </p>
             )}
             {card.replacedByCardCode && (
               <p>
                 Replaced by{' '}
-                <span className="font-mono">{card.replacedByCardCode}</span>
+                <Link
+                  to="/gift-cards/$code"
+                  params={{ code: card.replacedByCardCode }}
+                  className="font-mono underline underline-offset-4"
+                >
+                  {card.replacedByCardCode}
+                </Link>
               </p>
             )}
             {!card.replacesCardCode && !card.replacedByCardCode && (
@@ -271,7 +290,7 @@ export const getGiftCardColumns = (
                 label: 'Replace card',
                 permission: { method: 'POST', path: '/gift-cards/:id/replace' },
                 icon: RefreshCwIcon,
-                disabled: giftCardStatus(card, today) !== 'Active',
+                disabled: !canReplaceGiftCard(card, today),
                 onClick: () => onReplace(card),
               },
               {
