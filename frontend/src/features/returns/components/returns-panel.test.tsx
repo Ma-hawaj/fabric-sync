@@ -22,6 +22,7 @@ function renderPanel(context: ReturnContext = CONTEXT) {
         name: 'Manama',
         isActive: true,
         holdsStock: true,
+        producesOrders: false,
         receivesOrders: true,
       },
       {
@@ -29,6 +30,7 @@ function renderPanel(context: ReturnContext = CONTEXT) {
         name: 'Riffa',
         isActive: true,
         holdsStock: true,
+        producesOrders: false,
         receivesOrders: true,
       },
       {
@@ -36,6 +38,7 @@ function renderPanel(context: ReturnContext = CONTEXT) {
         name: 'Retired store',
         isActive: false,
         holdsStock: true,
+        producesOrders: false,
         receivesOrders: true,
       },
       {
@@ -43,6 +46,7 @@ function renderPanel(context: ReturnContext = CONTEXT) {
         name: 'Pickup only',
         isActive: true,
         holdsStock: false,
+        producesOrders: false,
         receivesOrders: true,
       },
     ],

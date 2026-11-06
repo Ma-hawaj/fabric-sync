@@ -9,11 +9,13 @@ import type { Location } from '../types/location'
 
 export const RECEIVES_ORDERS_LABEL = 'Receives orders'
 export const HOLDS_STOCK_LABEL = 'Holds stock'
+export const PRODUCES_ORDERS_LABEL = 'Produces orders'
 
 export function locationUses(location: Location): string[] {
   const uses: string[] = []
   if (location.receivesOrders) uses.push(RECEIVES_ORDERS_LABEL)
   if (location.holdsStock) uses.push(HOLDS_STOCK_LABEL)
+  if (location.producesOrders) uses.push(PRODUCES_ORDERS_LABEL)
   return uses
 }
 
@@ -75,6 +77,7 @@ export const getLocationColumns = (
         options: [
           { label: RECEIVES_ORDERS_LABEL, value: 'receivesOrders' },
           { label: HOLDS_STOCK_LABEL, value: 'holdsStock' },
+          { label: PRODUCES_ORDERS_LABEL, value: 'producesOrders' },
         ],
       },
     },

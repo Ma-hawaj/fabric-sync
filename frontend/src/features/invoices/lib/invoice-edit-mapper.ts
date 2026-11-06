@@ -132,19 +132,39 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
           normalPrice: null,
           largePrice: null,
           locations:
-            line.productionLocationId == null
+            line.materialLocationId == null
               ? []
               : [
                   {
-                    locationId: line.productionLocationId,
-                    location: line.productionLocationName ?? '',
+                    locationId: line.materialLocationId,
+                    location: line.materialLocationName ?? '',
                     quantity: line.stockQuantity ?? 0,
                   },
                 ],
         })
       }
+      if (line.materialId && line.materialLocationId) {
+        const material = seeds.materials.get(line.materialId)
+        if (
+          material &&
+          !material.locations.some(
+            (stock) => stock.locationId === line.materialLocationId,
+          )
+        ) {
+          material.locations.push({
+            locationId: line.materialLocationId,
+            location: line.materialLocationName ?? '',
+            quantity: line.stockQuantity ?? 0,
+          })
+        }
+      }
       if (line.materialId)
         seeds.materialLabels.set(line.materialId, line.materialName)
+      if (line.materialLocationId)
+        seeds.locationLabels.set(
+          line.materialLocationId,
+          line.materialLocationName ?? '',
+        )
       if (line.productionLocationId) {
         seeds.locationLabels.set(
           line.productionLocationId,
@@ -186,6 +206,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
         customerMaterialDescription: line.customerMaterialDescription ?? '',
         materialId: line.materialId ?? '',
         materialAmount: line.materialAmount,
+        materialLocationId: line.materialLocationId ?? '',
         productionLocationId: line.productionLocationId ?? '',
         price: line.price,
         isUrgent: line.isUrgent,

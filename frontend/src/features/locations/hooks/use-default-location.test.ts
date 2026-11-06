@@ -21,6 +21,7 @@ const BOTH: Location = {
   name: 'Manama Main Branch',
   receivesOrders: true,
   holdsStock: true,
+  producesOrders: false,
   isActive: true,
 }
 

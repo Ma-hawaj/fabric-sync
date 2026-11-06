@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT EXISTS(SELECT 1 FROM branch WHERE id = $1 AND is_active AND holds_stock) AS \"usable!\"",
+  "query": "SELECT EXISTS(SELECT 1 FROM branch WHERE id = $1 AND is_active AND produces_orders) AS \"usable!\"",
   "describe": {
     "columns": [
       {
@@ -18,5 +18,5 @@
       null
     ]
   },
-  "hash": "d84266c4d6bc67bce97a86d748b766e32b4b9d2431e6de5a41d7721870ab796b"
+  "hash": "85ff3720e4e1c6f5336ed1c1b1409210b6ed6f4a4dbc497e6a7b13cce5179f45"
 }

@@ -64,7 +64,7 @@ async fn material_sales_database() {
     let tokens = TokenIntrospection::discover(&config).await.unwrap();
     let users = ZitadelUserDirectory::discover(&config).await.unwrap();
     let state = AppState::new(config, pool.clone(), tokens, users);
-    let branch: Uuid = sqlx::query_scalar("INSERT INTO branch (name, receives_orders, holds_stock) VALUES ('Stock', true, true) RETURNING id").fetch_one(&pool).await.unwrap();
+    let branch: Uuid = sqlx::query_scalar("INSERT INTO branch (name, receives_orders, holds_stock, produces_orders) VALUES ('Stock', true, true, true) RETURNING id").fetch_one(&pool).await.unwrap();
     let other: Uuid = sqlx::query_scalar("INSERT INTO branch (name, receives_orders, holds_stock) VALUES ('Other', false, true) RETURNING id").fetch_one(&pool).await.unwrap();
     let material: Uuid = sqlx::query_scalar(
         "INSERT INTO materials (name, unit) VALUES ('Linen', 'meters') RETURNING id",
@@ -219,7 +219,7 @@ async fn material_sales_database() {
     mixed.customers = serde_json::from_value(json!([{
         "existingCustomerId": customer,
         "measurement": { "date": "2026-10-21", "type": "body", "fit": "medium" },
-        "orders": [{ "materialId": material, "materialAmount": 2.0, "productionLocationId": branch, "price": 22.0 }]
+        "orders": [{ "materialId": material, "materialAmount": 2.0, "productionLocationId": branch, "materialLocationId": branch, "price": 22.0 }]
     }])).unwrap();
     assert!(
         service::create_invoice(&state, mixed.clone(), "material-sale-test")

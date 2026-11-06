@@ -708,12 +708,12 @@ fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
     }
     match order.material_source {
         MaterialSource::Shop
-            if order.material_id.is_some() && order.customer_material_description.is_none() =>
+            if order.material_id.is_some() && order.material_location_id.is_some() && order.customer_material_description.is_none() =>
         {
             Ok(())
         }
         MaterialSource::Customer
-            if order.material_id.is_none()
+            if order.material_id.is_none() && order.material_location_id.is_none()
                 && order
                     .customer_material_description
                     .as_deref()
@@ -722,7 +722,7 @@ fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
             Ok(())
         }
         _ => Err(AppError::BadRequest(
-            "shop material needs a materialId; customer material needs only a fabric description"
+            "shop material needs a materialId and materialLocationId; customer material needs only a fabric description"
                 .into(),
         )),
     }
@@ -1019,6 +1019,7 @@ mod tests {
             "materialId": "0197fdd2-6a67-7000-8000-000000000001",
             "materialAmount": 2.0,
             "productionLocationId": "0197fdd2-6a67-7000-8000-000000000005",
+            "materialLocationId": "0197fdd2-6a67-7000-8000-000000000005",
             "price": price,
             "customerBasePrice": price,
         })
@@ -1050,6 +1051,7 @@ mod tests {
     fn customer_fabric_uses_the_fixed_base_and_ignores_client_prices() {
         let mut raw = order(9999.0);
         raw["materialSource"] = serde_json::json!("customer");
+        raw["materialLocationId"] = serde_json::Value::Null;
         raw["materialId"] = serde_json::Value::Null;
         raw["customerMaterialDescription"] = serde_json::json!("White linen");
         raw["customerBasePrice"] = serde_json::json!(9999.0);
@@ -1111,6 +1113,7 @@ mod tests {
 
         let mut customer_order = order(100.0);
         customer_order["materialSource"] = serde_json::json!("customer");
+        customer_order["materialLocationId"] = serde_json::Value::Null;
         customer_order["materialId"] = serde_json::Value::Null;
         customer_order["customerMaterialDescription"] = serde_json::json!("White linen");
         let parse = |value| serde_json::from_value::<CreateOrderInput>(value).unwrap();
@@ -1318,11 +1321,13 @@ mod tests {
         shop["materialId"] = serde_json::json!(material_id);
         shop["materialAmount"] = serde_json::json!(2.99);
         shop["productionLocationId"] = serde_json::json!(production);
+        shop["materialLocationId"] = serde_json::json!(production);
         shop["emd"] = serde_json::json!("urgent-compat");
         shop["isUrgent"] = serde_json::json!(true);
         shop["urgentCharge"] = serde_json::json!(9999.0);
         let mut customer_fabric = order(9999.0);
         customer_fabric["materialSource"] = serde_json::json!("customer");
+        customer_fabric["materialLocationId"] = serde_json::Value::Null;
         customer_fabric["materialId"] = serde_json::Value::Null;
         customer_fabric["customerMaterialDescription"] = serde_json::json!("Customer linen");
         customer_fabric["productionLocationId"] = serde_json::json!(production);
@@ -2038,12 +2043,25 @@ async fn write_customer_orders(
     orders: &[CreateOrderInput],
 ) -> Result<(), AppError> {
     for order in orders {
+        if !repository::is_production_location(tx, order.production_location_id).await? {
+            return Err(AppError::BadRequest(
+                "pick an active location that produces orders".into(),
+            ));
+        }
         // Customer fabric is allocated to this garment, never entered into shop stock.
         if let Some(material_id) = order.material_id {
+            let stock_location = order.material_location_id.ok_or_else(|| {
+                AppError::BadRequest("pick where this material comes from".into())
+            })?;
+            if !repository::is_stock_location(tx, stock_location).await? {
+                return Err(AppError::BadRequest(
+                    "pick an active location that holds stock".into(),
+                ));
+            }
             let decremented = materials_repository::decrement_stock(
                 tx,
                 material_id,
-                order.production_location_id,
+                stock_location,
                 order.material_amount,
             )
             .await?;
@@ -2056,14 +2074,6 @@ async fn write_customer_orders(
                 return Err(AppError::BadRequest(format!(
                     "not enough {name} in stock at the selected location"
                 )));
-            }
-        } else {
-            let usable =
-                repository::is_production_location(tx, order.production_location_id).await?;
-            if !usable {
-                return Err(AppError::BadRequest(
-                    "pick an active production location for customer material".into(),
-                ));
             }
         }
 
@@ -2086,7 +2096,7 @@ async fn write_material_lines(
     materials: &[CreateMaterialLineInput],
 ) -> Result<(), AppError> {
     for line in materials {
-        if !repository::is_production_location(tx, line.branch_id).await? {
+        if !repository::is_stock_location(tx, line.branch_id).await? {
             return Err(AppError::BadRequest(
                 "pick an active stock-holding location for material sales".into(),
             ));
@@ -2491,7 +2501,8 @@ pub async fn update_invoice(
     // schema for legacy rows; a missing one has no stock row to restore to, so
     // it is skipped rather than failing the edit.
     for line in &order_lines {
-        if let (Some(material_id), Some(branch_id)) = (line.material_id, line.production_branch_id)
+        if let (Some(material_id), Some(branch_id)) =
+            (line.material_id, line.material_stock_branch_id)
         {
             repository::restore_material_stock(
                 &mut tx,

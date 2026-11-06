@@ -268,10 +268,15 @@ async fn cancelling_an_urgent_order_does_not_consume_the_material_sale_credit(po
     .fetch_one(&pool)
     .await
     .unwrap();
+    sqlx::query("UPDATE branch SET produces_orders=true WHERE id=$1")
+        .bind(sale.origin)
+        .execute(&pool)
+        .await
+        .unwrap();
     let input = json!({"targetDate":"2099-01-01","discount":10,"expectedVatRate":0.1,"discountUnit":"percent",
         "materials":[{"materialId":sale.material,"branchId":sale.origin,"quantity":2.5,"unitPrice":11}],
         "customers":[{"existingCustomerId":customer,"measurement":{"date":"2026-10-25","type":"body","fit":"medium"},
-            "orders":[{"materialId":sale.material,"productionLocationId":sale.origin,"materialAmount":2,"isUrgent":true}]}]});
+            "orders":[{"materialId":sale.material,"productionLocationId":sale.origin,"materialLocationId":sale.origin,"materialAmount":2,"isUrgent":true}]}]});
     let invoice =
         invoices::create_invoice(&sale.state, serde_json::from_value(input).unwrap(), "staff")
             .await

@@ -155,6 +155,7 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
             isActive: true,
             receivesOrders: true,
             holdsStock: true,
+            producesOrders: true,
           },
         ],
       }),

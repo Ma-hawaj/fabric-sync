@@ -14,6 +14,7 @@ pub struct Location {
     pub receives_orders: bool,
     /// A location material stock is held at — a store.
     pub holds_stock: bool,
+    pub produces_orders: bool,
     pub is_active: bool,
 }
 
@@ -25,6 +26,8 @@ pub struct CreateLocationInput {
     pub receives_orders: bool,
     #[serde(default = "default_true")]
     pub holds_stock: bool,
+    #[serde(default)]
+    pub produces_orders: bool,
 }
 
 /// Every field is optional so the same endpoint serves the edit form (which
@@ -36,5 +39,6 @@ pub struct UpdateLocationInput {
     pub name: Option<String>,
     pub receives_orders: Option<bool>,
     pub holds_stock: Option<bool>,
+    pub produces_orders: Option<bool>,
     pub is_active: Option<bool>,
 }

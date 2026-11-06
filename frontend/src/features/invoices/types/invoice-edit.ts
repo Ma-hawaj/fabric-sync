@@ -44,6 +44,8 @@ export interface InvoiceEditOrder {
   materialName: string
   materialUnit: string
   materialAmount: number
+  materialLocationId: string | null
+  materialLocationName: string | null
   productionLocationId: string | null
   productionLocationName: string | null
   /** Live stock at the production location — seeds the "Made At" picker. */

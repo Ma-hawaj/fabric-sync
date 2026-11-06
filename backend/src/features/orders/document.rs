@@ -1360,6 +1360,8 @@ fn services_order() -> crate::features::orders::types::OrderListItem {
         production_location_id: None,
         production_location: None,
         production_location_inferred: false,
+        material_location_id: None,
+        material_location: None,
         receiving_location_id: None,
         collection_method: "pickup".into(),
         customer_address: None,

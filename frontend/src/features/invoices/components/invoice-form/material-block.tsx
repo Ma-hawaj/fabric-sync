@@ -14,6 +14,7 @@ import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-def
 import { CURRENCY } from '@/lib/currency'
 import type { InvoiceFormApi } from '../../types/invoice-form'
 import type { Material, MaterialLocationStock } from '../../types/materials'
+import { materialStockAvailable } from '../../types/materials'
 import { computeProductLineTotal } from '../../lib/invoice-pricing'
 import { GrossVatHint } from './gross-vat-hint'
 import { InvoiceLineItem } from './invoice-line-item'
@@ -42,8 +43,7 @@ export function MaterialBlock({
   )
   const stockDefault = useApplicableDefaultLocation('stock')
   useEffect(() => {
-    const locations =
-      picked?.locations.filter((stock) => stock.quantity > 0) ?? []
+    const locations = picked?.locations.filter(materialStockAvailable) ?? []
     const preferred =
       locations.find((stock) => stock.locationId === stockDefault?.id) ??
       (locations.length === 1 ? locations[0] : null)
@@ -94,7 +94,8 @@ export function MaterialBlock({
             const locations =
               picked?.locations.filter(
                 (stock) =>
-                  stock.quantity > 0 || stock.locationId === field.state.value,
+                  materialStockAvailable(stock) ||
+                  stock.locationId === field.state.value,
               ) ?? []
             const selected =
               locations.find(

@@ -69,6 +69,8 @@ const SPEC: ListSpec = ListSpec {
             o.more_details,
             o.production_branch_id AS production_location_id,
             prod.name AS production_location,
+            CASE WHEN o.material_source = 'shop' THEN COALESCE(o.material_stock_branch_id, o.production_branch_id) END AS material_location_id,
+            origin.name AS material_location,
             CASE WHEN i.collection_method = 'pickup' THEN i.branch_id END AS receiving_location_id,
             i.collection_method,
             CASE WHEN i.collection_method = 'pickup' THEN recv.name END AS receiving_location,
@@ -104,6 +106,7 @@ const SPEC: ListSpec = ListSpec {
         JOIN customers c ON c.id = m.customer_id
         LEFT JOIN materials mat ON mat.id = o.material_id
         LEFT JOIN branch prod ON prod.id = o.production_branch_id
+        LEFT JOIN branch origin ON origin.id = CASE WHEN o.material_source = 'shop' THEN COALESCE(o.material_stock_branch_id, o.production_branch_id) END
         LEFT JOIN branch recv ON recv.id = i.branch_id
         -- The invoice's money state, derived from the payments ledger: the
         -- table stores only the total, so the paid sum, the status and the
@@ -128,7 +131,7 @@ const SPEC: ListSpec = ListSpec {
             WHERE ms.material_id = o.material_id
               AND ms.quantity > 0
               AND b.is_active
-              AND b.holds_stock
+              AND b.holds_stock AND b.produces_orders
             GROUP BY ms.material_id
             HAVING COUNT(DISTINCT ms.branch_id) = 1
         ) inferred ON true
@@ -282,7 +285,7 @@ pub async fn single_stock_locations(
         WHERE ms.material_id = ANY($1)
           AND ms.quantity > 0
           AND b.is_active
-          AND b.holds_stock
+          AND b.holds_stock AND b.produces_orders
         GROUP BY ms.material_id
         HAVING COUNT(DISTINCT ms.branch_id) = 1
         "#,

@@ -258,6 +258,14 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 )}
               </dd>
             </div>
+            {order.materialSource === 'shop' && (
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Material from</dt>
+                <dd className="font-medium">
+                  {order.materialLocation ?? 'Not assigned'}
+                </dd>
+              </div>
+            )}
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Made at</dt>
               <dd className="font-medium">

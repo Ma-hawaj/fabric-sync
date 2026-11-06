@@ -20,6 +20,7 @@ function validOrder() {
     ...createEmptyOrder(),
     materialId: 'mat-1',
     materialAmount: 2,
+    materialLocationId: 'loc-1',
     productionLocationId: 'loc-1',
     price: 150,
   }
@@ -440,6 +441,7 @@ describe('invoiceFormSchema', () => {
           ...createEmptyOrder(),
           materialId: 'mat-1',
           materialAmount: 2,
+          materialLocationId: 'loc-1',
           productionLocationId: 'loc-1',
         },
       ],

@@ -58,6 +58,7 @@ function renderDialog(material?: Material) {
           name: 'Main Warehouse',
           isActive: true,
           holdsStock: true,
+          producesOrders: false,
           receivesOrders: false,
         },
       ],
@@ -72,6 +73,7 @@ function renderDialog(material?: Material) {
         name: 'Main Warehouse',
         isActive: true,
         holdsStock: true,
+        producesOrders: false,
         receivesOrders: false,
       },
     })

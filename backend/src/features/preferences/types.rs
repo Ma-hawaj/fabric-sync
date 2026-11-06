@@ -12,6 +12,7 @@ pub struct DefaultLocation {
     pub name: String,
     pub receives_orders: bool,
     pub holds_stock: bool,
+    pub produces_orders: bool,
     pub is_active: bool,
 }
 

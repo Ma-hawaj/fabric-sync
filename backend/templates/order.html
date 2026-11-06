@@ -19,7 +19,9 @@
 {%- macro material_name(item) -%}
   <span class="material-name">{{ item.material }}</span>
   {% if item.materialSku %}<strong class="material-sku">SKU: {{ item.materialSku }}</strong>{% endif %}
-  {% if item.materialSource == 'customer' %}<span class="material-source">Customer-provided material</span>{% endif %}
+  {% if item.materialSource == 'customer' %}<span class="material-source">Customer-provided material</span>
+  {% elif item.materialLocation %}<span class="material-source">Material from: {{ item.materialLocation }}</span>{% endif %}
+  {% if item.productionLocation %}<span class="material-source">Production branch: {{ item.productionLocation }}</span>{% endif %}
 {%- endmacro -%}
 {%- macro order_reference(item) -%}
   <span class="order-reference">
@@ -145,6 +147,11 @@
           </dl>
           <div class="customer-name"><span class="customer-label">Name</span><strong dir="auto">{{ order.customerName }}</strong></div>
           <div class="customer-mobile"><span class="customer-label">Phone</span><strong dir="ltr">{{ order.customerMobile }}</strong></div>
+          {% if order.collectionMethod == 'delivery' %}
+          <div class="customer-mobile"><span class="customer-label">Delivery address</span><strong dir="auto">{{ order.customerAddress or 'Not assigned' }}</strong></div>
+          {% elif order.receivingLocation %}
+          <div class="customer-mobile"><span class="customer-label">Collection branch</span><strong dir="auto">{{ order.receivingLocation }}</strong></div>
+          {% endif %}
         </div>
         {% if company.logoDataUrl %}<img class="logo" src="{{ company.logoDataUrl }}" alt="" />{% endif %}
         <div class="doc-title">

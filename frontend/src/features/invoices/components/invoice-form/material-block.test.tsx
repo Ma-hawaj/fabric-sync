@@ -85,6 +85,7 @@ function Harness({
           name: stock.location,
           isActive: true,
           holdsStock: true,
+          producesOrders: false,
           receivesOrders: false,
         }
       : null,

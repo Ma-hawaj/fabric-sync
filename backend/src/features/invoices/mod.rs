@@ -26,3 +26,6 @@ mod payment_response_tests;
 mod vat_snapshot_tests;
 #[cfg(test)]
 mod voucher_vat_tests;
+
+#[cfg(test)]
+mod production_location_tests;

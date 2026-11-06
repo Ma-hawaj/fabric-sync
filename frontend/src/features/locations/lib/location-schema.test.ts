@@ -19,6 +19,7 @@ describe('locationFormSchema', () => {
         name: 'Downtown Branch',
         receivesOrders: true,
         holdsStock: false,
+        producesOrders: false,
       }),
     )
     expect(error).toBeNull()
@@ -30,11 +31,24 @@ describe('locationFormSchema', () => {
         name: 'Main Warehouse',
         receivesOrders: false,
         holdsStock: true,
+        producesOrders: false,
       }),
     )
     expect(error).toBeNull()
   })
 
+  it('accepts a production-only workshop', () => {
+    expect(
+      firstError(
+        values({
+          name: 'Workshop',
+          receivesOrders: false,
+          holdsStock: false,
+          producesOrders: true,
+        }),
+      ),
+    ).toBeNull()
+  })
   it('requires a name', () => {
     const error = firstError(values({ name: '   ' }))
     expect(error?.message).toMatch(/enter a location name/i)

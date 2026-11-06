@@ -27,6 +27,7 @@ const locations: Location[] = [
     name: 'Warehouse',
     isActive: true,
     holdsStock: true,
+    producesOrders: false,
     receivesOrders: false,
   },
   {
@@ -34,6 +35,7 @@ const locations: Location[] = [
     name: 'Workshop',
     isActive: true,
     holdsStock: true,
+    producesOrders: false,
     receivesOrders: false,
   },
   {
@@ -41,6 +43,7 @@ const locations: Location[] = [
     name: 'Retired',
     isActive: false,
     holdsStock: true,
+    producesOrders: false,
     receivesOrders: false,
   },
   {
@@ -48,6 +51,7 @@ const locations: Location[] = [
     name: 'Pickup Only',
     isActive: true,
     holdsStock: false,
+    producesOrders: false,
     receivesOrders: true,
   },
 ]

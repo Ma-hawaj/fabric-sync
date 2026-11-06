@@ -883,7 +883,7 @@ pub async fn insert_order(
             thobe_type, f_pocket, s_pocket, collar, sleeve, patti, emd, more_details,
             production_branch_id, material_source, customer_material_description, base_price, is_urgent, urgent_charge, material_stock_branch_id
         )
-        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8, $18, $19::float8, CASE WHEN $15::text = 'shop' THEN $14::uuid ELSE NULL::uuid END)
+        VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8, $18, $19::float8, $20)
         "#,
         measurement_id,
         order.material_id,
@@ -907,6 +907,7 @@ pub async fn insert_order(
         order.base_price,
         order.is_urgent,
         urgent_charge,
+        order.material_location_id,
     )
     .execute(&mut **tx)
     .await?;
@@ -974,7 +975,7 @@ pub async fn insert_gift_card_item(
 /// Old tailoring lines, for restoring the material they consumed.
 pub struct OldOrderLine {
     pub material_id: Option<Uuid>,
-    pub production_branch_id: Option<Uuid>,
+    pub material_stock_branch_id: Option<Uuid>,
     pub material_amount: f64,
 }
 
@@ -1087,6 +1088,8 @@ pub async fn fetch_invoice_edit(
             COALESCE(mat.unit, 'meters') AS "material_unit!",
             o.material_amount::float8 AS "material_amount!",
             o.production_branch_id,
+            COALESCE(o.material_stock_branch_id, o.production_branch_id) AS material_location_id,
+            stock_branch.name AS "material_location_name?",
             b.name AS "production_location_name?",
             ms.quantity::float8 AS stock_quantity,
             o.price::float8 AS "price!",
@@ -1106,9 +1109,10 @@ pub async fn fetch_invoice_edit(
         JOIN customers c ON c.id = m.customer_id
         LEFT JOIN materials mat ON mat.id = o.material_id
         LEFT JOIN branch b ON b.id = o.production_branch_id
+        LEFT JOIN branch stock_branch ON stock_branch.id = COALESCE(o.material_stock_branch_id, o.production_branch_id)
         LEFT JOIN material_stock ms
             ON ms.material_id = o.material_id
-            AND ms.branch_id = o.production_branch_id
+            AND ms.branch_id = COALESCE(o.material_stock_branch_id, o.production_branch_id)
         WHERE o.invoice_id = $1
         ORDER BY o.id
         "#,
@@ -1157,13 +1161,23 @@ pub async fn fetch_invoice_edit(
             original_order_id: row.original_order_id,
             base_price: row.base_price,
             material_id: row.material_id,
-            material_source: row.material_source,
+            material_source: row.material_source.clone(),
             customer_material_description: row.customer_material_description,
             material_name: row.material_name,
             material_unit: row.material_unit,
             material_amount: row.material_amount,
             production_location_id: row.production_branch_id,
             production_location_name: row.production_location_name,
+            material_location_id: if row.material_source == "shop" {
+                row.material_location_id
+            } else {
+                None
+            },
+            material_location_name: if row.material_source == "shop" {
+                row.material_location_name
+            } else {
+                None
+            },
             stock_quantity: row.stock_quantity,
             price: row.price,
             is_urgent: row.is_urgent,
@@ -1358,7 +1372,7 @@ pub async fn old_order_lines(
     sqlx::query_as!(
         OldOrderLine,
         r#"
-        SELECT material_id, COALESCE(material_stock_branch_id, production_branch_id) AS production_branch_id, material_amount::float8 AS "material_amount!"
+        SELECT material_id, COALESCE(material_stock_branch_id, production_branch_id) AS material_stock_branch_id, material_amount::float8 AS "material_amount!"
         FROM orders
         WHERE invoice_id = $1
         "#,
@@ -1653,9 +1667,21 @@ pub async fn is_production_location(
     location_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
     Ok(sqlx::query_scalar!(
-        "SELECT EXISTS(SELECT 1 FROM branch WHERE id = $1 AND is_active AND holds_stock) AS \"usable!\"",
+        "SELECT EXISTS(SELECT 1 FROM branch WHERE id = $1 AND is_active AND produces_orders) AS \"usable!\"",
         location_id,
     ).fetch_one(&mut **tx).await?)
+}
+
+pub async fn is_stock_location(
+    tx: &mut sqlx::PgTransaction<'_>,
+    location_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM branch WHERE id=$1 AND is_active AND holds_stock)",
+    )
+    .bind(location_id)
+    .fetch_one(&mut **tx)
+    .await
 }
 
 /// Whether a location is eligible now or is already saved on this invoice.

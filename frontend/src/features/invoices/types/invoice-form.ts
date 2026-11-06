@@ -49,8 +49,8 @@ export interface InvoiceOrderDraft {
   customerMaterialDescription: string
   materialId: string
   materialAmount: NumberInput
-  // Where the garment is made. Shop material needs stock at this location;
-  // customer fabric can use any active production location.
+  // Shop stock source and production workshop are chosen independently.
+  materialLocationId: string
   productionLocationId: string
   // Calculated preview; the backend calculates its own final price.
   price: NumberInput
@@ -183,6 +183,7 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     customerMaterialDescription: '',
     materialId: '',
     materialAmount: '',
+    materialLocationId: '',
     productionLocationId: '',
     price: '',
     isUrgent: false,

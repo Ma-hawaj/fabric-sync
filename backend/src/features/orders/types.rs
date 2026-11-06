@@ -155,6 +155,8 @@ pub struct OrderRow {
     pub more_details: Option<String>,
     pub production_location_id: Option<Uuid>,
     pub production_location: Option<String>,
+    pub material_location_id: Option<Uuid>,
+    pub material_location: Option<String>,
     pub receiving_location_id: Option<Uuid>,
     pub collection_method: String,
     pub receiving_location: Option<String>,
@@ -277,6 +279,8 @@ pub struct OrderListItem {
     /// inferred — see `production_location_inferred`.
     pub production_location_id: Option<Uuid>,
     pub production_location: Option<String>,
+    pub material_location_id: Option<Uuid>,
+    pub material_location: Option<String>,
     /// True when `production_location_id` was inferred from `material_stock`
     /// rather than assigned by staff. Never true alongside a stored
     /// `orders.production_branch_id` — an explicit assignment always displaces

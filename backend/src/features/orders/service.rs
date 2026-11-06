@@ -420,6 +420,8 @@ fn assemble_order(
         production_location_id,
         production_location,
         production_location_inferred,
+        material_location_id: row.material_location_id,
+        material_location: row.material_location,
         receiving_location_id: row.receiving_location_id,
         collection_method: row.collection_method,
         customer_address: row.customer_address,
@@ -682,6 +684,14 @@ pub async fn update_order(
     input: UpdateOrderInput,
 ) -> Result<OrderListItem, AppError> {
     let mut tx = active_order_transaction(state, order_id).await?;
+    if let Some(location) = input.production_location_id {
+        if !crate::features::invoices::repository::is_production_location(&mut tx, location).await?
+        {
+            return Err(AppError::BadRequest(
+                "pick an active location that produces orders".into(),
+            ));
+        }
+    }
     repository::update_order(&mut tx, order_id, input.production_location_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;
@@ -1951,5 +1961,42 @@ mod repair_collection_tests {
         assert_eq!(saved.0, "received");
         assert_eq!((saved.1, saved.2, saved.3, saved.4), original);
         assert_eq!(saved.5, "Customer collected the garment");
+    }
+}
+
+#[cfg(test)]
+mod production_location_tests {
+    use super::*;
+    #[sqlx::test]
+    async fn stock_only_locations_are_not_inferred_or_accepted_as_production(db: sqlx::PgPool) {
+        let (_, orders, production, _) = crate::test_support::invoice(&db, 1, false).await;
+        let warehouse: Uuid = sqlx::query_scalar("INSERT INTO branch(name,receives_orders,holds_stock,produces_orders) VALUES('Warehouse only',false,true,false) RETURNING id").fetch_one(&db).await.unwrap();
+        let material: Uuid =
+            sqlx::query_scalar("INSERT INTO materials(name) VALUES('Stock fabric') RETURNING id")
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        sqlx::query("INSERT INTO material_stock(material_id,branch_id,quantity) VALUES($1,$2,10)")
+            .bind(material)
+            .bind(warehouse)
+            .execute(&db)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE orders SET material_source='shop',customer_material_description=NULL,material_id=$2,material_stock_branch_id=$3,production_branch_id=NULL WHERE id=$1").bind(orders[0]).bind(material).bind(warehouse).execute(&db).await.unwrap();
+        let state = crate::test_support::state(db.clone(), None, None).await;
+        let order = get_order(&state, orders[0]).await.unwrap().order;
+        assert!(order.production_location_id.is_none());
+        assert!(!order.production_location_inferred);
+        let input =
+            serde_json::from_value(serde_json::json!({"productionLocationId":warehouse})).unwrap();
+        assert!(matches!(
+            update_order(&state, orders[0], input).await,
+            Err(AppError::BadRequest(_))
+        ));
+        let input =
+            serde_json::from_value(serde_json::json!({"productionLocationId":production})).unwrap();
+        let order = update_order(&state, orders[0], input).await.unwrap();
+        assert_eq!(order.production_location_id, Some(production));
+        assert_eq!(order.material_location_id, Some(warehouse));
     }
 }

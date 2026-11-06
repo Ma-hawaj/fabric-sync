@@ -82,7 +82,8 @@ function Harness({
         id: 'workshop',
         name: 'Customer Fabric Workshop',
         receivesOrders: false,
-        holdsStock: true,
+        holdsStock: false,
+        producesOrders: true,
         isActive: true,
       },
     ],
@@ -140,7 +141,9 @@ function openMaterialSearch() {
 }
 
 function locationSearchInput() {
-  return screen.getByPlaceholderText<HTMLInputElement>('Search location...')
+  return screen.getByPlaceholderText<HTMLInputElement>(
+    'Search stock location...',
+  )
 }
 
 function openLocationSearch() {
@@ -252,6 +255,33 @@ describe('OrderBlock', () => {
     ).toBeNull()
   })
 
+  it('selects the fabric source independently of a production-only workshop', async () => {
+    render(<Harness />)
+    await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')
+    openLocationSearch()
+    fireEvent.click(
+      await screen.findByRole('option', {
+        name: 'Main Warehouse (100 meters)',
+      }),
+    )
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order).toMatchObject({
+        materialLocationId: 'loc-1',
+        productionLocationId: 'workshop',
+      })
+    })
+    await pickMaterial('Wool Blend — Grey')
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order).toMatchObject({
+        materialLocationId: '',
+        productionLocationId: 'workshop',
+      })
+    })
+  })
   it('creates a customer fabric order with a production location that has no inventory stock', async () => {
     render(<Harness />)
     fireEvent.click(screen.getByRole('radio', { name: 'Customer' }))
@@ -286,6 +316,7 @@ describe('OrderBlock', () => {
         order={{
           materialId: 'mat-1',
           productionLocationId: 'loc-1',
+          materialLocationId: 'loc-1',
           materialAmount: 3,
           price: 40,
         }}
@@ -303,7 +334,8 @@ describe('OrderBlock', () => {
         materialSource: 'shop',
         materialId: '',
         customerMaterialDescription: '',
-        productionLocationId: '',
+        materialLocationId: '',
+        productionLocationId: 'loc-1',
         materialAmount: 3,
         price: '',
       })
@@ -369,7 +401,7 @@ describe('OrderBlock', () => {
     ).toBeTruthy()
   })
 
-  it("limits the Made At picker to the selected material's stock locations", async () => {
+  it("limits the Material from picker to the selected material's stock locations", async () => {
     render(<Harness />)
 
     await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')

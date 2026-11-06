@@ -93,9 +93,10 @@ pub struct CreateOrderInput {
     pub material_id: Option<Uuid>,
     pub customer_material_description: Option<String>,
     pub material_amount: f64,
-    // Where the garment is made. Shop fabric is deducted from stock here;
-    // customer fabric needs an active production location without a stock row.
-    // Stored directly as orders.production_branch_id for delivery tracking.
+    // Stock source and production are independent. Customer fabric has no stock source.
+    #[serde(default)]
+    pub material_location_id: Option<Uuid>,
+    // Stored as orders.production_branch_id for production and pickup transfers.
     pub production_location_id: Uuid,
     // Resolved by the service, never accepted from a client.
     #[serde(skip_deserializing)]
@@ -281,8 +282,10 @@ pub struct InvoiceEditOrder {
     pub material_amount: f64,
     pub production_location_id: Option<Uuid>,
     pub production_location_name: Option<String>,
-    /// Live stock at the production location, so the edit form can seed the
-    /// "Made At" picker without a second query. Informational only — the
+    pub material_location_id: Option<Uuid>,
+    pub material_location_name: Option<String>,
+    /// Live stock at the material source, so the edit form can seed the
+    /// "Material from" picker without a second query. Informational only — the
     /// guarded decrement on save is what actually enforces availability.
     pub stock_quantity: Option<f64>,
     pub price: f64,

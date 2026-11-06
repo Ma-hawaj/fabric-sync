@@ -19,11 +19,13 @@ const SPEC: ListSpec = ListSpec {
             name,
             receives_orders,
             holds_stock,
+            produces_orders,
             is_active,
             array_remove(
                 ARRAY[
                     CASE WHEN receives_orders THEN 'receivesOrders' END,
-                    CASE WHEN holds_stock THEN 'holdsStock' END
+                    CASE WHEN holds_stock THEN 'holdsStock' END,
+                    CASE WHEN produces_orders THEN 'producesOrders' END
                 ],
                 NULL
             ) AS uses,
@@ -42,6 +44,10 @@ const SPEC: ListSpec = ListSpec {
         (
             "holdsStock",
             ColumnDef::new("holds_stock", ColumnKind::Bool),
+        ),
+        (
+            "producesOrders",
+            ColumnDef::new("produces_orders", ColumnKind::Bool),
         ),
         ("isActive", ColumnDef::new("is_active", ColumnKind::Bool)),
     ],
@@ -69,17 +75,19 @@ pub async fn create_location(
     name: &str,
     receives_orders: bool,
     holds_stock: bool,
+    produces_orders: bool,
 ) -> Result<Location, sqlx::Error> {
     sqlx::query_as!(
         Location,
         r#"
-        INSERT INTO branch (name, receives_orders, holds_stock)
-        VALUES ($1, $2, $3)
-        RETURNING id, name, receives_orders, holds_stock, is_active
+        INSERT INTO branch (name, receives_orders, holds_stock, produces_orders)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, name, receives_orders, holds_stock, produces_orders, is_active
         "#,
         name,
         receives_orders,
         holds_stock,
+        produces_orders,
     )
     .fetch_one(state.db())
     .await
@@ -93,6 +101,7 @@ pub async fn update_location(
     name: Option<&str>,
     receives_orders: Option<bool>,
     holds_stock: Option<bool>,
+    produces_orders: Option<bool>,
     is_active: Option<bool>,
 ) -> Result<Option<Location>, sqlx::Error> {
     sqlx::query_as!(
@@ -102,14 +111,16 @@ pub async fn update_location(
         SET name = COALESCE($2, name),
             receives_orders = COALESCE($3, receives_orders),
             holds_stock = COALESCE($4, holds_stock),
-            is_active = COALESCE($5, is_active)
+            produces_orders = COALESCE($5, produces_orders),
+            is_active = COALESCE($6, is_active)
         WHERE id = $1
-        RETURNING id, name, receives_orders, holds_stock, is_active
+        RETURNING id, name, receives_orders, holds_stock, produces_orders, is_active
         "#,
         location_id,
         name,
         receives_orders,
         holds_stock,
+        produces_orders,
         is_active,
     )
     .fetch_optional(state.db())

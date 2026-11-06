@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT material_id, COALESCE(material_stock_branch_id, production_branch_id) AS production_branch_id, material_amount::float8 AS \"material_amount!\"\n        FROM orders\n        WHERE invoice_id = $1\n        ",
+  "query": "\n        SELECT material_id, COALESCE(material_stock_branch_id, production_branch_id) AS material_stock_branch_id, material_amount::float8 AS \"material_amount!\"\n        FROM orders\n        WHERE invoice_id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -10,7 +10,7 @@
       },
       {
         "ordinal": 1,
-        "name": "production_branch_id",
+        "name": "material_stock_branch_id",
         "type_info": "Uuid"
       },
       {
@@ -30,5 +30,5 @@
       null
     ]
   },
-  "hash": "e9b3345fe28e0d12b4daf946ffe37aad9886abe5659bbda026bbe4e0c98cdb16"
+  "hash": "f2331ac0906d2b266d0cb86b7c1ed2772bc786f1e7011215a9c7309a44e0273a"
 }

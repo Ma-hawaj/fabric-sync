@@ -7,6 +7,7 @@ import {
   ISSUING_BRANCH_FILTERS,
   ORDER_RECEIVING_FILTERS,
   STOCK_FILTERS,
+  PRODUCTION_FILTERS,
 } from '@/features/locations/lib/location-filters'
 import type { Location } from '@/features/locations/types/location'
 import { useInvoiceLocationDefault } from './use-invoice-location-default'
@@ -21,6 +22,7 @@ const branch: Location = {
   isActive: true,
   receivesOrders: true,
   holdsStock: false,
+  producesOrders: false,
 }
 const store: Location = {
   id: 'store',
@@ -28,10 +30,11 @@ const store: Location = {
   isActive: true,
   receivesOrders: false,
   holdsStock: true,
+  producesOrders: false,
 }
 
 function setup(
-  kind: 'issuing' | 'receiving' | 'stock',
+  kind: 'issuing' | 'receiving' | 'stock' | 'production',
   rows: Location[],
   preferred: Location | null | undefined,
   total = rows.length,
@@ -49,7 +52,9 @@ function setup(
       ? ISSUING_BRANCH_FILTERS
       : kind === 'receiving'
         ? ORDER_RECEIVING_FILTERS
-        : STOCK_FILTERS
+        : kind === 'production'
+          ? PRODUCTION_FILTERS
+          : STOCK_FILTERS
   client.setQueryData(
     ['invoice-location-default', 'name', JSON.stringify(filters), '', 2],
     {
@@ -66,6 +71,18 @@ function setup(
 }
 
 describe('invoice location defaults', () => {
+  it('defaults production to the sole workshop when the user default is a warehouse', () => {
+    const workshop = {
+      ...store,
+      id: 'workshop',
+      name: 'Workshop',
+      holdsStock: false,
+      producesOrders: true,
+    }
+    expect(setup('production', [workshop], store).result.current?.id).toBe(
+      'workshop',
+    )
+  })
   it('uses the eligible user default even when it is beyond the first page', () => {
     const { result } = setup(
       'issuing',

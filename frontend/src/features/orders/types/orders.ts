@@ -152,6 +152,8 @@ export interface Order {
    * one, a material stocked at exactly one location is inferred — see
    * productionLocationInferred. Null when neither is available.
    */
+  materialLocationId?: string | null
+  materialLocation?: string | null
   productionLocationId: string | null
   productionLocation: string | null
   /** True when productionLocation was inferred rather than assigned by staff. */

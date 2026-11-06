@@ -10,6 +10,7 @@ export interface UpdateLocationInput {
   name?: string
   receivesOrders?: boolean
   holdsStock?: boolean
+  producesOrders?: boolean
   isActive?: boolean
 }
 
@@ -31,7 +32,15 @@ export function useUpdateLocation() {
       // The cache holds one entry per page-and-filter combination now, and
       // each holds an envelope rather than a bare array, so there is no
       // single list to splice into. Prefix matching refreshes them all.
-      void queryClient.invalidateQueries({ queryKey: ['locations'] })
+      for (const queryKey of [
+        'locations',
+        'default-location',
+        'invoice-location-default',
+        'invoice-production-branch',
+        'production-location-picker',
+      ]) {
+        void queryClient.invalidateQueries({ queryKey: [queryKey] })
+      }
     },
   })
 }

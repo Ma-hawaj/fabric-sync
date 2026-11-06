@@ -32,13 +32,11 @@ export const STOCK_FILTERS: readonly PickerFilter[] = [
   { id: 'holdsStock', value: true, variant: 'boolean', operator: 'eq' },
 ]
 
-/**
- * Locations a garment can be made at. Production happens where the material is,
- * so this currently follows the stock rule — but it is named separately so that
- * if a dedicated production capability is ever added to `branch`, this is the
- * one place that changes rather than every picker.
- */
-export const PRODUCTION_FILTERS: readonly PickerFilter[] = STOCK_FILTERS
+/** Locations explicitly enabled for production, independently of stock. */
+export const PRODUCTION_FILTERS: readonly PickerFilter[] = [
+  ACTIVE_FILTER,
+  { id: 'producesOrders', value: true, variant: 'boolean', operator: 'eq' },
+]
 
 /** Any active location may issue invoices, independently of fulfilment. */
 export function issuingLocations(locations: Location[]): Location[] {
@@ -59,12 +57,9 @@ export function stockLocations(locations: Location[]): Location[] {
   )
 }
 
-/**
- * Locations a garment can be made at. Production happens where the material is,
- * so this currently follows the stock rule — but it is named separately so that
- * if a dedicated production capability is ever added to `branch`, this is the
- * one place that changes rather than every picker.
- */
+/** Locations explicitly enabled for production, independently of stock. */
 export function productionLocations(locations: Location[]): Location[] {
-  return stockLocations(locations)
+  return locations.filter(
+    (location) => location.isActive && location.producesOrders,
+  )
 }

@@ -42,7 +42,10 @@ import {
 } from './invoice-workspace'
 import { orderDraftSchema } from '../../lib/invoice-schema'
 import { cn } from '@/lib/utils'
-import { materialTotalStock } from '../../types/materials'
+import {
+  materialTotalStock,
+  materialStockAvailable,
+} from '../../types/materials'
 import type { Material } from '../../types/materials'
 import type {
   InvoiceFormApi,
@@ -53,7 +56,9 @@ function materialOptionLabel(material: Material) {
   return material.sku ? `${material.name} (${material.sku})` : material.name
 }
 
-interface StockLocationOption extends Location {
+interface StockLocationOption {
+  id: string
+  name: string
   quantity: number
   unit: string
 }
@@ -101,7 +106,7 @@ export function OrderBlock({
         ?.materialSource ?? 'shop',
   )
   // The row behind the stored `materialId`, remembered from the picker. The
-  // "made at" options come from the material's own stock rows, which the list
+  // "Material from" options come from the material's own stock rows, which the list
   // endpoint returns nested — so the whole materials list is not needed. On an
   // edit form it starts seeded from the loaded invoice, with live stock at the
   // stored location, so the current "Made At" resolves without re-picking.
@@ -115,8 +120,7 @@ export function OrderBlock({
       ? (initialMaterialForId?.(storedMaterialId) ?? null)
       : null,
   )
-  // Shop fabric needs stock at the default location. Customer fabric can use
-  // the active production default directly. Never overwrite a chosen location.
+  // Stock and production defaults are independent and never overwrite a choice.
   const stockDefault = useApplicableDefaultLocation('stock')
   const productionDefault = useInvoiceLocationDefault('production')
   // The whole design catalog, shared across every order block on the form —
@@ -160,22 +164,27 @@ export function OrderBlock({
     : (currentMaterial ?? null)
   React.useEffect(() => {
     const locations =
-      resolvedMaterial?.locations.filter((stock) => stock.quantity > 0) ?? []
+      resolvedMaterial?.locations.filter(materialStockAvailable) ?? []
     const preferredStock =
       locations.find((stock) => stock.locationId === stockDefault?.id) ??
       (locations.length === 1 ? locations[0] : null)
-    const defaultId =
-      materialSource === 'customer'
-        ? productionDefault?.id
-        : preferredStock?.locationId
+    const stockField = `${base}.materialLocationId` as never
     if (
-      defaultId &&
-      form.state.values.customers[customerIndex]?.orders[orderIndex]
-        ?.productionLocationId === ''
+      materialSource === 'shop' &&
+      preferredStock &&
+      !form.state.values.customers[customerIndex]?.orders[orderIndex]
+        ?.materialLocationId
+    ) {
+      form.setFieldValue(stockField, preferredStock.locationId as never)
+    }
+    if (
+      productionDefault &&
+      !form.state.values.customers[customerIndex]?.orders[orderIndex]
+        ?.productionLocationId
     ) {
       form.setFieldValue(
         `${base}.productionLocationId` as never,
-        defaultId as never,
+        productionDefault.id as never,
       )
     }
   }, [
@@ -396,7 +405,7 @@ export function OrderBlock({
                         '' as never,
                       )
                       form.setFieldValue(
-                        `${base}.productionLocationId` as never,
+                        `${base}.materialLocationId` as never,
                         '' as never,
                       )
                       setPickedMaterial(null)
@@ -405,7 +414,12 @@ export function OrderBlock({
                 </Field>
               )}
             </form.Field>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div
+              className={cn(
+                'grid gap-4 sm:grid-cols-2',
+                materialSource === 'shop' ? 'lg:grid-cols-6' : 'lg:grid-cols-5',
+              )}
+            >
               {materialSource === 'customer' ? (
                 <div className="lg:col-span-2">
                   <TextField
@@ -442,10 +456,10 @@ export function OrderBlock({
                         value={field.state.value || null}
                         onValueChange={(value) => {
                           field.handleChange(value ?? '')
-                          // "Made At" only lists this material's stock locations —
+                          // "Material from" only lists this material's stock locations —
                           // drop a previously chosen one that may not stock it.
                           form.setFieldValue(
-                            `${base}.productionLocationId` as never,
+                            `${base}.materialLocationId` as never,
                             '' as never,
                           )
                         }}
@@ -472,96 +486,103 @@ export function OrderBlock({
                 </form.Field>
               )}
 
-              {/* A material can only be made at a location where it is in
-              stock — so this picker lists the selected material's stock
-              locations rather than every stock-holding branch. */}
-              <form.Field name={`${base}.productionLocationId` as never}>
-                {(field: any) => {
-                  if (materialSource === 'customer') {
+              {materialSource === 'shop' && (
+                <form.Field name={`${base}.materialLocationId` as never}>
+                  {(field: any) => {
+                    const stockOptions: StockLocationOption[] =
+                      resolvedMaterial?.locations
+                        .filter(
+                          (stock) =>
+                            materialStockAvailable(stock) ||
+                            stock.locationId === field.state.value,
+                        )
+                        .map((stock) => ({
+                          id: stock.locationId,
+                          name: stock.location,
+                          quantity: stock.quantity,
+                          unit: resolvedMaterial.unit,
+                        })) ?? []
                     return (
                       <Field data-invalid={field.state.meta.errors.length > 0}>
-                        <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
-                        <AsyncCombobox<Location>
-                          id={field.name}
-                          endpoint="/locations"
-                          queryKey="invoice-customer-material-production"
-                          searchField="name"
-                          filters={PRODUCTION_FILTERS}
-                          toOption={(location) => ({
-                            value: location.id,
-                            label: location.name,
-                          })}
-                          getValueLabel={(id) =>
-                            locationLabelForId?.(id) ??
-                            (id === productionDefault?.id
-                              ? productionDefault.name
-                              : null)
+                        <FieldLabel htmlFor={field.name}>
+                          Material from
+                        </FieldLabel>
+                        <Combobox
+                          items={stockOptions}
+                          itemToStringLabel={stockOptionLabel}
+                          isItemEqualToValue={(
+                            a: StockLocationOption,
+                            b: StockLocationOption,
+                          ) => a.id === b.id}
+                          value={
+                            stockOptions.find(
+                              (location) => location.id === field.state.value,
+                            ) ?? null
                           }
-                          value={field.state.value || null}
-                          onValueChange={(value) =>
-                            field.handleChange(value ?? '')
-                          }
-                          placeholder="Search production location..."
-                          emptyMessage="No active production locations found."
-                        />
+                          onValueChange={(
+                            location: StockLocationOption | null,
+                          ) => field.handleChange(location?.id ?? '')}
+                        >
+                          <ComboboxInput
+                            id={field.name}
+                            placeholder="Search stock location..."
+                            className="w-full"
+                            showClear
+                          />
+                          <ComboboxContent>
+                            <ComboboxEmpty>
+                              {resolvedMaterial
+                                ? 'This material has no stock available.'
+                                : 'Pick a material first.'}
+                            </ComboboxEmpty>
+                            <ComboboxList>
+                              {(location: StockLocationOption) => (
+                                <ComboboxItem
+                                  key={location.id}
+                                  value={location}
+                                >
+                                  {stockOptionLabel(location)}
+                                </ComboboxItem>
+                              )}
+                            </ComboboxList>
+                          </ComboboxContent>
+                        </Combobox>
                         <FieldError errors={field.state.meta.errors} />
                       </Field>
                     )
-                  }
-                  const stockOptions: StockLocationOption[] =
-                    resolvedMaterial?.locations
-                      .filter((stock) => stock.quantity > 0)
-                      .map((stock) => ({
-                        id: stock.locationId,
-                        name: stock.location,
-                        receivesOrders: false,
-                        holdsStock: true,
-                        isActive: true,
-                        quantity: stock.quantity,
-                        unit: resolvedMaterial.unit,
-                      })) ?? []
-                  const selected = stockOptions.find(
-                    (location) => location.id === field.state.value,
-                  )
-                  return (
-                    <Field data-invalid={field.state.meta.errors.length > 0}>
-                      <FieldLabel htmlFor={field.name}>Made At</FieldLabel>
-                      <Combobox
-                        items={stockOptions}
-                        itemToStringLabel={stockOptionLabel}
-                        isItemEqualToValue={(a: Location, b: Location) =>
-                          a.id === b.id
-                        }
-                        value={selected ?? null}
-                        onValueChange={(location: Location | null) => {
-                          field.handleChange(location?.id ?? '')
-                        }}
-                      >
-                        <ComboboxInput
-                          id={field.name}
-                          placeholder="Search location..."
-                          className="w-full"
-                          showClear
-                        />
-                        <ComboboxContent>
-                          <ComboboxEmpty>
-                            {resolvedMaterial
-                              ? 'This material has no stock available.'
-                              : 'Pick a material first.'}
-                          </ComboboxEmpty>
-                          <ComboboxList>
-                            {(location: StockLocationOption) => (
-                              <ComboboxItem key={location.id} value={location}>
-                                {stockOptionLabel(location)}
-                              </ComboboxItem>
-                            )}
-                          </ComboboxList>
-                        </ComboboxContent>
-                      </Combobox>
-                      <FieldError errors={field.state.meta.errors} />
-                    </Field>
-                  )
-                }}
+                  }}
+                </form.Field>
+              )}
+              <form.Field name={`${base}.productionLocationId` as never}>
+                {(field: any) => (
+                  <Field data-invalid={field.state.meta.errors.length > 0}>
+                    <FieldLabel htmlFor={field.name}>
+                      Production branch
+                    </FieldLabel>
+                    <AsyncCombobox<Location>
+                      id={field.name}
+                      endpoint="/locations"
+                      queryKey="invoice-production-branch"
+                      searchField="name"
+                      filters={PRODUCTION_FILTERS}
+                      toOption={(location) => ({
+                        value: location.id,
+                        label: location.name,
+                      })}
+                      getValueLabel={(id) =>
+                        locationLabelForId?.(id) ??
+                        (id === productionDefault?.id
+                          ? productionDefault.name
+                          : null)
+                      }
+                      value={field.state.value || null}
+                      onValueChange={(value) => field.handleChange(value ?? '')}
+                      placeholder="Search production location..."
+                      emptyMessage="No active production locations found."
+                    />
+                    <FieldError errors={field.state.meta.errors} />
+                  </Field>
+                )}
               </form.Field>
 
               <NumberField

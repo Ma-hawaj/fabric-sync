@@ -5,7 +5,7 @@ before deployment; there is no upgrade path from the previous migration history.
 
 SQLx applies the files in version order:
 
-1. `0001_core_schema.sql` creates the business tables, including the complete
+1. `0001_core_schema.sql` creates the business tables, including independent stock, pickup, and production capabilities and the complete
    order lifecycle (`pending`, `ready`, `collected`), customer addresses,
    notification preferences, invoice collection method, a separate issuing branch
    with its saved name, and per-order urgency and automatic charges. Delivery uses

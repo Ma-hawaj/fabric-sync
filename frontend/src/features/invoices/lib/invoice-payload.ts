@@ -36,6 +36,8 @@ function orderPayload(order: InvoiceOrderDraft) {
         ? order.customerMaterialDescription.trim()
         : null,
     materialAmount: numberOrZero(order.materialAmount),
+    materialLocationId:
+      order.materialSource === 'shop' ? order.materialLocationId : null,
     productionLocationId: order.productionLocationId,
     isUrgent: order.isUrgent,
     thobeType: blankToNull(order.thobeType),

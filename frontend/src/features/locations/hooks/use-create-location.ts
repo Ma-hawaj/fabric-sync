@@ -8,6 +8,7 @@ async function createLocation(values: LocationFormValues): Promise<Location> {
     name: values.name,
     receivesOrders: values.receivesOrders,
     holdsStock: values.holdsStock,
+    producesOrders: values.producesOrders,
   })
 
   return response.data
@@ -24,7 +25,15 @@ export function useCreateLocation() {
       // The cache holds one entry per page-and-filter combination now, and
       // each holds an envelope rather than a bare array, so there is no
       // single list to splice into. Prefix matching refreshes them all.
-      void queryClient.invalidateQueries({ queryKey: ['locations'] })
+      for (const queryKey of [
+        'locations',
+        'default-location',
+        'invoice-location-default',
+        'invoice-production-branch',
+        'production-location-picker',
+      ]) {
+        void queryClient.invalidateQueries({ queryKey: [queryKey] })
+      }
     },
   })
 }
