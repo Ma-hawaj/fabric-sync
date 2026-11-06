@@ -16,8 +16,8 @@ export function giftCardStatus(card: GiftCard, on: string): GiftCardStatus {
   return 'Active'
 }
 
-/** Expired uninvoiced credit can be renewed; voided, spent, and retired codes cannot. */
+/** Expired cards can be renewed; voided, spent, and retired codes cannot. */
 export function canReplaceGiftCard(card: GiftCard, on: string): boolean {
   const status = giftCardStatus(card, on)
-  return status === 'Active' || (status === 'Expired' && !card.taxedAtIssue)
+  return status === 'Active' || status === 'Expired'
 }

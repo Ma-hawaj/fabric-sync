@@ -80,10 +80,10 @@ the recipient and customer, and records the replacement operator as
 new value, or card type is created. A replaced code cannot be restored or spent
 on a new purchase.
 
-Uninvoiced credit can receive a new expiry date, including renewal of an expired
-remaining balance. Managers choose today or a future date, or clear the date for
-no expiry. The original record retains its historical expiry. Cards backed by a
-sale invoice retain their existing expiry rules, including through replacements.
+Both invoiced and uninvoiced cards can receive a new expiry date, including renewal
+of an expired remaining balance. Managers choose today or a future date, or clear
+the date for no expiry. The original record retains its historical expiry, and
+the replacement retains the original card's VAT treatment.
 The replacement request supplies `expiresOn` explicitly as a date or null.
 
 Card codes and both **Replaces**/**Replaced by** references open the selected

@@ -29,9 +29,7 @@ export function ReplaceGiftCardDialog({
   const today = new Date().toISOString().slice(0, 10)
   const form = useForm({
     defaultValues: { expiresOn: card.expiresOn ?? '' },
-    validators: card.taxedAtIssue
-      ? undefined
-      : { onSubmit: giftCardReplacementSchema(today) },
+    validators: { onSubmit: giftCardReplacementSchema(today) },
     onSubmit: async ({ value }) => {
       try {
         await replace.mutateAsync({
@@ -100,7 +98,7 @@ export function ReplaceGiftCardDialog({
             <dd>{(replacement ?? card).expiresOn ?? 'Never'}</dd>
           </div>
         </dl>
-        {!card.taxedAtIssue && !replacement && (
+        {!replacement && (
           <div className="space-y-2">
             <DateField
               form={form}
@@ -113,10 +111,8 @@ export function ReplaceGiftCardDialog({
           </div>
         )}
         <p className="text-sm text-muted-foreground">
-          {card.taxedAtIssue
-            ? 'Recipient details, expiry, and the original VAT treatment carry over.'
-            : 'Recipient details and the original VAT treatment carry over.'}{' '}
-          No new invoice is created.
+          Recipient details and the original VAT treatment carry over. No new
+          invoice is created.
         </p>
         {problem && (
           <p role="alert" className="text-sm text-destructive">

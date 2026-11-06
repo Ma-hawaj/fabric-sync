@@ -521,45 +521,101 @@ async fn past_replacement_expiry_is_rejected_without_transferring_value(pool: Pg
     assert_eq!(count, 1);
 }
 
-/// A paid replacement retains its expiry rules even though its own record has no sale invoice.
+/// Renew expired invoiced value through its replacement chain while taxing it only once.
 #[sqlx::test]
-async fn paid_value_cannot_bypass_expiry_through_a_replacement_chain(pool: PgPool) {
+async fn expired_paid_value_can_be_renewed_without_taxing_it_again(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
-    let (_, original) = paid(&state).await;
-    let replacement =
-        service::replace_gift_card(&state, original.id, replacement_input(None), "manager")
-            .await
-            .unwrap();
-    let future = chrono::Utc::now().date_naive() + chrono::Duration::days(365);
-    let result = service::replace_gift_card(
+    let (invoice_id, original) = paid(&state).await;
+    sqlx::query("UPDATE gift_cards SET expires_on='2000-01-01' WHERE id=$1")
+        .bind(original.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let expired: chrono::NaiveDate = "2000-01-01".parse().unwrap();
+    let invalid = service::replace_gift_card(
         &state,
-        replacement.id,
-        replacement_input(Some(future)),
+        original.id,
+        replacement_input(Some(expired)),
         "manager",
     )
     .await;
     assert!(
-        matches!(result, Err(AppError::BadRequest(message)) if message.contains("without a sale invoice"))
+        matches!(invalid, Err(AppError::BadRequest(message)) if message.contains("expiry date today or later"))
     );
+    let future = chrono::Utc::now().date_naive() + chrono::Duration::days(365);
+    let replacement = service::replace_gift_card(
+        &state,
+        original.id,
+        replacement_input(Some(future)),
+        "manager",
+    )
+    .await
+    .unwrap();
+    assert_eq!(replacement.expires_on, Some(future));
+    assert_eq!(replacement.balance, 110.0);
+    assert!(replacement.taxed_at_issue);
+    assert_eq!(replacement.replaces_card_id, Some(original.id));
+    let retired = service::get_gift_card_by_code(&state, &original.code)
+        .await
+        .unwrap();
+    assert_eq!(
+        (retired.balance, retired.is_active, retired.expires_on),
+        (0.0, false, Some(expired))
+    );
+    assert_eq!(retired.replaced_by_card_id, Some(replacement.id));
+
     sqlx::query("UPDATE gift_cards SET expires_on='2000-01-01' WHERE id=$1")
         .bind(replacement.id)
         .execute(&pool)
         .await
         .unwrap();
-    let expired: chrono::NaiveDate = "2000-01-01".parse().unwrap();
-    let result = service::replace_gift_card(
+    let current = service::replace_gift_card(
         &state,
         replacement.id,
-        replacement_input(Some(expired)),
-        "manager",
+        replacement_input(None),
+        "next-manager",
     )
-    .await;
-    assert!(matches!(result, Err(AppError::BadRequest(message)) if message.contains("expired")));
-    let source = service::get_gift_card_by_code(&state, &replacement.code)
+    .await
+    .unwrap();
+    assert_eq!(current.expires_on, None);
+    assert_eq!(current.balance, 110.0);
+    assert_eq!(current.replaces_card_id, Some(replacement.id));
+    assert!(current.taxed_at_issue);
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM invoices")
+        .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(source.balance, 110.0);
-    assert!(source.replaced_by_card_id.is_none());
+    assert_eq!(count, 1, "renewals must not create another invoice");
+
+    let (product, branch) = stock(&pool).await;
+    let created = invoices::service::create_invoice(
+        &state,
+        serde_json::from_value(purchase(product, branch, &current, 110.0)).unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
+    let detail = invoices::service::get_invoice(&state, created.id)
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            detail.totals.vat,
+            detail.totals.prepaid_amount,
+            detail.totals.balance_due
+        ),
+        (0.0, 110.0, 0.0)
+    );
+    assert_eq!(detail.document_kind, "redemption_receipt");
+    let issued = invoices::service::get_invoice(&state, invoice_id)
+        .await
+        .unwrap();
+    assert_eq!(issued.totals.vat, 10.0);
+    let vat: f64 = sqlx::query_scalar("SELECT SUM(vat_amount)::float8 FROM invoices")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(vat, 10.0);
 }
 
 #[test]

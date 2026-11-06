@@ -103,12 +103,13 @@ it('lets a manager open renewal for expired uninvoiced credit', () => {
   ).toBeTruthy()
 })
 
-it('keeps expired paid value ineligible for renewal', () => {
+it('lets a manager renew an expired invoiced card', () => {
   show({ ...card, taxedAtIssue: true })
-  expect(screen.getByRole('button', { name: 'Replace card' })).toHaveProperty(
-    'disabled',
-    true,
-  )
+  fireEvent.click(screen.getByRole('button', { name: 'Replace card' }))
+  expect(screen.getByRole('dialog')).toBeTruthy()
+  expect(
+    screen.getByRole('button', { name: 'New expiry date (optional)' }),
+  ).toBeTruthy()
 })
 
 it('handles a replacement link whose code cannot be found', () => {

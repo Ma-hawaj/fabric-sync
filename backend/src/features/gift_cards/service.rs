@@ -236,7 +236,7 @@ pub async fn update_gift_card(
 }
 
 /// Transfer remaining value to a new code, preserving recipient and VAT lineage.
-/// Uninvoiced credit can receive a new expiry even after expiration; paid value keeps its expiry.
+/// All cards can receive a new expiry after expiration without changing their VAT history.
 /// Locking the source serializes replacement against spending, refunds, and repeated requests.
 pub async fn replace_gift_card(
     state: &AppState,
@@ -256,12 +256,7 @@ pub async fn replace_gift_card(
     }
     validate_amount(locked.balance)?;
     let today = chrono::Utc::now().date_naive();
-    if original.taxed_at_issue && input.expires_on != original.expires_on {
-        return Err(AppError::BadRequest(
-            "Only cards issued without a sale invoice can receive a new expiry date.".into(),
-        ));
-    }
-    if !original.taxed_at_issue && input.expires_on.is_some_and(|expiry| expiry < today) {
+    if input.expires_on.is_some_and(|expiry| expiry < today) {
         return Err(AppError::BadRequest(
             "Choose an expiry date today or later, or no expiry.".into(),
         ));

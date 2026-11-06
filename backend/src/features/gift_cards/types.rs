@@ -52,7 +52,7 @@ pub struct CreateGiftCardInput {
     pub expires_on: Option<NaiveDate>,
 }
 
-/// Replacement expiry is explicit: a date sets it, null makes uninvoiced credit non-expiring.
+/// Replacement expiry is explicit: a date sets it, null makes the replacement non-expiring.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ReplaceGiftCardInput {
