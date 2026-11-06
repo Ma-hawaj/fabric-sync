@@ -42,8 +42,7 @@ export function snapshotLabel(
 export function measurementFromSnapshot(
   snapshot: Measurement | null,
 ): MeasurementDraft {
-  // Start from a blank draft so an unset field stays '' rather than
-  // undefined, then copy across whatever the snapshot actually recorded.
+  // Start from draft defaults, then copy across whatever the snapshot recorded.
   const draft = createEmptyMeasurement() as MeasurementDraft &
     Record<string, unknown>
   draft.loadedFromId = snapshot?.id ?? null
@@ -60,10 +59,9 @@ export function measurementFromSnapshot(
     }
     // Type and fit live on the draft but outside the diagram catalog (plain
     // details, no sketch callouts), so they don't ride the loop above.
-    // A legacy snapshot predates them and arrives null — blank, for the form
-    // to require before saving.
+    // A legacy snapshot may arrive null: require its type and use the default fit.
     draft.type = snapshot.type ?? ''
-    draft.fit = snapshot.fit ?? ''
+    draft.fit = snapshot.fit ?? draft.fit
   }
 
   return draft

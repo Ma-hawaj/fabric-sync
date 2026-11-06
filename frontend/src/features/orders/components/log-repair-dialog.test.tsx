@@ -4,6 +4,7 @@ import {
   screen,
   waitFor,
   cleanup,
+  within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LogRepairDialog } from './log-repair-dialog'
@@ -70,7 +71,12 @@ describe('LogRepairDialog', () => {
     fireEvent.change(chest, { target: { value: '44' } })
     const fit = screen.getByRole<HTMLInputElement>('textbox', { name: 'Fit' })
     expect(fit.value).toBe('fit')
-    for (const option of ['Loose', 'Medium', 'Fit']) {
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Fit' }))
+        .getAllByRole('radio')
+        .map((option) => option.textContent),
+    ).toEqual(['Fit', 'Medium', 'Loose'])
+    for (const option of ['Fit', 'Medium', 'Loose']) {
       const preset = screen.getByRole('radio', { name: option, exact: true })
       fireEvent.click(preset)
       expect(fit.value).toBe(option.toLowerCase())
@@ -81,7 +87,7 @@ describe('LogRepairDialog', () => {
     })
     expect(
       screen
-        .getByRole('radio', { name: 'Fit', exact: true })
+        .getByRole('radio', { name: 'Loose', exact: true })
         .getAttribute('aria-checked'),
     ).toBe('false')
     fireEvent.click(screen.getByRole('button', { name: 'Log Repair' }))
