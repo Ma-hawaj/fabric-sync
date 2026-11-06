@@ -60,9 +60,7 @@ export function GiftCardBlock({
               {code
                 ? `Code: ${code}`
                 : 'A unique code is generated automatically when you save.'}{' '}
-              You can also send the card later from Gift Cards. Single-purpose
-              voucher for Bahrain purchases; VAT is included and accounted for
-              at issue.
+              You can also send the card later from Gift Cards.
             </p>
           )}
         </form.Subscribe>

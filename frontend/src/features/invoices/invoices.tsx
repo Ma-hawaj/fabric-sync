@@ -133,23 +133,31 @@ export function InvoicesPage() {
       data-slot="list-page"
       className="flex h-full min-h-0 min-w-0 flex-col gap-5 [&>:first-child]:shrink-0"
     >
-      <div className="flex items-start justify-between gap-4">
-        <div>
+      <div>
+        <div className="flex items-start justify-between gap-4">
           <h1 className="text-2xl font-semibold leading-tight tracking-tight">
             Invoices{' '}
             <span className="ms-2 align-middle text-xs font-normal text-muted-foreground tabular-nums">
               {isLoading ? '…' : total.toLocaleString()} records
             </span>
           </h1>
-          <p className="mt-1.5 hidden text-sm leading-relaxed text-muted-foreground sm:block">
-            Sales exclude VAT and gift-card funding. Transaction totals include
-            gift-card funding and redemption purchases.
+          <Button nativeButton={false} render={<Link to="/invoices/new" />}>
+            <PlusIcon className="h-4 w-4" />
+            New Invoice
+          </Button>
+        </div>
+        <div className="mt-1.5 max-w-3xl space-y-1 text-sm leading-relaxed text-muted-foreground">
+          <p>
+            <span className="font-medium">Sales excl. VAT:</span> Goods and
+            services after discounts and return credits, excluding gift-card
+            sales. Purchases paid with gift cards are included.
+          </p>
+          <p>
+            <span className="font-medium">Transaction Total:</span> The full
+            invoice amount including VAT and gift-card sales, before return
+            credits or payments.
           </p>
         </div>
-        <Button nativeButton={false} render={<Link to="/invoices/new" />}>
-          <PlusIcon className="h-4 w-4" />
-          New Invoice
-        </Button>
       </div>
 
       <DataTable
