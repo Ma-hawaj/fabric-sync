@@ -17,14 +17,56 @@ const columns: ColumnDef<{ reference: string }>[] = [
 ]
 const data = [{ reference: 'A-1' }]
 
-function Harness() {
+function Harness({
+  rows = data,
+  isLoading = false,
+  isFetching = false,
+}: {
+  rows?: typeof data
+  isLoading?: boolean
+  isFetching?: boolean
+}) {
   const table = useReactTable({
     columns,
-    data,
+    data: rows,
     getCoreRowModel: getCoreRowModel(),
   })
-  return <DataTable table={table} />
+  return (
+    <DataTable table={table} isLoading={isLoading} isFetching={isFetching} />
+  )
 }
+
+describe('DataTable loading', () => {
+  it('shows skeleton rows during the initial request', () => {
+    render(<Harness rows={[]} isLoading isFetching />)
+
+    const table = screen.getByRole('table', { name: 'Records' })
+    expect(table.closest('[aria-busy]')?.getAttribute('aria-busy')).toBe('true')
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(8)
+    expect(screen.queryByText('No results.')).toBeNull()
+    expect(screen.queryByRole('progressbar')).toBeNull()
+  })
+
+  it('indicates refreshes even when the previous result was empty', () => {
+    const { rerender } = render(<Harness rows={[]} isFetching />)
+
+    expect(
+      screen.getByRole('progressbar', { name: 'Updating records' }),
+    ).toBeTruthy()
+    expect(screen.getByText('No results.')).toBeTruthy()
+
+    rerender(<Harness rows={[]} />)
+
+    expect(screen.queryByRole('progressbar')).toBeNull()
+    expect(screen.getByText('No results.')).toBeTruthy()
+    expect(
+      screen
+        .getByRole('table')
+        .closest('[aria-busy]')
+        ?.getAttribute('aria-busy'),
+    ).toBe('false')
+  })
+})
 
 describe('DataTable resizing', () => {
   it("respects each column's configured limits for keyboard resizing", () => {

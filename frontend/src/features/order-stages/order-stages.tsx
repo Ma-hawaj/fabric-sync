@@ -13,7 +13,7 @@ import { useUpdateOrderStage } from './hooks/use-update-order-stage'
 import type { OrderStage } from './types/order-stage'
 
 export function OrderStagesPage() {
-  const { data: stages = [], isLoading } = useOrderStages()
+  const { data: stages = [], isLoading, isFetching } = useOrderStages()
   const updateStage = useUpdateOrderStage()
 
   const toggleActive = React.useCallback(
@@ -72,7 +72,7 @@ export function OrderStagesPage() {
         </PermissionGuard>
       </div>
 
-      <DataTable isLoading={isLoading} table={table}>
+      <DataTable isLoading={isLoading} isFetching={isFetching} table={table}>
         <DataTableToolbar table={table} />
       </DataTable>
     </div>

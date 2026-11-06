@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   RouterProvider,
@@ -88,10 +88,17 @@ function rowOrder() {
 }
 
 describe('customers page sorting (real tanstack-router adapter)', () => {
-  it('refetches with the sort param and renders the sorted rows after one click', async () => {
+  it('indicates loading while keeping old rows until the sorted request finishes', async () => {
     const client = new QueryClient()
+    const sortedResponse = listResponse(sorted())
+    let finishSort!: () => void
+    const sortRequest = new Promise<{ data: typeof sortedResponse }>(
+      (resolve) => {
+        finishSort = () => resolve({ data: sortedResponse })
+      },
+    )
     apiGet.mockImplementation(async (url: string) => {
-      if (url.includes('sort=')) return { data: listResponse(sorted()) }
+      if (url.includes('sort=')) return sortRequest
       return { data: listResponse(CUSTOMERS) }
     })
 
@@ -108,6 +115,7 @@ describe('customers page sorting (real tanstack-router adapter)', () => {
     expect(screen.getByText('C-1')).toBeTruthy()
     expect(screen.getByText('C-2')).toBeTruthy()
     expect(rowOrder()).toEqual(['Zainab', 'Aamal'])
+    expect(screen.queryByRole('progressbar')).toBeNull()
 
     const nameHeader = screen
       .getByRole('columnheader', { name: /^Name/ })
@@ -126,8 +134,29 @@ describe('customers page sorting (real tanstack-router adapter)', () => {
       expect(sortedCalls.length).toBeGreaterThan(0)
     })
 
+    expect(
+      await screen.findByRole('progressbar', { name: 'Updating records' }),
+    ).toBeTruthy()
+    expect(rowOrder()).toEqual(['Zainab', 'Aamal'])
+    expect(
+      screen
+        .getByRole('table')
+        .closest('[aria-busy]')
+        ?.getAttribute('aria-busy'),
+    ).toBe('true')
+
+    await act(async () => finishSort())
+
     await waitFor(() => {
       expect(rowOrder()).toEqual(['Aamal', 'Zainab'])
+      expect(screen.queryByRole('progressbar')).toBeNull()
+      expect(
+        screen
+          .getByRole('table')
+          .closest('[aria-busy]')
+          ?.getAttribute('aria-busy'),
+      ).toBe('false')
     })
+    client.clear()
   })
 })

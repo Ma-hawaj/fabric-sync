@@ -56,6 +56,7 @@ export function InventoryPage() {
     pageCount,
     total,
     isLoading,
+    isFetching,
   } = useInventory(searchParams)
 
   const { table } = useDataTable({
@@ -97,7 +98,7 @@ export function InventoryPage() {
         </PermissionGuard>
       </div>
 
-      <DataTable isLoading={isLoading} table={table}>
+      <DataTable isLoading={isLoading} isFetching={isFetching} table={table}>
         <DataTableAdvancedToolbar table={table} defaultSearchColumnId="name" />
       </DataTable>
 
