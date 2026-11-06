@@ -68,7 +68,9 @@ it('transfers via the source-card endpoint and displays the actual issued code a
   expect(
     screen.getByRole('button', { name: 'New expiry date (optional)' }),
   ).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: 'Replace card' }))
+  const replaceButton = screen.getByRole('button', { name: 'Replace card' })
+  replaceButton.focus()
+  fireEvent.click(replaceButton)
   expect(
     await screen.findByRole('heading', { name: 'Replacement card issued' }),
   ).toBeTruthy()
@@ -78,8 +80,11 @@ it('transfers via the source-card endpoint and displays the actual issued code a
   expect(
     screen.queryByRole('button', { name: 'New expiry date (optional)' }),
   ).toBeNull()
-  expect(screen.getByLabelText('New gift card code').textContent).toBe(
-    replacement.code,
+  expect(
+    screen.getByRole('status', { name: 'New gift card code' }).textContent,
+  ).toBe(replacement.code)
+  expect(document.activeElement).toBe(
+    screen.getByRole('button', { name: 'Done' }),
   )
   expect(invalidate).toHaveBeenCalledWith({ queryKey: ['gift-card'] })
   expect(invalidate).toHaveBeenCalledWith({ queryKey: ['gift-cards'] })

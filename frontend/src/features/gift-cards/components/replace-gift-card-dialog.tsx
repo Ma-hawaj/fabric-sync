@@ -65,6 +65,7 @@ export function ReplaceGiftCardDialog({
         </DialogHeader>
         {replacement && (
           <p
+            role="status"
             className="rounded-lg bg-muted p-4 font-mono text-lg font-semibold"
             aria-label="New gift card code"
           >
@@ -121,7 +122,9 @@ export function ReplaceGiftCardDialog({
         )}
         <DialogFooter>
           {replacement ? (
-            <Button onClick={onClose}>Done</Button>
+            <Button autoFocus onClick={onClose}>
+              Done
+            </Button>
           ) : (
             <>
               <Button

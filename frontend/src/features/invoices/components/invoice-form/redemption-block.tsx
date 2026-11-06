@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useState } from 'react'
+import { useStore } from '@tanstack/react-form'
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
@@ -46,8 +47,10 @@ export function RedemptionBlock({
 
   const { data: card, isFetching } = useGiftCardByCode(lookupCode)
   const status = card ? giftCardStatus(card, date) : null
-  const originalCode = form.getFieldValue(`${base}.originalCode` as never) as
-    string | undefined
+  const originalCode = useStore(
+    form.store,
+    (state) => state.values.redemptions[lineIndex]?.originalCode,
+  )
   const existingReplacement =
     status === 'Replaced' && card?.code === originalCode
 
