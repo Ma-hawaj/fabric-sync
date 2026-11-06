@@ -47,18 +47,20 @@ describe('measurementFromSnapshot', () => {
     expect(draft.fit).toBe('medium')
   })
 
-  it('preserves saved values and defaults legacy snapshots to body and medium', () => {
+  it('preserves saved values and leaves missing legacy values blank', () => {
     const draft = measurementFromSnapshot(
       makeSnapshot({ type: 'thobe', fit: 'loose' }),
     )
     expect(draft.type).toBe('thobe')
     expect(draft.fit).toBe('loose')
 
-    const legacy = measurementFromSnapshot(
-      makeSnapshot({ type: undefined, fit: undefined }),
-    )
-    expect(legacy.type).toBe('body')
-    expect(legacy.fit).toBe('medium')
+    for (const missing of [undefined, null, '']) {
+      const legacy = measurementFromSnapshot(
+        makeSnapshot({ type: missing, fit: missing }),
+      )
+      expect(legacy.type).toBe('')
+      expect(legacy.fit).toBe('')
+    }
   })
 })
 
