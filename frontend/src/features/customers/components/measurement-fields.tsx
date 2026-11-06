@@ -11,6 +11,7 @@ import { SegmentedOptions } from '@/components/form/segmented-options'
 import type { AnyFormApi } from '@/components/form/fields'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { ThobDiagram } from './thob-diagram'
 import type { MeasurementValues } from './thob-diagram'
 import {
@@ -23,6 +24,7 @@ import type { MeasurementField } from '../data/measurement-fields'
 import type { Measurement } from '../types/customers'
 import type { MeasurementDraft } from '../types/measurement-form'
 import {
+  MEASUREMENT_FITS,
   MEASUREMENT_TYPES,
   createEmptyMeasurement,
 } from '../types/measurement-form'
@@ -211,7 +213,40 @@ export function MeasurementFields({
                     </Field>
                   )}
                 </form.Field>
-                <TextField form={form} name={`${base}.fit`} label="Fit" />
+                <form.Field name={`${base}.fit` as never}>
+                  {(field: any) => (
+                    <Field data-invalid={field.state.meta.errors.length > 0}>
+                      <FieldLabel htmlFor={field.name}>Fit</FieldLabel>
+                      <SegmentedOptions
+                        id={`${field.name}.options`}
+                        ariaLabel="Fit"
+                        columns={3}
+                        options={MEASUREMENT_FITS.map(
+                          (option) =>
+                            option.charAt(0).toUpperCase() + option.slice(1),
+                        )}
+                        value={
+                          field.state.value.charAt(0).toUpperCase() +
+                          field.state.value.slice(1)
+                        }
+                        onChange={(value) =>
+                          field.handleChange(value.toLowerCase())
+                        }
+                      />
+                      <Input
+                        id={field.name}
+                        placeholder="Or enter a custom fit"
+                        value={field.state.value}
+                        aria-invalid={field.state.meta.errors.length > 0}
+                        onBlur={field.handleBlur}
+                        onChange={(event) =>
+                          field.handleChange(event.target.value)
+                        }
+                      />
+                      <FieldError errors={field.state.meta.errors} />
+                    </Field>
+                  )}
+                </form.Field>
               </div>
             </div>
             {MEASUREMENT_GROUPS.map((group) => (

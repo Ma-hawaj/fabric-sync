@@ -6,6 +6,9 @@ export type NumberInput = number | ''
 export const MEASUREMENT_TYPES = ['body', 'thobe', 'sample'] as const
 export type MeasurementType = (typeof MEASUREMENT_TYPES)[number]
 
+// Quick choices for fit; custom text is also accepted.
+export const MEASUREMENT_FITS = ['loose', 'fit', 'medium'] as const
+
 // Field names match the thobe diagram slots wherever the drawing has a slot:
 // frontHeight/backHeight (lengths), neckSize, hip (singular), armhole
 // (lowercase), bottomFold, frontPocketLength, sidePocket, cuffSize. The pocket L×W

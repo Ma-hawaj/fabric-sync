@@ -61,16 +61,29 @@ describe('LogRepairDialog', () => {
     )
   })
 
-  it('sends a typed custom fit and edited measurements in a single save', async () => {
+  it('offers the existing fits and saves a typed custom fit with edited measurements', async () => {
     render(<LogRepairDialog order={order} onOpenChange={vi.fn()} />)
     enterReason()
     fireEvent.click(screen.getByRole('radio', { name: 'Update measurements' }))
     const chest = screen.getByLabelText('Chest')
     expect((chest as HTMLInputElement).value).toBe('42')
     fireEvent.change(chest, { target: { value: '44' } })
+    const fit = screen.getByRole<HTMLInputElement>('textbox', { name: 'Fit' })
+    expect(fit.value).toBe('fit')
+    for (const option of ['Loose', 'Medium', 'Fit']) {
+      const preset = screen.getByRole('radio', { name: option, exact: true })
+      fireEvent.click(preset)
+      expect(fit.value).toBe(option.toLowerCase())
+      expect(preset.getAttribute('aria-checked')).toBe('true')
+    }
     fireEvent.change(screen.getByRole('textbox', { name: 'Fit' }), {
       target: { value: 'Slim with extra chest room' },
     })
+    expect(
+      screen
+        .getByRole('radio', { name: 'Fit', exact: true })
+        .getAttribute('aria-checked'),
+    ).toBe('false')
     fireEvent.click(screen.getByRole('button', { name: 'Log Repair' }))
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1))
     expect(mutateAsync).toHaveBeenCalledWith(
