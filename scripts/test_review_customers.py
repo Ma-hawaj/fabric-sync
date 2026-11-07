@@ -129,3 +129,58 @@ class InteractiveReviewTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 self.run_review(["s"])
         self.assertEqual(self.path.read_bytes(), original)
+
+
+class PhoneNameReviewTests(unittest.TestCase):
+    setUp = InteractiveReviewTests.setUp
+    run_review = InteractiveReviewTests.run_review
+    policy = InteractiveReviewTests.policy
+    def seed(self, names=("Alias A", "Alias B"), phone="33333333"):
+        identities = [(name, phone) for name in names]
+        policy = CustomerIdentity([], canon_key)
+        policy.configure_phones(identities, [])
+        save_review(self.path, policy, identities)
+
+    def test_chooses_a_name_instead_of_asking_same_or_different(self):
+        self.seed()
+        self.run_review(["2", "q"])
+        policy = self.policy()
+        self.assertEqual(policy.preferred_names, {"+97333333333": "Alias B"})
+        self.assertEqual(pending_pairs(policy), [])
+        self.assertTrue(any("choose one name" in line for line in self.output))
+
+    def test_custom_name_is_saved(self):
+        self.seed()
+        self.run_review(["n", "  Preferred customer  ", "q"])
+        self.assertEqual(self.policy().preferred_names["+97333333333"], "Preferred customer")
+
+    def test_skip_leaves_name_pending(self):
+        self.seed()
+        before = self.path.read_bytes()
+        self.run_review(["k"])
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_name_choice_can_be_undone(self):
+        self.seed()
+        before = self.path.read_bytes()
+        self.run_review(["2", "u", "q"])
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_similarity_filter_does_not_hide_required_name_choices(self):
+        self.seed()
+        self.run_review(["1", "q"], min_similarity=1)
+        self.assertEqual(self.policy().preferred_names["+97333333333"], "Alias A")
+
+    def test_measurement_context_survives_answer_and_save(self):
+        identities = [(name, "33333333") for name in ["Ali", "Aly", "Son"]]
+        records = [{"name": name, "phone": "33333333", "measurementNo": i,
+                    "date": "2026-11-07", "values": {"chest": str(42-i)}}
+                   for i, (name, _) in enumerate(identities, 1)]
+        policy = CustomerIdentity([], canon_key)
+        policy.configure_phones(identities, records)
+        save_review(self.path, policy, identities)
+        self.run_review(["s", "q"])
+        rows = pending_pairs(self.policy())
+        self.assertEqual(len(rows), 1)
+        self.assertEqual({r["measurementNo"] for r in rows[0]["measurements"]}, {1, 2, 3})
+        self.assertTrue(any("Measurement No" in line for line in self.output))

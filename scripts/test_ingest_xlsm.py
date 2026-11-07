@@ -650,6 +650,114 @@ class DatabaseIntegrationTests(unittest.TestCase):
                         "JOIN customers c ON c.id=m.customer_id ORDER BY c.name")
             self.assertEqual(cur.fetchall(), [("Father",), ("Son",)])
 
+    def test_unmeasured_receipt_names_share_one_chosen_customer(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read(
+            invoices=[[101, fixture.date, "Ali", "33333333", None, 30],
+                      [102, fixture.date, "Aly", "33333333", None, 20]], measurements=[])
+        apply_customer_identity(workbook, CustomerIdentity([
+            {"phone": "33333333", "names": ["Ali", "Aly"], "decision": "name", "name": "Ali Ahmed"}
+        ], canon_key))
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Phone test',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+        perform_insert(self.conn, workbook, branch, report)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id,name,mobile_no FROM customers")
+            rows = cur.fetchall()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0][1:], ("Ali Ahmed", "+97333333333"))
+            cur.execute("SELECT DISTINCT customer_id FROM invoices")
+            self.assertEqual(cur.fetchall(), [(rows[0][0],)])
+            cur.execute("SELECT count(*) FROM measurements")
+            self.assertEqual(cur.fetchone()[0], 0)
+        perform_insert(self.conn, workbook, branch, Report())
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM customers")
+            self.assertEqual(cur.fetchone()[0], 1)
+
+    def test_one_measurement_identity_absorbs_unlinked_receipt_names(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read(
+            invoices=[[101, fixture.date, "Ali", "33333333", None, 30],
+                      [102, fixture.date, "Aly", "33333333", None, 20]],
+            measurements=[[7, fixture.date, "Measured name", "33333333", 42]])
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('One measured test',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+        perform_insert(self.conn, workbook, branch, report)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id,name,customer_number FROM customers")
+            rows = cur.fetchall()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0][1:], ("Measured name", 7))
+            cur.execute("SELECT DISTINCT customer_id FROM invoices")
+            self.assertEqual(cur.fetchall(), [(rows[0][0],)])
+
+    def test_verified_measured_variations_become_one_customer_with_all_history(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read(invoices=[], measurements=[
+            [7, fixture.date, "Ali", "33333333", 42],
+            [8, fixture.date, "Aly", "33333333", 43]])
+        apply_customer_identity(workbook, CustomerIdentity([
+            {"phone": "33333333", "names": ["Ali", "Aly"], "decision": "same"}
+        ], canon_key))
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Verified test',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+        perform_insert(self.conn, workbook, branch, report)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM customers")
+            self.assertEqual(cur.fetchone()[0], 1)
+            cur.execute("SELECT count(*) FROM measurements")
+            self.assertEqual(cur.fetchone()[0], 2)
+
+    def test_existing_measured_father_is_not_renamed_to_new_measured_son(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read(
+            invoices=[[101, fixture.date, "Son", "33333333", "7", 20]],
+            measurements=[[7, fixture.date, "Son", "33333333", 30]])
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Existing family test',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+            cur.execute("INSERT INTO customers(name,mobile_no) VALUES('Father','+97333333333') RETURNING id")
+            father = cur.fetchone()[0]
+            cur.execute("INSERT INTO measurements(customer_id,chest) VALUES(%s,42)", (father,))
+        perform_insert(self.conn, workbook, branch, report)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT name FROM customers ORDER BY name")
+            self.assertEqual(cur.fetchall(), [("Father",), ("Son",)])
+            cur.execute("SELECT name FROM customers WHERE id=%s", (father,))
+            self.assertEqual(cur.fetchone()[0], "Father")
+
+    def test_chosen_unmeasured_name_reuses_an_existing_single_contact(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read(
+            invoices=[[101, fixture.date, "Ali", "33333333", None, 30],
+                      [102, fixture.date, "Aly", "33333333", None, 20]], measurements=[])
+        apply_customer_identity(workbook, CustomerIdentity([
+            {"phone": "33333333", "names": ["Ali", "Aly"], "decision": "name", "name": "Ali Ahmed"}
+        ], canon_key))
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Rename contact test',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+            cur.execute("INSERT INTO customers(name,mobile_no) VALUES('Ali','+97333333333') RETURNING id,customer_number")
+            customer_id, number = cur.fetchone()
+        perform_insert(self.conn, workbook, branch, report)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id,name,customer_number FROM customers")
+            self.assertEqual(cur.fetchall(), [(customer_id, "Ali Ahmed", number)])
+
     def test_import_reserves_unused_numbers_and_never_rewinds_the_sequence(self):
         fixture = ReadWorkbookTests()
         fixture.setUp()

@@ -25,11 +25,13 @@ Mapping decisions worth knowing:
    its linked receipt's phone when its own phone is missing. Receipts with
    no usable measurement customer, or several distinct measurement customers,
    keep their own contact identity; each order still uses its own measurement
-   customer when identifiable. Shared phones alone never combine people.
-   Customer matching uses normalized ``(name, phone)`` pairs (Bahrain numbers
-   get ``+973``; names ignore case and extra whitespace), plus explicitly saved
-   same-person decisions. Measurement spellings also win for reviewed aliases
-   and matched existing records, without changing customer numbers or ownership.
+   customer when identifiable. With no measured customer on a phone, contacts
+   share one customer and a saved preferred name. With one measured customer,
+   its name wins for all that phone's contacts. Multiple measured identities
+   sharing a phone stay separate until explicitly reviewed as the same person.
+   Matching normalizes names and phones (Bahrain numbers get ``+973``; names
+   ignore case and extra whitespace). Saved decisions apply to reviewed aliases
+   and matched existing records without changing customer numbers or ownership.
  * A customer's highest ``Measurments`` Measurement No becomes their
    ``customers.customer_number`` (6216 prints as C-6216). Numbers belong
    to the measurement's customer, even when the receipt names someone else.
@@ -129,10 +131,11 @@ Run from the repository root, with DATABASE_URL exported (or --database-url):
   python3 scripts/ingest_xlsm.py --branch "Thobx Main"
   python3 scripts/ingest_xlsm.py --production-branch "Central Workshop"
 
-Without reviewed --customer-decisions, ambiguous identities stay separate: one phone
-with several name spellings stays separate customers, one name with several
-phones stays separate customers, and receipt-vs-measurement customer
-mismatches always resolve to the measurement's customer. The historical
+Run --dry-run to refresh --customer-decisions, then review_customers.py to choose
+one name per unmeasured phone and verify measured identities sharing a phone.
+Required name choices block import until answered; unresolved measured identities
+stay separate. One name with several phones stays separate customers, and
+receipt-vs-measurement mismatches resolve to the measurement's customer. The historical
 ``scripts/ingest_choices.json`` file (and the removed ``--choices-file`` /
 ``--non-interactive`` / ``--no-save`` flags) is ignored — it can be deleted.
 """
@@ -154,7 +157,7 @@ import openpyxl
 import psycopg2
 
 from ingest_locations import require_branch, select_branch
-from customer_identity import (canon_key, canon_name, load_identity, norm_name,
+from customer_identity import (CustomerIdentity, canon_key, canon_name, load_identity, norm_name,
                                norm_phone, save_review)
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -291,8 +294,51 @@ def customer_key(workbook, name, phone):
     return identity.key(name, phone) if identity else canon_key(name, phone)
 
 
-def apply_customer_identity(workbook, identity):
+def apply_customer_identity(workbook, identity, state=None):
+    # Rebuild from original names, not a previous automatic phone grouping.
+    identity.phone_measured = None
+    identity.phone_defaults = {}
+    identity.labels = {}
     workbook["customer_identity"] = identity
+    if "invoices" not in workbook or "measurements" not in workbook:
+        return
+    for measurement in workbook["measurements"]:
+        measurement["key"] = identity.base_key(measurement["name"], measurement["phone"])
+    sources = {m["measurement_no"]: m for m in workbook["measurements"]}
+    display, _ = customer_display(workbook, sources)
+    records = []
+    seen = set()
+
+    def add_record(measurement, key):
+        if key is None or (key, measurement["measurement_no"]) in seen:
+            return
+        seen.add((key, measurement["measurement_no"]))
+        date = measurement.get("measurement_date")
+        records.append({"name": display.get(key, (key[0], key[1]))[0], "phone": key[1],
+                        "measurementNo": measurement["measurement_no"],
+                        "date": date.isoformat() if hasattr(date, "isoformat") else str(date or ""),
+                        "values": {k: str(v) for k, v in measurement.get("values", {}).items() if v is not None}})
+
+    for measurement in workbook["measurements"]:
+        if any(v is not None for v in measurement.get("values", {}).values()):
+            add_record(measurement, measurement["key"])
+    for invoice in workbook["invoices"]:
+        for no in invoice["meas_nos"]:
+            measurement = sources.get(no)
+            if measurement and any(v is not None for v in measurement.get("values", {}).values()):
+                key = measurement_customer_key(workbook, measurement, invoice)
+                add_record(measurement, key or invoice_customer_key(workbook, invoice, sources))
+    # A measured person already in the database also protects a shared phone.
+    if state:
+        customers = {str(cid): (name, phone) for name, phone, cid in state["customer_rows"]}
+        for cid, date, values in sorted(state.get("measurement_sigs", set()), key=lambda sig: (sig[0], sig[1], str(sig[2]))):
+            if cid in customers:
+                name, phone = customers[cid]
+                records.append({"name": name, "phone": phone, "source": "database",
+                                "customerId": cid, "date": date,
+                                "values": {col: value for col, value in zip(MEASUREMENT_VALUE_COLS, values)
+                                           if value not in {"NULL", "None"}}})
+    identity.configure_phones(list(display.values()), records)
     for measurement in workbook["measurements"]:
         measurement["key"] = identity.key(measurement["name"], measurement["phone"])
 
@@ -309,6 +355,7 @@ def measurement_customer_key(workbook, measurement, invoice=None):
 
 def invoice_customer_key(workbook, invoice, sources):
     owners = {key for no in invoice["meas_nos"] if no in sources
+              if any(v is not None for v in sources[no].get("values", {}).values())
               if (key := measurement_customer_key(workbook, sources[no], invoice)) is not None}
     if len(owners) == 1:
         return next(iter(owners))
@@ -335,6 +382,11 @@ def customer_display(workbook, sources):
         key = invoice_customer_key(workbook, invoice, sources)
         if key:
             display.setdefault(key, (invoice["name"], invoice["phone"]))
+    identity = workbook.get("customer_identity")
+    if identity:
+        display = {key: (identity.display_name(key, name), phone)
+                   for key, (name, phone) in display.items()}
+        measurement_keys |= {key for key in display if key in identity.labels}
     return display, measurement_keys
 
 
@@ -831,6 +883,8 @@ def legacy_customer_numbers(workbook: dict, report: Report) -> tuple[dict, int]:
     Reserve every valid source/reference number, including unused, orphaned,
     and older measurements, before allocating numbers to unmapped customers.
     """
+    if "customer_identity" not in workbook:
+        apply_customer_identity(workbook, CustomerIdentity([], canon_key))
     sources = {m["measurement_no"]: m for m in workbook["measurements"]}
     receipt_owners: dict[int, set[tuple[str, str]]] = collections.defaultdict(set)
     reserved = set()
@@ -877,6 +931,10 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             or material_amount != material_amount.quantize(Decimal("0.01"))):
         raise ValueError("material amount must be positive with at most two decimal places")
     state = load_db_state(conn)
+    identity = workbook.get("customer_identity") or CustomerIdentity([], canon_key)
+    apply_customer_identity(workbook, identity, state)
+    if identity.name_questions:
+        raise ValueError("Choose a customer name for each unmeasured phone group using review_customers.py before importing")
     # Never silently choose between existing records after adding an alias.
     existing = {}
     for name, phone, customer_id in state["customer_rows"]:
@@ -1290,7 +1348,7 @@ def main() -> int:
     parser.add_argument("--customer-decisions", default=str(CUSTOMER_DECISIONS),
                         help="saved JSON decisions (default: scripts/customer-decisions.json; "
                              "created/refreshed by dry-run, required for import)")
-    parser.add_argument("--customer-review", help="write pending shared-phone pairs as JSON")
+    parser.add_argument("--customer-review", help="write pending name choices and measured identity pairs as JSON")
     args = parser.parse_args()
     if (args.customer_decisions and args.customer_review
             and Path(args.customer_decisions).resolve() == Path(args.customer_review).resolve()):
@@ -1317,6 +1375,9 @@ def main() -> int:
         Path(args.customer_review).write_text(json.dumps(identity.review(identities), indent=2, ensure_ascii=False) + "\n")
     if args.dry_run:
         legacy_customer_numbers(workbook, report)
+    questions = identity.review(identities)
+    report.count("customer names to choose", len(identity.name_questions))
+    report.count("measured customer pairs to verify", sum(row["decision"] == "pending" for row in questions))
     print(report.summary("workbook"))
 
     if args.dry_run:
@@ -1331,8 +1392,13 @@ def main() -> int:
     conn = psycopg2.connect(url)
     conn.autocommit = False
     try:
+        state = load_db_state(conn)
+        apply_customer_identity(workbook, identity, state)
+        if identity.name_questions:
+            print("Choose the pending customer names with scripts/review_customers.py before importing.", file=sys.stderr)
+            conn.rollback()
+            return 2
         if args.customer_review:
-            state = load_db_state(conn)
             identities.extend((n, p) for n, p, _ in state["customer_rows"])
             Path(args.customer_review).write_text(json.dumps(identity.review(identities), indent=2, ensure_ascii=False) + "\n")
         branch_id, branch_label = choose_branch(conn, args.branch, report)

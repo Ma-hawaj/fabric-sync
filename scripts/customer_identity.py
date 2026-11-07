@@ -1,4 +1,4 @@
-"""Explicit, phone-scoped customer identity decisions for legacy ingestion."""
+"""Phone-scoped contact names and measured identity decisions for ingestion."""
 import itertools
 import json
 import os
@@ -73,20 +73,42 @@ class CustomerIdentity:
         self.canonical_key = canonical_key
         self.parents = {}
         self.separate = set()
+        self.preferred_names = {}
+        self.phone_measured = None
+        self.phone_defaults = {}
+        self.labels = {}
+        self.name_questions = []
+        self.profile_records = {}
         if not isinstance(decisions, list):
             raise ValueError("Customer decisions must be a JSON list")
         self.decisions = decisions
         pairs = []
         for row in decisions:
-            if not isinstance(row, dict) or row.get("decision") not in {"same", "different", "pending"}:
-                raise ValueError("Each decision must be same, different, or pending")
+            if not isinstance(row, dict):
+                raise ValueError("Each decision must be a JSON object")
+            decision = row.get("decision")
+            if decision in {"name", "name_pending"}:
+                phone = norm_phone(row.get("phone"))
+                names = row.get("names", [row.get("name")])
+                if not phone or not isinstance(names, list) or not names or not all(isinstance(n, str) and norm_name(n) for n in names):
+                    raise ValueError("A name choice needs a phone and a list of names")
+                if decision == "name":
+                    chosen = norm_name(row.get("name"))
+                    if not chosen:
+                        raise ValueError("A saved name choice needs a non-empty name")
+                    if phone in self.preferred_names and self.preferred_names[phone] != chosen:
+                        raise ValueError("Conflicting preferred names for one phone")
+                    self.preferred_names[phone] = chosen
+                continue
+            if decision not in {"same", "different", "pending"}:
+                raise ValueError("Each decision must be same, different, pending, name, or name_pending")
             names = row.get("names")
             if not isinstance(names, list) or len(names) != 2 or not all(isinstance(n, str) for n in names):
-                raise ValueError("Each decision needs exactly two names")
+                raise ValueError("Each identity decision needs exactly two names")
             keys = [canonical_key(n, row.get("phone")) for n in names]
             if not all(keys) or keys[0] == keys[1]:
                 raise ValueError("Decisions need two distinct names and a phone")
-            pairs.append((row["decision"], *keys))
+            pairs.append((decision, *keys))
         for decision, left, right in pairs:
             if decision == "same":
                 self.parents[self.resolve(right)] = self.resolve(left)
@@ -102,24 +124,86 @@ class CustomerIdentity:
             key = self.parents[key]
         return key
 
-    def key(self, name, phone):
+    def base_key(self, name, phone):
         return self.resolve(self.canonical_key(name, phone))
 
-    def review(self, identities):
+    def configure_phones(self, identities, measurements):
+        """Receipt-only names share a contact; measured people stay distinct."""
+        self.phone_measured = {}
+        self.phone_defaults = {}
+        self.labels = {}
+        self.name_questions = []
+        self.profile_records = {}
+        for record in measurements:
+            key = self.base_key(record["name"], record["phone"])
+            if key:
+                self.phone_measured.setdefault(key[1], set()).add(key)
+                self.labels.setdefault(key, record["name"])
+                self.profile_records.setdefault(key, []).append(record)
         by_phone = {}
         for name, phone in identities:
-            key = self.key(name, phone)
+            key = self.base_key(name, phone)
             if key:
-                by_phone.setdefault(key[1], set()).add(key[0])
+                by_phone.setdefault(key[1], {}).setdefault(key, name)
+        for phone, names in by_phone.items():
+            measured = self.phone_measured.setdefault(phone, set())
+            if len(measured) == 1:
+                self.phone_defaults[phone] = next(iter(measured))
+                continue
+            unmeasured = {key: name for key, name in names.items() if key not in measured}
+            if not unmeasured:
+                continue
+            chosen = self.preferred_names.get(phone)
+            if chosen:
+                key = self.base_key(chosen, phone)
+                self.phone_defaults[phone] = key
+                self.labels.setdefault(key, chosen)
+            else:
+                key = next(iter(unmeasured))
+                self.phone_defaults[phone] = key
+                self.labels.setdefault(key, unmeasured[key])
+                if len(unmeasured) > 1:
+                    options = list(dict.fromkeys([*unmeasured.values(),
+                                                 *(self.labels[k] for k in sorted(measured))]))
+                    self.name_questions.append({"phone": phone, "names": options,
+                                                "decision": "name_pending",
+                                                "measurement_names": [self.labels[k] for k in sorted(measured)]})
+
+    def key(self, name, phone):
+        key = self.base_key(name, phone)
+        if key is None or self.phone_measured is None:
+            return key
+        measured = self.phone_measured.get(key[1], set())
+        if key in measured:
+            return key
+        return self.phone_defaults.get(key[1], key)
+
+    def display_name(self, key, fallback):
+        return self.labels.get(key, fallback)
+
+    def review(self, identities):
+        if self.phone_measured is None:
+            by_phone = {}
+            for name, phone in identities:
+                key = self.key(name, phone)
+                if key:
+                    by_phone.setdefault(key[1], set()).add(key[0])
+        else:
+            by_phone = {phone: {key[0] for key in keys}
+                        for phone, keys in self.phone_measured.items()}
         rows = []
         for phone, names in sorted(by_phone.items()):
             for left, right in itertools.combinations(sorted(names), 2):
                 if frozenset(((left, phone), (right, phone))) in self.separate:
                     continue
-                rows.append({"phone": phone, "names": [left, right],
-                             "decision": "pending",
-                             "name_similarity": round(SequenceMatcher(None, left, right).ratio(), 3)})
-        return sorted(rows, key=lambda row: (-row["name_similarity"], row["phone"], row["names"]))
+                row = {"phone": phone, "names": [left, right], "decision": "pending",
+                       "name_similarity": round(SequenceMatcher(None, left, right).ratio(), 3)}
+                records = self.profile_records.get((left, phone), []) + self.profile_records.get((right, phone), [])
+                if records:
+                    row["measurements"] = records
+                rows.append(row)
+        questions = sorted(self.name_questions, key=lambda row: row["phone"])
+        return questions + sorted(rows, key=lambda row: (-row["name_similarity"], row["phone"], row["names"]))
 
 
 def load_identity(path, canonical_key):
@@ -128,8 +212,8 @@ def load_identity(path, canonical_key):
 
 
 def save_review(path, identity, identities):
-    """Preserve reviewed decisions and refresh pending pairs atomically."""
-    reviewed = [row for row in identity.decisions if row["decision"] != "pending"]
+    """Preserve reviewed decisions and refresh pending questions atomically."""
+    reviewed = [row for row in identity.decisions if row["decision"] not in {"pending", "name_pending"}]
     save_decisions(path, reviewed + identity.review(identities))
 
 
