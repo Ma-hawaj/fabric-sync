@@ -30,6 +30,11 @@
     "roles": ["sales", "production"]
   },
   {
+    "method": "POST",
+    "path": "/customers/:id/merge",
+    "roles": ["sales", "production"]
+  },
+  {
     "method": "GET",
     "path": "/materials",
     "roles": ["sales", "production", "inventory"]

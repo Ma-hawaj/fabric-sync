@@ -259,3 +259,16 @@ describe('role policy', () => {
     expect(homePath(principal('inventory'))).toBe('/inventory')
   })
 })
+
+describe('customer merging permissions', () => {
+  it('uses the same roles as customer editing', () => {
+    for (const role of ['sales', 'production', 'admin'] as const) {
+      expect(
+        canAccess(principal(role), 'POST', '/customers/duplicate/merge'),
+      ).toBe(true)
+    }
+    expect(
+      canAccess(principal('inventory'), 'POST', '/customers/duplicate/merge'),
+    ).toBe(false)
+  })
+})

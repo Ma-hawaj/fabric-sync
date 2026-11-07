@@ -10,11 +10,13 @@ import { DataTable } from '@/components/data-table/data-table'
 import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-advanced-toolbar'
 import { getCustomerColumns } from './components/customer-columns'
 import { CustomerDetailsSheet } from './components/customer-details-sheet'
+import { MergeCustomerDialog } from './components/merge-customer-dialog'
 import { useCustomers } from './hooks/use-customers'
 import { printMeasurements } from './lib/print-measurements'
 import type { Customer } from './types/customers'
 
 export function CustomersPage() {
+  const [mergeSource, setMergeSource] = useState<Customer | null>(null)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
     null,
   )
@@ -85,8 +87,16 @@ export function CustomersPage() {
 
       <CustomerDetailsSheet
         customer={selectedCustomer}
+        onMerge={setMergeSource}
         onOpenChange={(open) => !open && setSelectedCustomer(null)}
       />
+      {mergeSource && (
+        <MergeCustomerDialog
+          source={mergeSource}
+          onClose={() => setMergeSource(null)}
+          onMerged={setSelectedCustomer}
+        />
+      )}
     </div>
   )
 }

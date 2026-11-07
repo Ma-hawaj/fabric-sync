@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { PermissionGuard } from '@/components/permission-guard'
 import {
   Sheet,
   SheetContent,
@@ -40,11 +41,13 @@ import type { Customer } from '../types/customers'
 interface CustomerDetailsSheetProps {
   customer: Customer | null
   onOpenChange: (open: boolean) => void
+  onMerge?: (customer: Customer) => void
 }
 
 export function CustomerDetailsSheet({
   customer,
   onOpenChange,
+  onMerge,
 }: CustomerDetailsSheetProps) {
   const [activeMeasurementId, setActiveMeasurementId] = useState<string | null>(
     null,
@@ -88,7 +91,7 @@ export function CustomerDetailsSheet({
         {customer && (
           <div className="space-y-6 px-6 pb-8">
             <SheetHeader className="border-b pb-4">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-info/10 text-info">
                   <User className="h-5 w-5" />
                 </div>
@@ -108,6 +111,20 @@ export function CustomerDetailsSheet({
                     </p>
                   )}
                 </div>
+                {onMerge && (
+                  <PermissionGuard
+                    method="POST"
+                    path={`/customers/${customer.id}/merge`}
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onMerge(customer)}
+                    >
+                      Merge duplicate
+                    </Button>
+                  </PermissionGuard>
+                )}
                 {customer.measurements.length > 0 && (
                   <Button
                     variant="outline"

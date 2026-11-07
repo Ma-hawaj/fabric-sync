@@ -446,6 +446,28 @@ class DatabaseIntegrationTests(unittest.TestCase):
             cur.execute("SELECT holds_stock,produces_orders FROM branch WHERE id=%s", (workshop,))
             self.assertEqual(cur.fetchone(), (False, True))
 
+    def test_rerun_reuses_a_merged_customer_alias(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read()
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Merge import',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+            cur.execute("INSERT INTO customers(name,mobile_no) VALUES('Canonical Customer','+97334444444') RETURNING id")
+            target = cur.fetchone()[0]
+            cur.execute("INSERT INTO customer_aliases(source_customer_id,target_customer_id,customer_number,name,mobile_no,merged_by) "
+                        "VALUES(%s,%s,9,'Sheet Customer','+97334444444','staff')", (str(uuid.uuid4()),target))
+        perform_insert(self.conn, workbook, branch, report)
+        perform_insert(self.conn, workbook, branch, Report())
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM customers WHERE name='Sheet Customer'")
+            self.assertEqual(cur.fetchone()[0], 0)
+            cur.execute("SELECT DISTINCT m.customer_id FROM orders o JOIN measurements m ON m.id=o.measurement_id")
+            self.assertEqual(cur.fetchall(), [(target,)])
+            cur.execute("SELECT count(*) FROM customers")
+            self.assertEqual(cur.fetchone()[0], 2)
+
     def test_workbook_insert_payments_repairs_and_idempotent_rerun(self):
         fixture = ReadWorkbookTests()
         fixture.setUp()

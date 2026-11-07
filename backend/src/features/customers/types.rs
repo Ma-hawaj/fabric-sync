@@ -39,7 +39,7 @@ pub const MEASUREMENT_TYPES: &[&str] = &["body", "thobe", "sample"];
 pub struct Measurement {
     pub id: Uuid,
     pub customer_id: Uuid,
-    /// Server-formatted customer ID plus permanent per-customer increment.
+    /// Original customer prefix and increment, preserved across customer merges.
     pub readable_id: String,
     #[serde(rename(deserialize = "measurement_date"))]
     pub date: NaiveDate,
@@ -384,4 +384,10 @@ mod tests {
         c.fit = Some("loose".to_string());
         assert!(!measurement_values_equal(&a, &c));
     }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeCustomerInput {
+    pub target_customer_id: Uuid,
 }

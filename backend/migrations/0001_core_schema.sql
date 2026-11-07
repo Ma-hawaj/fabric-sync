@@ -26,6 +26,46 @@ CREATE TABLE customers (
     UNIQUE (name, mobile_no)
 );
 
+-- Retired identities resolve to the surviving customer, including on later imports.
+CREATE FUNCTION customer_name_key(value TEXT) RETURNS TEXT LANGUAGE sql IMMUTABLE STRICT AS $$
+    SELECT lower(regexp_replace(btrim(value), '\s+', ' ', 'g'))
+$$;
+CREATE FUNCTION customer_phone_key(value TEXT) RETURNS TEXT LANGUAGE sql IMMUTABLE STRICT AS $$
+    SELECT CASE WHEN length(digits) = 8 THEN '973' || digits ELSE digits END
+    FROM (SELECT regexp_replace(value, '[^0-9]', '', 'g') AS digits) normalized
+$$;
+CREATE TABLE customer_aliases (
+    source_customer_id UUID PRIMARY KEY,
+    target_customer_id UUID NOT NULL REFERENCES customers(id),
+    customer_number BIGINT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    mobile_no TEXT NOT NULL,
+    merged_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    merged_by TEXT NOT NULL,
+    CHECK (source_customer_id <> target_customer_id)
+);
+CREATE UNIQUE INDEX customer_aliases_identity_key ON customer_aliases
+    (customer_name_key(name), customer_phone_key(mobile_no));
+CREATE INDEX customer_aliases_target_idx ON customer_aliases(target_customer_id);
+
+CREATE FUNCTION reserve_merged_customer_identity() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    -- Customer creation/rename and merging use the same transaction lock.
+    PERFORM pg_advisory_xact_lock(46098571621);
+    IF EXISTS (SELECT 1 FROM customer_aliases WHERE customer_number = NEW.customer_number) THEN
+        RAISE EXCEPTION 'retired customer number cannot be reused' USING ERRCODE = '23505';
+    END IF;
+    IF EXISTS (SELECT 1 FROM customer_aliases a
+               WHERE customer_name_key(a.name) = customer_name_key(NEW.name)
+                 AND customer_phone_key(a.mobile_no) = customer_phone_key(NEW.mobile_no)
+                 AND a.target_customer_id <> NEW.id) THEN
+        RAISE EXCEPTION 'customer identity belongs to a merged customer' USING ERRCODE = '23505';
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER customers_reserve_merged_identity BEFORE INSERT OR UPDATE OF name, mobile_no
+    ON customers FOR EACH ROW EXECUTE FUNCTION reserve_merged_customer_identity();
+
 CREATE TABLE materials (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     name TEXT NOT NULL,
@@ -110,6 +150,8 @@ CREATE TABLE measurements (
     customer_id UUID NOT NULL REFERENCES customers(id),
     -- Assigned by the insert trigger below, independently for each customer.
     measurement_number BIGINT NOT NULL,
+    -- Persist the original label so customer merges never renumber snapshots.
+    readable_id TEXT NOT NULL UNIQUE,
     measurement_date DATE NOT NULL DEFAULT CURRENT_DATE,
 
     -- Three decimal places preserve eighth-inch measurements (⅛ = 0.125),
@@ -147,8 +189,7 @@ CREATE TABLE measurements (
     -- new write has to set them (see validate_measurement).
     type TEXT CHECK (type IN ('body', 'thobe', 'sample')),
     fit TEXT,
-    CONSTRAINT measurements_number_positive CHECK (measurement_number > 0),
-    CONSTRAINT measurements_customer_number_key UNIQUE (customer_id, measurement_number)
+    CONSTRAINT measurements_number_positive CHECK (measurement_number > 0)
 );
 
 -- Keep the counter even if a measurement is deleted so saved IDs are never reused.
@@ -159,7 +200,7 @@ CREATE TABLE customer_measurement_counters (
 
 CREATE FUNCTION assign_measurement_number() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    IF NEW.measurement_number IS NOT NULL THEN
+    IF NEW.measurement_number IS NOT NULL OR NEW.readable_id IS NOT NULL THEN
         RAISE EXCEPTION 'measurement number is assigned automatically' USING ERRCODE = '23514';
     END IF;
     INSERT INTO customer_measurement_counters (customer_id, last_number)
@@ -167,6 +208,8 @@ BEGIN
     ON CONFLICT (customer_id) DO UPDATE
         SET last_number = customer_measurement_counters.last_number + 1
     RETURNING last_number INTO NEW.measurement_number;
+    NEW.readable_id := readable_measurement_id(
+        (SELECT customer_number FROM customers WHERE id = NEW.customer_id), NEW.measurement_number);
     RETURN NEW;
 END $$;
 CREATE TRIGGER measurements_assign_number BEFORE INSERT ON measurements
@@ -174,13 +217,17 @@ CREATE TRIGGER measurements_assign_number BEFORE INSERT ON measurements
 
 CREATE FUNCTION preserve_measurement_number() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    IF (NEW.customer_id, NEW.measurement_number) IS DISTINCT FROM
-       (OLD.customer_id, OLD.measurement_number) THEN
+    IF (NEW.measurement_number, NEW.readable_id) IS DISTINCT FROM
+       (OLD.measurement_number, OLD.readable_id)
+       OR (NEW.customer_id IS DISTINCT FROM OLD.customer_id AND NOT EXISTS (
+           SELECT 1 FROM customer_aliases a
+           WHERE a.source_customer_id = OLD.customer_id AND a.target_customer_id = NEW.customer_id
+       )) THEN
         RAISE EXCEPTION 'measurement identity cannot change' USING ERRCODE = '23514';
     END IF;
     RETURN NEW;
 END $$;
-CREATE TRIGGER measurements_preserve_number BEFORE UPDATE OF customer_id, measurement_number
+CREATE TRIGGER measurements_preserve_number BEFORE UPDATE OF customer_id, measurement_number, readable_id
     ON measurements FOR EACH ROW EXECUTE FUNCTION preserve_measurement_number();
 
 CREATE FUNCTION readable_measurement_id(customer_number BIGINT, measurement_number BIGINT)

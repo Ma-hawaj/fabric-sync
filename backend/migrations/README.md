@@ -21,7 +21,8 @@ SQLx applies the files in version order:
    part of this original baseline. A card may have at most one direct replacement;
    sale history stays attached to the original card. Legacy orders may have an
    unknown fabric source with a null material reference; shop/customer material
-   constraints remain enforced.
+   constraints remain enforced. Customer merges retain retired identities as
+   aliases, and measurement labels are stored permanently on their snapshots.
 2. `0002_notification_schema.sql` creates immutable PDF artifacts, notification
    previews and approvals, recipients, delivery attempts, webhook storage, and
    the staff-approved gift card delivery queue with its immutable PNG attachments.
@@ -36,7 +37,9 @@ per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.
 Customer numbers use an identity sequence; the workbook importer preserves each
 customer's highest legacy Measurement No and advances the sequence beyond the
 workbook's range. A measurement counter and insert trigger serialize concurrent
-saves and retain used numbers after deletion. Imports and app-created snapshots
+saves and retain used numbers after deletion. Each snapshot stores its original
+readable ID, allowing customers to be merged without changing printed labels.
+Retired customer numbers are reserved by the alias history. Imports and app-created snapshots
 use the same allocation trigger.
 
 The core schema also defines return credits and lines, refund payouts,

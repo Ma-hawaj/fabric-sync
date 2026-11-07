@@ -81,11 +81,39 @@ measurement ownership, measurement deduplication, and legacy customer numbers.
 entries keep people separate and continue appearing for review. Conflicting
 same/different decisions are rejected before connecting to the database.
 
-Review before the first import when possible. If an alias would resolve multiple
-existing database records to one identity, ingestion stops and rolls back. This
-workflow does not merge existing records or move their invoices and measurements;
-those records need reconciliation before importing with that alias. Existing
-invoice numbers are still skipped on reruns.
+Review before the first import when possible. If a decision would resolve
+multiple existing database records to one identity, ingestion stops and rolls
+back. Merge those existing records through the Customers page before importing
+again. Existing invoice numbers are still skipped on reruns.
+
+## Merge customers after ingestion
+
+Open the duplicate customer's details on the Customers page and choose **Merge
+duplicate**. Search by customer number, name, or phone to choose the customer to
+keep. Both records' contact details and history counts are shown. Confirm that
+they belong to the same person, then choose **Merge customers**.
+
+The selected customer keeps its name, phone, address, and customer number. All
+measurements, tailoring and retail invoices, and gift-card ownership move to that
+customer in one transaction. Orders, payments, measurement UUIDs, and original
+readable measurement IDs remain intact; snapshots with identical values are kept
+as separate historical records. Either customer's notification opt-out is retained.
+Relatives sharing a phone should only be merged when they are actually the same
+person.
+
+The duplicate disappears from customer lists. Its original UUID, number, name,
+and phone are retained in an audited alias record, and old customer links resolve
+to the surviving customer. Subsequent merges keep aliases pointing directly to
+the final record. Customer creation and future Excel imports reuse these saved
+aliases, so old workbook spellings do not recreate the duplicate. Retired customer
+numbers remain reserved. Production merges do not modify the local decisions JSON;
+copying an older decisions file does not remove the database aliases.
+
+The API is `POST /customers/:id/merge` with
+`{"targetCustomerId":"<customer-to-keep>"}`. It uses the same sales/production
+permissions as customer editing, records the authenticated actor, rejects
+self-merges and stale destinations, and safely handles retries to the same
+surviving customer.
 
 ## Unknown materials
 

@@ -670,7 +670,8 @@ def load_db_state(conn) -> dict:
     with conn.cursor() as cur:
         cur.execute("SELECT invoice_number FROM invoices")
         invoice_numbers = {row[0] for row in cur.fetchall()}
-        cur.execute("SELECT name, mobile_no, id FROM customers")
+        cur.execute("SELECT name, mobile_no, id FROM customers "
+                    "UNION ALL SELECT name, mobile_no, target_customer_id FROM customer_aliases")
         customer_rows = [(str(n), str(m), str(i)) for n, m, i in cur.fetchall()]
         cur.execute("SELECT order_id, reported_on, reason FROM order_repairs")
         repairs = {(str(a), b, c) for a, b, c in cur.fetchall()}
@@ -912,7 +913,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             """,
             (reserved_max,),
         )
-        cur.execute("SELECT customer_number FROM customers")
+        cur.execute("SELECT customer_number FROM customers UNION SELECT customer_number FROM customer_aliases")
         taken_numbers = {row[0] for row in cur.fetchall()}
         for key, (name, phone) in new_customers.items():
             number = legacy_numbers.get(key)
@@ -937,7 +938,8 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 taken_numbers.add(number)
                 report.count("customers assigned legacy measurement numbers")
         report.count("customers created", len(new_customers))
-        cur.execute("SELECT name, mobile_no, id FROM customers")
+        cur.execute("SELECT name, mobile_no, id FROM customers "
+                    "UNION ALL SELECT name, mobile_no, target_customer_id FROM customer_aliases")
         customer_ids: dict[tuple[str, str], str] = {}
         for n, m, id_ in cur.fetchall():
             key = customer_key(workbook, str(n), str(m))
