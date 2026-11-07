@@ -1427,7 +1427,7 @@ mod customer_address_tests {
     use sqlx::PgPool;
     use uuid::Uuid;
     #[sqlx::test]
-    async fn delivery_orders_and_documents_use_each_customers_saved_address(pool: PgPool) {
+    async fn delivery_addresses_stay_on_invoices_and_out_of_production_documents(pool: PgPool) {
         let (invoice, orders, _, _) = test_support::invoice(&pool, 2, false).await;
         sqlx::query("UPDATE invoices SET collection_method='delivery',branch_id=NULL WHERE id=$1")
             .bind(invoice)
@@ -1469,7 +1469,7 @@ mod customer_address_tests {
             let html = crate::features::orders::document::render_order_document(&state, order_id)
                 .await
                 .unwrap();
-            assert!(html.contains(escaped));
+            assert!(!html.contains(escaped));
         }
         let html = crate::features::invoices::document::render_invoice_document(&state, invoice)
             .await
