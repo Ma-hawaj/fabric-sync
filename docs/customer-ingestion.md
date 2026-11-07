@@ -68,8 +68,8 @@ invoice numbers are still skipped on reruns.
 
 ## Unknown materials
 
-Apply backend migrations (including `0005_unknown_legacy_material.sql`) before
-running the updated importer. Imported orders default to `material_id = NULL`
+The original `0001_core_schema.sql` baseline supports unknown legacy materials.
+Imported orders default to `material_id = NULL`
 and `material_source = 'unknown'`. No placeholder inventory record is created;
 order lists and invoice documents display “Unknown material”. The quantity still
 uses `--material-amount` (default 1 metre), since order quantities must be positive.

@@ -192,7 +192,7 @@ $$;
 CREATE TABLE orders (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     measurement_id UUID NOT NULL REFERENCES measurements(id),
-    material_source TEXT NOT NULL DEFAULT 'shop' CHECK (material_source IN ('shop', 'customer')),
+    material_source TEXT NOT NULL DEFAULT 'shop' CHECK (material_source IN ('shop', 'customer', 'unknown')),
     material_id UUID REFERENCES materials(id),
     customer_material_description TEXT,
     material_amount NUMERIC(10, 2) NOT NULL CHECK (material_amount > 0),
@@ -202,6 +202,8 @@ CREATE TABLE orders (
         (material_source = 'customer' AND material_id IS NULL
          AND customer_material_description IS NOT NULL
          AND length(btrim(customer_material_description)) > 0)
+        OR
+        (material_source = 'unknown' AND material_id IS NULL AND customer_material_description IS NULL)
     ),
     invoice_id UUID NOT NULL REFERENCES invoices(id),
     price NUMERIC(10, 2) NOT NULL,
