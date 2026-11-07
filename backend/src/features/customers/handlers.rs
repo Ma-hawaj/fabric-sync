@@ -54,20 +54,3 @@ pub async fn update_customer(
         service::update_customer(&state, customer_id, input).await?,
     ))
 }
-
-pub async fn merge_customer(
-    State(state): State<AppState>,
-    Extension(user): Extension<AuthenticatedUser>,
-    Path(customer_id): Path<Uuid>,
-    Json(input): Json<super::types::MergeCustomerInput>,
-) -> Result<Json<Customer>, AppError> {
-    Ok(Json(
-        service::merge_customer(
-            &state,
-            customer_id,
-            input.target_customer_id,
-            user.subject().unwrap_or("staff"),
-        )
-        .await?,
-    ))
-}

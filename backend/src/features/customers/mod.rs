@@ -10,6 +10,3 @@ pub use routes::router;
 
 #[cfg(test)]
 mod number_tests;
-
-#[cfg(test)]
-mod merge_tests;

@@ -385,19 +385,3 @@ mod tests {
         assert!(unchanged.whatsapp_notifications_enabled);
     }
 }
-
-pub async fn merge_customer(
-    state: &AppState,
-    source_id: Uuid,
-    target_id: Uuid,
-    actor: &str,
-) -> Result<Customer, AppError> {
-    if source_id == target_id {
-        return Err(AppError::BadRequest(
-            "Choose a different customer to keep".into(),
-        ));
-    }
-    repository::merge_customer(state, source_id, target_id, actor).await?;
-    tracing::info!(%source_id, %target_id, %actor, "customers merged");
-    get_customer(state, target_id).await
-}

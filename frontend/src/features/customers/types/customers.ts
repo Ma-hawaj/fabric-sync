@@ -1,7 +1,7 @@
 export interface Measurement {
   id: string
   customerId: string
-  /** Permanent original ID, e.g. C-6216-001; unchanged by customer merges. */
+  /** Permanent ID within the customer, e.g. C-6216-001. */
   readableId: string
   date: Date
   // Record-level choices rather than lengths. Null on legacy snapshots that

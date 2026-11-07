@@ -254,16 +254,3 @@ Read `docs/roles.md` for the policy and Zitadel setup. Protected endpoints must
 have explicit entries in `frontend/src/lib/access-policy.json`; the backend
 defaults to deny. Use `PermissionGuard`, `RoleGuard`, and per-item row-action
 permissions for UI actions. Keep form lookup rights when restricting writes.
-
-
-## Customer merges
-
-`POST /customers/:id/merge` moves a duplicate's measurements, invoice buyer
-references, and gift-card ownership to the selected customer in one transaction.
-`customer_aliases` retains the retired UUID, number, name, phone, actor, and date;
-repeat merges flatten aliases. Creation and XLSM ingestion resolve aliases rather
-than recreating retired identities. Customers and retired numbers are never matched
-by phone alone. Measurement `readable_id` is assigned at insertion and remains
-immutable when ownership changes through a recorded merge; its original label
-may retain the retired customer's prefix. Retired customer numbers cannot be
-reused. Use the existing original schema migrations for this feature.

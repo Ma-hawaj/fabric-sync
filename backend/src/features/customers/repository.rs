@@ -29,7 +29,9 @@ const SPEC: ListSpec = ListSpec {
             max(m.measurement_date) AS last_measured_on,
             count(m.id) AS measurement_count,
             COALESCE(
-                json_agg(to_jsonb(m) ORDER BY m.measurement_date DESC, m.id DESC)
+                json_agg(to_jsonb(m) || jsonb_build_object(
+                    'readable_id', readable_measurement_id(c.customer_number, m.measurement_number)
+                ) ORDER BY m.measurement_date DESC, m.id DESC)
                     FILTER (WHERE m.id IS NOT NULL),
                 '[]'
             ) AS measurements,
@@ -107,13 +109,7 @@ pub async fn get_customer(
     state: &AppState,
     customer_id: Uuid,
 ) -> Result<Option<Customer>, AppError> {
-    let resolved: Option<Uuid> = sqlx::query_scalar(
-        "SELECT target_customer_id FROM customer_aliases WHERE source_customer_id = $1",
-    )
-    .bind(customer_id)
-    .fetch_optional(state.db())
-    .await?;
-    list::fetch_by_id(state.db(), &SPEC, resolved.unwrap_or(customer_id)).await
+    list::fetch_by_id(state.db(), &SPEC, customer_id).await
 }
 
 /// The measurement record that backs an order — the snapshot captured when its
@@ -126,7 +122,9 @@ pub async fn get_measurement(
     let row = sqlx::query!(
         r#"
         SELECT
-            to_jsonb(m) AS "measurement!: Json<Measurement>"
+            to_jsonb(m) || jsonb_build_object(
+                'readable_id', readable_measurement_id(c.customer_number, m.measurement_number)
+            ) AS "measurement!: Json<Measurement>"
         FROM measurements m
         JOIN customers c ON c.id = m.customer_id
         WHERE m.id = $1
@@ -304,27 +302,6 @@ pub async fn insert_customer(
     whatsapp_notifications_enabled: bool,
     address: Option<&str>,
 ) -> Result<Uuid, sqlx::Error> {
-    sqlx::query("SELECT pg_advisory_xact_lock(46098571621)")
-        .execute(&mut **tx)
-        .await?;
-    let alias: Option<Uuid> = sqlx::query_scalar(
-        "SELECT target_customer_id FROM customer_aliases \
-         WHERE customer_name_key(name) = customer_name_key($1) \
-         AND customer_phone_key(mobile_no) = customer_phone_key($2)",
-    )
-    .bind(name)
-    .bind(mobile_no)
-    .fetch_optional(&mut **tx)
-    .await?;
-    if let Some(customer_id) = alias {
-        if !whatsapp_notifications_enabled {
-            sqlx::query("UPDATE customers SET whatsapp_notifications_enabled=false WHERE id=$1")
-                .bind(customer_id)
-                .execute(&mut **tx)
-                .await?;
-        }
-        return Ok(customer_id);
-    }
     let address = address.map(str::trim);
     sqlx::query_scalar!(
         r#"
@@ -381,10 +358,6 @@ pub async fn update_customer(
     whatsapp_notifications_enabled: Option<bool>,
     address: Option<&str>,
 ) -> Result<Option<Customer>, AppError> {
-    let mut tx = state.db().begin().await?;
-    sqlx::query("SELECT pg_advisory_xact_lock(46098571621)")
-        .execute(&mut *tx)
-        .await?;
     let address = address.map(str::trim);
     let updated = sqlx::query_scalar!(
         r#"
@@ -402,119 +375,12 @@ pub async fn update_customer(
         whatsapp_notifications_enabled,
         address,
     )
-    .fetch_optional(&mut *tx)
+    .fetch_optional(state.db())
     .await?;
-    tx.commit().await?;
 
     if updated.is_none() {
         return Ok(None);
     }
 
     get_customer(state, customer_id).await
-}
-
-/// Merge the source into the target in one transaction. Keep all snapshot keys,
-/// original labels, payments, production work, and stock allocations intact.
-pub async fn merge_customer(
-    state: &AppState,
-    source_id: Uuid,
-    target_id: Uuid,
-    actor: &str,
-) -> Result<(), AppError> {
-    let mut tx = state.db().begin().await?;
-    sqlx::query("SELECT pg_advisory_xact_lock(46098571621)")
-        .execute(&mut *tx)
-        .await?;
-    #[derive(sqlx::FromRow)]
-    struct Identity {
-        id: Uuid,
-        customer_number: i64,
-        name: String,
-        mobile_no: String,
-        whatsapp_notifications_enabled: bool,
-    }
-    let customers: Vec<Identity> = sqlx::query_as(
-        "SELECT id, customer_number, name, mobile_no, whatsapp_notifications_enabled \
-         FROM customers WHERE id = ANY($1) ORDER BY id FOR UPDATE",
-    )
-    .bind(vec![source_id, target_id])
-    .fetch_all(&mut *tx)
-    .await?;
-    let target = customers
-        .iter()
-        .find(|c| c.id == target_id)
-        .ok_or_else(|| AppError::NotFound("The customer to keep no longer exists".into()))?;
-    let Some(source) = customers.iter().find(|c| c.id == source_id) else {
-        let existing: Option<Uuid> = sqlx::query_scalar(
-            "SELECT target_customer_id FROM customer_aliases WHERE source_customer_id=$1",
-        )
-        .bind(source_id)
-        .fetch_optional(&mut *tx)
-        .await?;
-        return match existing {
-            Some(id) if id == target_id => Ok(()),
-            Some(_) => Err(AppError::Conflict(
-                "This customer was already merged. Reload before trying again.".into(),
-            )),
-            None => Err(AppError::NotFound(
-                "The duplicate customer no longer exists".into(),
-            )),
-        };
-    };
-    // Invalidate previews on every affected invoice, even when it is linked only
-    // through a measurement. Ordered locks match the other invoice write paths.
-    sqlx::query(
-        "SELECT i.id FROM invoices i WHERE i.customer_id = ANY($1) OR EXISTS \
-         (SELECT 1 FROM orders o JOIN measurements m ON m.id=o.measurement_id \
-          WHERE o.invoice_id=i.id AND m.customer_id = ANY($1)) ORDER BY i.id FOR UPDATE",
-    )
-    .bind(vec![source_id, target_id])
-    .fetch_all(&mut *tx)
-    .await?;
-    sqlx::query(
-        "UPDATE invoices i SET notification_revision=notification_revision+1 \
-         WHERE i.customer_id = ANY($1) OR EXISTS \
-         (SELECT 1 FROM orders o JOIN measurements m ON m.id=o.measurement_id \
-          WHERE o.invoice_id=i.id AND m.customer_id = ANY($1))",
-    )
-    .bind(vec![source_id, target_id])
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query(
-        "INSERT INTO customer_aliases(source_customer_id,target_customer_id,customer_number,name,mobile_no,merged_by) \
-         VALUES($1,$2,$3,$4,$5,$6)",
-    ).bind(source_id).bind(target_id).bind(source.customer_number).bind(&source.name)
-        .bind(&source.mobile_no).bind(actor).execute(&mut *tx).await?;
-    sqlx::query("UPDATE measurements SET customer_id=$2 WHERE customer_id=$1")
-        .bind(source_id)
-        .bind(target_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("UPDATE invoices SET customer_id=$2 WHERE customer_id=$1")
-        .bind(source_id)
-        .bind(target_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("UPDATE gift_cards SET customer_id=$2 WHERE customer_id=$1")
-        .bind(source_id)
-        .bind(target_id)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("UPDATE customer_aliases SET target_customer_id=$2 WHERE target_customer_id=$1")
-        .bind(source_id)
-        .bind(target_id)
-        .execute(&mut *tx)
-        .await?;
-    // Retain either person's opt-out, while keeping the target's contact details.
-    sqlx::query("UPDATE customers SET whatsapp_notifications_enabled=$2 WHERE id=$1")
-        .bind(target_id)
-        .bind(source.whatsapp_notifications_enabled && target.whatsapp_notifications_enabled)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("DELETE FROM customers WHERE id=$1")
-        .bind(source_id)
-        .execute(&mut *tx)
-        .await?;
-    tx.commit().await?;
-    Ok(())
 }
