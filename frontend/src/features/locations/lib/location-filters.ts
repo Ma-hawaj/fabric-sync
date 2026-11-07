@@ -1,6 +1,20 @@
 import type { PickerFilter } from '@/lib/async-combobox'
 import type { Location } from '../types/location'
 
+/** Location changes affect lists, preferences, and independently cached pickers. */
+export const LOCATION_QUERY_KEYS = [
+  'locations',
+  'default-location',
+  'invoice-location-default',
+  'invoice-issuing-branch',
+  'invoice-receiving-branch',
+  'invoice-sold-from',
+  'invoice-production-branch',
+  'production-location-picker',
+  'stock-entry-locations',
+  'return-restock-locations',
+] as const
+
 // The single place the capability rules live. GET /locations returns every
 // location — including inactive ones, which the locations page needs — so each
 // picker narrows the list to what it can actually use.
