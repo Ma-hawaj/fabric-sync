@@ -3,6 +3,7 @@ import { apiClient } from '@/lib/api'
 import type { NotificationDraft, NotificationKind } from '../types'
 
 interface PrepareNotificationInput {
+  repairId?: string
   invoiceId: string
   kind: NotificationKind
   requestId: string

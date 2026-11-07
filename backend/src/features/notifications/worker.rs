@@ -64,7 +64,14 @@ pub(super) async fn tick(state: &AppState) -> Result<(), AppError> {
     repository::start_attempt(&mut tx, &job).await?;
     tx.commit().await?;
     let notification = repository::get(state.db(), job.notification_id).await?;
-    match service::source(state, notification.invoice_id, &notification.kind).await {
+    match service::source(
+        state,
+        notification.invoice_id,
+        &notification.kind,
+        notification.snapshot.repair_id,
+    )
+    .await
+    {
         Ok(source) if source.snapshot.source_hash == notification.source_hash => {}
         Ok(_) | Err(AppError::Conflict(_)) => {
             let mut tx = state.db().begin().await?;

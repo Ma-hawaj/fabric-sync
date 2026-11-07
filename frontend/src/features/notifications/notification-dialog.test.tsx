@@ -49,13 +49,22 @@ function fixture(): NotificationDraft {
     ],
   }
 }
-function mount(kind: NotificationKind = 'manual_resend', onClose = vi.fn()) {
+function mount(
+  kind: NotificationKind = 'manual_resend',
+  onClose = vi.fn(),
+  repairId?: string,
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   const view = render(
     <QueryClientProvider client={client}>
-      <NotificationDialog invoiceId="invoice-1" kind={kind} onClose={onClose} />
+      <NotificationDialog
+        invoiceId="invoice-1"
+        kind={kind}
+        onClose={onClose}
+        repairId={repairId}
+      />
     </QueryClientProvider>,
   )
   return { onClose, ...view }
@@ -94,6 +103,29 @@ describe('notification preview and approval', () => {
       return { data: draft }
     })
   })
+  it('prepares a repair pickup notice without an invoice PDF or an automatic send', async () => {
+    draft.kind = 'invoice_ready'
+    draft.artifactId = null
+    draft.snapshot.repairId = 'repair-1'
+    mount('invoice_ready', vi.fn(), 'repair-1')
+    await screen.findByText('Repair ready for pickup — notify customer')
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/invoices/invoice-1/notifications',
+        expect.objectContaining({
+          kind: 'invoice_ready',
+          repairId: 'repair-1',
+        }),
+      ),
+    )
+    expect(apiClient.get).not.toHaveBeenCalled()
+    expect(
+      vi
+        .mocked(apiClient.post)
+        .mock.calls.some(([path]) => String(path).endsWith('/send')),
+    ).toBe(false)
+  })
+
   it('shows every customer grouped by unique mobile and only sends after explicit approval', async () => {
     mount()
     await screen.findByTitle('Invoice PDF preview')
