@@ -18,18 +18,18 @@ Mapping decisions worth knowing:
    to the workbook's receipt number (identity allows explicit values; the
    sequence is advanced past the max afterwards). Orders have no number of
    their own in the source; they are identified by their invoice number.
- * One invoice has exactly one customer — the Name/Telephone on its ``New``
-   receipt row. Customer identity is the canonical ``(name, phone)`` pair:
-   the normalized phone (8-digit Bahrain numbers stored with the default
-   ``+973`` prefix) plus the name collapsed for whitespace and case
-   (``canon_key``). Spelling variants such as 'Ali' vs 'ALI' merge via
-   casefolding; other variations stay separate unless explicitly approved with --customer-decisions — genuinely different
-   names sharing one phone (family/shared numbers) are separate customers,
-   and one name with different numbers is separate customers too. Both cases
-   are listed for review; only explicit same-person decisions combine identities. When the
-   receipt and the referenced ``Measurments`` row name different customers,
-   the measurement's customer always owns the order's copy (its phone is the
-   one kept).
+ * Customer names come from ``Measurments`` before the ``New`` receipts.
+   A receipt referencing exactly one identifiable measurement customer uses
+   that customer for the invoice as well as the orders, so receipt spelling
+   variations do not create extra customers. A named measurement row may use
+   its linked receipt's phone when its own phone is missing. Receipts with
+   no usable measurement customer, or several distinct measurement customers,
+   keep their own contact identity; each order still uses its own measurement
+   customer when identifiable. Shared phones alone never combine people.
+   Customer matching uses normalized ``(name, phone)`` pairs (Bahrain numbers
+   get ``+973``; names ignore case and extra whitespace), plus explicitly saved
+   same-person decisions. Measurement spellings also win for reviewed aliases
+   and matched existing records, without changing customer numbers or ownership.
  * A customer's highest ``Measurments`` Measurement No becomes their
    ``customers.customer_number`` (6216 prints as C-6216). Numbers belong
    to the measurement's customer, even when the receipt names someone else.
@@ -109,7 +109,8 @@ Mapping decisions worth knowing:
    identifiable — unidentifiable orphans are skipped and counted. Per-order
    copies prefer the sheet row's customer but never need it: a referenced
    row without a name/phone still contributes its values under the invoice's
-   customer. A receipt with no identifiable customer is skipped as a whole.
+   customer. A receipt is skipped only when neither its measurements nor its own contact
+   identifies a customer.
 
 Idempotent: existing invoice numbers and
 repair keys already in the database are skipped, so a re-run does not
@@ -294,6 +295,47 @@ def apply_customer_identity(workbook, identity):
     workbook["customer_identity"] = identity
     for measurement in workbook["measurements"]:
         measurement["key"] = identity.key(measurement["name"], measurement["phone"])
+
+
+def measurement_customer_key(workbook, measurement, invoice=None):
+    """Use the measurement's name; a linked receipt may supply a missing phone."""
+    if measurement["key"] is not None:
+        return measurement["key"]
+    if invoice is not None and measurement.get("name"):
+        return customer_key(workbook, measurement["name"],
+                            measurement.get("phone") or invoice["phone"])
+    return None
+
+
+def invoice_customer_key(workbook, invoice, sources):
+    owners = {key for no in invoice["meas_nos"] if no in sources
+              if (key := measurement_customer_key(workbook, sources[no], invoice)) is not None}
+    if len(owners) == 1:
+        return next(iter(owners))
+    # A family receipt can cover several people. Never choose one arbitrarily.
+    return customer_key(workbook, invoice["name"], invoice["phone"])
+
+
+def customer_display(workbook, sources):
+    """Measurement spellings win, including for explicitly reviewed aliases."""
+    display = {}
+    for measurement in workbook["measurements"]:
+        if measurement["key"]:
+            display.setdefault(measurement["key"], (measurement["name"], measurement["phone"]))
+    for invoice in workbook["invoices"]:
+        for no in invoice["meas_nos"]:
+            source = sources.get(no)
+            if source is None or not source.get("name"):
+                continue
+            key = measurement_customer_key(workbook, source, invoice)
+            if key:
+                display.setdefault(key, (source["name"], source.get("phone") or invoice["phone"]))
+    measurement_keys = set(display)
+    for invoice in workbook["invoices"]:
+        key = invoice_customer_key(workbook, invoice, sources)
+        if key:
+            display.setdefault(key, (invoice["name"], invoice["phone"]))
+    return display, measurement_keys
 
 
 def norm_payment_type(value: object) -> str | None:
@@ -544,14 +586,11 @@ def read_workbook(path: Path, report: Report) -> dict:
     # customer (its phone is the one kept).
     phone_to_names: dict[str, set[str]] = {}
     name_to_phones: dict[str, set[str]] = {}
-    for inv in invoices:
-        if inv["name"] and inv["phone"]:
-            phone_to_names.setdefault(inv["phone"], set()).add(inv["name"])
-            name_to_phones.setdefault(inv["name"].casefold(), set()).add(inv["phone"])
-    for m in measurements:
-        if m["name"] and m["phone"]:
-            phone_to_names.setdefault(m["phone"], set()).add(m["name"])
-            name_to_phones.setdefault(m["name"].casefold(), set()).add(m["phone"])
+    source_by_no = {m["measurement_no"]: m for m in measurements}
+    effective, _ = customer_display({"invoices": invoices, "measurements": measurements}, source_by_no)
+    for name, phone in effective.values():
+        phone_to_names.setdefault(phone, set()).add(name)
+        name_to_phones.setdefault(name.casefold(), set()).add(phone)
     for phone, names in phone_to_names.items():
         if len(names) > 1:
             report.anomaly("customers: one phone, several names (review candidates)",
@@ -561,7 +600,7 @@ def read_workbook(path: Path, report: Report) -> dict:
             report.anomaly("customers: one name, several phones (kept separate)",
                             f"{cname} -> {sorted(phones)[:4]}")
     inv_by_number = {inv["invoice_number"]: inv for inv in invoices}
-    source_by_no = {m["measurement_no"]: m for m in measurements}
+
     for no, inv_nos in meas_to_invoices.items():
         src = source_by_no.get(no)
         if src is None or src["key"] is None:
@@ -792,10 +831,11 @@ def legacy_customer_numbers(workbook: dict, report: Report) -> tuple[dict, int]:
     Reserve every valid source/reference number, including unused, orphaned,
     and older measurements, before allocating numbers to unmapped customers.
     """
+    sources = {m["measurement_no"]: m for m in workbook["measurements"]}
     receipt_owners: dict[int, set[tuple[str, str]]] = collections.defaultdict(set)
     reserved = set()
     for inv in workbook["invoices"]:
-        key = customer_key(workbook, inv["name"], inv["phone"])
+        key = invoice_customer_key(workbook, inv, sources)
         for no in inv["meas_nos"]:
             if 0 < no < 9223372036854775807:
                 reserved.add(no)
@@ -870,21 +910,9 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 placeholder_material_id = str(row[0])
                 report.count(f"materials reused: {material_name}")
 
-        # ---- customers (canonical pair plus explicitly reviewed aliases) --------------
-        # First-seen display spelling wins per canonical key. One phone with
-        # several names stays separate unless approved; different phones stay separate
-        # customers (see the workbook verification in read_workbook).
-        # Referenced measurement rows get their own customer row too:
-        # per-order copies below are owned by the measurement's customer
-        # (measurement wins, always), so that customer must exist.
-        display: dict[tuple[str, str], tuple[str, str]] = {}
-        for inv in workbook["invoices"]:
-            key = customer_key(workbook, inv["name"], inv["phone"])
-            if key and key not in display:
-                display[key] = (inv["name"], inv["phone"])
-        for m in workbook["measurements"]:
-            if m["key"] and m["key"] not in display:
-                display[m["key"]] = (m["name"], m["phone"])
+        # Measurement-sheet names take precedence over linked receipt names.
+        source_by_no = {m["measurement_no"]: m for m in workbook["measurements"]}
+        display, measurement_keys = customer_display(workbook, source_by_no)
         db_customers: dict[tuple[str, str], str] = {}
         for name, mobile, id_ in state["customer_rows"]:
             key = customer_key(workbook, name, mobile)
@@ -895,6 +923,13 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             else:
                 report.count("customers already merged in DB (same canonical key)")
         new_customers = {k: v for k, v in display.items() if k not in db_customers}
+        existing_names = {customer_id: name for name, _, customer_id in state["customer_rows"]}
+        for key in sorted(measurement_keys & db_customers.keys()):
+            name, _ = display[key]
+            customer_id = db_customers[key]
+            if existing_names[customer_id] != name:
+                cur.execute("UPDATE customers SET name=%s WHERE id=%s", (name, customer_id))
+                report.count("customer names updated from measurement sheet")
         # Move above all workbook numbers before automatic inserts. Never
         # rewind a sequence already advanced by an earlier import/app write.
         cur.execute(
@@ -946,7 +981,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
 
         # ---- measurements ---------------------------------------------------
         # This lookup also feeds the per-order copies in the invoice loop.
-        source_by_no = {m["measurement_no"]: m for m in workbook["measurements"]}
+
 
         # Standalone history: sheet rows no 2026 receipt references, imported
         # once each under their own sheet customer.
@@ -1007,7 +1042,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             if inv["invoice_number"] in state["invoice_numbers"]:
                 report.count("invoices already present (skipped)")
                 continue
-            inv_key = customer_key(workbook, inv["name"], inv["phone"])
+            inv_key = invoice_customer_key(workbook, inv, source_by_no)
             if inv_key is None or inv_key not in customer_ids:
                 report.anomaly("invoices skipped (no identifiable customer)",
                                inv["invoice_number"])
@@ -1097,7 +1132,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                         "orders skipped (measurement row has no usable values)", no)
                     continue
                 owner_key = inv_key
-                src_key = src["key"]
+                src_key = measurement_customer_key(workbook, src, inv)
                 if src_key is not None and src_key in customer_ids:
                     owner_key = src_key
                     report.count("orders owned by measurement customer")
@@ -1272,8 +1307,8 @@ def main() -> int:
     report = Report()
     workbook = read_workbook(Path(args.workbook), report)
     apply_customer_identity(workbook, identity)
-    identities = [(r["name"], r["phone"]) for r in
-                  workbook["invoices"] + workbook["measurements"]]
+    sources = {m["measurement_no"]: m for m in workbook["measurements"]}
+    identities = list(customer_display(workbook, sources)[0].values())
     if args.dry_run:
         save_review(decisions_path, identity, identities)
     digest = hashlib.sha256(decisions_path.read_bytes()).hexdigest()

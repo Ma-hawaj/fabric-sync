@@ -13,11 +13,14 @@ import openpyxl
 import psycopg2
 from psycopg2 import sql
 
+from customer_identity import CustomerIdentity
+
 import ingest_storage_csv as storage
 from ingest_locations import select_branch
 from ingest_xlsm import (
-    Report, canon_key, choose_branch, legacy_customer_numbers, measurement_signature,
-    parse_measurement, perform_insert, read_workbook,
+    Report, apply_customer_identity, canon_key, choose_branch, customer_display,
+    invoice_customer_key, legacy_customer_numbers, measurement_customer_key,
+    measurement_signature, parse_measurement, perform_insert, read_workbook,
 )
 
 
@@ -279,6 +282,75 @@ class ReadWorkbookTests(unittest.TestCase):
             "customers: shared ownerless measurement (automatic IDs used)"
         ], 1)
 
+    def test_linked_measurement_name_replaces_receipt_variants(self):
+        workbook, _ = self.read(
+            invoices=[[101, self.date, "Receipt variation", "33333333", "7", 30]],
+            measurements=[[7, self.date, "Measurement name", "34444444", 42]],
+        )
+        sources = {m["measurement_no"]: m for m in workbook["measurements"]}
+        display, _ = customer_display(workbook, sources)
+        expected = canon_key("Measurement name", "34444444")
+        self.assertEqual(invoice_customer_key(workbook, workbook["invoices"][0], sources), expected)
+        self.assertEqual(display, {expected: ("Measurement name", "+97334444444")})
+
+    def test_shared_phone_with_multiple_measurement_customers_stays_separate(self):
+        workbook, _ = self.read(
+            invoices=[[101, self.date, "Family buyer", "33333333", "7 & 8", 30]],
+            measurements=[[7, self.date, "Father", "33333333", 42],
+                          [8, self.date, "Son", "33333333", 30]],
+        )
+        sources = {m["measurement_no"]: m for m in workbook["measurements"]}
+        display, _ = customer_display(workbook, sources)
+        self.assertEqual(len(display), 3)
+        self.assertNotEqual(sources[7]["key"], sources[8]["key"])
+        self.assertEqual(invoice_customer_key(workbook, workbook["invoices"][0], sources),
+                         canon_key("Family buyer", "33333333"))
+
+    def test_measurement_name_can_use_linked_receipt_phone(self):
+        workbook, report = self.read(
+            invoices=[[101, self.date, "Receipt variation", "33333333", "7", 30]],
+            measurements=[[7, self.date, "Measurement name", None, 42]],
+        )
+        sources = {m["measurement_no"]: m for m in workbook["measurements"]}
+        expected = canon_key("Measurement name", "33333333")
+        self.assertEqual(invoice_customer_key(workbook, workbook["invoices"][0], sources), expected)
+        self.assertEqual(measurement_customer_key(workbook, sources[7], workbook["invoices"][0]), expected)
+        self.assertEqual(legacy_customer_numbers(workbook, report)[0], {expected: 7})
+        self.assertEqual(list(customer_display(workbook, sources)[0].values()),
+                         [("Measurement name", "+97333333333")])
+
+    def test_receipt_name_is_fallback_when_measurement_has_no_name(self):
+        workbook, _ = self.read(
+            invoices=[[101, self.date, "Receipt name", "33333333", "7", 30]],
+            measurements=[[7, self.date, None, None, 42]],
+        )
+        sources = {m["measurement_no"]: m for m in workbook["measurements"]}
+        expected = canon_key("Receipt name", "33333333")
+        self.assertEqual(invoice_customer_key(workbook, workbook["invoices"][0], sources), expected)
+        self.assertEqual(list(customer_display(workbook, sources)[0].values()),
+                         [("Receipt name", "+97333333333")])
+
+    def test_measurement_spelling_wins_for_reviewed_aliases(self):
+        workbook, _ = self.read(
+            invoices=[[101, self.date, "Ali Ahmad", "33333333", "7", 30]],
+            measurements=[[7, self.date, "Ali Ahmed", "33333333", 42]],
+        )
+        identity = CustomerIdentity([{"phone": "33333333", "names": ["Ali Ahmad", "Ali Ahmed"],
+                                     "decision": "same"}], canon_key)
+        apply_customer_identity(workbook, identity)
+        sources = {m["measurement_no"]: m for m in workbook["measurements"]}
+        self.assertEqual(list(customer_display(workbook, sources)[0].values()),
+                         [("Ali Ahmed", "+97333333333")])
+
+    def test_measurements_identify_receipt_with_missing_contact(self):
+        workbook, _ = self.read(
+            invoices=[[101, self.date, None, None, "7", 30]],
+            measurements=[[7, self.date, "Measurement name", "33333333", 42]],
+        )
+        sources = {m["measurement_no"]: m for m in workbook["measurements"]}
+        self.assertEqual(invoice_customer_key(workbook, workbook["invoices"][0], sources),
+                         canon_key("Measurement name", "33333333"))
+
     def test_button_columns_are_imported_as_bottom(self):
         # The sheet misspells Bottom / Bottom Fold as Button / Button Fold;
         # the values are hem widths and land on the bottom columns.
@@ -468,7 +540,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             cur.execute("SELECT id, name, customer_number FROM customers ORDER BY id")
             original_customers = cur.fetchall()
             self.assertEqual({name: number for _, name, number in original_customers},
-                             {"Sheet Customer": 9, "Receipt Customer": 10})
+                             {"Sheet Customer": 9})
             cur.execute("SELECT DISTINCT c.customer_number FROM orders o "
                         "JOIN measurements m ON m.id = o.measurement_id "
                         "JOIN customers c ON c.id = m.customer_id")
@@ -509,7 +581,74 @@ class DatabaseIntegrationTests(unittest.TestCase):
                 self.assertEqual(cur.fetchone()[0], count, table)
             cur.execute("INSERT INTO customers(name, mobile_no) "
                         "VALUES('New app customer', '35555555') RETURNING customer_number")
-            self.assertEqual(cur.fetchone()[0], 11)
+            self.assertEqual(cur.fetchone()[0], 10)
+
+    def test_measurement_spelling_updates_a_matched_customer_without_renumbering(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read(
+            invoices=[[101, fixture.date, "Ali Ahmad", "33333333", "7", 30]],
+            measurements=[[7, fixture.date, "Ali Ahmed", "33333333", 42]],
+        )
+        apply_customer_identity(workbook, CustomerIdentity([
+            {"phone": "33333333", "names": ["Ali Ahmad", "Ali Ahmed"], "decision": "same"}
+        ], canon_key))
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Priority test',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+            cur.execute("INSERT INTO customers(name,mobile_no) VALUES('Ali Ahmad','+97333333333') RETURNING id,customer_number")
+            customer_id, number = cur.fetchone()
+        perform_insert(self.conn, workbook, branch, report)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id,name,customer_number FROM customers")
+            self.assertEqual(cur.fetchall(), [(customer_id, "Ali Ahmed", number)])
+            cur.execute("SELECT DISTINCT customer_id FROM invoices")
+            self.assertEqual(cur.fetchall(), [(customer_id,)])
+            cur.execute("SELECT DISTINCT customer_id FROM measurements")
+            self.assertEqual(cur.fetchall(), [(customer_id,)])
+        self.assertEqual(report.numeric["customer names updated from measurement sheet"], 1)
+        rerun = Report()
+        perform_insert(self.conn, workbook, branch, rerun)
+        self.assertEqual(rerun.numeric["customer names updated from measurement sheet"], 0)
+
+    def test_measurement_name_with_missing_phone_uses_receipt_phone(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read(
+            invoices=[[101, fixture.date, "Receipt variation", "33333333", "7", 30]],
+            measurements=[[7, fixture.date, "Measurement name", None, 42]],
+        )
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Fallback test',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+        perform_insert(self.conn, workbook, branch, report)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT name,mobile_no,customer_number FROM customers")
+            self.assertEqual(cur.fetchall(), [("Measurement name", "+97333333333", 7)])
+            cur.execute("SELECT count(*) FROM orders")
+            self.assertEqual(cur.fetchone()[0], 1)
+
+    def test_father_and_son_on_one_receipt_keep_separate_customers(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read(
+            invoices=[[101, fixture.date, "Father", "33333333", "7 & 8", 30]],
+            measurements=[[7, fixture.date, "Father", "33333333", 42],
+                          [8, fixture.date, "Son", "33333333", 30]],
+        )
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Family test',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+        perform_insert(self.conn, workbook, branch, report)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT name,mobile_no FROM customers ORDER BY name")
+            self.assertEqual(cur.fetchall(), [("Father", "+97333333333"), ("Son", "+97333333333")])
+            cur.execute("SELECT DISTINCT c.name FROM orders o JOIN measurements m ON m.id=o.measurement_id "
+                        "JOIN customers c ON c.id=m.customer_id ORDER BY c.name")
+            self.assertEqual(cur.fetchall(), [("Father",), ("Son",)])
 
     def test_import_reserves_unused_numbers_and_never_rewinds_the_sequence(self):
         fixture = ReadWorkbookTests()
@@ -591,7 +730,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             branch = cur.fetchone()[0]
         perform_insert(self.conn, workbook, branch, report)
         later_workbook, later_report = fixture.read(invoices=[], measurements=[
-            [10, fixture.date, "Later customer", "35555555", 38],
+            [9, fixture.date, "Later customer", "35555555", 38],
         ])
         perform_insert(self.conn, later_workbook, branch, later_report)
         self.assertEqual(later_report.numeric[
@@ -601,7 +740,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             cur.execute("SELECT id, name, customer_number FROM customers ORDER BY id")
             customers = cur.fetchall()
             self.assertEqual({name: number for _, name, number in customers}, {
-                "Sheet Customer": 9, "Receipt Customer": 10, "Later customer": 11,
+                "Sheet Customer": 9, "Later customer": 10,
             })
         perform_insert(self.conn, later_workbook, branch, Report())
         with self.conn.cursor() as cur:

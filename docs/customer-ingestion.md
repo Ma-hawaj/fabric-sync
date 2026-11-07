@@ -72,20 +72,35 @@ customers; dry-run reports include workbook customers only. Report output must
 be a different file from the saved decisions. These files transfer decisions,
 not database records; keep them out of version control.
 
-`same` decisions apply transitively and only within the specified phone number;
-the first name identifies the target identity. Existing customer display names
-and customer numbers are preserved. For a new customer, the first encountered
-workbook display spelling is stored. Aliases apply consistently to invoices,
-measurement ownership, measurement deduplication, and legacy customer numbers.
-`different` decisions suppress that pair in future review reports. `pending`
-entries keep people separate and continue appearing for review. Conflicting
-same/different decisions are rejected before connecting to the database.
+`same` decisions apply transitively and only within the specified phone number.
+They apply consistently to invoice and measurement ownership, measurement
+comparison, and legacy customer numbers. `different` decisions suppress that pair
+in future review reports. `pending` entries keep people separate and continue
+appearing for review. Conflicting same/different decisions are rejected before
+connecting to the database.
 
-Review before the first import when possible. If an alias would resolve multiple
-existing database records to one identity, ingestion stops and rolls back. This
-workflow does not merge existing records or move their invoices and measurements;
-those records need reconciliation before importing with that alias. Existing
-invoice numbers are still skipped on reruns.
+## Measurement-sheet names take priority
+
+Names from `Measurments` take precedence over names on `New` receipts. When the
+measurement numbers on a receipt identify one customer, the invoice and its
+orders use that customer. A receipt spelling variation does not create another
+customer or another review question just for that receipt. A measurement row
+with a name but no phone can use its linked receipt's phone.
+
+If a receipt references multiple distinct measurement customers, its own contact
+remains the invoice buyer, and each order keeps its measurement customer. This
+preserves father/son records that share a phone. Receipts with no identifiable
+measurement customer fall back to their own name and phone.
+
+For saved same-person decisions, the first measurement-sheet spelling is used
+for the resulting customer. An existing record matched by the normalized key or
+a reviewed same-person decision gets that preferred name without changing its
+ID, customer number, or history. Receipt-only names remain fallbacks.
+
+There is no post-ingestion customer merge action. Existing separate database
+records are not combined. If a saved decision would resolve multiple existing
+records to one identity, ingestion stops and rolls back for reconciliation.
+Existing invoice numbers and their ownership are still skipped on reruns.
 
 ## Unknown materials
 
