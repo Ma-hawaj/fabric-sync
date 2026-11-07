@@ -268,13 +268,16 @@ Customer-supplied fabric uses the fixed VAT-inclusive tailoring base configured
 by `CUSTOMER_MATERIAL_BASE_PRICE`, plus design costs. This is one price per order,
 independent of metres used. The form displays the price read-only; client-supplied
 price overrides are ignored. No amount is assumed, so customer-material orders
-cannot be saved until the fixed price is configured. Editing an invoice keeps the saved prices and urgency charge on unchanged
-orders. Changing fabric source, material, quantity, designs, or urgency reprices
-that order using the current catalog and configuration; new orders also use
-current prices. Notes, measurements, locations, and delivery details do not
-trigger repricing. Retail and direct-material unit prices remain editable and
-are retained when quantities or stock locations change. Imported materials without tier prices must
-be configured before creating garment lines.
+cannot be saved until the fixed price is configured. Editing an invoice keeps
+the saved prices and urgency charge on unchanged orders. Changing fabric source,
+material, price tier of shop fabric, designs, or urgency reprices that order using
+the current catalog and configuration; new orders also use current prices.
+Notes, measurements, locations, and delivery details do not trigger repricing.
+Quantity changes within a shop fabric's original price tier also keep the saved
+price and urgency charge. Customer fabric has a fixed base, so its quantity
+changes never trigger repricing. Retail and direct-material unit prices remain
+editable and are retained when quantities or stock locations change. Imported
+materials without tier prices must be configured before creating garment lines.
 
 Each material’s Actions menu includes Add Stock with that material already selected,
 so only locations and quantities need entering.

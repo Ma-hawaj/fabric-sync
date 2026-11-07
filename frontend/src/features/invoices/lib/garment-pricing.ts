@@ -91,6 +91,7 @@ export function calculateGarmentPrice(
 
 // Compare only inputs that determine the automatic charge. Notes, measurements,
 // descriptions and stock locations can change without repricing the order.
+// Shop fabric depends on its tier; customer fabric has a fixed per-order base.
 export function preservesOriginalOrderPricing(
   order: InvoiceOrderDraft,
 ): boolean {
@@ -99,6 +100,14 @@ export function preservesOriginalOrderPricing(
   return Object.keys(original).every((field) => {
     const key = field as keyof typeof original
     if (key === 'materialId' && order.materialSource === 'customer') return true
+    if (key === 'materialAmount')
+      return (
+        order.materialSource === 'customer' ||
+        (isMoney(order.materialAmount) &&
+          isMoney(original.materialAmount) &&
+          pricingTier(order.materialAmount) ===
+            pricingTier(original.materialAmount))
+      )
     return order[key] === original[key]
   })
 }

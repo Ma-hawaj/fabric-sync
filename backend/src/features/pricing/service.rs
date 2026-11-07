@@ -30,13 +30,28 @@ pub fn urgent_charge(
 pub const JUNIOR_BELOW: f64 = 3.0;
 pub const LARGE_ABOVE: f64 = 4.0;
 
-pub fn tier_price(quantity: f64, junior: f64, normal: f64, large: f64) -> f64 {
+#[derive(PartialEq, Eq)]
+pub enum PricingTier {
+    Junior,
+    Normal,
+    Large,
+}
+
+pub fn pricing_tier(quantity: f64) -> PricingTier {
     if quantity < JUNIOR_BELOW {
-        junior
+        PricingTier::Junior
     } else if quantity > LARGE_ABOVE {
-        large
+        PricingTier::Large
     } else {
-        normal
+        PricingTier::Normal
+    }
+}
+
+pub fn tier_price(quantity: f64, junior: f64, normal: f64, large: f64) -> f64 {
+    match pricing_tier(quantity) {
+        PricingTier::Junior => junior,
+        PricingTier::Normal => normal,
+        PricingTier::Large => large,
     }
 }
 

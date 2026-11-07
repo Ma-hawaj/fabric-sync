@@ -496,10 +496,14 @@ fn validate_expected_vat(expected: f64, applicable: f64) -> Result<(), AppError>
 }
 
 fn same_order_pricing(order: &CreateOrderInput, old: &super::types::SavedOrderPricing) -> bool {
+    use crate::features::pricing::service::pricing_tier;
+
     let normalized = |value: &Option<String>| value.as_deref().unwrap_or("").to_string();
     order.material_source.as_str() == old.material_source
         && order.material_id == old.material_id
-        && order.material_amount == old.material_amount
+        // Customer fabric is fixed per order; shop fabric depends on the tier.
+        && (order.material_source == MaterialSource::Customer
+            || pricing_tier(order.material_amount) == pricing_tier(old.material_amount))
         && order.is_urgent == old.is_urgent
         && normalized(&order.thobe_type) == normalized(&old.thobe_type)
         && normalized(&order.f_pocket) == normalized(&old.f_pocket)

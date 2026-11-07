@@ -156,8 +156,8 @@ describe('garment pricing', () => {
 })
 
 describe('saved order pricing', () => {
-  const saved = () => {
-    const order = draft()
+  const saved = (materialAmount = 3) => {
+    const order = { ...draft(), materialAmount }
     const inputs = {
       materialSource: order.materialSource,
       materialId: order.materialId,
@@ -187,6 +187,39 @@ describe('saved order pricing', () => {
       }),
     ).toBe(true)
   })
+  it.each([
+    [2, 2.99],
+    [3, 3.5],
+    [3, 4],
+    [4, 3],
+    [4.01, 5],
+  ])(
+    'preserves charges when quantity stays in its tier: %s to %s',
+    (before, after) => {
+      expect(
+        preservesOriginalOrderPricing({
+          ...saved(before),
+          materialAmount: after,
+        }),
+      ).toBe(true)
+    },
+  )
+  it.each([
+    [2.99, 3],
+    [3, 2.99],
+    [4, 4.01],
+    [4.01, 4],
+  ])(
+    'reprices when quantity crosses a tier boundary: %s to %s',
+    (before, after) => {
+      expect(
+        preservesOriginalOrderPricing({
+          ...saved(before),
+          materialAmount: after,
+        }),
+      ).toBe(false)
+    },
+  )
   it.each([
     { materialId: 'different' },
     { materialAmount: 4.01 },

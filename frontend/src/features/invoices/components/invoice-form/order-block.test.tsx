@@ -5,6 +5,7 @@ import { useForm } from '@tanstack/react-form'
 import { OrderBlock } from './order-block'
 import { createEmptyCustomer } from '../../types/invoice-form'
 import type { InvoiceOrderDraft } from '../../types/invoice-form'
+import type { UrgentChargeRule } from '../../lib/garment-pricing'
 import type { Material } from '../../types/materials'
 import { apiGetMock } from '@/lib/list-fixtures'
 import { typeSearchText } from '@/lib/test-events'
@@ -64,7 +65,12 @@ vi.mock('@/lib/api', () => ({
 function Harness({
   order = {},
   isUrgent = false,
-}: { order?: Partial<InvoiceOrderDraft>; isUrgent?: boolean } = {}) {
+  urgentRule = { amount: 5, unit: 'amount' },
+}: {
+  order?: Partial<InvoiceOrderDraft>
+  isUrgent?: boolean
+  urgentRule?: UrgentChargeRule | null
+} = {}) {
   const form = useForm({
     defaultValues: {
       customers: [
@@ -93,7 +99,7 @@ function Harness({
       return {
         data: {
           vatRate: 0.1,
-          urgentCharge: { amount: 5, unit: 'amount' },
+          urgentCharge: urgentRule,
           customerMaterialBasePrice: 15,
         },
       }
@@ -157,6 +163,61 @@ async function pickMaterial(name: RegExp | string) {
 }
 
 describe('OrderBlock', () => {
+  it.each([
+    { amount: 5, unit: 'amount' as const },
+    { amount: 25, unit: 'percent' as const },
+    null,
+  ])(
+    'keeps saved customer-fabric charges after quantity and urgency rule changes: %o',
+    async (urgentRule) => {
+      const inputs = {
+        materialSource: 'customer' as const,
+        materialId: '',
+        materialAmount: 3,
+        thobeType: '',
+        fPocket: '',
+        sPocket: '',
+        collar: '',
+        sleeve: '',
+        patti: '',
+        emd: '6',
+        isUrgent: true,
+      }
+      render(
+        <Harness
+          urgentRule={urgentRule}
+          order={{
+            ...inputs,
+            customerMaterialDescription: 'White linen',
+            originalOrderId: 'saved-order',
+            price: 12.5,
+            urgentCharge: 2,
+            originalPricing: {
+              inputs,
+              basePrice: 10,
+              price: 12.5,
+              urgentCharge: 2,
+            },
+          }}
+        />,
+      )
+      await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/pricing'))
+      fireEvent.change(screen.getByLabelText('Quantity (m)'), {
+        target: { value: '4.5' },
+      })
+      await waitFor(() => {
+        const order = JSON.parse(screen.getByTestId('draft').textContent)
+          .customers[0].orders[0]
+        expect(order).toMatchObject({
+          materialAmount: 4.5,
+          price: 12.5,
+          urgentCharge: 2,
+        })
+      })
+      expect(screen.queryByText('Current pricing applies.')).toBeNull()
+    },
+  )
+
   it('preserves saved charges until a pricing input changes, then uses current prices', async () => {
     const inputs = {
       materialSource: 'shop' as const,
@@ -190,6 +251,20 @@ describe('OrderBlock', () => {
     const price = screen.getByLabelText(`Price incl. VAT (${CURRENCY})`)
     await waitFor(() => expect(price.textContent).toContain('12.00'))
     await waitFor(() => expect(apiGet).toHaveBeenCalled())
+    expect(screen.queryByText('Current pricing applies.')).toBeNull()
+    // Metres within the same tier do not change the garment or urgent price.
+    fireEvent.change(screen.getByLabelText('Quantity (m)'), {
+      target: { value: '3.5' },
+    })
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order).toMatchObject({
+        materialAmount: 3.5,
+        price: 12,
+        urgentCharge: 2,
+      })
+    })
     expect(screen.queryByText('Current pricing applies.')).toBeNull()
     fireEvent.change(screen.getByLabelText('Quantity (m)'), {
       target: { value: '4.01' },
