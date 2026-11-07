@@ -19,7 +19,9 @@ SQLx applies the files in version order:
    return-credit and refund tables. Gift-card issuer attribution, replacement
    links, original-card traversal, and the invoice voucher-accounting view are
    part of this original baseline. A card may have at most one direct replacement;
-   sale history stays attached to the original card.
+   sale history stays attached to the original card. Legacy orders may have an
+   unknown fabric source with a null material reference; shop/customer material
+   constraints remain enforced.
 2. `0002_notification_schema.sql` creates immutable PDF artifacts, notification
    previews and approvals, recipients, delivery attempts, webhook storage, and
    the staff-approved gift card delivery queue with its immutable PNG attachments.
