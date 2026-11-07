@@ -106,6 +106,22 @@ function editFixture(): InvoiceEdit {
 }
 
 describe('mapInvoiceEditToForm', () => {
+  it('requires a real fabric selection when editing an unknown legacy material', () => {
+    const fixture = editFixture()
+    const line = fixture.customers[0].orders[0]
+    line.materialSource = 'unknown'
+    line.materialId = null
+    line.customerMaterialDescription = null
+    line.materialName = 'Unknown material'
+    const { values, seeds } = mapInvoiceEditToForm(fixture)
+    expect(values.customers[0].orders[0]).toMatchObject({
+      materialSource: 'shop',
+      materialId: '',
+      customerMaterialDescription: '',
+    })
+    expect(seeds.materials.size).toBe(0)
+  })
+
   it('restores prepaid provenance for the preview without sending a tax override', () => {
     const edit = editFixture()
     edit.giftCardRedemptions = [
