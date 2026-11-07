@@ -173,7 +173,8 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
       }
 
       const inputs = {
-        materialSource: line.materialSource,
+        materialSource:
+          line.materialSource === 'unknown' ? 'shop' : line.materialSource,
         materialId: line.materialId ?? '',
         materialAmount: line.materialAmount,
         thobeType: nullToBlank(line.thobeType),
@@ -202,7 +203,8 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
         patti: nullToBlank(line.patti),
         emd: nullToBlank(line.emd),
         moreDetails: nullToBlank(line.moreDetails),
-        materialSource: line.materialSource,
+        materialSource:
+          line.materialSource === 'unknown' ? 'shop' : line.materialSource,
         customerMaterialDescription: line.customerMaterialDescription ?? '',
         materialId: line.materialId ?? '',
         materialAmount: line.materialAmount,

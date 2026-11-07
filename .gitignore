@@ -1,2 +1,5 @@
 .env
 .env.production
+
+# Local customer identity review data (copy securely to production).
+/scripts/customer-decisions.json

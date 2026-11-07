@@ -22,6 +22,36 @@ from ingest_xlsm import (
 
 
 class InvoiceInsertTests(unittest.TestCase):
+    def test_default_import_inserts_null_material_without_inventory_queries(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read()
+        identities = {canon_key(row["name"], row["phone"])
+                      for row in workbook["invoices"] + workbook["measurements"]}
+        rows = [(name, phone, f"customer-{index}")
+                for index, (name, phone) in enumerate(sorted(identities - {None}))]
+        conn = MagicMock()
+        cur = conn.cursor.return_value.__enter__.return_value
+        cur.fetchone.return_value = ("inserted-id",)
+        cur.fetchall.return_value = rows
+        state = {"customer_rows": rows, "measurement_sigs": set(), "stages": {},
+                 "orders_by_invoice": {}, "invoice_numbers": set(), "repairs": set()}
+        with patch("ingest_xlsm.load_db_state", return_value=state), \
+                patch("ingest_xlsm.require_branch", return_value=("branch-id", "Branch")), \
+                patch("ingest_xlsm.select_branch", return_value=("production-id", "Workshop")):
+            perform_insert(conn, workbook, "branch-id", report)
+        orders = [call for call in cur.execute.call_args_list if "INSERT INTO orders" in call.args[0]]
+        self.assertTrue(orders)
+        for call in orders:
+            query, params = call.args
+            self.assertIsNone(params[1])
+            self.assertEqual(params[5], "unknown")
+            self.assertEqual(params[-1], "production-id")
+            self.assertEqual(query.count("%s"), len(params))
+        self.assertFalse(any("FROM materials" in call.args[0] or "INTO materials" in call.args[0]
+                             for call in cur.execute.call_args_list))
+
     def test_invalid_placeholder_quantity_is_rejected_before_database_access(self):
         for value in ("0", "-1", "NaN", "Infinity", "0.001", "100000000"):
             with self.subTest(value=value):
@@ -63,7 +93,7 @@ class InvoiceInsertTests(unittest.TestCase):
                     "orders_by_invoice": {}, "invoice_numbers": set(), "repairs": set(),
                 }
                 with patch("ingest_xlsm.load_db_state", return_value=state):
-                    perform_insert(conn, workbook, "branch-id", Report())
+                    perform_insert(conn, workbook, "branch-id", Report(), material_name="General")
                 insert = next(call for call in cur.execute.call_args_list
                               if "INSERT INTO invoices" in call.args[0])
                 sql, params = insert.args
@@ -459,6 +489,10 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(cur.fetchone()[0], 1)
             cur.execute("SELECT count(*), sum(price) FROM orders")
             self.assertEqual(cur.fetchone(), (9, Decimal("88.00")))
+            cur.execute("SELECT DISTINCT material_id, material_source FROM orders")
+            self.assertEqual(cur.fetchall(), [(None, "unknown")])
+            cur.execute("SELECT count(*) FROM materials")
+            self.assertEqual(cur.fetchone()[0], 0)
             cur.execute("SELECT min(material_amount), max(material_amount) FROM orders")
             self.assertEqual(cur.fetchone(), (Decimal("2.50"), Decimal("2.50")))
         perform_insert(self.conn, workbook, branch, Report())

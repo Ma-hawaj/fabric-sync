@@ -23,10 +23,10 @@ Mapping decisions worth knowing:
    the normalized phone (8-digit Bahrain numbers stored with the default
    ``+973`` prefix) plus the name collapsed for whitespace and case
    (``canon_key``). Spelling variants such as 'Ali' vs 'ALI' merge via
-   casefolding; anything else always stays separate — genuinely different
+   casefolding; other variations stay separate unless explicitly approved with --customer-decisions — genuinely different
    names sharing one phone (family/shared numbers) are separate customers,
    and one name with different numbers is separate customers too. Both cases
-   are listed in the report for manual review but never merged. When the
+   are listed for review; only explicit same-person decisions combine identities. When the
    receipt and the referenced ``Measurments`` row name different customers,
    the measurement's customer always owns the order's copy (its phone is the
    one kept).
@@ -59,14 +59,11 @@ Mapping decisions worth knowing:
    unless the row holds no values at all (fully empty or design-only rows
    are skipped and counted: design travels on orders, which a standalone
     row never gets).
-  * Materials: sheet material names are ignored entirely — neither the
-    ``New`` receipt cell nor ``Measurments`` ``Materail`` is read. Every
-    order points at one placeholder ``materials`` row (``--material``,
-    default ``'General'``), created when missing. Fabric identity for
-    legacy orders is therefore not preserved; re-run against a DB that
-    already holds sheet-named materials leaves those rows untouched.
-    Legacy fabric quantities are unknown: ``--material-amount`` supplies a
-    positive placeholder per order (default 1 metre), without deducting stock.
+  * Materials: sheet material names are ignored. By default orders store a
+    NULL material_id and material_source='unknown', without creating inventory.
+    Pass --material NAME to explicitly use a placeholder material instead.
+    Legacy fabric quantities are unknown: --material-amount supplies a positive
+    placeholder quantity (default 1 metre), without deducting stock.
   * Invoice money is stored exactly as charged: total_price = Final Amount,
     discount = Discount. Order prices split the final amount across the
     invoice's orders, so they are VAT-inclusive gross figures — the app's
@@ -118,7 +115,7 @@ Idempotent: existing invoice numbers and
 repair keys already in the database are skipped, so a re-run does not
 duplicate (customers upsert on the canonical (name, phone) key; standalone
 measurements are skipped when the same customer already holds an identical
-date + value set; the placeholder material is reused when present). The
+date + value set; an explicitly requested placeholder material is reused when present). The
 whole write happens in one transaction and rolls back
 on error.
 
@@ -131,7 +128,7 @@ Run from the repository root, with DATABASE_URL exported (or --database-url):
   python3 scripts/ingest_xlsm.py --branch "Thobx Main"
   python3 scripts/ingest_xlsm.py --production-branch "Central Workshop"
 
-Ambiguous customer identities are never merged and never prompt: one phone
+Without reviewed --customer-decisions, ambiguous identities stay separate: one phone
 with several name spellings stays separate customers, one name with several
 phones stays separate customers, and receipt-vs-measurement customer
 mismatches always resolve to the measurement's customer. The historical
@@ -144,6 +141,8 @@ from __future__ import annotations
 import argparse
 import collections
 import datetime as dt
+import json
+import hashlib
 import os
 import re
 import sys
@@ -154,10 +153,12 @@ import openpyxl
 import psycopg2
 
 from ingest_locations import require_branch, select_branch
+from customer_identity import load_identity, save_review
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKBOOK = ROOT / "2026 Orders.xlsm"
-DEFAULT_MATERIAL = "General"
+CUSTOMER_DECISIONS = ROOT / "scripts" / "customer-decisions.json"
+DEFAULT_MATERIAL = None
 PLACEHOLDER_DATE = dt.datetime(2026, 1, 1, 0, 0, 0)
 DEFAULT_BRANCH = "Main Branch"
 LEGACY_VAT_RATE = Decimal("0.10")
@@ -343,6 +344,17 @@ def canon_key(name_value: object, phone_value: object) -> tuple[str, str] | None
     return (name, phone)
 
 
+def customer_key(workbook, name, phone):
+    identity = workbook.get("customer_identity")
+    return identity.key(name, phone) if identity else canon_key(name, phone)
+
+
+def apply_customer_identity(workbook, identity):
+    workbook["customer_identity"] = identity
+    for measurement in workbook["measurements"]:
+        measurement["key"] = identity.key(measurement["name"], measurement["phone"])
+
+
 def norm_payment_type(value: object) -> str | None:
     """Map a payment cell to benefit/cash/card, or NULL.
 
@@ -431,15 +443,9 @@ class Report:
         return "\n".join(lines)
 
 
-# ---- customer-identity policy (no merging, no prompts) ----------------------
-# Customer identity is the canonical (name, phone) pair, full stop:
-#  * one phone with several name spellings -> separate customers, always;
-#  * one name with several phones          -> separate customers, always;
-#  * receipt vs measurement naming different customers -> the measurement's
-#    customer owns the order's copy (its phone is the one kept), always.
-# There is no interactive merging and no choices file: an earlier version of
-# this script asked and persisted answers in scripts/ingest_choices.json;
-# that file is now ignored and can be deleted.
+# Customer matching defaults to the canonical (name, phone) pair. Reviewed
+# phone-scoped aliases are applied after reading, before numbering or writing.
+# Historical ingest_choices.json decisions remain ignored.
 
 
 def read_workbook(path: Path, report: Report) -> dict:
@@ -474,7 +480,7 @@ def read_workbook(path: Path, report: Report) -> dict:
             # design value the app prints as-is.
             "emd": norm_name(get(r, idx, "EMD")),
             # Sheet material names are ignored entirely (see module
-            # docstring): every order points at the placeholder material.
+            # docstring): fabric is unknown unless a placeholder is requested.
             "delivery": get(r, idx, "Delivery Date"),
             "approval": get(r, idx, "Approval By Mess Date"),
             "status": status,
@@ -590,7 +596,7 @@ def read_workbook(path: Path, report: Report) -> dict:
 
     # ---- customer verification (workbook side, no DB needed) --------------
     # One invoice = one customer, and identity is the (name, phone) pair with
-    # no merging, ever: one phone with several names and one name with several
+    # before reviewed aliases: one phone with several names and one name with several
     # phones both stay separate customers. Everything ambiguous is reported
     # here so a human can confirm the script did not split or join wrongly.
     # Receipt-vs-measurement mismatches always resolve to the measurement's
@@ -607,7 +613,7 @@ def read_workbook(path: Path, report: Report) -> dict:
             name_to_phones.setdefault(m["name"].casefold(), set()).add(m["phone"])
     for phone, names in phone_to_names.items():
         if len(names) > 1:
-            report.anomaly("customers: one phone, several names (kept separate)",
+            report.anomaly("customers: one phone, several names (review candidates)",
                             f"{phone} -> {sorted(names)[:4]}")
     for cname, phones in name_to_phones.items():
         if len(phones) > 1:
@@ -848,7 +854,7 @@ def legacy_customer_numbers(workbook: dict, report: Report) -> tuple[dict, int]:
     receipt_owners: dict[int, set[tuple[str, str]]] = collections.defaultdict(set)
     reserved = set()
     for inv in workbook["invoices"]:
-        key = canon_key(inv["name"], inv["phone"])
+        key = customer_key(workbook, inv["name"], inv["phone"])
         for no in inv["meas_nos"]:
             if 0 < no < 9223372036854775807:
                 reserved.add(no)
@@ -882,50 +888,57 @@ def legacy_customer_numbers(workbook: dict, report: Report) -> tuple[dict, int]:
 
 
 def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
-                   material_name: str = DEFAULT_MATERIAL,
+                   material_name: str | None = DEFAULT_MATERIAL,
                    material_amount: Decimal = Decimal("1"),
                    production_branch_id: object | None = None) -> None:
     if (not material_amount.is_finite() or material_amount <= 0
             or material_amount > Decimal("99999999.99")
             or material_amount != material_amount.quantize(Decimal("0.01"))):
         raise ValueError("material amount must be positive with at most two decimal places")
+    state = load_db_state(conn)
+    # Never silently choose between existing records after adding an alias.
+    existing = {}
+    for name, phone, customer_id in state["customer_rows"]:
+        key = customer_key(workbook, name, phone)
+        if key and key in existing and existing[key] != customer_id:
+            raise ValueError(
+                f"Multiple existing customers resolve to {key}; reconcile those records before importing")
+        if key:
+            existing[key] = customer_id
     _, issuing_branch_name = require_branch(conn, branch_id, "receives_orders")
     if production_branch_id is None:
         production_branch_id, _ = select_branch(conn, None, "produces_orders", None, report)
     else:
         require_branch(conn, production_branch_id, "produces_orders")
-    state = load_db_state(conn)
     legacy_numbers, reserved_max = legacy_customer_numbers(workbook, report)
     with conn.cursor() as cur:
-        # ---- materials ------------------------------------------------------
-        # Sheet material names are ignored: every order points at one
-        # placeholder row, created here when missing (materials.name is
-        # not unique, so match with LIMIT 1 rather than ON CONFLICT).
-        cur.execute("SELECT id FROM materials WHERE name = %s LIMIT 1",
-                    (material_name,))
-        row = cur.fetchone()
-        if row is None:
-            cur.execute(
-                "INSERT INTO materials (name, unit) VALUES (%s, 'meters') "
-                "RETURNING id",
-                (material_name,),
-            )
-            placeholder_material_id = str(cur.fetchone()[0])
-            report.count(f"materials created: {material_name}")
-        else:
-            placeholder_material_id = str(row[0])
-            report.count(f"materials reused: {material_name}")
+        # Legacy fabric is unknown by default; a placeholder is opt-in.
+        placeholder_material_id = None
+        if material_name is not None:
+            cur.execute("SELECT id FROM materials WHERE name = %s LIMIT 1",
+                        (material_name,))
+            row = cur.fetchone()
+            if row is None:
+                cur.execute(
+                    "INSERT INTO materials (name, unit) VALUES (%s, 'meters') RETURNING id",
+                    (material_name,),
+                )
+                placeholder_material_id = str(cur.fetchone()[0])
+                report.count(f"materials created: {material_name}")
+            else:
+                placeholder_material_id = str(row[0])
+                report.count(f"materials reused: {material_name}")
 
-        # ---- customers (canonical (name, phone), never merged) --------------
+        # ---- customers (canonical pair plus explicitly reviewed aliases) --------------
         # First-seen display spelling wins per canonical key. One phone with
-        # several names and one name with several phones always stay separate
+        # several names stays separate unless approved; different phones stay separate
         # customers (see the workbook verification in read_workbook).
         # Referenced measurement rows get their own customer row too:
         # per-order copies below are owned by the measurement's customer
         # (measurement wins, always), so that customer must exist.
         display: dict[tuple[str, str], tuple[str, str]] = {}
         for inv in workbook["invoices"]:
-            key = canon_key(inv["name"], inv["phone"])
+            key = customer_key(workbook, inv["name"], inv["phone"])
             if key and key not in display:
                 display[key] = (inv["name"], inv["phone"])
         for m in workbook["measurements"]:
@@ -933,7 +946,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 display[m["key"]] = (m["name"], m["phone"])
         db_customers: dict[tuple[str, str], str] = {}
         for name, mobile, id_ in state["customer_rows"]:
-            key = canon_key(name, mobile)
+            key = customer_key(workbook, name, mobile)
             if key is None:
                 continue
             if key not in db_customers:
@@ -986,7 +999,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
         cur.execute("SELECT name, mobile_no, id FROM customers")
         customer_ids: dict[tuple[str, str], str] = {}
         for n, m, id_ in cur.fetchall():
-            key = canon_key(str(n), str(m))
+            key = customer_key(workbook, str(n), str(m))
             if key and key not in customer_ids:
                 customer_ids[key] = str(id_)
 
@@ -1053,7 +1066,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             if inv["invoice_number"] in state["invoice_numbers"]:
                 report.count("invoices already present (skipped)")
                 continue
-            inv_key = canon_key(inv["name"], inv["phone"])
+            inv_key = customer_key(workbook, inv["name"], inv["phone"])
             if inv_key is None or inv_key not in customer_ids:
                 report.anomaly("invoices skipped (no identifiable customer)",
                                inv["invoice_number"])
@@ -1178,10 +1191,10 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 cur.execute(
                     """
                     INSERT INTO orders (
-                        measurement_id, material_id, material_amount, invoice_id, price,
+                        measurement_id, material_id, material_amount, invoice_id, price, material_source,
                         thobe_type, f_pocket, collar, sleeve, patti, emd, more_details,
                         status, collected_at, production_branch_id, material_stock_branch_id
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
                     RETURNING id
                     """,
                     (
@@ -1190,6 +1203,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                         material_amount,
                         invoice_id,
                         prices[k],
+                        "shop" if material_id is not None else "unknown",
                         design.get("thobe_type"),
                         design.get("f_pocket"),
                         design.get("collar"),
@@ -1292,16 +1306,39 @@ def main() -> int:
                         help="production branch name (created if missing; "
                              "default: first active branch that produces orders)")
     parser.add_argument("--material", default=DEFAULT_MATERIAL,
-                        help="placeholder material every order points at "
-                             "(created if missing; sheet names are ignored)")
+                        help="optional placeholder material (default: NULL/unknown; sheet names ignored)")
     parser.add_argument("--material-amount", type=Decimal, default=Decimal("1"),
                         help="positive placeholder metres per legacy order (default: 1)")
     parser.add_argument("--dry-run", action="store_true",
-                        help="read the workbook only; write nothing")
+                        help="read the workbook only; no database access (review output is allowed)")
+    parser.add_argument("--customer-decisions", default=str(CUSTOMER_DECISIONS),
+                        help="saved JSON decisions (default: scripts/customer-decisions.json; "
+                             "created/refreshed by dry-run, required for import)")
+    parser.add_argument("--customer-review", help="write pending shared-phone pairs as JSON")
     args = parser.parse_args()
+    if (args.customer_decisions and args.customer_review
+            and Path(args.customer_decisions).resolve() == Path(args.customer_review).resolve()):
+        parser.error("Customer review output must differ from the decisions file")
+    try:
+        decisions_path = Path(args.customer_decisions)
+        if not decisions_path.exists() and not args.dry_run:
+            parser.error("Customer decisions file missing; run --dry-run locally and copy "
+                         "the reviewed file to production, or pass --customer-decisions")
+        identity = load_identity(decisions_path if decisions_path.exists() else None, canon_key)
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
 
     report = Report()
     workbook = read_workbook(Path(args.workbook), report)
+    apply_customer_identity(workbook, identity)
+    identities = [(r["name"], r["phone"]) for r in
+                  workbook["invoices"] + workbook["measurements"]]
+    if args.dry_run:
+        save_review(decisions_path, identity, identities)
+    digest = hashlib.sha256(decisions_path.read_bytes()).hexdigest()
+    print(f"Customer decisions: {decisions_path.resolve()} (SHA-256: {digest})")
+    if args.customer_review:
+        Path(args.customer_review).write_text(json.dumps(identity.review(identities), indent=2, ensure_ascii=False) + "\n")
     if args.dry_run:
         legacy_customer_numbers(workbook, report)
     print(report.summary("workbook"))
@@ -1318,6 +1355,10 @@ def main() -> int:
     conn = psycopg2.connect(url)
     conn.autocommit = False
     try:
+        if args.customer_review:
+            state = load_db_state(conn)
+            identities.extend((n, p) for n, p, _ in state["customer_rows"])
+            Path(args.customer_review).write_text(json.dumps(identity.review(identities), indent=2, ensure_ascii=False) + "\n")
         branch_id, branch_label = choose_branch(conn, args.branch, report)
         production_id, production_label = select_branch(
             conn, args.production_branch, "produces_orders", None, report)
