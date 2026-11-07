@@ -462,7 +462,7 @@ export function OrderBlock({
                     label="Customer fabric description"
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Customer-provided material does not use shop stock.
+                    Customer material does not use shop stock.
                   </p>
                 </div>
               ) : (

@@ -66,7 +66,7 @@ export const orderDraftSchema = z
     ) {
       ctx.addIssue({
         code: 'custom',
-        message: 'Describe the customer-provided material.',
+        message: 'Describe the customer material.',
         path: ['customerMaterialDescription'],
       })
     }

@@ -174,7 +174,7 @@ export function getOrderColumns(
           {row.getValue('material')}
           {row.original.materialSource === 'customer' && (
             <div className="text-xs text-muted-foreground">
-              Customer-provided material
+              Customer material
             </div>
           )}
         </div>
