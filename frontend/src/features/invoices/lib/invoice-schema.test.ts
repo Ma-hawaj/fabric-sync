@@ -20,6 +20,7 @@ function validOrder() {
     ...createEmptyOrder(),
     materialId: 'mat-1',
     materialAmount: 2,
+    materialLocationId: 'loc-1',
     productionLocationId: 'loc-1',
     price: 150,
   }
@@ -155,6 +156,16 @@ describe('invoiceCreateFormSchema payments', () => {
 })
 
 describe('invoiceFormSchema', () => {
+  it('uses customer addresses without requiring a separate delivery-address field', () => {
+    const input = values({
+      collectionMethod: 'delivery',
+      products: [validProductLine()],
+      productBranch: 'stock',
+    })
+    expect(firstErrorFor(input)).toBeNull()
+    input.collectionMethod = 'pickup'
+    expect(firstErrorFor(input)).toBeNull()
+  })
   it('requires a target date when any order is urgent', () => {
     const input = values({
       customers: [
@@ -430,6 +441,7 @@ describe('invoiceFormSchema', () => {
           ...createEmptyOrder(),
           materialId: 'mat-1',
           materialAmount: 2,
+          materialLocationId: 'loc-1',
           productionLocationId: 'loc-1',
         },
       ],

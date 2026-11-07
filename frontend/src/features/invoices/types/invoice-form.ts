@@ -49,8 +49,8 @@ export interface InvoiceOrderDraft {
   customerMaterialDescription: string
   materialId: string
   materialAmount: NumberInput
-  // Where the garment is made. Shop material needs stock at this location;
-  // customer fabric can use any active production location.
+  // Shop stock source and production workshop are chosen independently.
+  materialLocationId: string
   productionLocationId: string
   // Calculated preview; the backend calculates its own final price.
   price: NumberInput
@@ -132,6 +132,7 @@ export interface InvoiceFormValues {
   // date is server-set at creation and never enters the form.
   targetDate: string
   receivingBranch: string
+  issuingBranch: string
   // Who a sale with no tailoring orders is billed to; a tailoring invoice
   // finds its customer through the orders instead.
   customerId: string
@@ -182,6 +183,7 @@ export function createEmptyOrder(): InvoiceOrderDraft {
     customerMaterialDescription: '',
     materialId: '',
     materialAmount: '',
+    materialLocationId: '',
     productionLocationId: '',
     price: '',
     isUrgent: false,
@@ -213,6 +215,7 @@ export function createEmptyInvoiceForm(): InvoiceFormValues {
     targetDate: '',
     collectionMethod: 'pickup',
     receivingBranch: '',
+    issuingBranch: '',
     customerId: '',
     productBranch: '',
     discount: '',

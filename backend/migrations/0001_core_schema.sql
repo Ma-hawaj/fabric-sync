@@ -1,15 +1,16 @@
 -- Fresh-database baseline: locations, sales, production, and collection.
 
 -- A physical location. It can be a branch where customers collect finished
--- orders, a store that only holds material stock, or both — so the two
--- capabilities are independent flags rather than a single type column.
--- Deactivating a location hides it from both pickers without touching the
+-- orders, a material warehouse, a production workshop, or a combination.
+-- These capabilities are independent; holding stock does not imply production.
+-- Deactivating a location hides it from selection pickers without touching the
 -- stock rows and invoices that still reference it.
 CREATE TABLE branch (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     name TEXT NOT NULL UNIQUE,
     receives_orders BOOLEAN NOT NULL DEFAULT TRUE,
     holds_stock BOOLEAN NOT NULL DEFAULT TRUE,
+    produces_orders BOOLEAN NOT NULL DEFAULT FALSE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
@@ -80,7 +81,12 @@ CREATE TABLE invoices (
     urgent_charge NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (urgent_charge >= 0),
     collection_method TEXT NOT NULL DEFAULT 'pickup'
         CHECK (collection_method IN ('delivery', 'pickup')),
+    -- Customer pickup destination; unused for delivery invoices.
     branch_id UUID REFERENCES branch(id),
+    -- Issuing is independent of fulfilment. Keep the issued branch name stable
+    -- if the location is renamed later, and leave unknown issuers nullable.
+    issuing_branch_id UUID REFERENCES branch(id),
+    issuing_branch_name TEXT,
     discount NUMERIC(10, 2) NOT NULL DEFAULT 0,
     discount_unit TEXT NOT NULL DEFAULT 'amount' CHECK (discount_unit IN ('amount', 'percent')),
     -- A tailoring invoice finds its customer through orders → measurements, but

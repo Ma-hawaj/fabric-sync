@@ -3,6 +3,8 @@ export interface MaterialLocationStock {
   locationId: string
   location: string
   quantity: number
+  isActive?: boolean
+  holdsStock?: boolean
 }
 
 export interface Material {
@@ -21,4 +23,11 @@ export interface Material {
 
 export function materialTotalStock(material: Material): number {
   return material.locations.reduce((sum, stock) => sum + stock.quantity, 0)
+}
+
+/** Saved edit seeds may omit flags; catalog rows carry current eligibility. */
+export function materialStockAvailable(stock: MaterialLocationStock): boolean {
+  return (
+    stock.quantity > 0 && stock.isActive !== false && stock.holdsStock !== false
+  )
 }

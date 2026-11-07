@@ -13,8 +13,10 @@ import openpyxl
 import psycopg2
 from psycopg2 import sql
 
+import ingest_storage_csv as storage
+from ingest_locations import select_branch
 from ingest_xlsm import (
-    Report, canon_key, legacy_customer_numbers, measurement_signature,
+    Report, canon_key, choose_branch, legacy_customer_numbers, measurement_signature,
     parse_measurement, perform_insert, read_workbook,
 )
 
@@ -39,7 +41,11 @@ class InvoiceInsertTests(unittest.TestCase):
             with self.subTest(gross=gross):
                 conn = MagicMock()
                 cur = conn.cursor.return_value.__enter__.return_value
-                cur.fetchone.side_effect = [("material-id",), ("invoice-id",)]
+                cur.fetchone.side_effect = [
+                    ("branch-id", "Import branch", True, True),
+                    ("production-id", "Workshop"),
+                    ("material-id",), ("invoice-id",),
+                ]
                 cur.fetchall.return_value = [("Customer", "+97333333333", "customer-id")]
                 workbook = {
                     "measurements": [], "repairs": [], "meas_to_invoices": {},
@@ -285,6 +291,131 @@ class DatabaseIntegrationTests(unittest.TestCase):
                 cur.execute(migration.read_text())
             cur.execute((self.root / "backend/seeds/reference_data.sql").read_text())
 
+    def new_branch(self, name, receives=False, stock=False, produces=False, active=True):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO branch(name,receives_orders,holds_stock,produces_orders,is_active) "
+                "VALUES(%s,%s,%s,%s,%s) RETURNING id",
+                (name, receives, stock, produces, active),
+            )
+            return cur.fetchone()[0]
+
+    def sample_workbook(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        return fixture.read()
+
+    def test_import_defaults_to_first_active_production_branch_and_preserves_unknown_stock(self):
+        self.new_branch("Inactive workshop", produces=True, active=False)
+        warehouse = self.new_branch("Warehouse", stock=True)
+        pickup = self.new_branch("Pickup", receives=True)
+        first = self.new_branch("First workshop", produces=True)
+        second = self.new_branch("Second workshop", produces=True)
+        workbook, report = self.sample_workbook()
+        self.assertEqual(choose_branch(self.conn, None, report), (pickup, "Pickup"))
+        self.assertEqual(storage.choose_branch(self.conn, None, storage.Report()),
+                         (warehouse, "Warehouse"))
+        perform_insert(self.conn, workbook, pickup, report)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT DISTINCT branch_id,issuing_branch_id,issuing_branch_name,collection_method FROM invoices")
+            self.assertEqual(cur.fetchall(), [(pickup, pickup, "Pickup", "pickup")])
+            cur.execute("SELECT DISTINCT production_branch_id,material_stock_branch_id FROM orders")
+            self.assertEqual(cur.fetchall(), [(first, None)])
+            cur.execute("SELECT count(*) FROM material_stock")
+            self.assertEqual(cur.fetchone()[0], 0)
+            # A rerun must not replace historical assignments or the issued name.
+            cur.execute("UPDATE branch SET is_active=FALSE WHERE id=%s", (first,))
+            cur.execute("UPDATE branch SET name='Renamed pickup' WHERE id=%s", (pickup,))
+        perform_insert(self.conn, workbook, pickup, Report())
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT DISTINCT production_branch_id,material_stock_branch_id FROM orders")
+            self.assertEqual(cur.fetchall(), [(first, None)])
+            cur.execute("SELECT DISTINCT issuing_branch_name FROM invoices")
+            self.assertEqual(cur.fetchall(), [("Pickup",)])
+        self.assertEqual(select_branch(self.conn, None, "produces_orders", None, report),
+                         (second, "Second workshop"))
+
+    def test_explicit_production_override_is_saved(self):
+        pickup = self.new_branch("Pickup", receives=True)
+        self.new_branch("First workshop", produces=True)
+        override = self.new_branch("Override workshop", produces=True)
+        workbook, report = self.sample_workbook()
+        perform_insert(self.conn, workbook, pickup, report, production_branch_id=override)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT DISTINCT production_branch_id FROM orders")
+            self.assertEqual(cur.fetchall(), [(override,)])
+
+    def test_missing_production_configuration_fails_before_import_writes(self):
+        pickup = self.new_branch("Pickup", receives=True)
+        self.new_branch("Inactive workshop", produces=True, active=False)
+        self.new_branch("Warehouse", stock=True)
+        with self.assertRaisesRegex(ValueError, "no active production branch"):
+            perform_insert(self.conn, {}, pickup, Report())
+        with self.conn.cursor() as cur:
+            for table in ("materials", "customers", "invoices", "orders"):
+                cur.execute(sql.SQL("SELECT count(*) FROM {}").format(sql.Identifier(table)))
+                self.assertEqual(cur.fetchone()[0], 0, table)
+
+    def test_named_import_branches_must_be_active_and_support_the_requested_role(self):
+        workshop = self.new_branch("Workshop", produces=True)
+        self.new_branch("Inactive", receives=True, stock=True, produces=True, active=False)
+        pickup = self.new_branch("Pickup", receives=True)
+        for name in ("Workshop", "Inactive"):
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(ValueError, "receives_orders"):
+                    choose_branch(self.conn, name, Report())
+                with self.assertRaisesRegex(ValueError, "holds_stock"):
+                    storage.choose_branch(self.conn, name, storage.Report())
+        for branch in ("Pickup", "Inactive"):
+            with self.assertRaisesRegex(ValueError, "produces_orders"):
+                select_branch(self.conn, branch, "produces_orders", None, Report())
+        with self.assertRaisesRegex(ValueError, "receives_orders"):
+            perform_insert(self.conn, {}, workshop, Report())
+        with self.assertRaisesRegex(ValueError, "produces_orders"):
+            perform_insert(self.conn, {}, pickup, Report(), production_branch_id=pickup)
+        with self.assertRaisesRegex(ValueError, "holds_stock"):
+            storage.perform_insert(self.conn, {}, workshop, "Workshop", storage.Report(), "set")
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM branch")
+            self.assertEqual(cur.fetchone()[0], 3)
+
+    def test_default_pickup_and_stock_branches_are_separate_from_production(self):
+        workshop = self.new_branch("Workshop", produces=True)
+        pickup, _ = choose_branch(self.conn, None, Report())
+        warehouse, _ = storage.choose_branch(self.conn, None, storage.Report())
+        self.assertNotEqual(pickup, workshop)
+        self.assertNotEqual(warehouse, workshop)
+        self.assertNotEqual(warehouse, pickup)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT receives_orders,holds_stock,produces_orders FROM branch WHERE id=%s", (pickup,))
+            self.assertEqual(cur.fetchone(), (True, False, False))
+            cur.execute("SELECT receives_orders,holds_stock,produces_orders FROM branch WHERE id=%s", (warehouse,))
+            self.assertEqual(cur.fetchone(), (False, True, False))
+        self.assertEqual(choose_branch(self.conn, None, Report())[0], pickup)
+        self.assertEqual(storage.choose_branch(self.conn, None, storage.Report())[0], warehouse)
+
+    def test_named_workshop_is_created_with_only_production_enabled(self):
+        workshop, label = select_branch(self.conn, "New workshop", "produces_orders", None, Report())
+        self.assertEqual(label, "New workshop")
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT receives_orders,holds_stock,produces_orders,is_active FROM branch WHERE id=%s", (workshop,))
+            self.assertEqual(cur.fetchone(), (False, False, True, True))
+        self.assertEqual(select_branch(self.conn, "New workshop", "produces_orders", None, Report()),
+                         (workshop, label))
+
+    def test_stock_import_only_changes_stock_at_the_selected_warehouse(self):
+        workshop = self.new_branch("Workshop", produces=True)
+        warehouse = self.new_branch("Warehouse", stock=True)
+        groups = {("Cotton white", "CT-1"): {"family": "Cotton", "meters": Decimal("12.50")}}
+        for mode in ("set", "set", "add"):
+            storage.perform_insert(self.conn, groups, warehouse, "Warehouse", storage.Report(), mode)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT branch_id,quantity FROM material_stock")
+            self.assertEqual(cur.fetchall(), [(warehouse, Decimal("25.00"))])
+            cur.execute("SELECT holds_stock,produces_orders FROM branch WHERE id=%s", (workshop,))
+            self.assertEqual(cur.fetchone(), (False, True))
+
     def test_workbook_insert_payments_repairs_and_idempotent_rerun(self):
         fixture = ReadWorkbookTests()
         fixture.setUp()
@@ -299,7 +430,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             "raw_status": "done", "collected": dt.datetime(2026, 6, 2),
         }]
         with self.conn.cursor() as cur:
-            cur.execute("INSERT INTO branch (name) VALUES ('Import test') RETURNING id")
+            cur.execute("INSERT INTO branch (name, produces_orders) VALUES ('Import test', TRUE) RETURNING id")
             branch = cur.fetchone()[0]
         perform_insert(self.conn, workbook, branch, report,
                        material_amount=Decimal("2.50"))
@@ -356,7 +487,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             [10000, fixture.date, None, None, 38],
         ])
         with self.conn.cursor() as cur:
-            cur.execute("INSERT INTO branch(name) VALUES('Import test') RETURNING id")
+            cur.execute("INSERT INTO branch(name, produces_orders) VALUES('Import test', TRUE) RETURNING id")
             branch = cur.fetchone()[0]
         perform_insert(self.conn, workbook, branch, report)
         with self.conn.cursor() as cur:
@@ -382,7 +513,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             [7, fixture.date, "Other incoming", "34444444", 40],
         ])
         with self.conn.cursor() as cur:
-            cur.execute("INSERT INTO branch(name) VALUES('Import test') RETURNING id")
+            cur.execute("INSERT INTO branch(name, produces_orders) VALUES('Import test', TRUE) RETURNING id")
             branch = cur.fetchone()[0]
             cur.execute("INSERT INTO customers(name, mobile_no) "
                         "VALUES('App customer', '35555555') RETURNING customer_number")
@@ -422,7 +553,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
         self.addCleanup(fixture.tempdir.cleanup)
         workbook, report = fixture.read()
         with self.conn.cursor() as cur:
-            cur.execute("INSERT INTO branch(name) VALUES('Import test') RETURNING id")
+            cur.execute("INSERT INTO branch(name, produces_orders) VALUES('Import test', TRUE) RETURNING id")
             branch = cur.fetchone()[0]
         perform_insert(self.conn, workbook, branch, report)
         later_workbook, later_report = fixture.read(invoices=[], measurements=[

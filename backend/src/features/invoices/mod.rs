@@ -14,6 +14,8 @@ pub use routes::router;
 #[cfg(test)]
 mod attribution_tests;
 #[cfg(test)]
+mod location_tests;
+#[cfg(test)]
 mod material_sale_tests;
 #[cfg(test)]
 mod payment_idempotency_tests;
@@ -24,3 +26,6 @@ mod payment_response_tests;
 mod vat_snapshot_tests;
 #[cfg(test)]
 mod voucher_vat_tests;
+
+#[cfg(test)]
+mod production_location_tests;

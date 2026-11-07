@@ -113,8 +113,15 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
               {invoice.targetDate
                 ? ` · Target ${new Date(invoice.targetDate).toLocaleDateString()}`
                 : ''}
-              {detail.branchName ? ` · ${detail.branchName}` : ''}
+              {detail.issuingBranchName
+                ? ` · Issued by ${detail.issuingBranchName}`
+                : ''}
             </p>
+            {detail.collectionMethod === 'pickup' && detail.branchName && (
+              <p className="text-sm text-muted-foreground">
+                Collection branch: {detail.branchName}
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">
               Created by: <StaffName userId={detail.createdBy} />
             </p>
@@ -156,6 +163,7 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
               id={invoiceId}
               invoiceId={invoiceId}
               scope="invoices"
+              collectionMethod={detail.collectionMethod}
               status={
                 detail.readinessStatus ??
                 (detail.collected ? 'collected' : 'in_progress')

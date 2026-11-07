@@ -40,11 +40,12 @@ pub async fn invoice(
             .await
             .unwrap();
     }
-    let production: Uuid = sqlx::query_scalar("INSERT INTO branch(name) VALUES($1) RETURNING id")
-        .bind(format!("Production {}", Uuid::new_v4()))
-        .fetch_one(db)
-        .await
-        .unwrap();
+    let production: Uuid =
+        sqlx::query_scalar("INSERT INTO branch(name,produces_orders) VALUES($1,true) RETURNING id")
+            .bind(format!("Production {}", Uuid::new_v4()))
+            .fetch_one(db)
+            .await
+            .unwrap();
     let pickup = if separate_pickup {
         sqlx::query_scalar("INSERT INTO branch(name) VALUES($1) RETURNING id")
             .bind(format!("Pickup {}", Uuid::new_v4()))

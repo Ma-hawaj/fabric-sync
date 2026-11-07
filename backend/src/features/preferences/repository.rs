@@ -15,6 +15,7 @@ pub struct PreferenceRow {
     pub branch_name: Option<String>,
     pub receives_orders: Option<bool>,
     pub holds_stock: Option<bool>,
+    pub produces_orders: Option<bool>,
     pub is_active: Option<bool>,
 }
 
@@ -32,17 +33,24 @@ impl PreferenceRow {
             self.branch_name,
             self.receives_orders,
             self.holds_stock,
+            self.produces_orders,
             self.is_active,
         ) {
-            (Some(id), Some(name), Some(receives_orders), Some(holds_stock), Some(is_active)) => {
-                Some(DefaultLocation {
-                    id,
-                    name,
-                    receives_orders,
-                    holds_stock,
-                    is_active,
-                })
-            }
+            (
+                Some(id),
+                Some(name),
+                Some(receives_orders),
+                Some(holds_stock),
+                Some(produces_orders),
+                Some(is_active),
+            ) => Some(DefaultLocation {
+                id,
+                name,
+                receives_orders,
+                holds_stock,
+                produces_orders,
+                is_active,
+            }),
             _ => None,
         };
 
@@ -67,6 +75,7 @@ pub async fn get_preferences(state: &AppState, user_id: &str) -> Result<Preferen
             b.name AS "branch_name?",
             b.receives_orders AS "receives_orders?",
             b.holds_stock AS "holds_stock?",
+            b.produces_orders AS "produces_orders?",
             b.is_active AS "is_active?"
         FROM (SELECT $1::TEXT AS user_id) AS u
         LEFT JOIN user_preferences p ON p.user_id = u.user_id

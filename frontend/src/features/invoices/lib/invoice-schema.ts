@@ -43,6 +43,7 @@ export const orderDraftSchema = z
     customerMaterialDescription: z.string(),
     materialId: z.string(),
     materialAmount: numberInputSchema,
+    materialLocationId: z.string(),
     productionLocationId: z.string(),
     price: numberInputSchema,
     isUrgent: z.boolean(),
@@ -81,8 +82,13 @@ export const orderDraftSchema = z
         path: ['materialAmount'],
       })
     }
-    // Material stock is held per location, and comes off automatically when
-    // the invoice is saved, so each order has to name one.
+    if (order.materialSource === 'shop' && !order.materialLocationId) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick where this material comes from.',
+        path: ['materialLocationId'],
+      })
+    }
     if (!order.productionLocationId) {
       ctx.addIssue({
         code: 'custom',
@@ -289,6 +295,7 @@ export const invoiceFormSchema = z
         },
       ),
     receivingBranch: z.string(),
+    issuingBranch: z.string(),
     expectedVatRate: z
       .number()
       .finite()

@@ -36,6 +36,8 @@ function orderPayload(order: InvoiceOrderDraft) {
         ? order.customerMaterialDescription.trim()
         : null,
     materialAmount: numberOrZero(order.materialAmount),
+    materialLocationId:
+      order.materialSource === 'shop' ? order.materialLocationId : null,
     productionLocationId: order.productionLocationId,
     isUrgent: order.isUrgent,
     thobeType: blankToNull(order.thobeType),
@@ -102,7 +104,11 @@ export function invoicePayload(values: InvoiceFormValues) {
     expectedVatRate: values.expectedVatRate,
     targetDate: values.targetDate || null,
     collectionMethod: values.collectionMethod,
-    branchId: values.receivingBranch || null,
+    branchId:
+      values.collectionMethod === 'pickup'
+        ? values.receivingBranch || null
+        : null,
+    issuingBranchId: values.issuingBranch || null,
     discount: numberOrZero(values.discount),
     discountUnit: values.discountUnit,
     // Untouched blank rows never reach the server — every payment sent has a

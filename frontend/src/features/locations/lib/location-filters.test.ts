@@ -12,6 +12,7 @@ function location(overrides: Partial<Location>): Location {
     name: 'Location',
     receivesOrders: true,
     holdsStock: true,
+    producesOrders: false,
     isActive: true,
     ...overrides,
   }
@@ -21,13 +22,20 @@ const BRANCH_ONLY = location({
   id: 'branch',
   name: 'Downtown Branch',
   holdsStock: false,
+  producesOrders: false,
 })
 const STORE_ONLY = location({
   id: 'store',
   name: 'Main Warehouse',
   receivesOrders: false,
 })
-const BOTH = location({ id: 'both', name: 'Head Office' })
+const BOTH = location({ id: 'both', name: 'Head Office', producesOrders: true })
+const WORKSHOP = location({
+  id: 'workshop',
+  receivesOrders: false,
+  holdsStock: false,
+  producesOrders: true,
+})
 const INACTIVE = location({ id: 'closed', name: 'Old Shop', isActive: false })
 
 const ALL = [BRANCH_ONLY, STORE_ONLY, BOTH, INACTIVE]
@@ -49,7 +57,10 @@ describe('stockLocations', () => {
 
 describe('productionLocations', () => {
   it('offers the locations a garment can be made at', () => {
-    expect(productionLocations(ALL).map((l) => l.id)).toEqual(['store', 'both'])
+    expect(productionLocations([...ALL, WORKSHOP]).map((l) => l.id)).toEqual([
+      'both',
+      'workshop',
+    ])
   })
 })
 

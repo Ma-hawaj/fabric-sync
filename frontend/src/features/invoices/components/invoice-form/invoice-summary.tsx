@@ -21,8 +21,11 @@ import {
   customerOptionLabel,
 } from '@/features/customers/lib/customer-picker'
 import type { Location } from '@/features/locations/types/location'
-import { ORDER_RECEIVING_FILTERS } from '@/features/locations/lib/location-filters'
-import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
+import {
+  ISSUING_BRANCH_FILTERS,
+  ORDER_RECEIVING_FILTERS,
+} from '@/features/locations/lib/location-filters'
+import { useInvoiceLocationDefault } from '../../hooks/use-invoice-location-default'
 import type { Material } from '../../types/materials'
 import type { Product } from '@/features/products/types/product'
 import { CURRENCY } from '@/lib/currency'
@@ -121,7 +124,8 @@ export function InvoiceSummary({
   const values = useStore(form.store, (state) => state.values)
   const totals = invoiceTotals(values)
   const subtotal = totals?.grossSubtotal
-  const receivingDefault = useApplicableDefaultLocation('receiving')
+  const receivingDefault = useInvoiceLocationDefault('receiving')
+  const issuingDefault = useInvoiceLocationDefault('issuing')
   const workspace = useInvoiceWorkspace()
   const [discountOpen, setDiscountOpen] = useState(values.discount !== '')
   useEffect(() => {
@@ -310,16 +314,43 @@ export function InvoiceSummary({
       {
         <section
           className="space-y-4 rounded-xl border border-border bg-card p-4"
-          aria-label="Collection"
+          aria-label="Invoice and fulfilment"
         >
-          <h3 className="text-sm font-semibold">Collection</h3>
+          <h3 className="text-sm font-semibold">Invoice and fulfilment</h3>
+          <form.Field name={'issuingBranch' as never}>
+            {(field: any) => (
+              <Field data-invalid={field.state.meta.errors.length > 0}>
+                <FieldLabel htmlFor={field.name}>Issuing branch</FieldLabel>
+                <AsyncCombobox<Location>
+                  id={field.name}
+                  endpoint="/locations"
+                  queryKey="invoice-issuing-branch"
+                  searchField="name"
+                  filters={ISSUING_BRANCH_FILTERS}
+                  toOption={(location) => ({
+                    value: location.id,
+                    label: location.name,
+                  })}
+                  getValueLabel={(id) =>
+                    locationLabelForId?.(id) ??
+                    (id === issuingDefault?.id ? issuingDefault.name : null)
+                  }
+                  value={field.state.value || null}
+                  onValueChange={(value) => field.handleChange(value ?? '')}
+                  placeholder="Search branch..."
+                  emptyMessage="No active branches found."
+                />
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
+            )}
+          </form.Field>
           <form.Field name={'collectionMethod' as never}>
             {(field: any) => (
               <Field>
-                <FieldLabel>Collection method</FieldLabel>
+                <FieldLabel>Fulfilment method</FieldLabel>
                 <SegmentedOptions
                   id={field.name}
-                  ariaLabel="Collection"
+                  ariaLabel="Fulfilment method"
                   options={['Pickup', 'Delivery']}
                   value={
                     field.state.value === 'delivery' ? 'Delivery' : 'Pickup'
@@ -330,33 +361,43 @@ export function InvoiceSummary({
               </Field>
             )}
           </form.Field>
-          <form.Field name={'receivingBranch' as never}>
-            {(field: any) => (
-              <Field data-invalid={field.state.meta.errors.length > 0}>
-                <FieldLabel htmlFor={field.name}>Receiving Branch</FieldLabel>
-                <AsyncCombobox<Location>
-                  id={field.name}
-                  endpoint="/locations"
-                  queryKey="invoice-receiving-branch"
-                  searchField="name"
-                  filters={ORDER_RECEIVING_FILTERS}
-                  toOption={(location) => ({
-                    value: location.id,
-                    label: location.name,
-                  })}
-                  getValueLabel={(id) =>
-                    locationLabelForId?.(id) ??
-                    (id === receivingDefault?.id ? receivingDefault.name : null)
-                  }
-                  value={field.state.value || null}
-                  onValueChange={(value) => field.handleChange(value ?? '')}
-                  placeholder="Search branch..."
-                  emptyMessage="No branches found."
-                />
-                <FieldError errors={field.state.meta.errors} />
-              </Field>
-            )}
-          </form.Field>
+          {values.collectionMethod === 'pickup' ? (
+            <form.Field name={'receivingBranch' as never}>
+              {(field: any) => (
+                <Field data-invalid={field.state.meta.errors.length > 0}>
+                  <FieldLabel htmlFor={field.name}>
+                    Collection branch
+                  </FieldLabel>
+                  <AsyncCombobox<Location>
+                    id={field.name}
+                    endpoint="/locations"
+                    queryKey="invoice-receiving-branch"
+                    searchField="name"
+                    filters={ORDER_RECEIVING_FILTERS}
+                    toOption={(location) => ({
+                      value: location.id,
+                      label: location.name,
+                    })}
+                    getValueLabel={(id) =>
+                      locationLabelForId?.(id) ??
+                      (id === receivingDefault?.id
+                        ? receivingDefault.name
+                        : null)
+                    }
+                    value={field.state.value || null}
+                    onValueChange={(value) => field.handleChange(value ?? '')}
+                    placeholder="Search branch..."
+                    emptyMessage="No branches found."
+                  />
+                  <FieldError errors={field.state.meta.errors} />
+                </Field>
+              )}
+            </form.Field>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Delivery uses the customer’s address.
+            </p>
+          )}
           <DateField
             form={form}
             name="targetDate"
@@ -366,9 +407,7 @@ export function InvoiceSummary({
                 : 'Target Date (optional)'
             }
             placeholder={
-              hasUrgentOrders
-                ? 'Pick a target date'
-                : 'No collection date promised'
+              hasUrgentOrders ? 'Pick a target date' : 'No target date promised'
             }
           />
         </section>

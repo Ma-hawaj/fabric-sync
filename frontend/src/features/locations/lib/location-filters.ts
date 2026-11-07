@@ -1,6 +1,20 @@
 import type { PickerFilter } from '@/lib/async-combobox'
 import type { Location } from '../types/location'
 
+/** Location changes affect lists, preferences, and independently cached pickers. */
+export const LOCATION_QUERY_KEYS = [
+  'locations',
+  'default-location',
+  'invoice-location-default',
+  'invoice-issuing-branch',
+  'invoice-receiving-branch',
+  'invoice-sold-from',
+  'invoice-production-branch',
+  'production-location-picker',
+  'stock-entry-locations',
+  'return-restock-locations',
+] as const
+
 // The single place the capability rules live. GET /locations returns every
 // location — including inactive ones, which the locations page needs — so each
 // picker narrows the list to what it can actually use.
@@ -17,6 +31,9 @@ const ACTIVE_FILTER: PickerFilter = {
   operator: 'eq',
 }
 
+/** Any active branch can issue an invoice, independently of fulfilment. */
+export const ISSUING_BRANCH_FILTERS: readonly PickerFilter[] = [ACTIVE_FILTER]
+
 /** Locations a customer can collect a finished order from (server-side). */
 export const ORDER_RECEIVING_FILTERS: readonly PickerFilter[] = [
   ACTIVE_FILTER,
@@ -29,13 +46,16 @@ export const STOCK_FILTERS: readonly PickerFilter[] = [
   { id: 'holdsStock', value: true, variant: 'boolean', operator: 'eq' },
 ]
 
-/**
- * Locations a garment can be made at. Production happens where the material is,
- * so this currently follows the stock rule — but it is named separately so that
- * if a dedicated production capability is ever added to `branch`, this is the
- * one place that changes rather than every picker.
- */
-export const PRODUCTION_FILTERS: readonly PickerFilter[] = STOCK_FILTERS
+/** Locations explicitly enabled for production, independently of stock. */
+export const PRODUCTION_FILTERS: readonly PickerFilter[] = [
+  ACTIVE_FILTER,
+  { id: 'producesOrders', value: true, variant: 'boolean', operator: 'eq' },
+]
+
+/** Any active location may issue invoices, independently of fulfilment. */
+export function issuingLocations(locations: Location[]): Location[] {
+  return locations.filter((location) => location.isActive)
+}
 
 /** Locations a customer can collect a finished order from. */
 export function orderReceivingLocations(locations: Location[]): Location[] {
@@ -51,12 +71,9 @@ export function stockLocations(locations: Location[]): Location[] {
   )
 }
 
-/**
- * Locations a garment can be made at. Production happens where the material is,
- * so this currently follows the stock rule — but it is named separately so that
- * if a dedicated production capability is ever added to `branch`, this is the
- * one place that changes rather than every picker.
- */
+/** Locations explicitly enabled for production, independently of stock. */
 export function productionLocations(locations: Location[]): Location[] {
-  return stockLocations(locations)
+  return locations.filter(
+    (location) => location.isActive && location.producesOrders,
+  )
 }

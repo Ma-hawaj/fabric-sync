@@ -274,7 +274,7 @@ export const getInvoiceColumns = (
       accessorKey: 'receivingLocation',
       size: 114,
       header: ({ column }) => (
-        <DataTableColumnHeader column={column} label="Receiving" />
+        <DataTableColumnHeader column={column} label="Collection branch" />
       ),
       cell: ({ row }) => (
         <div>{row.getValue<string | null>('receivingLocation') ?? '—'}</div>
@@ -282,8 +282,8 @@ export const getInvoiceColumns = (
       enableSorting: true,
       enableColumnFilter: true,
       meta: {
-        label: 'Receiving',
-        placeholder: 'Filter receiving...',
+        label: 'Collection branch',
+        placeholder: 'Filter collection branches...',
         variant: 'multiSelect',
         options: receivingOptions,
       },
@@ -530,7 +530,7 @@ export const getInvoiceColumns = (
         options: [
           { label: 'In progress', value: 'in_progress' },
           { label: 'Partially ready', value: 'partially_ready' },
-          { label: 'Ready for pickup', value: 'ready' },
+          { label: 'Ready', value: 'ready' },
           { label: 'Collected', value: 'collected' },
           { label: 'No garments', value: 'not_applicable' },
         ],

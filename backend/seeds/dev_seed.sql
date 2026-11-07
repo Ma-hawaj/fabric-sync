@@ -17,14 +17,13 @@
 -- so every environment has them, dev or not. Everything below that needs a
 -- stage looks it up by name.
 
--- Deliberately covers all four capability combinations, including a retired
--- location, so the Locations status filter has something to hide and the
--- production/receiving pickers have something to exclude.
-INSERT INTO branch (id, name, receives_orders, holds_stock, is_active) VALUES
-    ('019a0000-0001-7000-8000-000000000001', 'Riyadh Main Branch', TRUE,  TRUE,  TRUE),
-    ('019a0000-0001-7000-8000-000000000002', 'Jeddah Branch',      TRUE,  FALSE, TRUE),
-    ('019a0000-0001-7000-8000-000000000003', 'Central Workshop',   FALSE, TRUE,  TRUE),
-    ('019a0000-0001-7000-8000-000000000004', 'Dammam Branch',      TRUE,  TRUE,  FALSE);
+-- Demo branches explicitly configure their capabilities and include a retired
+-- location for the status filter and pickers to exclude.
+INSERT INTO branch (id, name, receives_orders, holds_stock, produces_orders, is_active) VALUES
+    ('019a0000-0001-7000-8000-000000000001', 'Riyadh Main Branch', TRUE,  TRUE,  TRUE, TRUE),
+    ('019a0000-0001-7000-8000-000000000002', 'Jeddah Branch',      TRUE,  FALSE, FALSE, TRUE),
+    ('019a0000-0001-7000-8000-000000000003', 'Central Workshop',   FALSE, TRUE,  TRUE, TRUE),
+    ('019a0000-0001-7000-8000-000000000004', 'Dammam Branch',      TRUE,  TRUE,  FALSE, FALSE);
 
 INSERT INTO customers (id, name, mobile_no) VALUES
     ('019a0000-0002-7000-8000-000000000001', 'Abdullah Al-Otaibi', '0501234567'),

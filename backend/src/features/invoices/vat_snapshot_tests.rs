@@ -32,7 +32,7 @@ fn input(value: Value) -> CreateInvoiceInput {
 
 async fn fixture(pool: &PgPool) -> (Uuid, Value) {
     let branch: Uuid = sqlx::query_scalar(
-        "INSERT INTO branch(name,receives_orders,holds_stock) VALUES('Workshop',true,true) RETURNING id",
+        "INSERT INTO branch(name,receives_orders,holds_stock,produces_orders) VALUES('Workshop',true,true,true) RETURNING id",
     )
     .fetch_one(pool)
     .await
@@ -60,7 +60,7 @@ async fn fixture(pool: &PgPool) -> (Uuid, Value) {
             "customers":[{
                 "newCustomer":{"name":"Snapshot buyer","mobileNo":"33112233"},
                 "measurement":{"date":"2026-10-25","type":"body","fit":"medium"},
-                "orders":[{"materialId":material,"productionLocationId":branch,
+                "orders":[{"materialId":material,"productionLocationId":branch,"materialLocationId":branch,
                     "materialAmount":3,"collar":"snapshot-neck","isUrgent":true}]
             }]
         }),

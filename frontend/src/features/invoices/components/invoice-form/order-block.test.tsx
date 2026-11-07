@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
 import { OrderBlock } from './order-block'
 import { createEmptyCustomer } from '../../types/invoice-form'
 import type { InvoiceOrderDraft } from '../../types/invoice-form'
 import type { Material } from '../../types/materials'
+import type { Location } from '@/features/locations/types/location'
 import { apiGetMock } from '@/lib/list-fixtures'
 import { typeSearchText } from '@/lib/test-events'
 import { CURRENCY } from '@/lib/currency'
@@ -52,6 +53,28 @@ const DESIGN_OPTIONS = [
   },
 ]
 
+const WORKSHOP: Location = {
+  id: 'workshop',
+  name: 'Customer Fabric Workshop',
+  receivesOrders: false,
+  holdsStock: false,
+  producesOrders: true,
+  isActive: true,
+}
+const WAREHOUSE: Location = {
+  ...WORKSHOP,
+  id: 'loc-1',
+  name: 'Main Warehouse',
+  holdsStock: true,
+  producesOrders: false,
+}
+const STOCK_BRANCH: Location = {
+  ...WORKSHOP,
+  id: 'loc-2',
+  name: 'Downtown Branch',
+  holdsStock: true,
+}
+
 // The material picker queries the server per keystroke, so the API layer is
 // mocked to serve the search against in-memory rows instead of hitting the
 // network in jsdom.
@@ -64,7 +87,18 @@ vi.mock('@/lib/api', () => ({
 function Harness({
   order = {},
   isUrgent = false,
-}: { order?: Partial<InvoiceOrderDraft>; isUrgent?: boolean } = {}) {
+  locations = [WORKSHOP],
+  defaultLocation = null,
+  materials = MATERIALS,
+  loadLocation,
+}: {
+  order?: Partial<InvoiceOrderDraft>
+  isUrgent?: boolean
+  locations?: Location[]
+  defaultLocation?: Location | null
+  materials?: Material[]
+  loadLocation?: (id: string) => Promise<{ data: Location }>
+} = {}) {
   const form = useForm({
     defaultValues: {
       customers: [
@@ -76,19 +110,28 @@ function Harness({
     },
   })
   const listGet = apiGetMock({
-    '/materials': MATERIALS,
-    '/locations': [
-      {
-        id: 'workshop',
-        name: 'Customer Fabric Workshop',
-        receivesOrders: false,
-        holdsStock: true,
-        isActive: true,
-      },
-    ],
+    '/materials': materials,
+    '/locations': locations,
     '/design-options': DESIGN_OPTIONS,
   })
   apiGet.mockImplementation(async (url: string) => {
+    const pathname = new URL(url, 'http://localhost').pathname
+    if (pathname === '/me/preferences')
+      return {
+        data: {
+          defaultLocationId: defaultLocation?.id ?? null,
+          defaultLocation,
+        },
+      }
+    const locationId = pathname.match(/^\/locations\/([^/]+)$/)?.[1]
+    if (locationId)
+      return loadLocation
+        ? loadLocation(locationId)
+        : {
+            data: [...locations, WAREHOUSE, STOCK_BRANCH].find(
+              (location) => location.id === locationId,
+            ),
+          }
     if (new URL(url, 'http://localhost').pathname === '/pricing')
       return {
         data: {
@@ -101,7 +144,7 @@ function Harness({
       /^\/materials\/([^/]+)$/,
     )?.[1]
     return id
-      ? { data: MATERIALS.find((material) => material.id === id) }
+      ? { data: materials.find((material) => material.id === id) }
       : listGet(url)
   })
   const client = new QueryClient()
@@ -140,7 +183,9 @@ function openMaterialSearch() {
 }
 
 function locationSearchInput() {
-  return screen.getByPlaceholderText<HTMLInputElement>('Search location...')
+  return screen.getByPlaceholderText<HTMLInputElement>(
+    'Search stock location...',
+  )
 }
 
 function openLocationSearch() {
@@ -156,7 +201,186 @@ async function pickMaterial(name: RegExp | string) {
   fireEvent.click(option)
 }
 
+function currentOrder(): InvoiceOrderDraft {
+  return JSON.parse(screen.getByTestId('draft').textContent).customers[0]
+    .orders[0]
+}
+
+async function pickStock(name: string) {
+  openLocationSearch()
+  fireEvent.click(await screen.findByRole('option', { name }))
+}
+
+async function pickProduction(name: string) {
+  const input = screen.getByLabelText('Production branch')
+  fireEvent.pointerDown(input)
+  fireEvent.mouseDown(input)
+  fireEvent.click(input)
+  fireEvent.click(await screen.findByRole('option', { name }))
+}
+
 describe('OrderBlock', () => {
+  it('replaces an earlier user default when the selected material branch supports production', async () => {
+    let resolveLocation!: (value: { data: Location }) => void
+    const pending = new Promise<{ data: Location }>((resolve) => {
+      resolveLocation = resolve
+    })
+    render(
+      <Harness
+        locations={[WORKSHOP, STOCK_BRANCH]}
+        defaultLocation={WORKSHOP}
+        loadLocation={() => pending}
+      />,
+    )
+    await waitFor(() =>
+      expect(currentOrder().productionLocationId).toBe('workshop'),
+    )
+    await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')
+    await pickStock('Downtown Branch (20 meters)')
+    await act(async () => resolveLocation({ data: STOCK_BRANCH }))
+    await waitFor(() => {
+      expect(currentOrder()).toMatchObject({
+        materialLocationId: 'loc-2',
+        productionLocationId: 'loc-2',
+      })
+      expect(
+        screen.getByLabelText<HTMLInputElement>('Production branch').value,
+      ).toBe('Downtown Branch')
+    })
+  })
+
+  it('uses the sole material source for production ahead of the user default', async () => {
+    render(
+      <Harness
+        locations={[WORKSHOP, STOCK_BRANCH]}
+        defaultLocation={WORKSHOP}
+        materials={[
+          { ...MATERIALS[0], locations: [MATERIALS[0].locations[1]] },
+        ]}
+      />,
+    )
+    await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')
+    await waitFor(() =>
+      expect(currentOrder()).toMatchObject({
+        materialLocationId: 'loc-2',
+        productionLocationId: 'loc-2',
+      }),
+    )
+  })
+
+  it('updates automatic production when the material source changes and falls back for a warehouse', async () => {
+    render(
+      <Harness
+        locations={[WORKSHOP, STOCK_BRANCH, WAREHOUSE]}
+        defaultLocation={WORKSHOP}
+      />,
+    )
+    await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')
+    await pickStock('Downtown Branch (20 meters)')
+    await waitFor(() =>
+      expect(currentOrder().productionLocationId).toBe('loc-2'),
+    )
+    await pickStock('Main Warehouse (100 meters)')
+    await waitFor(() =>
+      expect(currentOrder()).toMatchObject({
+        materialLocationId: 'loc-1',
+        productionLocationId: 'workshop',
+      }),
+    )
+  })
+
+  it('ignores an inactive material branch for production defaults', async () => {
+    render(
+      <Harness
+        order={{ materialId: 'mat-1', materialLocationId: 'loc-2' }}
+        locations={[WORKSHOP, { ...STOCK_BRANCH, isActive: false }]}
+      />,
+    )
+    await waitFor(() =>
+      expect(currentOrder().productionLocationId).toBe('workshop'),
+    )
+  })
+
+  it('leaves production empty when the material source cannot produce and other branches are ambiguous', async () => {
+    render(
+      <Harness
+        order={{ materialId: 'mat-1', materialLocationId: 'loc-1' }}
+        locations={[WORKSHOP, STOCK_BRANCH, WAREHOUSE]}
+      />,
+    )
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/locations/loc-1'))
+    expect(currentOrder().productionLocationId).toBe('')
+  })
+
+  it('preserves a saved production branch when the material source can also produce', async () => {
+    render(
+      <Harness
+        order={{
+          materialId: 'mat-1',
+          materialLocationId: 'loc-2',
+          productionLocationId: 'workshop',
+          originalOrderId: 'saved-order',
+        }}
+        locations={[WORKSHOP, STOCK_BRANCH]}
+      />,
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText<HTMLInputElement>('Material from').value,
+      ).toBe('Downtown Branch (20 meters)'),
+    )
+    expect(currentOrder().productionLocationId).toBe('workshop')
+  })
+
+  it('preserves a manual production choice made while the material branch is loading', async () => {
+    let resolveLocation!: (value: { data: Location }) => void
+    const pending = new Promise<{ data: Location }>((resolve) => {
+      resolveLocation = resolve
+    })
+    render(
+      <Harness
+        locations={[WORKSHOP, STOCK_BRANCH]}
+        defaultLocation={WORKSHOP}
+        loadLocation={() => pending}
+      />,
+    )
+    await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')
+    await pickStock('Downtown Branch (20 meters)')
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/locations/loc-2'))
+    await pickProduction('Customer Fabric Workshop')
+    await act(async () => resolveLocation({ data: STOCK_BRANCH }))
+    await waitFor(() =>
+      expect(currentOrder()).toMatchObject({
+        materialLocationId: 'loc-2',
+        productionLocationId: 'workshop',
+      }),
+    )
+    await pickStock('Main Warehouse (100 meters)')
+    await pickStock('Downtown Branch (20 meters)')
+    expect(currentOrder().productionLocationId).toBe('workshop')
+  })
+
+  it('falls back to the production default when switching to customer fabric', async () => {
+    render(
+      <Harness
+        locations={[WORKSHOP, STOCK_BRANCH]}
+        defaultLocation={WORKSHOP}
+      />,
+    )
+    await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')
+    await pickStock('Downtown Branch (20 meters)')
+    await waitFor(() =>
+      expect(currentOrder().productionLocationId).toBe('loc-2'),
+    )
+    fireEvent.click(screen.getByRole('radio', { name: 'Customer' }))
+    await waitFor(() =>
+      expect(currentOrder()).toMatchObject({
+        materialLocationId: '',
+        productionLocationId: 'workshop',
+      }),
+    )
+  })
+
   it('preserves saved charges until a pricing input changes, then uses current prices', async () => {
     const inputs = {
       materialSource: 'shop' as const,
@@ -252,6 +476,33 @@ describe('OrderBlock', () => {
     ).toBeNull()
   })
 
+  it('selects the fabric source independently of a production-only workshop', async () => {
+    render(<Harness />)
+    await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')
+    openLocationSearch()
+    fireEvent.click(
+      await screen.findByRole('option', {
+        name: 'Main Warehouse (100 meters)',
+      }),
+    )
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order).toMatchObject({
+        materialLocationId: 'loc-1',
+        productionLocationId: 'workshop',
+      })
+    })
+    await pickMaterial('Wool Blend — Grey')
+    await waitFor(() => {
+      const order = JSON.parse(screen.getByTestId('draft').textContent)
+        .customers[0].orders[0]
+      expect(order).toMatchObject({
+        materialLocationId: '',
+        productionLocationId: 'workshop',
+      })
+    })
+  })
   it('creates a customer fabric order with a production location that has no inventory stock', async () => {
     render(<Harness />)
     fireEvent.click(screen.getByRole('radio', { name: 'Customer' }))
@@ -286,6 +537,7 @@ describe('OrderBlock', () => {
         order={{
           materialId: 'mat-1',
           productionLocationId: 'loc-1',
+          materialLocationId: 'loc-1',
           materialAmount: 3,
           price: 40,
         }}
@@ -303,7 +555,8 @@ describe('OrderBlock', () => {
         materialSource: 'shop',
         materialId: '',
         customerMaterialDescription: '',
-        productionLocationId: '',
+        materialLocationId: '',
+        productionLocationId: 'loc-1',
         materialAmount: 3,
         price: '',
       })
@@ -369,7 +622,7 @@ describe('OrderBlock', () => {
     ).toBeTruthy()
   })
 
-  it("limits the Made At picker to the selected material's stock locations", async () => {
+  it("limits the Material from picker to the selected material's stock locations", async () => {
     render(<Harness />)
 
     await pickMaterial('Cotton Poplin — White (FB-CTN-WHT-01)')

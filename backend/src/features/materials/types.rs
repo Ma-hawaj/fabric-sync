@@ -10,6 +10,8 @@ pub struct MaterialLocationStock {
     pub location_id: Uuid,
     pub location: String,
     pub quantity: f64,
+    pub is_active: bool,
+    pub holds_stock: bool,
 }
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]

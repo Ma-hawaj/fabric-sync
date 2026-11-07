@@ -199,6 +199,18 @@ function renderDeliveryOrder(overrides: Partial<OrderDetail> = {}) {
 }
 
 describe('OrderDetailPage', () => {
+  it('shows the saved customer address for a delivery order', () => {
+    renderPage({
+      ...ORDER,
+      collectionMethod: 'delivery',
+      customerAddress: 'Building 2, Road 3',
+      receivingLocationId: null,
+      receivingLocation: null,
+    })
+    expect(screen.getByText('Customer address')).toBeTruthy()
+    expect(screen.getByText('Building 2, Road 3')).toBeTruthy()
+    expect(screen.queryByText('Collection location')).toBeNull()
+  })
   it.each(['cancelled', 'returned'] as const)(
     'keeps a %s order and its production history read-only',
     (outcome) => {

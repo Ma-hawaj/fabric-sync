@@ -21,6 +21,21 @@ it('omits untouched extra entries while preserving the required payment', () => 
 })
 
 describe('invoice material payload', () => {
+  it('keeps the issuing branch independent and sends only the selected fulfilment details', () => {
+    const values = createEmptyInvoiceForm()
+    values.issuingBranch = 'issuer'
+    values.receivingBranch = 'pickup'
+    expect(invoicePayload(values)).toMatchObject({
+      issuingBranchId: 'issuer',
+      branchId: 'pickup',
+    })
+    values.collectionMethod = 'delivery'
+    expect(invoicePayload(values)).toMatchObject({
+      issuingBranchId: 'issuer',
+      branchId: null,
+    })
+    expect(invoicePayload(values)).not.toHaveProperty('deliveryAddress')
+  })
   it('saves customer addresses, collection, and urgency and clears a regular surcharge', () => {
     const values = createEmptyInvoiceForm()
     values.customers[0].orders[0].isUrgent = true

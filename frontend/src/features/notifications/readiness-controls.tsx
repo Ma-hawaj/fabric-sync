@@ -18,6 +18,7 @@ import { NotificationDialog } from './notification-dialog'
 import { useChangeReadiness } from './hooks/use-change-readiness'
 
 export interface ReadinessFields {
+  collectionMethod?: string
   readinessStatus?: string
   readyOrderCount?: number
   pendingOrderCount?: number
@@ -41,12 +42,15 @@ export function ReadinessBadge({
   readinessStatus,
   readyOrderCount,
   pendingOrderCount,
+  collectionMethod,
 }: ReadinessFields) {
   if (!readinessStatus || readinessStatus === 'not_applicable') return null
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
       <StatusBadge tone={readinessTones[readinessStatus] ?? 'neutral'}>
-        {readinessLabels[readinessStatus] ?? readinessStatus}
+        {readinessStatus === 'ready' && collectionMethod === 'delivery'
+          ? 'Ready for delivery'
+          : (readinessLabels[readinessStatus] ?? readinessStatus)}
       </StatusBadge>
       {readinessStatus !== 'collected' && (
         <span className="text-xs text-muted-foreground">
@@ -58,6 +62,7 @@ export function ReadinessBadge({
 }
 
 interface Props {
+  collectionMethod?: string
   id: string
   invoiceId: string
   scope: 'orders' | 'invoices'
@@ -72,9 +77,13 @@ export function ReadinessControls({
   status,
   readyAt,
   readyBy,
+  collectionMethod = 'pickup',
 }: Props) {
   const { user } = useAuth()
-  const canNotify = canAccess(user, 'POST', '/invoices/:id/notifications')
+  const delivery = collectionMethod === 'delivery'
+  const fulfilment = delivery ? 'delivery' : 'pickup'
+  const canNotify =
+    !delivery && canAccess(user, 'POST', '/invoices/:id/notifications')
   const [open, setOpen] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const [reason, setReason] = useState('')
@@ -118,7 +127,7 @@ export function ReadinessControls({
           ? 'Reopen production'
           : scope === 'invoices'
             ? 'Mark remaining orders ready'
-            : 'Mark ready for pickup'}
+            : `Mark ready for ${fulfilment}`}
       </Button>
       {readyAt && (
         <span className="text-xs text-muted-foreground">
@@ -135,12 +144,16 @@ export function ReadinessControls({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {reopening ? 'Reopen production' : 'Confirm ready for pickup'}
+              {reopening
+                ? 'Reopen production'
+                : `Confirm ready for ${fulfilment}`}
             </DialogTitle>
             <DialogDescription>
               {reopening
-                ? 'This clears readiness and requires a fresh confirmation before a pickup notice can be sent.'
-                : 'Production, repairs, and delivery to the pickup branch will be checked before marking ready.'}
+                ? 'This clears readiness and requires a fresh confirmation.'
+                : delivery
+                  ? 'Production and repairs will be checked before marking ready for delivery.'
+                  : 'Production, repairs, and delivery to the pickup branch will be checked before marking ready.'}
             </DialogDescription>
           </DialogHeader>
           {reopening ? (
@@ -160,7 +173,9 @@ export function ReadinessControls({
                 disabled={mutation.isPending}
                 onCheckedChange={setConfirmed}
               />
-              I confirm the garments are available at the pickup branch.
+              {delivery
+                ? 'I confirm the garments are ready for delivery.'
+                : 'I confirm the garments are available at the pickup branch.'}
             </label>
           )}
           {mutation.error && (

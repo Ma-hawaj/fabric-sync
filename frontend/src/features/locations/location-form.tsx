@@ -1,6 +1,7 @@
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { TextField } from '@/components/form/fields'
@@ -15,22 +16,6 @@ import {
   locationToFormValues,
 } from './types/location-form'
 import type { Location } from './types/location'
-import type { LocationFormValues } from './types/location-form'
-
-// The two capability flags are independent in the data model, but "neither" is
-// rejected by both the schema and the backend — so the three usable
-// combinations present better as one choice than as two checkboxes.
-const ORDERS_ONLY = 'Customer orders'
-const STOCK_ONLY = 'Material stock'
-const BOTH = 'Both'
-const USE_OPTIONS = [ORDERS_ONLY, STOCK_ONLY, BOTH] as const
-
-function usageLabel(
-  values: Pick<LocationFormValues, 'receivesOrders' | 'holdsStock'>,
-) {
-  if (values.receivesOrders && values.holdsStock) return BOTH
-  return values.receivesOrders ? ORDERS_ONLY : STOCK_ONLY
-}
 
 export function LocationFormPage({ locationId }: { locationId?: string }) {
   const { data: existing, isLoading, isError } = useLocation(locationId ?? null)
@@ -100,8 +85,7 @@ function LocationForm({ existing }: { existing?: Location }) {
           {existing ? 'Edit Location' : 'Add Location'}
         </h1>
         <p className="text-muted-foreground">
-          Choose what this location is used for — customers can only be sent to
-          collect orders from locations that receive them.
+          Choose pickup, stock, and production capabilities independently.
         </p>
       </div>
 
@@ -116,37 +100,33 @@ function LocationForm({ existing }: { existing?: Location }) {
         <div className="space-y-4 rounded-xl border border-border/60 bg-card p-5">
           <TextField form={form} name="name" label="Location Name" />
 
-          <form.Subscribe
-            selector={(state) =>
-              [state.values.receivesOrders, state.values.holdsStock] as const
-            }
-          >
-            {([receivesOrders, holdsStock]) => (
-              <form.Field name="receivesOrders">
+          <div className="space-y-3" role="group" aria-label="Used For">
+            {(
+              [
+                { name: 'receivesOrders', label: 'Receives orders' },
+                { name: 'holdsStock', label: 'Holds stock' },
+                { name: 'producesOrders', label: 'Produces orders' },
+              ] as const
+            ).map(({ name, label }) => (
+              <form.Field key={name} name={name}>
                 {(field) => (
                   <Field data-invalid={field.state.meta.errors.length > 0}>
-                    <FieldLabel htmlFor={field.name}>Used For</FieldLabel>
-                    <SegmentedOptions
-                      id={field.name}
-                      options={USE_OPTIONS}
-                      value={usageLabel({ receivesOrders, holdsStock })}
-                      onChange={(label) => {
-                        field.handleChange(
-                          label === ORDERS_ONLY || label === BOTH,
-                        )
-                        form.setFieldValue(
-                          'holdsStock',
-                          label === STOCK_ONLY || label === BOTH,
-                        )
-                      }}
-                      columns={3}
-                    />
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id={field.name}
+                        checked={field.state.value}
+                        onCheckedChange={(checked) =>
+                          field.handleChange(checked === true)
+                        }
+                      />
+                      <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
+                    </div>
                     <FieldError errors={field.state.meta.errors} />
                   </Field>
                 )}
               </form.Field>
-            )}
-          </form.Subscribe>
+            ))}
+          </div>
 
           {existing && (
             <form.Field name="isActive">

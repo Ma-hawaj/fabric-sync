@@ -19,7 +19,7 @@ import { ApiError } from '@/lib/api'
 import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
 import { STOCK_FILTERS } from '@/features/locations/lib/location-filters'
-import { useApplicableDefaultLocation } from '@/features/locations/hooks/use-default-location'
+import { useInvoiceLocationDefault } from './hooks/use-invoice-location-default'
 import type { Product } from '@/features/products/types/product'
 import { CURRENCY } from '@/lib/currency'
 import { CustomerBlock } from './components/invoice-form/customer-block'
@@ -152,14 +152,11 @@ export function InvoiceForm({
   const giftCards = editing ? [] : (savedInvoice?.giftCards ?? [])
   const giftCardToSend = giftCards.at(giftCardIndex)
 
-  // The user's default location pre-fills the two branch pickers below —
-  // receiving when it takes orders, sold-from when it holds stock. Only empty
-  // fields are touched, so a default that arrives late never overwrites a
-  // choice already made, and setting a value back to blank keeps it blank
-  // until the field is empty on a later pass (the guard re-checks the value,
-  // not a one-shot ref).
-  const receivingDefault = useApplicableDefaultLocation('receiving')
-  const stockDefault = useApplicableDefaultLocation('stock')
+  // Use an eligible user default or the sole eligible option. Fill empty fields
+  // only, so late data never overwrites saved values or a staff selection.
+  const issuingDefault = useInvoiceLocationDefault('issuing')
+  const receivingDefault = useInvoiceLocationDefault('receiving')
+  const stockDefault = useInvoiceLocationDefault('stock')
 
   const schema = editing ? invoiceFormSchema : invoiceCreateFormSchema
   const form = useForm({
@@ -247,6 +244,9 @@ export function InvoiceForm({
   }, [form, vatRate])
 
   useEffect(() => {
+    if (!editing && issuingDefault && form.state.values.issuingBranch === '') {
+      form.setFieldValue('issuingBranch', issuingDefault.id)
+    }
     if (receivingDefault && form.state.values.receivingBranch === '') {
       form.setFieldValue(
         'receivingBranch' as never,
@@ -259,7 +259,7 @@ export function InvoiceForm({
       // the picker — keep it in step with the pre-select above.
       setSoldFromBranchName(stockDefault.name)
     }
-  }, [receivingDefault, stockDefault, form])
+  }, [issuingDefault, receivingDefault, stockDefault, form, editing])
 
   useEffect(() => {
     if (!validationTarget) return

@@ -136,7 +136,7 @@ function ProductionLocationPicker({ order }: { order: Order }) {
   const updateOrder = useUpdateOrder()
   // An existing order is never silently rewritten: the default is offered as
   // a one-tap action while production is still unassigned and uninferred.
-  const stockDefault = useApplicableDefaultLocation('stock')
+  const stockDefault = useApplicableDefaultLocation('production')
   const showDefaultOffer =
     !order.productionLocationId && !order.productionLocationInferred
 
@@ -160,7 +160,7 @@ function ProductionLocationPicker({ order }: { order: Order }) {
 
   return (
     <section className="space-y-2">
-      <Label htmlFor="production-location">Made At</Label>
+      <Label htmlFor="production-location">Production branch</Label>
       <AsyncCombobox<Location>
         id="production-location"
         endpoint="/locations"
@@ -182,8 +182,14 @@ function ProductionLocationPicker({ order }: { order: Order }) {
         }}
       />
       <p className="text-xs text-muted-foreground">
-        Collected from {order.receivingLocation ?? 'an unassigned branch'}. A
-        delivery stage only applies while these two differ.
+        {order.collectionMethod === 'delivery' ? (
+          'Delivered to the customer after production.'
+        ) : (
+          <>
+            Collected from {order.receivingLocation ?? 'an unassigned branch'}.
+            A delivery stage only applies while these two differ.
+          </>
+        )}
       </p>
       {showDefaultOffer && stockDefault && (
         <Button

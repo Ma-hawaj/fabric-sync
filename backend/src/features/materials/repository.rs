@@ -34,7 +34,9 @@ const SPEC: ListSpec = ListSpec {
                     json_build_object(
                         'locationId', b.id,
                         'location', b.name,
-                        'quantity', ms.quantity
+                        'quantity', ms.quantity,
+                        'isActive', b.is_active,
+                        'holdsStock', b.holds_stock
                     )
                     ORDER BY b.name
                 ) FILTER (WHERE ms.id IS NOT NULL),

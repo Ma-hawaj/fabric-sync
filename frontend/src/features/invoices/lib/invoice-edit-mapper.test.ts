@@ -67,6 +67,8 @@ function editFixture(): InvoiceEdit {
             materialName: 'Linen',
             materialUnit: 'meters',
             materialAmount: 2,
+            materialLocationId: '0197fdd2-6a67-7000-8000-000000000005',
+            materialLocationName: 'Main Branch',
             productionLocationId: '0197fdd2-6a67-7000-8000-000000000005',
             productionLocationName: 'Main Branch',
             stockQuantity: 10,
@@ -122,6 +124,51 @@ describe('mapInvoiceEditToForm', () => {
       { code: 'GC-7KMP-4RWT-9DXH', amount: 55 },
       { code: 'GC-8BNQ-5SVX-3FYJ', amount: 55 },
     ])
+  })
+
+  it('restores distinct material sources without treating the workshop as stock', () => {
+    const edit = editFixture()
+    const line = edit.customers[0].orders[0]
+    line.materialLocationId = 'warehouse'
+    line.materialLocationName = 'Warehouse'
+    line.productionLocationId = 'workshop'
+    line.productionLocationName = 'Workshop'
+    edit.customers[0].orders.push({
+      ...line,
+      originalOrderId: 'other-order',
+      materialLocationId: 'other-warehouse',
+      materialLocationName: 'Other warehouse',
+      stockQuantity: 4,
+    })
+    const { values, seeds } = mapInvoiceEditToForm(edit)
+    expect(values.customers[0].orders[0]).toMatchObject({
+      materialLocationId: 'warehouse',
+      productionLocationId: 'workshop',
+    })
+    expect(
+      seeds.materials
+        .get(line.materialId!)
+        ?.locations.map((stock) => stock.locationId),
+    ).toEqual(['warehouse', 'other-warehouse'])
+    expect(invoicePayload(values).customers[0].orders[0]).toMatchObject({
+      materialLocationId: 'warehouse',
+      productionLocationId: 'workshop',
+    })
+  })
+  it('restores the issuing branch and each customer’s address for delivery', () => {
+    const edit = editFixture()
+    edit.customers[0].customerAddress = 'Building 2, Road 3'
+    const { values, seeds } = mapInvoiceEditToForm({
+      ...edit,
+      issuingBranchId: 'issuer',
+      issuingBranchName: 'Issuing office',
+      collectionMethod: 'delivery',
+    })
+    expect(values.issuingBranch).toBe('issuer')
+    expect(
+      seeds.customers.get(values.customers[0].existingCustomerId)?.address,
+    ).toBe('Building 2, Road 3')
+    expect(seeds.locationLabels.get('issuer')).toBe('Issuing office')
   })
   it('restores urgency, collection method, and customer addresses when editing', () => {
     const edit = editFixture()

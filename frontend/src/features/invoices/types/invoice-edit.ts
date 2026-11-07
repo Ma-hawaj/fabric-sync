@@ -44,6 +44,8 @@ export interface InvoiceEditOrder {
   materialName: string
   materialUnit: string
   materialAmount: number
+  materialLocationId: string | null
+  materialLocationName: string | null
   productionLocationId: string | null
   productionLocationName: string | null
   /** Live stock at the production location — seeds the "Made At" picker. */
@@ -113,6 +115,8 @@ export interface InvoiceEditRedemption {
 
 /** Shape of GET /invoices/:id/edit — the invoice as entered, not as printed. */
 export interface InvoiceEdit {
+  issuingBranchId?: string | null
+  issuingBranchName?: string | null
   vatRate: number
   urgentCharge: number
   collectionMethod: 'delivery' | 'pickup'

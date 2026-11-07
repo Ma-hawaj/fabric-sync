@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO branch (name, receives_orders, holds_stock)\n        VALUES ($1, $2, $3)\n        RETURNING id, name, receives_orders, holds_stock, is_active\n        ",
+  "query": "\n        UPDATE branch\n        SET name = COALESCE($2, name),\n            receives_orders = COALESCE($3, receives_orders),\n            holds_stock = COALESCE($4, holds_stock),\n            produces_orders = COALESCE($5, produces_orders),\n            is_active = COALESCE($6, is_active)\n        WHERE id = $1\n        RETURNING id, name, receives_orders, holds_stock, produces_orders, is_active\n        ",
   "describe": {
     "columns": [
       {
@@ -25,13 +25,21 @@
       },
       {
         "ordinal": 4,
+        "name": "produces_orders",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
         "name": "is_active",
         "type_info": "Bool"
       }
     ],
     "parameters": {
       "Left": [
+        "Uuid",
         "Text",
+        "Bool",
+        "Bool",
         "Bool",
         "Bool"
       ]
@@ -41,8 +49,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "784ebfd214ab91c8ae08c647f24212776a05feedc19a7fd5d175ccfbba94ef27"
+  "hash": "9563cb852ed1577db544d35dcf2114ac3cf21249f53f16140dc47677f4562b4b"
 }

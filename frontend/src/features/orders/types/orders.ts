@@ -152,11 +152,15 @@ export interface Order {
    * one, a material stocked at exactly one location is inferred — see
    * productionLocationInferred. Null when neither is available.
    */
+  materialLocationId?: string | null
+  materialLocation?: string | null
   productionLocationId: string | null
   productionLocation: string | null
   /** True when productionLocation was inferred rather than assigned by staff. */
   productionLocationInferred: boolean
   /** Where the customer collects, taken from the invoice's branch. */
+  collectionMethod?: 'delivery' | 'pickup'
+  customerAddress?: string | null
   receivingLocationId: string | null
   receivingLocation: string | null
   stages: OrderStageEntry[]

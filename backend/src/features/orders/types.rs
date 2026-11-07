@@ -108,6 +108,7 @@ pub struct RepairRow {
 /// selected column with no matching field, so they need no counterpart here.
 #[derive(Clone, Debug, sqlx::FromRow)]
 pub struct OrderRow {
+    pub customer_address: Option<String>,
     pub id: Uuid,
     /// The tailor-quotable number (`ORD-###`), DB-assigned like
     /// `invoices.invoice_number`.
@@ -154,7 +155,10 @@ pub struct OrderRow {
     pub more_details: Option<String>,
     pub production_location_id: Option<Uuid>,
     pub production_location: Option<String>,
+    pub material_location_id: Option<Uuid>,
+    pub material_location: Option<String>,
     pub receiving_location_id: Option<Uuid>,
+    pub collection_method: String,
     pub receiving_location: Option<String>,
     pub invoice_total_price: f64,
     pub invoice_amount_paid: f64,
@@ -221,6 +225,8 @@ pub struct OrderRepair {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderListItem {
+    pub customer_address: Option<String>,
+    pub collection_method: String,
     pub id: Uuid,
     /// The tailor-quotable number (`ORD-###`), DB-assigned like
     /// `invoices.invoice_number`. A bare number here; consumers prefix it.
@@ -273,6 +279,8 @@ pub struct OrderListItem {
     /// inferred — see `production_location_inferred`.
     pub production_location_id: Option<Uuid>,
     pub production_location: Option<String>,
+    pub material_location_id: Option<Uuid>,
+    pub material_location: Option<String>,
     /// True when `production_location_id` was inferred from `material_stock`
     /// rather than assigned by staff. Never true alongside a stored
     /// `orders.production_branch_id` — an explicit assignment always displaces

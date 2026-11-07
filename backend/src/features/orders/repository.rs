@@ -41,6 +41,7 @@ const SPEC: ListSpec = ListSpec {
             c.customer_number,
             c.name AS customer_name,
             c.mobile_no AS customer_mobile,
+            c.address AS customer_address,
             COALESCE(mat.name, o.customer_material_description) AS material,
             o.material_source,
             CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END AS material_filter,
@@ -68,8 +69,11 @@ const SPEC: ListSpec = ListSpec {
             o.more_details,
             o.production_branch_id AS production_location_id,
             prod.name AS production_location,
-            i.branch_id AS receiving_location_id,
-            recv.name AS receiving_location,
+            CASE WHEN o.material_source = 'shop' THEN o.material_stock_branch_id END AS material_location_id,
+            origin.name AS material_location,
+            CASE WHEN i.collection_method = 'pickup' THEN i.branch_id END AS receiving_location_id,
+            i.collection_method,
+            CASE WHEN i.collection_method = 'pickup' THEN recv.name END AS receiving_location,
             -- What the table shows and filters on: the explicit assignment
             -- when staff set one, otherwise the single-stock-location
             -- inference below (the same material location the Made At picker
@@ -102,6 +106,7 @@ const SPEC: ListSpec = ListSpec {
         JOIN customers c ON c.id = m.customer_id
         LEFT JOIN materials mat ON mat.id = o.material_id
         LEFT JOIN branch prod ON prod.id = o.production_branch_id
+        LEFT JOIN branch origin ON origin.id = CASE WHEN o.material_source = 'shop' THEN o.material_stock_branch_id END
         LEFT JOIN branch recv ON recv.id = i.branch_id
         -- The invoice's money state, derived from the payments ledger: the
         -- table stores only the total, so the paid sum, the status and the
@@ -126,7 +131,7 @@ const SPEC: ListSpec = ListSpec {
             WHERE ms.material_id = o.material_id
               AND ms.quantity > 0
               AND b.is_active
-              AND b.holds_stock
+              AND b.holds_stock AND b.produces_orders
             GROUP BY ms.material_id
             HAVING COUNT(DISTINCT ms.branch_id) = 1
         ) inferred ON true
@@ -144,6 +149,7 @@ const SPEC: ListSpec = ListSpec {
                   NOT s.requires_delivery
                   OR (
                       COALESCE(o.production_branch_id, inferred.branch_id) IS NOT NULL
+                      AND i.collection_method = 'pickup'
                       AND i.branch_id IS NOT NULL
                       AND COALESCE(o.production_branch_id, inferred.branch_id) <> i.branch_id
                   )
@@ -279,7 +285,7 @@ pub async fn single_stock_locations(
         WHERE ms.material_id = ANY($1)
           AND ms.quantity > 0
           AND b.is_active
-          AND b.holds_stock
+          AND b.holds_stock AND b.produces_orders
         GROUP BY ms.material_id
         HAVING COUNT(DISTINCT ms.branch_id) = 1
         "#,

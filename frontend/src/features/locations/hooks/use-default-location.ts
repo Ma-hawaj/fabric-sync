@@ -3,6 +3,7 @@ import { apiClient } from '@/lib/api'
 import {
   orderReceivingLocations,
   stockLocations,
+  productionLocations,
 } from '../lib/location-filters'
 import type { Location } from '../types/location'
 
@@ -40,7 +41,7 @@ export function useDefaultLocationId(): string | null {
   return data?.defaultLocationId ?? null
 }
 
-export type DefaultLocationKind = 'receiving' | 'stock'
+export type DefaultLocationKind = 'receiving' | 'stock' | 'production'
 
 /**
  * The default location when it is usable as this kind of picker, else null.
@@ -59,7 +60,9 @@ export function useApplicableDefaultLocation(
   const applicable =
     kind === 'receiving'
       ? orderReceivingLocations([location])
-      : stockLocations([location])
+      : kind === 'production'
+        ? productionLocations([location])
+        : stockLocations([location])
   return applicable.length > 0 ? location : null
 }
 

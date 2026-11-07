@@ -153,6 +153,55 @@ describe('readiness notification lifecycle', () => {
     ).toBe(false)
   })
 
+  it('confirms delivery readiness without opening a pickup notification', async () => {
+    vi.mocked(apiClient.post).mockResolvedValueOnce({
+      data: { becameReady: true },
+    })
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    render(
+      <QueryClientProvider client={client}>
+        <ReadinessControls
+          id="order-1"
+          invoiceId="invoice-1"
+          scope="orders"
+          status="in_progress"
+          collectionMethod="delivery"
+        />
+      </QueryClientProvider>,
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mark ready for delivery' }),
+    )
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: 'I confirm the garments are ready for delivery.',
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm ready' }))
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith('/orders/order-1/ready', {
+        confirmedAtPickupBranch: true,
+      }),
+    )
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'Confirm ready for delivery' }),
+      ).toBeNull(),
+    )
+    expect(
+      vi
+        .mocked(apiClient.post)
+        .mock.calls.some(
+          ([path]) => path === '/invoices/invoice-1/notifications',
+        ),
+    ).toBe(false)
+  })
+
   it.each([true, false])(
     'only opens the pickup preview when the order makes its invoice ready (becameReady=%s)',
     async (becameReady) => {
