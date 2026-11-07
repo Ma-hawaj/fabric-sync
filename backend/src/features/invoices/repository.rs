@@ -1088,7 +1088,7 @@ pub async fn fetch_invoice_edit(
             COALESCE(mat.unit, 'meters') AS "material_unit!",
             o.material_amount::float8 AS "material_amount!",
             o.production_branch_id,
-            COALESCE(o.material_stock_branch_id, o.production_branch_id) AS material_location_id,
+            o.material_stock_branch_id AS material_location_id,
             stock_branch.name AS "material_location_name?",
             b.name AS "production_location_name?",
             ms.quantity::float8 AS stock_quantity,
@@ -1109,10 +1109,10 @@ pub async fn fetch_invoice_edit(
         JOIN customers c ON c.id = m.customer_id
         LEFT JOIN materials mat ON mat.id = o.material_id
         LEFT JOIN branch b ON b.id = o.production_branch_id
-        LEFT JOIN branch stock_branch ON stock_branch.id = COALESCE(o.material_stock_branch_id, o.production_branch_id)
+        LEFT JOIN branch stock_branch ON stock_branch.id = o.material_stock_branch_id
         LEFT JOIN material_stock ms
             ON ms.material_id = o.material_id
-            AND ms.branch_id = COALESCE(o.material_stock_branch_id, o.production_branch_id)
+            AND ms.branch_id = o.material_stock_branch_id
         WHERE o.invoice_id = $1
         ORDER BY o.id
         "#,
@@ -1372,7 +1372,7 @@ pub async fn old_order_lines(
     sqlx::query_as!(
         OldOrderLine,
         r#"
-        SELECT material_id, COALESCE(material_stock_branch_id, production_branch_id) AS material_stock_branch_id, material_amount::float8 AS "material_amount!"
+        SELECT material_id, material_stock_branch_id, material_amount::float8 AS "material_amount!"
         FROM orders
         WHERE invoice_id = $1
         "#,

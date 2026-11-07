@@ -3,7 +3,7 @@
 
 Reads the storage spreadsheet — one row per fabric colour (``c. no.``) with
 its length in meters (``MATERS``) and code — and loads it into the Postgres
-schema defined by ``backend/migrations/20260712000000_create_tables.sql``:
+schema defined by ``backend/migrations/``:
 
   Storage(cloth ).csv  -> materials + material_stock
 
@@ -25,8 +25,9 @@ Mapping decisions worth knowing:
    are what ``material_stock`` tracks.
  * No branch is named in the sheet. All stock lands on one branch:
    ``--branch`` if given (created when missing), else the first active
-   ``holds_stock`` branch, else a created 'Main Branch' — the same rule as
-   ``scripts/ingest_xlsm.py``.
+   ``holds_stock`` branch, else a created 'Main Warehouse'. Existing branches must
+   be active and hold stock; new branches enable only stock holding. Production
+   and pickup capabilities are not inferred from inventory.
  * Re-runs add again: ``materials`` has no UNIQUE key, so an existing
    (name, sku) row is reused but its stock grows a second time (its family
    is backfilled when still NULL). Use ``--mode set`` to overwrite the
@@ -40,7 +41,7 @@ Run from the repository root, with DATABASE_URL exported (or --database-url):
   export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fabric_sync
   python3 scripts/ingest_storage_csv.py --dry-run   # sheet only, no DB writes
   python3 scripts/ingest_storage_csv.py
-  python3 scripts/ingest_storage_csv.py --branch "Central Workshop"
+  python3 scripts/ingest_storage_csv.py --branch "Main Warehouse"
   python3 scripts/ingest_storage_csv.py --mode set  # re-run overwrites stock
 """
 
@@ -56,9 +57,11 @@ from pathlib import Path
 
 import psycopg2
 
+from ingest_locations import require_branch, select_branch
+
 ROOT = Path(__file__).resolve().parents[1]
 STORAGE_CSV = ROOT / "Storage(cloth ).csv"
-DEFAULT_BRANCH = "Main Branch"
+DEFAULT_BRANCH = "Main Warehouse"
 
 
 class Report:
@@ -192,49 +195,14 @@ def group_materials(rows: list[dict]) -> dict[tuple[str, str | None], dict]:
     return groups
 
 
-def load_branches(conn) -> list[tuple]:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT name, id FROM branch "
-            "WHERE is_active AND holds_stock ORDER BY id"
-        )
-        branches = list(cur.fetchall())
-        if not branches:
-            cur.execute("SELECT name, id FROM branch WHERE is_active ORDER BY id")
-            branches = list(cur.fetchall())
-    return branches
-
-
 def choose_branch(conn, branch_arg: str | None,
                   report: Report) -> tuple[object, str]:
-    """Return (branch_id, label). Creates the branch when missing."""
-    branches = load_branches(conn)
-    if branch_arg:
-        for name, id_ in branches:
-            if name == branch_arg:
-                return id_, name
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO branch (name, receives_orders, holds_stock, is_active) "
-                "VALUES (%s, TRUE, TRUE, TRUE) RETURNING id",
-                (branch_arg,),
-            )
-            report.count(f"branch created: {branch_arg}")
-            return cur.fetchone()[0], branch_arg
-    if branches:
-        return branches[0][1], branches[0][0]
-    with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO branch (name, receives_orders, holds_stock, is_active) "
-            "VALUES (%s, TRUE, TRUE, TRUE) RETURNING id",
-            (DEFAULT_BRANCH,),
-        )
-        report.count(f"branch created: {DEFAULT_BRANCH}")
-        return cur.fetchone()[0], DEFAULT_BRANCH
+    return select_branch(conn, branch_arg, "holds_stock", DEFAULT_BRANCH, report)
 
 
 def perform_insert(conn, groups: dict, branch_id: object, branch_label: str,
                    report: Report, mode: str) -> None:
+    require_branch(conn, branch_id, "holds_stock")
     with conn.cursor() as cur:
         for (name, sku), group in sorted(groups.items(),
                                          key=lambda kv: (kv[0][0], kv[0][1] or "")):

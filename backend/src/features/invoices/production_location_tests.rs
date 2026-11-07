@@ -16,6 +16,55 @@ async fn quantity(db: &PgPool, material: Uuid, branch: Uuid) -> f64 {
 }
 
 #[sqlx::test]
+async fn imported_production_does_not_imply_a_stock_allocation_or_restore_stock(db: PgPool) {
+    let (invoice, orders, workshop, _) = test_support::invoice(&db, 1, false).await;
+    let warehouse: Uuid = sqlx::query_scalar("INSERT INTO branch(name,receives_orders,holds_stock,produces_orders) VALUES('Warehouse',false,true,false) RETURNING id").fetch_one(&db).await.unwrap();
+    let material: Uuid = sqlx::query_scalar("INSERT INTO materials(name,junior_price,normal_price,large_price) VALUES('Legacy fabric',10,20,30) RETURNING id").fetch_one(&db).await.unwrap();
+    for (location, amount) in [(workshop, 10.0), (warehouse, 20.0)] {
+        sqlx::query(
+            "INSERT INTO material_stock(material_id,branch_id,quantity) VALUES($1,$2,$3::float8)",
+        )
+        .bind(material)
+        .bind(location)
+        .bind(amount)
+        .execute(&db)
+        .await
+        .unwrap();
+    }
+    // Legacy imports know where production happens but never deducted stock.
+    sqlx::query("UPDATE orders SET material_source='shop',customer_material_description=NULL,material_id=$2,material_stock_branch_id=NULL WHERE id=$1")
+        .bind(orders[0]).bind(material).execute(&db).await.unwrap();
+    let state = test_support::state(db.clone(), None, None).await;
+    let order = crate::features::orders::repository::get_order(&state, orders[0])
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(order.production_location_id, Some(workshop));
+    assert!(order.material_location_id.is_none());
+    assert!(order.material_location.is_none());
+    let edit = service::get_invoice_for_edit(&state, invoice)
+        .await
+        .unwrap();
+    let line = &edit.customers[0].orders[0];
+    assert!(line.material_location_id.is_none());
+    assert!(line.material_location_name.is_none());
+    assert!(line.stock_quantity.is_none());
+    let payload = json!({"expectedVatRate":0.1,"discountUnit":"amount","customers":[{
+        "existingCustomerId":edit.customers[0].existing_customer_id,
+        "measurement":{"date":"2026-11-07","type":"body","fit":"medium"},
+        "orders":[{"originalOrderId":orders[0],"materialId":material,"materialAmount":3,
+            "materialLocationId":warehouse,"productionLocationId":workshop}]
+    }]});
+    let updated =
+        service::update_invoice(&state, invoice, serde_json::from_value(payload).unwrap())
+            .await
+            .unwrap();
+    assert_eq!(updated.total_price, 100.0);
+    assert_eq!(quantity(&db, material, workshop).await, 10.0);
+    assert_eq!(quantity(&db, material, warehouse).await, 17.0);
+}
+
+#[sqlx::test]
 async fn warehouse_stock_and_production_only_workshop_stay_independent_through_edits(db: PgPool) {
     let warehouse: Uuid = sqlx::query_scalar("INSERT INTO branch(name,receives_orders,holds_stock,produces_orders) VALUES('Warehouse',false,true,false) RETURNING id").fetch_one(&db).await.unwrap();
     let workshop: Uuid = sqlx::query_scalar("INSERT INTO branch(name,receives_orders,holds_stock,produces_orders) VALUES('Workshop',false,false,true) RETURNING id").fetch_one(&db).await.unwrap();

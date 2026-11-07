@@ -87,9 +87,14 @@ Mapping decisions worth knowing:
     Date is the customer receiving date, not the date the garment moved
     branches, so it feeds orders.collected_at (and the invoice target date)
     but never a 'Location delivery' completion timestamp.
- * No branch is named in the workbook. Every invoice uses one branch:
+ * No branch is named in the workbook. Every invoice uses one issuing/pickup branch:
    ``--branch`` if given (created when missing), else the first active
    ``receives_orders`` branch, else a created 'Main Branch'.
+   Orders use the first active ``produces_orders`` branch (ordered by id), or
+   ``--production-branch NAME`` to select/create a separate workshop. Missing
+   production configuration is an error. Existing branches must be active and
+   support the requested role; newly created branches enable only that role.
+   Material stock origins remain unknown: no stock is deducted or allocated.
  * Measurement values are text in the workbook ('55 ½', '17  ¾'). Halves,
    quarters, and eighths (symbols or slash fractions) are parsed to NUMERIC
    with three decimal places; unparseable values
@@ -124,6 +129,7 @@ Run from the repository root, with DATABASE_URL exported (or --database-url):
   python3 scripts/ingest_xlsm.py
   python3 scripts/ingest_xlsm.py --dry-run      # workbook only, no DB writes
   python3 scripts/ingest_xlsm.py --branch "Thobx Main"
+  python3 scripts/ingest_xlsm.py --production-branch "Central Workshop"
 
 Ambiguous customer identities are never merged and never prompt: one phone
 with several name spellings stays separate customers, one name with several
@@ -146,6 +152,8 @@ from pathlib import Path
 
 import openpyxl
 import psycopg2
+
+from ingest_locations import require_branch, select_branch
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKBOOK = ROOT / "2026 Orders.xlsm"
@@ -719,8 +727,6 @@ def load_db_state(conn) -> dict:
         customer_rows = [(str(n), str(m), str(i)) for n, m, i in cur.fetchall()]
         cur.execute("SELECT order_id, reported_on, reason FROM order_repairs")
         repairs = {(str(a), b, c) for a, b, c in cur.fetchall()}
-        cur.execute("SELECT name, id FROM branch WHERE is_active ORDER BY receives_orders DESC, id")
-        branches = list(cur.fetchall())
         cur.execute("SELECT name, id FROM order_stages")
         stages = {str(name): str(id_) for name, id_ in cur.fetchall()}
         cur.execute(
@@ -755,23 +761,14 @@ def load_db_state(conn) -> dict:
         "invoice_numbers": invoice_numbers,
         "customer_rows": customer_rows,
         "repairs": repairs,
-        "branches": branches,
         "stages": stages,
         "measurement_sigs": measurement_sigs,
         "orders_by_invoice": orders_by_invoice,
     }
 
 
-def choose_branch(conn, branch_arg: str | None, state: dict) -> tuple[str | None, str | None]:
-    """Return (branch_id, created_name). branch_id is None when a new branch
-    must be created."""
-    if branch_arg:
-        for name, id_ in state["branches"]:
-            if name == branch_arg and id_:
-                return id_, None
-    elif state["branches"]:
-        return state["branches"][0][1], None
-    return None, branch_arg or DEFAULT_BRANCH
+def choose_branch(conn, branch_arg: str | None, report: Report) -> tuple[object, str]:
+    return select_branch(conn, branch_arg, "receives_orders", DEFAULT_BRANCH, report)
 
 
 MEASUREMENT_COLUMNS = """(
@@ -886,11 +883,17 @@ def legacy_customer_numbers(workbook: dict, report: Report) -> tuple[dict, int]:
 
 def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                    material_name: str = DEFAULT_MATERIAL,
-                   material_amount: Decimal = Decimal("1")) -> None:
+                   material_amount: Decimal = Decimal("1"),
+                   production_branch_id: object | None = None) -> None:
     if (not material_amount.is_finite() or material_amount <= 0
             or material_amount > Decimal("99999999.99")
             or material_amount != material_amount.quantize(Decimal("0.01"))):
         raise ValueError("material amount must be positive with at most two decimal places")
+    _, issuing_branch_name = require_branch(conn, branch_id, "receives_orders")
+    if production_branch_id is None:
+        production_branch_id, _ = select_branch(conn, None, "produces_orders", None, report)
+    else:
+        require_branch(conn, production_branch_id, "produces_orders")
     state = load_db_state(conn)
     legacy_numbers, reserved_max = legacy_customer_numbers(workbook, report)
     with conn.cursor() as cur:
@@ -1073,8 +1076,8 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 INSERT INTO invoices (
                     invoice_number, created_at, total_price, invoice_date, target_date, branch_id,
                     discount, discount_unit, customer_id, gift_card_redeemed,
-                    vat_rate, taxable_amount, vat_amount
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'amount', %s, 0, %s, %s, %s)
+                    issuing_branch_id, issuing_branch_name, vat_rate, taxable_amount, vat_amount
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'amount', %s, 0, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -1086,6 +1089,8 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                     branch_id,
                     inv["discount"],
                     customer_ids[inv_key],
+                    branch_id,
+                    issuing_branch_name,
                     LEGACY_VAT_RATE,
                     taxable_amount,
                     vat_amount,
@@ -1175,8 +1180,8 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                     INSERT INTO orders (
                         measurement_id, material_id, material_amount, invoice_id, price,
                         thobe_type, f_pocket, collar, sleeve, patti, emd, more_details,
-                        status, collected_at, production_branch_id
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
+                        status, collected_at, production_branch_id, material_stock_branch_id
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
                     RETURNING id
                     """,
                     (
@@ -1194,6 +1199,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                         design.get("more_details"),
                         "collected" if inv["status"] == "done" else "pending",
                         collected_at,
+                        production_branch_id,
                     ),
                 )
                 order_id = cur.fetchone()[0]
@@ -1281,7 +1287,10 @@ def main() -> int:
                         help="path to the workbook (default: repo root)")
     parser.add_argument("--database-url", default=None, help="defaults to $DATABASE_URL")
     parser.add_argument("--branch", default=None,
-                        help="branch name for all invoices (created if missing)")
+                        help="issuing/pickup branch name (must receive orders; created if missing)")
+    parser.add_argument("--production-branch", default=None,
+                        help="production branch name (created if missing; "
+                             "default: first active branch that produces orders)")
     parser.add_argument("--material", default=DEFAULT_MATERIAL,
                         help="placeholder material every order points at "
                              "(created if missing; sheet names are ignored)")
@@ -1309,18 +1318,14 @@ def main() -> int:
     conn = psycopg2.connect(url)
     conn.autocommit = False
     try:
-        branch_id, created_name = choose_branch(conn, args.branch, load_db_state(conn))
-        if branch_id is None:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO branch (name, receives_orders, holds_stock, is_active) "
-                    "VALUES (%s, TRUE, TRUE, TRUE) RETURNING id",
-                    (created_name,),
-                )
-                branch_id = cur.fetchone()[0]
-            report.count(f"branch created: {created_name}")
+        branch_id, branch_label = choose_branch(conn, args.branch, report)
+        production_id, production_label = select_branch(
+            conn, args.production_branch, "produces_orders", None, report)
+        print(f"Issuing/pickup branch: {branch_label}")
+        print(f"Production branch: {production_label}")
         perform_insert(conn, workbook, branch_id, report,
-                       material_name=args.material, material_amount=args.material_amount)
+                       material_name=args.material, material_amount=args.material_amount,
+                       production_branch_id=production_id)
         conn.commit()
     except Exception:
         conn.rollback()
