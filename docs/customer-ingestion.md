@@ -18,15 +18,36 @@ is ignored by Git because it contains customer names and phone numbers.
    On subsequent dry runs, it preserves reviewed decisions and refreshes pending
    suggestions, including any new shared-phone names.
 
-2. Edit `scripts/customer-decisions.json`, changing each `decision` to `same`
-   or `different`. Leave uncertain pairs `pending` to keep them separate:
+2. Review the file interactively:
 
-   ```json
-   [
-     {"phone": "33333333", "names": ["Ali Ahmed", "Ali Ahmad"], "decision": "same"},
-     {"phone": "33333333", "names": ["Ali Ahmed", "Hassan Ahmed"], "decision": "different"}
-   ]
+   ```bash
+   python3 scripts/review_customers.py
    ```
+
+   The command shows the most similar unresolved names first, with one pair at
+   a time. Choose `s` for the same person, `d` for different people, `k` to skip,
+   `u` to undo a recent answer, or `q` to quit. Every answer is saved immediately
+   to the same JSON file; stopping and restarting resumes the remaining review.
+   Blank input skips a pair, keeping it pending for the next session.
+
+   For a family phone shared by many people, choose `a` to see all unresolved
+   names on that number and confirm that its remaining pairs are different.
+   Previously approved aliases are preserved. This bulk action applies to the
+   whole phone group, including pairs below a similarity filter.
+
+   To focus a large review, use either option:
+
+   ```bash
+   python3 scripts/review_customers.py --min-similarity 0.8
+   python3 scripts/review_customers.py --phone 33333333
+   ```
+
+   Filters only control which pairs are shown; others remain pending and stay
+   separate during import. The reviewer runs locally with Python's standard
+   library, without the workbook or a database connection. It supports the
+   existing decisions file format, so your generated file can be used directly.
+   For a custom file, pass `--customer-decisions /path/to/decisions.json`.
+   You can still edit the JSON manually when needed.
 
 3. Run `--dry-run` again to validate the decisions and preview the import.
    Copy the resulting file securely to `scripts/customer-decisions.json` in

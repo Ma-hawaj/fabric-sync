@@ -2,9 +2,70 @@
 import itertools
 import json
 import os
+import re
 import tempfile
 from difflib import SequenceMatcher
 from pathlib import Path
+
+
+def norm_name(value: object) -> str | None:
+    if value is None:
+        return None
+    s = re.sub(r"\s+", " ", str(value).strip())
+    return s or None
+
+
+def norm_phone(value: object) -> str | None:
+    """Normalize a workbook phone number to the stored ``mobile_no`` form.
+
+    Bahrain local numbers are 8 digits; they are stored with the default
+    ``+973`` prefix (``33332963`` -> ``+97333332963``). Numbers already
+    carrying the 973 country code collapse to the same ``+973...`` form, and
+    other international numbers keep an explicit ``+`` when the cell had one.
+    """
+    if value is None:
+        return None
+    had_plus = False
+    if isinstance(value, (int, float)):
+        digits = str(int(value))
+    else:
+        s = str(value).strip()
+        if not s:
+            return None
+        had_plus = s.startswith("+")
+        digits = re.sub(r"\D", "", s)
+    if not digits:
+        return None
+    if len(digits) == 8:
+        return f"+973{digits}"
+    if digits.startswith("973") and len(digits) == 11:
+        return f"+{digits}"
+    if had_plus:
+        return f"+{digits}"
+    return digits
+
+
+def canon_name(value: object) -> str | None:
+    """Whitespace-collapsed, casefolded name for customer matching.
+
+    Display spelling ('Ali' vs 'ALI') must not split one customer, so every
+    identity check uses this; the first-seen display form is what gets stored.
+    """
+    name = norm_name(value)
+    return name.casefold() if name else None
+
+
+def canon_key(name_value: object, phone_value: object) -> tuple[str, str] | None:
+    """Canonical customer identity, or None when unidentifiable.
+
+    Accepts raw cell values or already-normalized strings — both helpers are
+    idempotent, so callers don't need to care which they hold.
+    """
+    name = canon_name(name_value)
+    phone = norm_phone(phone_value)
+    if not (name and phone):
+        return None
+    return (name, phone)
 
 
 class CustomerIdentity:
@@ -69,7 +130,11 @@ def load_identity(path, canonical_key):
 def save_review(path, identity, identities):
     """Preserve reviewed decisions and refresh pending pairs atomically."""
     reviewed = [row for row in identity.decisions if row["decision"] != "pending"]
-    rows = reviewed + identity.review(identities)
+    save_decisions(path, reviewed + identity.review(identities))
+
+
+def save_decisions(path, rows):
+    """Replace a decisions file atomically, without truncating the old file."""
     destination = Path(path)
     # A failed write must never truncate previous decisions.
     fd, temporary = tempfile.mkstemp(prefix=destination.name + ".", dir=destination.parent)
