@@ -237,7 +237,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 {order.material}
                 {order.materialSource === 'customer' && (
                   <span className="block text-xs text-muted-foreground">
-                    Customer-provided material
+                    Customer material
                   </span>
                 )}
               </dd>

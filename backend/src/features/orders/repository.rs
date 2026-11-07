@@ -44,7 +44,7 @@ const SPEC: ListSpec = ListSpec {
             c.address AS customer_address,
             COALESCE(mat.name, o.customer_material_description) AS material,
             o.material_source,
-            CASE WHEN o.material_source = 'customer' THEN 'Customer-provided material' ELSE mat.name END AS material_filter,
+            CASE WHEN o.material_source = 'customer' THEN 'Customer material' ELSE mat.name END AS material_filter,
             mat.sku AS material_sku,
             o.material_id,
             o.material_amount::float8 AS material_amount,

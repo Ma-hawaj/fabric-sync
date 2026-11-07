@@ -33,7 +33,7 @@ export function OrdersPage() {
   const columns = React.useMemo(() => {
     const names = [
       ...new Set([
-        'Customer-provided material',
+        'Customer material',
         ...materials.map((material) => material.name),
       ]),
     ].sort()

@@ -806,7 +806,7 @@ mod tests {
             measurement: tests_support::measurement(),
         };
         let html = test_render(&detail, &branding());
-        assert!(html.contains("Customer-provided material"));
+        assert!(html.contains("Customer material"));
         assert!(html.contains("White &lt;linen&gt;"));
         assert!(html.contains("Urgent"));
     }

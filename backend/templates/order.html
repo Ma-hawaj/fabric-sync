@@ -19,7 +19,7 @@
 {%- macro material_name(item) -%}
   <span class="material-name">{{ item.material }}</span>
   {% if item.materialSku %}<strong class="material-sku">SKU: {{ item.materialSku }}</strong>{% endif %}
-  {% if item.materialSource == 'customer' %}<span class="material-source">Customer-provided material</span>{% endif %}
+  {% if item.materialSource == 'customer' %}<span class="material-source">Customer material</span>{% endif %}
 {%- endmacro -%}
 {%- macro order_reference(item) -%}
   <span class="order-reference">

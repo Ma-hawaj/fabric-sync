@@ -157,7 +157,7 @@ export function CancelOrderDialog({
             ) : (
               <p className="text-xs text-muted-foreground">
                 {context.order.materialSource === 'customer'
-                  ? 'Customer-provided fabric is not added to shop inventory.'
+                  ? 'Customer material is not added to shop inventory.'
                   : 'The original stock location is unavailable. Any verified unused fabric must be handled through Inventory.'}
               </p>
             )}
