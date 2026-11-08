@@ -23,7 +23,9 @@ Mapping decisions worth knowing:
    including when saved same-person decisions combine name variations.
    A receipt referencing exactly one identifiable measurement customer uses
    that customer for the invoice as well as the orders, so receipt spelling
-   variations do not create extra customers. A named measurement row may use
+   variations do not create extra customers. Consistent exact references also
+   link other receipts using the same contact name and phone, even without a
+   Measurement No on those receipts. A named measurement row may use
    its linked receipt's phone when its own phone is missing. Receipts with
    no usable measurement customer, or several distinct measurement customers,
    keep their own contact identity; each order still uses its own measurement
@@ -31,8 +33,8 @@ Mapping decisions worth knowing:
    share one customer and a saved preferred name. With one measured customer,
    its name wins for all that phone's contacts. Multiple measured identities
    sharing a phone stay separate until explicitly reviewed as the same person.
-   Unmeasured contacts must use one of those measured customers, selected in
-   the decisions file; they never introduce another customer on that phone.
+   Unmeasured contacts use one of those measured customers through exact
+   references or a saved selection; they never add another customer on that phone.
    Different measured names whose Measurement Nos are 1–5 apart are classified
    as different automatically; saved same-person decisions take precedence.
    Matching normalizes names and phones (Bahrain numbers get ``+973``; names
@@ -304,6 +306,7 @@ def apply_customer_identity(workbook, identity, state=None):
     # Rebuild from original names, not a previous automatic phone grouping.
     identity.phone_measured = None
     identity.phone_defaults = {}
+    identity.measurement_links = {}
     identity.labels = {}
     workbook["customer_identity"] = identity
     if "invoices" not in workbook or "measurements" not in workbook:
@@ -344,7 +347,25 @@ def apply_customer_identity(workbook, identity, state=None):
                                 "customerId": cid, "date": date,
                                 "values": {col: value for col, value in zip(MEASUREMENT_VALUE_COLS, values)
                                            if value not in {"NULL", "None"}}})
-    identity.configure_phones(list(display.values()), records)
+    # An exact receipt reference also identifies its name/phone on other receipts.
+    # Conflicting or unusable references keep that contact unresolved.
+    referenced_owners = collections.defaultdict(set)
+    unresolved_contacts = set()
+    for invoice in workbook["invoices"]:
+        contact = identity.base_key(invoice["name"], invoice["phone"])
+        if contact is None:
+            continue
+        for no in invoice["meas_nos"]:
+            measurement = sources.get(no)
+            if measurement and any(v is not None for v in measurement.get("values", {}).values()):
+                owner = measurement_customer_key(workbook, measurement, invoice)
+                if owner:
+                    referenced_owners[contact].add(owner)
+                    continue
+            unresolved_contacts.add(contact)
+    reference_links = {contact: next(iter(owners)) for contact, owners in referenced_owners.items()
+                       if len(owners) == 1 and contact not in unresolved_contacts}
+    identity.configure_phones(list(display.values()), records, reference_links)
     for measurement in workbook["measurements"]:
         measurement["key"] = identity.key(measurement["name"], measurement["phone"])
 
@@ -1471,6 +1492,7 @@ def main() -> int:
     report.count("customer names to choose", len(identity.name_questions))
     report.count("measured customer pairs to verify", sum(row["decision"] == "pending" for row in questions))
     report.count("measured pairs automatically different", sum(row["decision"] == "different" for row in questions))
+    report.count("receipt contacts linked by Measurement No", len(identity.measurement_links))
     print(report.summary("workbook"))
 
     if args.dry_run:

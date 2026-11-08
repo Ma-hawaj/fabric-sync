@@ -724,6 +724,33 @@ class DatabaseIntegrationTests(unittest.TestCase):
             cur.execute("SELECT count(*) FROM customers")
             self.assertEqual(cur.fetchone()[0], 1)
 
+    def test_measurement_references_assign_unreferenced_alias_receipts_to_the_right_family_member(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read(
+            invoices=[[101, fixture.date, "Alias A", "33333333", "7", 30],
+                      [102, fixture.date, "Alias B", "33333333", "8", 20],
+                      [103, fixture.date, "Alias A", "33333333", None, 30],
+                      [104, fixture.date, "Alias B", "33333333", None, 20]],
+            measurements=[[7, fixture.date, "Father", "33333333", 42],
+                          [8, fixture.date, "Son", "33333333", 30]])
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Reference test',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+        perform_insert(self.conn, workbook, branch, report)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id,name FROM customers ORDER BY name")
+            customers = cur.fetchall()
+            self.assertEqual([name for _, name in customers], ["Father", "Son"])
+            cur.execute("SELECT i.invoice_number,c.name FROM invoices i JOIN customers c ON c.id=i.customer_id "
+                        "ORDER BY i.invoice_number")
+            self.assertEqual(cur.fetchall(), [(101, "Father"), (102, "Son"), (103, "Father"), (104, "Son")])
+        perform_insert(self.conn, workbook, branch, Report())
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id,name FROM customers ORDER BY name")
+            self.assertEqual(cur.fetchall(), customers)
+
     def test_one_measurement_identity_absorbs_unlinked_receipt_names(self):
         fixture = ReadWorkbookTests()
         fixture.setUp()

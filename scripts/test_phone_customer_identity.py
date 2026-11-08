@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from customer_identity import CustomerIdentity, canon_key, load_identity, save_review
 from ingest_xlsm import (MEASUREMENT_VALUE_COLS, Report, apply_customer_identity,
-                         customer_display, customer_key, perform_insert)
+                         customer_display, customer_key, invoice_customer_key, perform_insert)
 
 
 def choice(name="Chosen customer", phone="33333333"):
@@ -200,3 +200,103 @@ class WorkbookPhonePolicyTests(unittest.TestCase):
         apply_customer_identity(workbook, CustomerIdentity([choice()], canon_key))
         display, _ = customer_display(workbook, {})
         self.assertEqual(list(display.values()), [("Chosen customer", "+97333333333")])
+
+
+class MeasurementReferenceLinkTests(unittest.TestCase):
+    def workbook(self, contacts):
+        return {"measurements": [
+            {"measurement_no": number, "name": name, "phone": "+97333333333", "values": {"chest": chest}}
+            for name, number, chest in [("Father", 7, 42), ("Son", 8, 30)]],
+            "invoices": [{"name": name, "phone": phone, "meas_nos": numbers}
+                         for name, phone, numbers in contacts]}
+
+    def test_exact_references_link_unreferenced_receipts_for_each_contact(self):
+        phone = "+97333333333"
+        workbook = self.workbook([("Alias A", phone, [7]), ("Alias B", phone, [8]),
+                                  ("Alias A", phone, []), ("Alias B", phone, [])])
+        identity = CustomerIdentity([], canon_key)
+        apply_customer_identity(workbook, identity)
+        self.assertEqual(identity.name_questions, [])
+        self.assertEqual(identity.key("Alias A", phone), identity.key("Father", phone))
+        self.assertEqual(identity.key("Alias B", phone), identity.key("Son", phone))
+        self.assertNotEqual(identity.key("Father", phone), identity.key("Son", phone))
+        self.assertEqual({name for name, _ in customer_display(workbook, {})[0].values()}, {"Father", "Son"})
+
+    def test_conflicting_references_and_family_receipts_still_need_a_choice(self):
+        phone = "+97333333333"
+        for references in [([7], [8], []), ([7, 8], []), ([7], [7, 8], [])]:
+            with self.subTest(references=references):
+                workbook = self.workbook([("Alias A", phone, numbers) for numbers in references])
+                identity = CustomerIdentity([], canon_key)
+                apply_customer_identity(workbook, identity)
+                self.assertEqual(identity.measurement_links, {})
+                question, = identity.name_questions
+                self.assertEqual(question["contact_names"], ["Alias A"])
+                self.assertEqual(question["names"], ["Father", "Son"])
+
+    def test_missing_or_unusable_measurement_numbers_do_not_infer_links(self):
+        phone = "+97333333333"
+        for numbers in [[], [999], [9], [7, 999], [7, 9]]:
+            with self.subTest(numbers=numbers):
+                workbook = self.workbook([("Alias A", phone, numbers), ("Alias A", phone, [])])
+                workbook["measurements"].append({"measurement_no": 9, "name": None, "phone": None,
+                                                 "values": {"chest": None}})
+                identity = CustomerIdentity([], canon_key)
+                apply_customer_identity(workbook, identity)
+                self.assertEqual(identity.measurement_links, {})
+                self.assertEqual(identity.name_questions[0]["contact_names"], ["Alias A"])
+
+    def test_reference_reuse_is_phone_scoped_and_does_not_remap_measured_people(self):
+        phone = "+97333333333"
+        other = "+97334444444"
+        workbook = self.workbook([("Alias A", other, [7]), ("Alias A", other, []),
+                                  ("Father", phone, [8]), ("Father", phone, [])])
+        identity = CustomerIdentity([], canon_key)
+        apply_customer_identity(workbook, identity)
+        sources = {m["measurement_no"]: m for m in workbook["measurements"]}
+        self.assertEqual(identity.measurement_links, {})
+        self.assertEqual(identity.key("Alias A", other), canon_key("Alias A", other))
+        self.assertEqual(identity.key("Father", phone), canon_key("Father", phone))
+        self.assertEqual(invoice_customer_key(workbook, workbook["invoices"][0], sources),
+                         canon_key("Father", phone))
+        self.assertEqual(invoice_customer_key(workbook, workbook["invoices"][2], sources),
+                         canon_key("Son", phone))
+
+    def test_changed_workbook_recomputes_reference_links(self):
+        phone = "+97333333333"
+        workbook = self.workbook([("Alias A", phone, [7]), ("Alias A", phone, [])])
+        identity = CustomerIdentity([], canon_key)
+        apply_customer_identity(workbook, identity)
+        self.assertEqual(identity.key("Alias A", phone), canon_key("Father", phone))
+        workbook["invoices"][0]["meas_nos"] = [8]
+        apply_customer_identity(workbook, identity)
+        self.assertEqual(identity.key("Alias A", phone), canon_key("Son", phone))
+        self.assertEqual(identity.name_questions, [])
+        workbook["invoices"][0]["meas_nos"] = []
+        apply_customer_identity(workbook, identity)
+        self.assertEqual(identity.measurement_links, {})
+        self.assertEqual(identity.name_questions[0]["contact_names"], ["Alias A"])
+
+    def test_exact_reference_evidence_precedes_the_phone_group_fallback(self):
+        phone = "+97333333333"
+        workbook = self.workbook([("Alias A", phone, [8]), ("Alias A", phone, []), ("Alias B", phone, [])])
+        identity = CustomerIdentity([choice("Father")], canon_key)
+        apply_customer_identity(workbook, identity)
+        self.assertEqual(identity.key("Alias A", phone), canon_key("Son", phone))
+        self.assertEqual(identity.key("Alias B", phone), canon_key("Father", phone))
+
+    def test_reference_linking_is_recomputed_with_the_same_saved_decisions_on_production(self):
+        phone = "+97333333333"
+        workbook = self.workbook([("Alias A", phone, [7]), ("Alias A", phone, []),
+                                  ("Alias B", phone, [8]), ("Alias B", phone, [])])
+        identity = CustomerIdentity([], canon_key)
+        apply_customer_identity(workbook, identity)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "decisions.json"
+            save_review(path, identity, [])
+            original = path.read_bytes()
+            production = load_identity(path, canon_key)
+            apply_customer_identity(workbook, production)
+            self.assertEqual(production.measurement_links, identity.measurement_links)
+            self.assertEqual(production.name_questions, [])
+            self.assertEqual(path.read_bytes(), original)

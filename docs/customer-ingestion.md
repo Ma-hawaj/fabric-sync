@@ -17,7 +17,10 @@ when their measurements are absent from the current workbook.
 
 When several measured customers share a phone, contacts without measurements
 must be assigned to one of those measured customers, even if there is only one
-unmeasured contact. The prompt lists the receipt-only names as context and offers
+unmeasured contact. Exact Measurement No references are used first, including
+reusing a proven link on other receipts with the same contact name and phone.
+Only contacts without a usable, unambiguous link need a selection. The prompt
+lists the receipt-only names as context and offers
 only measured customers as numbered options. Custom names and extra customers
 without measurements are unavailable on that phone. This selection never combines
 two measured customers. Similarity sorts identity suggestions and never merges people.
@@ -146,6 +149,20 @@ actual measurement values exist. When a receipt's referenced measurements
 identify one customer, the invoice and its orders use that customer. A receipt
 spelling variation does not create another customer or another review question.
 A measurement row with a name but no phone can use its linked receipt's phone.
+
+When all known Measurement No references for a receipt name and phone point to
+one measured customer on that phone, other receipts using that contact also use
+that customer, even if their own Measurement No is empty. Two receipt spellings
+on a shared family phone can therefore link to two different measured people.
+Conflicting owners, family receipts referencing several owners, or non-empty
+references without a usable source row prevent this reuse and keep the contact
+for review. The match is based on exact references; number proximity never
+links customers. Existing measured identities are not reassigned by this rule.
+
+These links are recomputed from the workbook on dry-run and import. Saved manual
+decisions continue to transfer to production; the same workbook yields the same
+reference links. A saved phone-wide owner choice applies to the contacts still
+unresolved after this matching. The summary counts contacts linked by Measurement No.
 
 If a receipt references several distinct measured customers, its contact is
 the invoice buyer under the phone-grouping rules above, and each order keeps

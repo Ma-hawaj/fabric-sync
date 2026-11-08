@@ -84,6 +84,7 @@ class CustomerIdentity:
         self.preferred_names = {}
         self.phone_measured = None
         self.phone_defaults = {}
+        self.measurement_links = {}
         self.labels = {}
         self.name_questions = []
         self.profile_records = {}
@@ -138,10 +139,11 @@ class CustomerIdentity:
     def base_key(self, name, phone):
         return self.resolve(self.canonical_key(name, phone))
 
-    def configure_phones(self, identities, measurements):
-        """Receipt-only names share a contact; measured people stay distinct."""
+    def configure_phones(self, identities, measurements, reference_links=None):
+        """Use reference-linked measured owners; group only unresolved contacts."""
         self.phone_measured = {}
         self.phone_defaults = {}
+        self.measurement_links = {}
         self.labels = {}
         self.name_questions = []
         self.profile_records = {}
@@ -154,6 +156,11 @@ class CustomerIdentity:
                 else:
                     self.labels[key] = record["name"]
                 self.profile_records.setdefault(key, []).append(record)
+        for contact, owner in (reference_links or {}).items():
+            contact, owner = self.resolve(contact), self.resolve(owner)
+            measured = self.phone_measured.get(owner[1], set())
+            if contact[1] == owner[1] and owner in measured and contact not in measured:
+                self.measurement_links[contact] = owner
         by_phone = {}
         for name, phone in identities:
             key = self.base_key(name, phone)
@@ -164,7 +171,8 @@ class CustomerIdentity:
             if len(measured) == 1:
                 self.phone_defaults[phone] = next(iter(measured))
                 continue
-            unmeasured = {key: name for key, name in names.items() if key not in measured}
+            unmeasured = {key: name for key, name in names.items()
+                          if key not in measured and key not in self.measurement_links}
             if not unmeasured:
                 continue
             chosen = self.preferred_names.get(phone)
@@ -203,6 +211,8 @@ class CustomerIdentity:
         measured = self.phone_measured.get(key[1], set())
         if key in measured:
             return key
+        if key in self.measurement_links:
+            return self.measurement_links[key]
         return self.phone_defaults.get(key[1], key)
 
     def display_name(self, key, fallback):
