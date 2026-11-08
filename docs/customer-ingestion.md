@@ -7,7 +7,7 @@ which names need identity verification:
 | --- | --- | --- |
 | None | All names share one customer. | Choose one display name if there are several names. |
 | One | All contacts use the measured customer and its measurement-sheet name. | None. |
-| Several | Measured customers stay separate until explicitly approved as the same person. | Measurement Nos 1–5 apart mean different people automatically; verify the remaining pairs. |
+| Several | Measured customers stay separate; contacts without measurements must use one of them. | Choose the measured owner for unmeasured contacts. Measurement Nos 1–5 apart mean different people automatically; verify other identity pairs. |
 
 Repeated snapshots under the same normalized name and phone count as one
 identity. Case and whitespace differences match automatically. Blank or
@@ -16,10 +16,16 @@ customers with saved measurement snapshots also count during import, including
 when their measurements are absent from the current workbook.
 
 When several measured customers share a phone, contacts without measurements
-share one additional contact. If they have several names, choose one name for
-them; choosing an existing measured name attaches only those unmeasured contacts
-to that measured customer. A display-name choice never combines two measured
-customers. Similarity sorts identity suggestions and never merges people.
+must be assigned to one of those measured customers, even if there is only one
+unmeasured contact. The prompt lists the receipt-only names as context and offers
+only measured customers as numbered options. Custom names and extra customers
+without measurements are unavailable on that phone. This selection never combines
+two measured customers. Similarity sorts identity suggestions and never merges people.
+
+Older mixed-option questions are restricted to measured choices by the reviewer.
+An old answer choosing an unmeasured name is reopened when measurements are
+available, and import stops until a valid measured customer is selected. With no
+measurements on the phone, choosing an existing or custom contact name still works.
 
 Two distinct measured names on the same phone are automatically considered
 different when any Measurement No from one profile is 1–5 away from a number
@@ -65,7 +71,8 @@ name pair and phone, so they survive workbook updates.
    python3 scripts/review_customers.py
    ```
 
-   For a name choice, enter a listed number or `n` to type a custom name.
+   When measurements exist, select a listed measured customer number. If the
+   phone has no measurements, enter a listed name number or `n` for a custom name.
    Pairs with Measurement Nos 1–5 apart are saved as different automatically.
    For the remaining measured identities, choose `s` for the same person or
    `d` for different people. The reviewer shows recent measurement values for
@@ -88,7 +95,7 @@ name pair and phone, so they survive workbook updates.
    The phone filter applies to both kinds of question. The similarity filter
    only applies to identity comparisons; required name choices remain visible.
    Skipped measured pairs remain separate during import. Unanswered required
-   name choices stop the import before writes.
+   name choices or measured-owner selections stop the import before writes.
 
    The reviewer runs with Python's standard library, without the workbook or
    a database connection. It also supports the previous pair-only JSON format;
@@ -124,9 +131,10 @@ keep them out of version control.
 invoice and measurement ownership, measurement comparison, and legacy customer
 numbers. Human `different` decisions suppress future identity comparisons for
 that pair; rule-generated decisions are recomputed from current measurements.
-`pending` measured identities stay separate. A `name` choice saves the
-preferred display name for contacts without measurements; a single measured
-identity takes precedence if measurement data is added later. Conflicting
+`pending` measured identities stay separate. A `name` choice saves the measured
+customer selected for receipt-only contacts, or a preferred display name when
+that phone has no measurements. If measurement data is added later, one measured
+identity is used automatically; several require a valid measured selection. Conflicting
 same/different decisions or conflicting preferred names are rejected before
 connecting to the database. Old receipt-only same/different answers are retained
 for future measurement comparisons; unmeasured contacts follow phone grouping.

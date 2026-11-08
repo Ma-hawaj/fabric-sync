@@ -31,6 +31,8 @@ Mapping decisions worth knowing:
    share one customer and a saved preferred name. With one measured customer,
    its name wins for all that phone's contacts. Multiple measured identities
    sharing a phone stay separate until explicitly reviewed as the same person.
+   Unmeasured contacts must use one of those measured customers, selected in
+   the decisions file; they never introduce another customer on that phone.
    Different measured names whose Measurement Nos are 1–5 apart are classified
    as different automatically; saved same-person decisions take precedence.
    Matching normalizes names and phones (Bahrain numbers get ``+973``; names
@@ -1485,13 +1487,13 @@ def main() -> int:
     try:
         state = load_db_state(conn)
         apply_customer_identity(workbook, identity, state)
+        if args.customer_review:
+            identities.extend((n, p) for n, p, _ in state["customer_rows"])
+            Path(args.customer_review).write_text(json.dumps(identity.review(identities), indent=2, ensure_ascii=False) + "\n")
         if identity.name_questions:
             print("Choose the pending customer names with scripts/review_customers.py before importing.", file=sys.stderr)
             conn.rollback()
             return 2
-        if args.customer_review:
-            identities.extend((n, p) for n, p, _ in state["customer_rows"])
-            Path(args.customer_review).write_text(json.dumps(identity.review(identities), indent=2, ensure_ascii=False) + "\n")
         branch_id, branch_label = choose_branch(conn, args.branch, report)
         production_id, production_label = select_branch(
             conn, args.production_branch, "produces_orders", None, report)

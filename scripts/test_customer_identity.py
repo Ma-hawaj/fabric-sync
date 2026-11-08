@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from customer_identity import CustomerIdentity, load_identity, save_review
 from ingest_xlsm import (Report, apply_customer_identity, canon_key, customer_key,
-                         legacy_customer_numbers, main, perform_insert)
+                         legacy_customer_numbers, main, perform_insert, MEASUREMENT_VALUE_COLS)
 
 
 class CustomerIdentityTests(unittest.TestCase):
@@ -117,6 +117,35 @@ class DecisionCliTests(unittest.TestCase):
             connect.assert_not_called()
             self.assertEqual(json.loads(path.read_text()), [])
             self.assertIn("SHA-256:", output.getvalue())
+
+    def test_existing_measured_choices_are_reported_before_import_is_blocked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "decisions.json"
+            review_path = Path(directory) / "review.json"
+            path.write_text("[]\n")
+            workbook = {"measurements": [], "invoices": [
+                {"name": "Receipt only", "phone": "+97333333333", "meas_nos": []}]}
+            values = tuple("NULL" for _ in MEASUREMENT_VALUE_COLS)
+            state = {"customer_rows": [("Father", "+97333333333", "father"),
+                                       ("Son", "+97333333333", "son")],
+                     "measurement_sigs": {(cid, "2026-01-01", values) for cid in ["father", "son"]}}
+            arguments = ["ingest", "--database-url", "postgres://test", "--customer-decisions", str(path),
+                         "--customer-review", str(review_path),
+                         "--parsing-report", str(Path(directory) / "parsing.csv")]
+            with patch("sys.argv", arguments), patch("ingest_xlsm.read_workbook", return_value=workbook), \
+                    patch("ingest_xlsm.load_db_state", return_value=state), \
+                    patch("ingest_xlsm.psycopg2.connect") as connect, \
+                    patch("ingest_xlsm.choose_branch") as choose, \
+                    patch("ingest_xlsm.perform_insert") as insert, \
+                    contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(main(), 2)
+            choose.assert_not_called()
+            insert.assert_not_called()
+            connect.return_value.rollback.assert_called_once()
+            self.assertEqual(path.read_text(), "[]\n")
+            question = next(row for row in json.loads(review_path.read_text()) if row["decision"] == "name_pending")
+            self.assertEqual(question["names"], ["Father", "Son"])
+            self.assertEqual(question["contact_names"], ["Receipt only"])
 
     def test_production_requires_decisions_before_reading_workbook(self):
         with tempfile.TemporaryDirectory() as directory:

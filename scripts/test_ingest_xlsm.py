@@ -668,10 +668,15 @@ class DatabaseIntegrationTests(unittest.TestCase):
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
         workbook, report = fixture.read(
-            invoices=[[101, fixture.date, "Father", "33333333", "7 & 8", 30]],
+            invoices=[[101, fixture.date, "Family buyer", "33333333", "7 & 8", 30],
+                      [102, fixture.date, "Receipt A", "33333333", None, 20],
+                      [103, fixture.date, "Receipt B", "33333333", None, 20]],
             measurements=[[7, fixture.date, "Father", "33333333", 42],
                           [8, fixture.date, "Son", "33333333", 30]],
         )
+        apply_customer_identity(workbook, CustomerIdentity([
+            {"phone": "33333333", "names": ["Father", "Son"], "decision": "name", "name": "Father"}
+        ], canon_key))
         with self.conn.cursor() as cur:
             cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Family test',TRUE) RETURNING id")
             branch = cur.fetchone()[0]
@@ -682,6 +687,14 @@ class DatabaseIntegrationTests(unittest.TestCase):
             cur.execute("SELECT DISTINCT c.name FROM orders o JOIN measurements m ON m.id=o.measurement_id "
                         "JOIN customers c ON c.id=m.customer_id ORDER BY c.name")
             self.assertEqual(cur.fetchall(), [("Father",), ("Son",)])
+            cur.execute("SELECT DISTINCT c.name FROM invoices i JOIN customers c ON c.id=i.customer_id")
+            self.assertEqual(cur.fetchall(), [("Father",)])
+            cur.execute("SELECT id,name FROM customers ORDER BY name")
+            original_customers = cur.fetchall()
+        perform_insert(self.conn, workbook, branch, Report())
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id,name FROM customers ORDER BY name")
+            self.assertEqual(cur.fetchall(), original_customers)
 
     def test_unmeasured_receipt_names_share_one_chosen_customer(self):
         fixture = ReadWorkbookTests()

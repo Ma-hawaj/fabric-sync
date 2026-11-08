@@ -168,6 +168,20 @@ class CustomerIdentity:
             if not unmeasured:
                 continue
             chosen = self.preferred_names.get(phone)
+            if measured:
+                key = self.base_key(chosen, phone) if chosen else None
+                if key in measured:
+                    self.phone_defaults[phone] = key
+                else:
+                    # A preview must not introduce an extra unmeasured customer.
+                    # Import remains blocked until an existing measured owner is chosen.
+                    self.phone_defaults[phone] = min(measured)
+                    options = [self.labels[k] for k in sorted(measured)]
+                    self.name_questions.append({"phone": phone, "names": options,
+                                                "decision": "name_pending",
+                                                "measurement_names": options,
+                                                "contact_names": list(unmeasured.values())})
+                continue
             if chosen:
                 key = self.base_key(chosen, phone)
                 self.phone_defaults[phone] = key
@@ -177,8 +191,7 @@ class CustomerIdentity:
                 self.phone_defaults[phone] = key
                 self.labels.setdefault(key, unmeasured[key])
                 if len(unmeasured) > 1:
-                    options = list(dict.fromkeys([*unmeasured.values(),
-                                                 *(self.labels[k] for k in sorted(measured))]))
+                    options = list(dict.fromkeys(unmeasured.values()))
                     self.name_questions.append({"phone": phone, "names": options,
                                                 "decision": "name_pending",
                                                 "measurement_names": [self.labels[k] for k in sorted(measured)]})

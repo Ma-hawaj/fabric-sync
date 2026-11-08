@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from customer_identity import CustomerIdentity, canon_key, save_review
-from review_customers import pending_pairs, review
+from review_customers import pending_names, pending_pairs, record_name, review
 
 
 class InteractiveReviewTests(unittest.TestCase):
@@ -184,3 +184,49 @@ class PhoneNameReviewTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual({r["measurementNo"] for r in rows[0]["measurements"]}, {10, 20, 30})
         self.assertTrue(any("Measurement No" in line for line in self.output))
+
+
+class MeasuredCustomerReviewTests(unittest.TestCase):
+    setUp = InteractiveReviewTests.setUp
+    run_review = InteractiveReviewTests.run_review
+    policy = InteractiveReviewTests.policy
+
+    def seed(self, decision="name_pending"):
+        row = {"phone": "+97333333333", "names": ["Receipt A", "Receipt B", "Father", "Son"],
+               "decision": decision, "measurement_names": ["Father", "Son"]}
+        if decision == "name":
+            row["name"] = "Receipt A"
+        self.path.write_text(json.dumps([row], indent=2) + "\n")
+
+    def test_old_mixed_options_only_offer_measured_customers_and_reject_custom_names(self):
+        self.seed()
+        self.run_review(["n", "3", "2", "q"])
+        self.assertEqual(self.policy().preferred_names, {"+97333333333": "Son"})
+        self.assertEqual(pending_names(self.policy()), [])
+        self.assertTrue(any("Contacts: Receipt A; Receipt B" in line for line in self.output))
+        self.assertTrue(any("  1. Father" in line for line in self.output))
+        self.assertFalse(any("  1. Receipt A" in line or "  3." in line for line in self.output))
+
+    def test_previous_unmeasured_name_choice_is_reopened(self):
+        self.seed(decision="name")
+        self.run_review(["1", "q"])
+        policy = self.policy()
+        self.assertEqual(policy.preferred_names, {"+97333333333": "Father"})
+        self.assertEqual(len(policy.decisions), 1)
+
+    def test_saving_an_unmeasured_name_for_a_measured_group_is_rejected(self):
+        self.seed()
+        policy = self.policy()
+        row, = pending_names(policy)
+        for name in ["Receipt A", "Custom person"]:
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "measured customers"):
+                record_name(policy, row, name)
+
+    def test_skip_and_undo_preserve_required_measured_selection(self):
+        self.seed()
+        original = self.path.read_bytes()
+        self.run_review(["k"])
+        self.assertEqual(self.path.read_bytes(), original)
+        self.run_review(["2", "u", "q"])
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertEqual(pending_names(self.policy())[0]["names"], ["Father", "Son"])

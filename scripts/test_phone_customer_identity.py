@@ -102,6 +102,28 @@ class PhonePolicyTests(unittest.TestCase):
         self.assertNotEqual(policy.key("Father", "33333333"), policy.key("Son", "33333333"))
         self.assertEqual([r["decision"] for r in policy.review(names)], ["different"])
 
+    def test_multiple_measured_customers_only_allow_measured_owners_for_receipt_contacts(self):
+        for contacts in [["Alias A"], ["Alias A", "Alias B"]]:
+            for decisions in [[], [choice("Old unmeasured name")]]:
+                with self.subTest(contacts=contacts, decisions=decisions):
+                    policy = CustomerIdentity(decisions, canon_key)
+                    names = [(n, "33333333") for n in ["Father", "Son", *contacts]]
+                    policy.configure_phones(names, [measured("Father", 7), measured("Son", 8, "30")])
+                    question, = policy.name_questions
+                    self.assertEqual(question["names"], ["Father", "Son"])
+                    self.assertEqual(question["measurement_names"], ["Father", "Son"])
+                    self.assertEqual(question["contact_names"], contacts)
+                    measured_keys = {canon_key(n, "33333333") for n in ["Father", "Son"]}
+                    self.assertTrue(all(policy.key(n, "33333333") in measured_keys for n in contacts))
+
+    def test_saved_measured_selection_stays_valid_after_new_receipt_spellings(self):
+        policy = CustomerIdentity([choice("Son")], canon_key)
+        names = [(n, "33333333") for n in ["Father", "Son", "Alias A", "New receipt spelling"]]
+        policy.configure_phones(names, [measured("Father", 7), measured("Son", 8, "30")])
+        self.assertEqual(policy.name_questions, [])
+        self.assertEqual(policy.key("New receipt spelling", "33333333"), canon_key("Son", "33333333"))
+        self.assertNotEqual(policy.key("Father", "33333333"), policy.key("Son", "33333333"))
+
     def test_new_measurement_data_supersedes_an_old_contact_name_choice(self):
         policy = CustomerIdentity([choice("Old name")], canon_key)
         names = [(n, "33333333") for n in ["New measured name", "Alias A"]]
@@ -156,6 +178,17 @@ class WorkbookPhonePolicyTests(unittest.TestCase):
 
     def test_pending_name_choice_blocks_before_any_database_writes(self):
         workbook = self.workbook()
+        conn = MagicMock()
+        with patch("ingest_xlsm.load_db_state", return_value={"customer_rows": [], "measurement_sigs": set()}):
+            with self.assertRaisesRegex(ValueError, "Choose a customer name"):
+                perform_insert(conn, workbook, "branch", Report())
+        conn.cursor.assert_not_called()
+
+    def test_old_unmeasured_choice_cannot_create_an_extra_customer_when_measurements_exist(self):
+        workbook = self.workbook([
+            {"name": name, "phone": "33333333", "measurement_no": number, "values": {"chest": 42}}
+            for name, number in [("Father", 7), ("Son", 8)]])
+        apply_customer_identity(workbook, CustomerIdentity([choice()], canon_key))
         conn = MagicMock()
         with patch("ingest_xlsm.load_db_state", return_value={"customer_rows": [], "measurement_sigs": set()}):
             with self.assertRaisesRegex(ValueError, "Choose a customer name"):

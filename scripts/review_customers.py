@@ -37,11 +37,24 @@ def pair_key(row):
 
 def pending_names(identity):
     rows = []
-    for row in identity.decisions:
-        if row["decision"] != "name_pending" or norm_phone(row["phone"]) in identity.preferred_names:
+    # A refreshed pending row supersedes an older saved choice for the same phone.
+    by_phone = {norm_phone(row["phone"]): row for row in identity.decisions
+                if row["decision"] in {"name", "name_pending"}}
+    for phone, row in by_phone.items():
+        measured = {identity.base_key(name, phone): name for name in row.get("measurement_names", [])}
+        chosen = identity.preferred_names.get(phone)
+        if len(measured) == 1:
             continue
-        measured = {identity.base_key(name, row["phone"]) for name in row.get("measurement_names", [])}
-        if len(measured) != 1:
+        if measured:
+            if chosen and identity.base_key(chosen, phone) in measured:
+                continue
+            contacts = row.get("contact_names", [name for name in row["names"]
+                                                  if identity.base_key(name, phone) not in measured])
+            question = {**row, "decision": "name_pending", "names": list(measured.values()),
+                        "measurement_names": list(measured.values()), "contact_names": contacts}
+            question.pop("name", None)
+            rows.append(question)
+        elif row["decision"] == "name_pending" and not chosen:
             rows.append(row)
     return rows
 
@@ -59,6 +72,9 @@ def record_name(identity, row, name):
     chosen = norm_name(name)
     if not chosen:
         raise ValueError("Choose a non-empty customer name")
+    measured = {identity.base_key(n, row["phone"]) for n in row.get("measurement_names", [])}
+    if measured and identity.base_key(chosen, row["phone"]) not in measured:
+        raise ValueError("Choose one of the measured customers on this phone")
     rows = [r for r in identity.decisions
             if not (r["decision"] in {"name", "name_pending"} and norm_phone(r["phone"]) == norm_phone(row["phone"]))]
     return CustomerIdentity(rows + [{**row, "decision": "name", "name": chosen}], canon_key)
@@ -100,7 +116,7 @@ def review(path, *, phone=None, min_similarity=0, input_fn=input, output_fn=prin
         expected = path.read_bytes()
 
     output_fn(f"Decisions: {path.resolve()}")
-    output_fn("Each answer is saved immediately. Unmeasured contacts need one name; shared measured profiles need identity verification.")
+    output_fn("Each answer is saved immediately. Contacts use a measured customer where available; shared measured profiles need identity verification.")
     refreshed = record_decisions(identity, [])
     automatic_count = sum(is_automatic_decision(row) for row in refreshed.decisions)
     if automatic_count or any(is_automatic_decision(row) for row in identity.decisions):
@@ -123,11 +139,19 @@ def review(path, *, phone=None, min_similarity=0, input_fn=input, output_fn=prin
                 row = first_name
                 name_mode = True
                 current_key = ("name", norm_phone(row["phone"]))
-                output_fn(f"\nPhone: {row['phone']} — choose one name for the contacts without measurements.")
+                measured_selection = bool(row.get("measurement_names"))
+                if measured_selection:
+                    output_fn(f"\nPhone: {row['phone']} — choose a measured customer for the contacts without measurements.")
+                    if row.get("contact_names"):
+                        output_fn("  Contacts: " + "; ".join(row["contact_names"]))
+                else:
+                    output_fn(f"\nPhone: {row['phone']} — choose one name for the contacts without measurements.")
                 for index, name in enumerate(row["names"], 1):
                     suffix = " (has measurements)" if name in row.get("measurement_names", []) else ""
                     output_fn(f"  {index}. {name}{suffix}")
-                answer = input_fn("Name number, [n] custom name, [k] skip, [u] undo, [q] quit: ").strip().casefold()
+                prompt = ("Measured customer number, [k] skip, [u] undo, [q] quit: " if measured_selection else
+                          "Name number, [n] custom name, [k] skip, [u] undo, [q] quit: ")
+                answer = input_fn(prompt).strip().casefold()
             elif candidates:
                 row = candidates[0]
                 name_mode = False
@@ -163,10 +187,11 @@ def review(path, *, phone=None, min_similarity=0, input_fn=input, output_fn=prin
             if name_mode:
                 if answer.isdecimal() and 1 <= int(answer) <= len(row["names"]):
                     chosen = row["names"][int(answer) - 1]
-                elif answer in {"n", "name"}:
+                elif answer in {"n", "name"} and not measured_selection:
                     chosen = input_fn("Preferred customer name: ")
                 else:
-                    output_fn("Choose a listed name number, n, k, u, or q.")
+                    output_fn("Choose a listed measured customer number, k, u, or q." if measured_selection else
+                              "Choose a listed name number, n, k, u, or q.")
                     continue
                 try:
                     updated = record_name(identity, row, chosen)
