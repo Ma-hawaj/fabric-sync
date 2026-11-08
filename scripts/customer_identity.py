@@ -56,7 +56,8 @@ def canon_name(value: object) -> str | None:
     """Whitespace-collapsed, casefolded name for customer matching.
 
     Display spelling ('Ali' vs 'ALI') must not split one customer, so every
-    identity check uses this; the first-seen display form is what gets stored.
+    identity check uses this; ingestion selects the last measurement spelling
+    separately from the normalized matching key.
     """
     name = norm_name(value)
     return name.casefold() if name else None
@@ -148,7 +149,10 @@ class CustomerIdentity:
             key = self.base_key(record["name"], record["phone"])
             if key:
                 self.phone_measured.setdefault(key[1], set()).add(key)
-                self.labels.setdefault(key, record["name"])
+                if record.get("source") == "database":
+                    self.labels.setdefault(key, record["name"])
+                else:
+                    self.labels[key] = record["name"]
                 self.profile_records.setdefault(key, []).append(record)
         by_phone = {}
         for name, phone in identities:

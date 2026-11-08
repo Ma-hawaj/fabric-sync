@@ -333,7 +333,8 @@ class ReadWorkbookTests(unittest.TestCase):
     def test_measurement_spelling_wins_for_reviewed_aliases(self):
         workbook, _ = self.read(
             invoices=[[101, self.date, "Ali Ahmad", "33333333", "7", 30]],
-            measurements=[[7, self.date, "Ali Ahmed", "33333333", 42]],
+            measurements=[[20, dt.datetime(2026, 6, 1), "Ali Ahmad", "33333333", 42],
+                          [7, self.date, "Ali Ahmed", "33333333", 43]],
         )
         identity = CustomerIdentity([{"phone": "33333333", "names": ["Ali Ahmad", "Ali Ahmed"],
                                      "decision": "same"}], canon_key)
@@ -341,6 +342,37 @@ class ReadWorkbookTests(unittest.TestCase):
         sources = {m["measurement_no"]: m for m in workbook["measurements"]}
         self.assertEqual(list(customer_display(workbook, sources)[0].values()),
                          [("Ali Ahmed", "+97333333333")])
+
+    def test_last_measurement_name_uses_sheet_order_with_missing_phones(self):
+        for phones in [("33333333", None), (None, "33333333"), (None, None)]:
+            with self.subTest(phones=phones):
+                workbook, _ = self.read(
+                    invoices=[[101, self.date, "Receipt", "33333333", "20", 30],
+                              [102, self.date, "Receipt", "33333333", "7", 30]],
+                    measurements=[[7, self.date, "Ali Ahmad", phones[0], 42],
+                                  [20, self.date, "Ali Ahmed", phones[1], 43]],
+                )
+                apply_customer_identity(workbook, CustomerIdentity([
+                    {"phone": "33333333", "names": ["Ali Ahmad", "Ali Ahmed"], "decision": "same"}
+                ], canon_key))
+                sources = {m["measurement_no"]: m for m in workbook["measurements"]}
+                self.assertEqual(list(customer_display(workbook, sources)[0].values()),
+                                 [("Ali Ahmed", "+97333333333")])
+
+    def test_last_name_uses_retained_duplicate_row_position_without_reordering_history(self):
+        workbook, _ = self.read(invoices=[], measurements=[
+            [7, dt.datetime(2026, 1, 1), "Discarded spelling", "33333333", 40],
+            [20, self.date, "Ali Ahmad", "33333333", 42],
+            [7, dt.datetime(2026, 6, 1), "Ali Ahmed", "33333333", 43],
+        ])
+        apply_customer_identity(workbook, CustomerIdentity([
+            {"phone": "33333333", "names": ["Ali Ahmad", "Ali Ahmed"], "decision": "same"}
+        ], canon_key))
+        sources = {m["measurement_no"]: m for m in workbook["measurements"]}
+        self.assertEqual(list(customer_display(workbook, sources)[0].values()),
+                         [("Ali Ahmed", "+97333333333")])
+        self.assertEqual([m["measurement_no"] for m in workbook["measurements"]], [7, 20])
+        self.assertEqual(workbook["measurement_source_order"], [20, 7])
 
     def test_measurements_identify_receipt_with_missing_contact(self):
         workbook, _ = self.read(
@@ -589,7 +621,8 @@ class DatabaseIntegrationTests(unittest.TestCase):
         self.addCleanup(fixture.tempdir.cleanup)
         workbook, report = fixture.read(
             invoices=[[101, fixture.date, "Ali Ahmad", "33333333", "7", 30]],
-            measurements=[[7, fixture.date, "Ali Ahmed", "33333333", 42]],
+            measurements=[[20, dt.datetime(2026, 6, 1), "ALI AHMAD", "33333333", 42],
+                          [7, fixture.date, "Ali Ahmed", "33333333", 43]],
         )
         apply_customer_identity(workbook, CustomerIdentity([
             {"phone": "33333333", "names": ["Ali Ahmad", "Ali Ahmed"], "decision": "same"}

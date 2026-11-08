@@ -51,6 +51,14 @@ class PhonePolicyTests(unittest.TestCase):
         self.assertEqual({policy.key(n, p) for n, p in names}, {canon_key("Measurement name", "33333333")})
         self.assertEqual(policy.review(names), [])
 
+    def test_last_measurement_spelling_wins_over_older_spelling_and_database_name(self):
+        policy = CustomerIdentity([], canon_key)
+        names = [("Ali", "33333333")]
+        policy.configure_phones(names, [measured("Ali", 7), measured("ALI", 20),
+                                       {**measured("Ali", None), "source": "database"}])
+        self.assertEqual(policy.display_name(canon_key("Ali", "33333333"), "Fallback"), "ALI")
+        self.assertEqual(policy.review(names), [])
+
     def test_only_multiple_measured_identities_need_verification(self):
         policy = CustomerIdentity([], canon_key)
         names = [(name, "33333333") for name in ["Father", "Son"]]

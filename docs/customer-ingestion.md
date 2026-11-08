@@ -145,7 +145,12 @@ its measurement customer. This preserves father/son records sharing a phone.
 Receipts with no identifiable measurement customer use their own contact under
 the same rules.
 
-For saved same-person decisions, the first measurement-sheet spelling is used.
+The last retained measurement-sheet row for each customer supplies its name,
+including when saved same-person decisions combine name variations. “Last”
+means Excel row order; measurement numbers and dates do not rank the names.
+Duplicate Measurement Nos still use the existing row-selection policy, then
+the retained rows' original positions determine name priority. Linked receipts
+can supply missing phones, and their order does not change which name wins.
 An existing matched record gets that preferred name, or the chosen unmeasured
 contact name, without changing its ID, customer number, or history.
 

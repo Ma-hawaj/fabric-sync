@@ -19,6 +19,8 @@ Mapping decisions worth knowing:
    sequence is advanced past the max afterwards). Orders have no number of
    their own in the source; they are identified by their invoice number.
  * Customer names come from ``Measurments`` before the ``New`` receipts.
+   The last retained measurement-sheet row for a customer supplies its name,
+   including when saved same-person decisions combine name variations.
    A receipt referencing exactly one identifiable measurement customer uses
    that customer for the invoice as well as the orders, so receipt spelling
    variations do not create extra customers. A named measurement row may use
@@ -366,19 +368,23 @@ def invoice_customer_key(workbook, invoice, sources):
 
 
 def customer_display(workbook, sources):
-    """Measurement spellings win, including for explicitly reviewed aliases."""
+    """The last retained measurement-sheet spelling wins for each customer."""
     display = {}
-    for measurement in workbook["measurements"]:
-        if measurement["key"]:
-            display.setdefault(measurement["key"], (measurement["name"], measurement["phone"]))
+    linked = collections.defaultdict(list)
     for invoice in workbook["invoices"]:
         for no in invoice["meas_nos"]:
-            source = sources.get(no)
-            if source is None or not source.get("name"):
-                continue
-            key = measurement_customer_key(workbook, source, invoice)
-            if key:
-                display.setdefault(key, (source["name"], source.get("phone") or invoice["phone"]))
+            linked[no].append(invoice)
+    source_order = {no: index for index, no in enumerate(workbook.get("measurement_source_order", []))}
+    measurements = sorted(workbook["measurements"],
+                          key=lambda m: source_order.get(m["measurement_no"], len(source_order)))
+    for measurement in measurements:
+        if measurement["key"]:
+            display[measurement["key"]] = (measurement["name"], measurement["phone"])
+        elif measurement.get("name"):
+            for invoice in linked[measurement["measurement_no"]]:
+                key = measurement_customer_key(workbook, measurement, invoice)
+                if key:
+                    display[key] = (measurement["name"], measurement.get("phone") or invoice["phone"])
     measurement_keys = set(display)
     for invoice in workbook["invoices"]:
         key = invoice_customer_key(workbook, invoice, sources)
@@ -769,6 +775,8 @@ def read_workbook(path: Path, report: Report) -> dict:
     return {
         "invoices": invoices,
         "measurements": measurements,
+        # Naming follows retained Excel row positions without reordering history.
+        "measurement_source_order": [no for no, _ in sorted(kept.items(), key=lambda item: item[1][0])],
         "repairs": repairs,
         # Workbook lookup: measurement no -> receipt
         # numbers listing it. Per-order copies and repairs resolve through it.
