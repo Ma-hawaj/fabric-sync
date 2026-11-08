@@ -4,8 +4,8 @@
 Reads three sheets of the workbook (read-only, no macros executed) and loads
 their data into the Postgres schema defined by ``backend/migrations/``:
 
-  New          -> invoices + orders (+ per-order measurement copies)
-  Measurments  -> value source for the copies + standalone customer history
+  New          -> invoices + orders linked to shared measurement records
+  Measurments  -> distinct measurement value sets + standalone customer history
   Repairing    -> order_repairs                (rows dated 2026 only)
 
 Everything else in the workbook (Search, M.Pepar, Invoice, Approvel BD,
@@ -50,22 +50,24 @@ Mapping decisions worth knowing:
    customers continue above the reserved range.
  * Every saved measurement snapshot gets its own permanent per-customer
    increment from the database, e.g. C-6216-001, C-6216-002. This
-   applies to standalone history and per-order copies alike. Re-running an
-   import skips existing snapshots without renumbering them.
- * Measurement No also serves as a lookup key for per-order copies. One
+   applies to each distinct stored value set. Identical sets within one customer
+   share a record across history and orders, regardless of date. Consolidation
+   retains the earliest permanent ID and the latest date, redirects order and
+   repair links, and retires duplicate IDs without reusing their numbers.
+ * Measurement No also serves as a lookup key for order measurements. One
    order row per measurement number listed on a receipt ('6216 & 9179' ->
-   two orders), each backed by a fresh measurement snapshot owned by the
+   two orders), each backed by a distinct or reused measurement record owned by the
    referenced ``Measurments`` row's customer (measurement wins, always —
    falling back to the invoice's customer only when the sheet row names no
    identifiable customer), with values/design copied from that row. Price
    (Final Amount) is split evenly across those
    orders, with the remainder landing on the last one so
    sum(orders.price) == total_price. A thob count larger than the listed
-   measurement numbers reuses the first copy (a receipt can describe several
+   measurement numbers reuses the first record (a receipt can describe several
    thobs under one measurement). A number with no sheet row, or with no
    usable values, yields no order and is counted in the report.
    ``Measurments`` rows never referenced by a 2026 receipt are still imported
-   once each under their own sheet customer, so customer history is kept —
+   as distinct value sets under their own sheet customer —
    unless the row holds no values at all (fully empty or design-only rows
    are skipped and counted: design travels on orders, which a standalone
     row never gets).
@@ -116,17 +118,17 @@ Mapping decisions worth knowing:
    measurement row; the schema stores one design set per order, so only the
    '- 1' set is used (extras are counted in the report).
  * A standalone measurement row is only stored when its own customer is
-   identifiable — unidentifiable orphans are skipped and counted. Per-order
-   copies prefer the sheet row's customer but never need it: a referenced
+   identifiable — unidentifiable orphans are skipped and counted. Order
+   measurements prefer the sheet row's customer but never need it: a referenced
    row without a name/phone still contributes its values under the invoice's
    customer. A receipt is skipped only when neither its measurements nor its own contact
    identifies a customer.
 
 Idempotent: existing invoice numbers and
 repair keys already in the database are skipped, so a re-run does not
-duplicate (customers upsert on the canonical (name, phone) key; standalone
-measurements are skipped when the same customer already holds an identical
-date + value set; an explicitly requested placeholder material is reused when present). The
+duplicate (customers upsert on the canonical (name, phone) key; identical
+measurement values reuse one record within that customer; an explicitly
+requested placeholder material is reused when present). The
 whole write happens in one transaction and rolls back
 on error.
 
@@ -165,6 +167,7 @@ from pathlib import Path
 
 import openpyxl
 import psycopg2
+from psycopg2.extras import execute_values
 
 from ingest_locations import require_branch, select_branch
 from customer_identity import (CustomerIdentity, canon_key, canon_name, load_identity, norm_name,
@@ -346,7 +349,7 @@ def apply_customer_identity(workbook, identity, state=None):
                 records.append({"name": name, "phone": phone, "source": "database",
                                 "customerId": cid, "date": date,
                                 "values": {col: value for col, value in zip(MEASUREMENT_VALUE_COLS, values)
-                                           if value not in {"NULL", "None"}}})
+                                           if value not in {None, "NULL", "None"}}})
     # An exact receipt reference also identifies its name/phone on other receipts.
     # Conflicting or unusable references keep that contact unresolved.
     referenced_owners = collections.defaultdict(set)
@@ -631,7 +634,7 @@ def read_workbook(path: Path, report: Report) -> dict:
     report.count("New: dated rows -> invoices", len(invoices))
 
     # Measurement numbers referenced by 2026 receipts also serve as lookup
-    # keys: per-order copies take their
+    # keys: order measurements take their
     # values from the referenced sheet row, and repairs resolve through the
     # receipt(s) listing the number (see meas_to_invoices).
     referenced_numbers: set[int] = set()
@@ -802,7 +805,7 @@ def read_workbook(path: Path, report: Report) -> dict:
         "measurement_source_order": [no for no, _ in sorted(kept.items(), key=lambda item: item[1][0])],
         "repairs": repairs,
         # Workbook lookup: measurement no -> receipt
-        # numbers listing it. Per-order copies and repairs resolve through it.
+        # numbers listing it. Orders and repairs resolve through it.
         "meas_to_invoices": meas_to_invoices,
     }
 
@@ -824,6 +827,11 @@ MEASUREMENT_TEXT_COLS = frozenset({
     "mobile_pocket_length_by_width",
     "side_pocket_length_by_width",
 })
+
+# Include fields absent from the legacy workbook so app-created measurements
+# with extra body details, type or fit are never mistaken for an exact match.
+MEASUREMENT_MATCH_COLS = (*MEASUREMENT_VALUE_COLS, "shoulder_down", "side_pocket", "type", "fit")
+MEASUREMENT_MATCH_TEXT_COLS = MEASUREMENT_TEXT_COLS | {"type", "fit"}
 
 
 def _canon_num(value: object) -> str:
@@ -847,17 +855,20 @@ def _canon_num(value: object) -> str:
 
 
 def measurement_signature(customer_id: str, measurement_date, values: dict) -> tuple:
-    """Identity of a standalone measurement for re-run skipping.
-
-    No source number is stored on measurements, so a row is "already present"
-    when the same customer holds the same date + full value set.
-    """
+    """Customer, date and stored values, retained for identity review context."""
     return (
         customer_id,
         measurement_date.isoformat() if hasattr(measurement_date, "isoformat") else str(measurement_date),
-        tuple(_canon_num(values.get(col)) if col not in MEASUREMENT_TEXT_COLS
-              else str(values.get(col)) for col in MEASUREMENT_VALUE_COLS),
+        measurement_values_signature(customer_id, values)[1],
     )
+
+
+def measurement_values_signature(customer_id: str, values: dict) -> tuple:
+    """An exact stored measurement set for one customer, independent of date."""
+    return (customer_id, tuple(
+        _canon_num(values.get(col)) if col not in MEASUREMENT_MATCH_TEXT_COLS else
+        None if values.get(col) is None else str(values[col])
+        for col in MEASUREMENT_MATCH_COLS))
 
 
 def load_db_state(conn) -> dict:
@@ -872,7 +883,7 @@ def load_db_state(conn) -> dict:
         stages = {str(name): str(id_) for name, id_ in cur.fetchall()}
         cur.execute(
             """
-            SELECT customer_id, measurement_date,
+            SELECT id, customer_id, measurement_date,
                 front_height, back_height, chest, waist, hip, shoulder,
                 sleeve_length, neck_size, open_hand, chest_up, cuff_width,
                 cuff_size, neck_width, armhole, fo_width, fo, full_body,
@@ -880,15 +891,30 @@ def load_db_state(conn) -> dict:
                 front_pocket_length,
                 front_pocket_length_by_width,
                 mobile_pocket_length_by_width,
-                side_pocket_length_by_width
+                side_pocket_length_by_width,
+                shoulder_down, side_pocket, type, fit
             FROM measurements
+            ORDER BY customer_id, measurement_number, id
             """
         )
         measurement_sigs = set()
+        measurement_ids = {}
+        measurement_duplicates = []
+        measurement_dates = {}
+        measurement_date_updates = {}
         for row in cur.fetchall():
-            cid, mdate = str(row[0]), row[1]
-            vals = dict(zip(MEASUREMENT_VALUE_COLS, row[2:]))
+            mid, cid, mdate = str(row[0]), str(row[1]), row[2]
+            vals = dict(zip(MEASUREMENT_MATCH_COLS, row[3:]))
             measurement_sigs.add(measurement_signature(cid, mdate, vals))
+            key = measurement_values_signature(cid, vals)
+            if key in measurement_ids:
+                measurement_duplicates.append((mid, measurement_ids[key]))
+                if mdate.isoformat() > measurement_dates[key]:
+                    measurement_dates[key] = mdate.isoformat()
+                    measurement_date_updates[measurement_ids[key]] = mdate.isoformat()
+            else:
+                measurement_ids[key] = mid
+                measurement_dates[key] = mdate.isoformat()
         cur.execute(
             """
             SELECT i.invoice_number, o.id
@@ -904,8 +930,93 @@ def load_db_state(conn) -> dict:
         "repairs": repairs,
         "stages": stages,
         "measurement_sigs": measurement_sigs,
+        "measurement_ids": measurement_ids,
+        "measurement_duplicates": measurement_duplicates,
+        "measurement_dates": measurement_dates,
+        "measurement_date_updates": measurement_date_updates,
         "orders_by_invoice": orders_by_invoice,
     }
+
+
+def consolidate_existing_measurements(cur, state, report):
+    """Retain the earliest permanent ID and redirect exact duplicate references."""
+    duplicates = state.get("measurement_duplicates", [])
+    if not duplicates:
+        return
+    expected = {mid: key for key, mid in state["measurement_ids"].items()}
+    for duplicate, keeper in duplicates:
+        expected[duplicate] = expected[keeper]
+    ids = [(mid,) for mid in sorted({mid for pair in duplicates for mid in pair})]
+    # Lock before rewriting references, including ON DELETE SET NULL repair links.
+    # Refuse a stale comparison instead of deleting a measurement edited meanwhile.
+    rows = execute_values(cur, f"""
+        SELECT target.id, target.customer_id, target.measurement_date,
+               {', '.join('target.' + column for column in MEASUREMENT_MATCH_COLS)}
+        FROM measurements AS target JOIN (VALUES %s) AS wanted(id) ON target.id = wanted.id
+        ORDER BY target.id FOR UPDATE OF target
+    """, ids, template="(%s::uuid)", page_size=1000, fetch=True)
+    if {str(row[0]) for row in rows} != {mid for (mid,) in ids}:
+        raise ValueError("Measurements changed during consolidation; rerun the import")
+    for row in rows:
+        mid, cid, date = str(row[0]), str(row[1]), row[2]
+        key = measurement_values_signature(cid, dict(zip(MEASUREMENT_MATCH_COLS, row[3:])))
+        if key != expected[mid]:
+            raise ValueError("Measurements changed during consolidation; rerun the import")
+        note_measurement_date(state, key, state["measurement_ids"][key], date)
+    for table, column in (("orders", "measurement_id"),
+                          ("order_repairs", "fixed_measurement_id")):
+        execute_values(cur, f"""
+            UPDATE {table} AS target SET {column} = matches.keep_id
+            FROM (VALUES %s) AS matches(duplicate_id, keep_id)
+            WHERE target.{column} = matches.duplicate_id
+        """, duplicates, template="(%s::uuid, %s::uuid)", page_size=1000)
+    deleted = execute_values(cur, """
+        DELETE FROM measurements AS target
+        USING (VALUES %s) AS matches(duplicate_id, keep_id)
+        WHERE target.id = matches.duplicate_id
+        RETURNING target.id
+    """, duplicates, template="(%s::uuid, %s::uuid)", page_size=1000, fetch=True)
+    report.count("measurements existing duplicates consolidated", len(deleted))
+
+
+def reuse_or_insert_measurement(cur, customer_id, measurement, state, report):
+    key = measurement_values_signature(customer_id, measurement["values"])
+    measurement_ids = state.setdefault("measurement_ids", {})
+    if key in measurement_ids:
+        note_measurement_date(state, key, measurement_ids[key], measurement["measurement_date"])
+        report.count("measurements identical reused")
+        return measurement_ids[key]
+    cur.execute(f"INSERT INTO measurements {MEASUREMENT_COLUMNS} "
+                f"VALUES {MEASUREMENT_PLACEHOLDERS} RETURNING id",
+                measurement_params(customer_id, measurement))
+    measurement_id = str(cur.fetchone()[0])
+    measurement_ids[key] = measurement_id
+    state.setdefault("measurement_dates", {})[key] = measurement["measurement_date"].isoformat()
+    state["measurement_sigs"].add(measurement_signature(
+        customer_id, measurement["measurement_date"], measurement["values"]))
+    report.count("measurements for orders created")
+    return measurement_id
+
+
+def note_measurement_date(state, key, measurement_id, date):
+    date = date.isoformat()
+    dates = state.setdefault("measurement_dates", {})
+    if key not in dates or date > dates[key]:
+        dates[key] = date
+        state.setdefault("measurement_date_updates", {})[measurement_id] = date
+
+
+def advance_measurement_dates(cur, state, report):
+    updates = list(state.get("measurement_date_updates", {}).items())
+    if not updates:
+        return
+    changed = execute_values(cur, """
+        UPDATE measurements AS target SET measurement_date = matches.latest_date
+        FROM (VALUES %s) AS matches(measurement_id, latest_date)
+        WHERE target.id = matches.measurement_id AND target.measurement_date < matches.latest_date
+        RETURNING target.id
+    """, updates, template="(%s::uuid, %s::date)", page_size=1000, fetch=True)
+    report.count("measurement dates advanced", len(changed))
 
 
 def choose_branch(conn, branch_arg: str | None, report: Report) -> tuple[object, str]:
@@ -964,7 +1075,7 @@ def measurement_params(customer_id: str, m: dict) -> tuple:
 
 
 def has_usable_values(m: dict) -> bool:
-    """Whether a sheet row contributes anything to a per-order copy."""
+    """Whether a sheet row contributes a measurement or design to an order."""
     if any(v is not None for v in m["values"].values()):
         return True
     return any(v is not None for v in m["design"].values())
@@ -978,6 +1089,37 @@ def has_stored_values(m: dict) -> bool:
     store a customer + date with every value NULL.
     """
     return any(v is not None for v in m["values"].values())
+
+
+def report_measurement_consolidation(workbook, report):
+    """Preview distinct stored sets without connecting to the database."""
+    signatures = set()
+    candidates = 0
+
+    def include(owner, measurement):
+        nonlocal candidates
+        if owner:
+            candidates += 1
+            signatures.add(measurement_values_signature(owner, measurement["values"]))
+
+    for measurement in workbook["measurements"]:
+        if not measurement["referenced"] and has_stored_values(measurement):
+            include(measurement["key"], measurement)
+    sources = {m["measurement_no"]: m for m in workbook["measurements"]}
+    invoices_seen = set()
+    for invoice in workbook["invoices"]:
+        if invoice["invoice_number"] in invoices_seen:
+            continue
+        invoices_seen.add(invoice["invoice_number"])
+        owner = invoice_customer_key(workbook, invoice, sources)
+        if not owner:
+            continue
+        for number in invoice["meas_nos"]:
+            measurement = sources.get(number)
+            if measurement and has_usable_values(measurement):
+                include(measurement_customer_key(workbook, measurement, invoice) or owner, measurement)
+    report.count("measurement sets after consolidation", len(signatures))
+    report.count("duplicate measurement records consolidated", candidates - len(signatures))
 
 
 def legacy_customer_numbers(workbook: dict, report: Report) -> tuple[dict, int]:
@@ -1054,6 +1196,8 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
         require_branch(conn, production_branch_id, "produces_orders")
     legacy_numbers, reserved_max = legacy_customer_numbers(workbook, report)
     with conn.cursor() as cur:
+        consolidate_existing_measurements(cur, state, report)
+        measurement_ids = state.setdefault("measurement_ids", {})
         # Legacy fabric is unknown by default; a placeholder is opt-in.
         placeholder_material_id = None
         if material_name is not None:
@@ -1141,16 +1285,8 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 customer_ids[key] = str(id_)
 
         # ---- measurements ---------------------------------------------------
-        # This lookup also feeds the per-order copies in the invoice loop.
-
-
-        # Standalone history: sheet rows no 2026 receipt references, imported
-        # once each under their own sheet customer.
-        # Referenced rows enter only via per-order copies owned by the
-        # measurement's customer, falling back to the invoice's customer
-        # only when the sheet row has no identifiable customer.
-        standalone_to_add = []
-        standalone_keys: dict[int, tuple] = {}
+        # Standalone history and order references share the same exact-value index.
+        standalone_to_add = {}
         for m in workbook["measurements"]:
             if m["referenced"]:
                 continue
@@ -1165,27 +1301,30 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 report.anomaly("measurements orphan skipped (no customer, unreferenced)",
                                m["measurement_no"])
                 continue
-            standalone_keys[id(m)] = akey
-            sig = measurement_signature(
-                customer_ids[akey], m["measurement_date"], m["values"]
-            )
-            if sig in state["measurement_sigs"]:
-                report.count("measurements already present (skipped)")
+            key = measurement_values_signature(customer_ids[akey], m["values"])
+            if key in measurement_ids:
+                note_measurement_date(state, key, measurement_ids[key], m["measurement_date"])
+                report.count("measurements identical reused")
                 continue
-            standalone_to_add.append(m)
-        cur.executemany(
-            f"INSERT INTO measurements {MEASUREMENT_COLUMNS} "
-            f"VALUES {MEASUREMENT_PLACEHOLDERS}",
-            [measurement_params(customer_ids[standalone_keys[id(m)]], m)
-             for m in standalone_to_add],
-        )
-        for m in standalone_to_add:
-            state["measurement_sigs"].add(
-                measurement_signature(
-                    customer_ids[standalone_keys[id(m)]],
-                    m["measurement_date"], m["values"]
-                )
-            )
+            parameters = measurement_params(customer_ids[akey], m)
+            if key in standalone_to_add:
+                report.count("measurements identical reused")
+                if parameters[1] > standalone_to_add[key][1]:
+                    standalone_to_add[key] = parameters
+            else:
+                standalone_to_add[key] = parameters
+        if standalone_to_add:
+            rows = execute_values(cur,
+                f"INSERT INTO measurements {MEASUREMENT_COLUMNS} VALUES %s "
+                f"RETURNING id, customer_id, measurement_date, {', '.join(MEASUREMENT_VALUE_COLS)}",
+                list(standalone_to_add.values()), page_size=1000, fetch=True)
+            for row in rows:
+                mid, cid, date = str(row[0]), str(row[1]), row[2]
+                values = dict(zip(MEASUREMENT_VALUE_COLS, row[3:]))
+                key = measurement_values_signature(cid, values)
+                measurement_ids[key] = mid
+                state.setdefault("measurement_dates", {})[key] = date.isoformat()
+                state["measurement_sigs"].add(measurement_signature(cid, date, values))
         report.count("measurements standalone created", len(standalone_to_add))
 
         # ---- invoices + orders ----------------------------------------------
@@ -1276,9 +1415,8 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             if not inv["meas_nos"]:
                 report.count("invoices left without orders (no measurement)")
                 continue
-            # One snapshot per listed number, always owned by the measurement
-            # row's customer. On a phone conflict between the receipt and
-            # the sheet row, the measurement phone is therefore the one kept.
+            # Every listed number still produces an order. Identical value sets
+            # reuse a snapshot owned by the measurement row's customer.
             # Only a referenced row without an identifiable customer falls
             # back to the receipt owner (its values still contribute).
             copies: list[tuple] = []  # (measurement_id, source row)
@@ -1301,12 +1439,8 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                     report.anomaly(
                         "orders kept receipt owner (measurement owner unknown)",
                         no)
-                cur.execute(
-                    f"INSERT INTO measurements {MEASUREMENT_COLUMNS} "
-                    f"VALUES {MEASUREMENT_PLACEHOLDERS} RETURNING id",
-                    measurement_params(customer_ids[owner_key], src),
-                )
-                copies.append((cur.fetchone()[0], src))
+                measurement_id = reuse_or_insert_measurement(cur, customer_ids[owner_key], src, state, report)
+                copies.append((measurement_id, src))
             if not copies:
                 report.count("invoices left without orders (no usable measurements)")
                 continue
@@ -1376,6 +1510,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 # collected_at above, and no progress row is fabricated for it.
                 steps += 1
         report.count("invoices+orders roundtrips", steps)
+        advance_measurement_dates(cur, state, report)
 
         # Advance the identity sequence so the app's next invoice can't collide.
         cur.execute(
@@ -1488,6 +1623,7 @@ def main() -> int:
         Path(args.customer_review).write_text(json.dumps(identity.review(identities), indent=2, ensure_ascii=False) + "\n")
     if args.dry_run:
         legacy_customer_numbers(workbook, report)
+        report_measurement_consolidation(workbook, report)
     questions = identity.review(identities)
     report.count("customer names to choose", len(identity.name_questions))
     report.count("measured customer pairs to verify", sum(row["decision"] == "pending" for row in questions))

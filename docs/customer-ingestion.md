@@ -185,6 +185,32 @@ would resolve multiple existing records to one identity, ingestion stops and
 rolls back for reconciliation. Existing invoice numbers and their ownership
 are skipped on reruns.
 
+## Consolidating identical measurements
+
+Ingestion stores one measurement record per customer and exact value set.
+Measurement dates and Excel Measurement Nos do not make identical values
+distinct. All stored measurement fields must match, including pocket text,
+type, fit, and body fields absent from the workbook. Numbers compare at the
+database's three-decimal precision; text and NULL remain distinct.
+
+Standalone history and orders use the same records. Every receipt and order
+still exists, with its own price, design and other order details. Two customers
+with identical measurements keep separate records, including relatives sharing
+a phone. Customer identity review still uses the original source numbers before
+measurement storage is consolidated.
+
+Existing duplicates are consolidated during import too. The earliest permanent
+measurement ID and number survive, and the stored date becomes the latest date
+seen for that value set. Orders and repair fixes are redirected to the survivor
+before duplicate rows are removed. Retired numbers are never reused. This keeps
+the latest value set current even when a customer later returns to earlier values.
+The operation shares the import transaction and rolls back on an error.
+
+Dry-run shows the workbook's projected distinct-set and duplicate counts without
+accessing a database. Normal import also reports existing duplicates consolidated,
+matching records reused, and dates advanced. The original schema already supports
+shared measurement references; no additional migration is required.
+
 ## Finding records with parsing issues
 
 Every workbook read writes `scripts/parsing-issues.csv` and prints its path,

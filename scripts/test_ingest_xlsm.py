@@ -20,7 +20,9 @@ from ingest_locations import select_branch
 from ingest_xlsm import (
     Report, apply_customer_identity, canon_key, choose_branch, customer_display,
     invoice_customer_key, legacy_customer_numbers, measurement_customer_key,
-    measurement_signature, parse_measurement, perform_insert, read_workbook,
+    measurement_signature, measurement_values_signature, MEASUREMENT_MATCH_COLS,
+    consolidate_existing_measurements, parse_measurement, perform_insert, read_workbook,
+    report_measurement_consolidation,
 )
 
 
@@ -156,6 +158,51 @@ class ParseMeasurementTests(unittest.TestCase):
         self.assertEqual(signature(Decimal("42.125")), signature(Decimal("42.1250")))
         self.assertEqual(signature(42), signature(Decimal("42.000")))
         self.assertNotEqual(signature(Decimal("42.125")), signature(Decimal("42.13")))
+
+
+class MeasurementConsolidationTests(unittest.TestCase):
+    def test_changed_or_removed_records_are_rejected_before_references_are_rewritten(self):
+        date = dt.date(2026, 5, 1)
+        baseline = [42 if col == "chest" else None for col in MEASUREMENT_MATCH_COLS]
+        changed = [43 if col == "chest" else None for col in MEASUREMENT_MATCH_COLS]
+        for rows in [[("keeper", "c", date, *baseline)],
+                     [("duplicate", "c", date, *changed), ("keeper", "c", date, *baseline)]]:
+            with self.subTest(rows=rows):
+                state = {"measurement_ids": {measurement_values_signature("c", {"chest": 42}): "keeper"},
+                         "measurement_duplicates": [("duplicate", "keeper")]}
+                with patch("ingest_xlsm.execute_values", return_value=rows) as execute:
+                    with self.assertRaisesRegex(ValueError, "Measurements changed"):
+                        consolidate_existing_measurements(MagicMock(), state, Report())
+                execute.assert_called_once()
+
+    def test_values_match_at_database_precision_with_customer_scope(self):
+        key = measurement_values_signature
+        self.assertEqual(key("c", {"chest": 42}), key("c", {"chest": Decimal("42.000")}))
+        self.assertEqual(key("c", {"chest": Decimal("42.1254")}), key("c", {"chest": Decimal("42.125")}))
+        self.assertNotEqual(key("father", {"chest": 42}), key("son", {"chest": 42}))
+        self.assertNotEqual(key("c", {"chest": Decimal("42.125")}), key("c", {"chest": Decimal("42.13")}))
+
+    def test_type_fit_and_unmapped_body_fields_are_part_of_an_exact_match(self):
+        key = measurement_values_signature
+        baseline = {"chest": 42}
+        for field, value in [("type", "body"), ("fit", "medium"), ("shoulder_down", 1),
+                             ("side_pocket", 1), ("front_pocket_length_by_width", "7 * 7")]:
+            with self.subTest(field=field):
+                self.assertNotEqual(key("c", baseline), key("c", {**baseline, field: value}))
+
+    def test_null_text_is_distinct_from_a_literal_none_string(self):
+        self.assertNotEqual(measurement_values_signature("c", {"front_pocket_length_by_width": None}),
+                            measurement_values_signature("c", {"front_pocket_length_by_width": "None"}))
+
+    def test_dry_run_counts_one_set_for_identical_order_measurements(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        workbook, report = fixture.read()
+        apply_customer_identity(workbook, CustomerIdentity([], canon_key))
+        report_measurement_consolidation(workbook, report)
+        self.assertEqual(report.numeric["measurement sets after consolidation"], 1)
+        self.assertEqual(report.numeric["duplicate measurement records consolidated"], 8)
 
 
 class ReadWorkbookTests(unittest.TestCase):
@@ -555,6 +602,8 @@ class DatabaseIntegrationTests(unittest.TestCase):
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
         workbook, report = fixture.read()
+        workbook["measurements"][0]["design"]["collar"] = "Saudi"
+        workbook["measurements"][1]["design"]["collar"] = "Emirati"
         invoice = workbook["invoices"][0]
         invoice.update(final=Decimal("28.00"), discount=Decimal("2.00"),
                        advance=Decimal("10.00"), status="done", pay1="cash")
@@ -582,7 +631,11 @@ class DatabaseIntegrationTests(unittest.TestCase):
                         "ORDER BY m.measurement_number")
             original_measurements = cur.fetchall()
             self.assertEqual([code for _, code in original_measurements],
-                             [f"C-9-{number:03d}" for number in range(1, 10)])
+                             ["C-9-001"])
+            cur.execute("SELECT COUNT(DISTINCT measurement_id) FROM orders")
+            self.assertEqual(cur.fetchone()[0], 1)
+            cur.execute("SELECT collar,COUNT(*) FROM orders GROUP BY collar")
+            self.assertCountEqual(cur.fetchall(), [("Saudi", 3), ("Emirati", 3), (None, 3)])
             cur.execute("SELECT total_price, vat_rate, taxable_amount, vat_amount "
                         "FROM invoices WHERE invoice_number = 101")
             self.assertEqual(cur.fetchone(), tuple(map(Decimal,
@@ -614,6 +667,98 @@ class DatabaseIntegrationTests(unittest.TestCase):
             cur.execute("INSERT INTO customers(name, mobile_no) "
                         "VALUES('New app customer', '35555555') RETURNING customer_number")
             self.assertEqual(cur.fetchone()[0], 10)
+
+    def test_identical_history_and_orders_share_one_set_with_its_latest_date(self):
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        june, july = dt.datetime(2026, 6, 1), dt.datetime(2026, 7, 1)
+        workbook, report = fixture.read(
+            invoices=[[101, july, "Customer", "33333333", "9", 30]],
+            measurements=[[7, fixture.date, "Customer", "33333333", 42],
+                          [8, june, "Customer", "33333333", "42.000"],
+                          [9, july, "Customer", "33333333", 42],
+                          [10, june, "Customer", "33333333", 43]])
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Shared snapshots',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+        perform_insert(self.conn, workbook, branch, report)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id,chest,measurement_date FROM measurements ORDER BY measurement_date DESC")
+            rows = cur.fetchall()
+            self.assertEqual([(chest, date) for _, chest, date in rows],
+                             [(Decimal("42"), july.date()), (Decimal("43"), june.date())])
+            cur.execute("SELECT DISTINCT measurement_id FROM orders")
+            self.assertEqual(cur.fetchall(), [(rows[0][0],)])
+        self.assertEqual(report.numeric["measurements standalone created"], 2)
+        self.assertEqual(report.numeric["measurements identical reused"], 2)
+        perform_insert(self.conn, workbook, branch, Report())
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id,chest,measurement_date FROM measurements ORDER BY measurement_date DESC")
+            self.assertEqual(cur.fetchall(), rows)
+
+    def test_existing_exact_duplicates_repoint_orders_and_repair_fixes_without_reusing_numbers(self):
+        workbook, report = self.sample_workbook()
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Existing duplicates',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+        perform_insert(self.conn, workbook, branch, report)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id,customer_id,measurement_number FROM measurements")
+            keeper, customer, number = cur.fetchone()
+            self.assertEqual(number, 1)
+            cur.execute("INSERT INTO measurements(customer_id,measurement_date,chest,bottom,bottom_fold) "
+                        "VALUES(%s,'2026-06-01',42,29,3) RETURNING id,measurement_number", (customer,))
+            duplicate, duplicate_number = cur.fetchone()
+            cur.execute("SELECT id,invoice_id,price,status FROM orders ORDER BY id")
+            orders = cur.fetchall()
+            cur.execute("UPDATE orders SET measurement_id=%s WHERE id=%s", (duplicate, orders[0][0]))
+            cur.execute("INSERT INTO order_repairs(order_id,reason,fixed_measurement_id) "
+                        "VALUES(%s,'Existing fix',%s) RETURNING id", (orders[0][0], duplicate))
+            repair = cur.fetchone()[0]
+        rerun = Report()
+        perform_insert(self.conn, workbook, branch, rerun)
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT id,measurement_number,measurement_date FROM measurements")
+            self.assertEqual(cur.fetchall(), [(keeper, number, dt.date(2026, 6, 1))])
+            cur.execute("SELECT DISTINCT measurement_id FROM orders")
+            self.assertEqual(cur.fetchall(), [(keeper,)])
+            cur.execute("SELECT fixed_measurement_id FROM order_repairs WHERE id=%s", (repair,))
+            self.assertEqual(cur.fetchone()[0], keeper)
+            cur.execute("SELECT id,invoice_id,price,status FROM orders ORDER BY id")
+            self.assertEqual(cur.fetchall(), orders)
+            cur.execute("INSERT INTO measurements(customer_id,chest) VALUES(%s,43) RETURNING measurement_number", (customer,))
+            self.assertEqual(cur.fetchone()[0], duplicate_number + 1)
+        self.assertEqual(rerun.numeric["measurements existing duplicates consolidated"], 1)
+
+    def test_exact_comparison_covers_every_stored_field_and_keeps_distinct_sets(self):
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO customers(name,mobile_no) VALUES('Stored fields','+97333333333') RETURNING id")
+            customer = cur.fetchone()[0]
+            entries = [
+                (dt.date(2026, 5, 1), None, None, None, None, None),
+                (dt.date(2026, 6, 1), None, None, None, None, None),
+                (dt.date(2026, 5, 1), "body", "medium", None, None, None),
+                (dt.date(2026, 5, 1), "thobe", "medium", None, None, None),
+                (dt.date(2026, 5, 1), "body", "loose", None, None, None),
+                (dt.date(2026, 5, 1), None, None, 1, None, None),
+                (dt.date(2026, 5, 1), None, None, None, 1, None),
+                (dt.date(2026, 5, 1), None, None, None, None, "None"),
+            ]
+            cur.executemany("INSERT INTO measurements(customer_id,chest,measurement_date,type,fit,"
+                            "shoulder_down,side_pocket,front_pocket_length_by_width) "
+                            "VALUES(%s,42,%s,%s,%s,%s,%s,%s)", [(customer, *entry) for entry in entries])
+            cur.execute("SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema=current_schema() AND table_name='measurements'")
+            actual = {row[0] for row in cur.fetchall()} - {"id", "customer_id", "measurement_date", "measurement_number"}
+            self.assertEqual(actual, set(MEASUREMENT_MATCH_COLS))
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Full comparison',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+        empty = {"measurements": [], "invoices": [], "repairs": [], "meas_to_invoices": {}}
+        perform_insert(self.conn, empty, branch, Report())
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM measurements WHERE customer_id=%s", (customer,))
+            self.assertEqual(cur.fetchone()[0], 7)
 
     def test_measurement_spelling_updates_a_matched_customer_without_renumbering(self):
         fixture = ReadWorkbookTests()
@@ -672,7 +817,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
                       [102, fixture.date, "Receipt A", "33333333", None, 20],
                       [103, fixture.date, "Receipt B", "33333333", None, 20]],
             measurements=[[7, fixture.date, "Father", "33333333", 42],
-                          [8, fixture.date, "Son", "33333333", 30]],
+                          [8, fixture.date, "Son", "33333333", 42]],
         )
         apply_customer_identity(workbook, CustomerIdentity([
             {"phone": "33333333", "names": ["Father", "Son"], "decision": "name", "name": "Father"}
