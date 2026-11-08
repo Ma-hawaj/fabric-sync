@@ -29,6 +29,8 @@ Mapping decisions worth knowing:
    share one customer and a saved preferred name. With one measured customer,
    its name wins for all that phone's contacts. Multiple measured identities
    sharing a phone stay separate until explicitly reviewed as the same person.
+   Different measured names whose Measurement Nos are 1–5 apart are classified
+   as different automatically; saved same-person decisions take precedence.
    Matching normalizes names and phones (Bahrain numbers get ``+973``; names
    ignore case and extra whitespace). Saved decisions apply to reviewed aliases
    and matched existing records without changing customer numbers or ownership.
@@ -1418,7 +1420,7 @@ def main() -> int:
     parser.add_argument("--customer-decisions", default=str(CUSTOMER_DECISIONS),
                         help="saved JSON decisions (default: scripts/customer-decisions.json; "
                              "created/refreshed by dry-run, required for import)")
-    parser.add_argument("--customer-review", help="write pending name choices and measured identity pairs as JSON")
+    parser.add_argument("--customer-review", help="write customer questions and automatic separation evidence as JSON")
     parser.add_argument("--parsing-report", default=str(PARSING_REPORT),
                         help="CSV of every parsing issue with Excel locations (default: scripts/parsing-issues.csv)")
     args = parser.parse_args()
@@ -1458,6 +1460,7 @@ def main() -> int:
     questions = identity.review(identities)
     report.count("customer names to choose", len(identity.name_questions))
     report.count("measured customer pairs to verify", sum(row["decision"] == "pending" for row in questions))
+    report.count("measured pairs automatically different", sum(row["decision"] == "different" for row in questions))
     print(report.summary("workbook"))
 
     if args.dry_run:

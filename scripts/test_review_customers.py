@@ -173,7 +173,7 @@ class PhoneNameReviewTests(unittest.TestCase):
 
     def test_measurement_context_survives_answer_and_save(self):
         identities = [(name, "33333333") for name in ["Ali", "Aly", "Son"]]
-        records = [{"name": name, "phone": "33333333", "measurementNo": i,
+        records = [{"name": name, "phone": "33333333", "measurementNo": i * 10,
                     "date": "2026-11-07", "values": {"chest": str(42-i)}}
                    for i, (name, _) in enumerate(identities, 1)]
         policy = CustomerIdentity([], canon_key)
@@ -182,5 +182,5 @@ class PhoneNameReviewTests(unittest.TestCase):
         self.run_review(["s", "q"])
         rows = pending_pairs(self.policy())
         self.assertEqual(len(rows), 1)
-        self.assertEqual({r["measurementNo"] for r in rows[0]["measurements"]}, {1, 2, 3})
+        self.assertEqual({r["measurementNo"] for r in rows[0]["measurements"]}, {10, 20, 30})
         self.assertTrue(any("Measurement No" in line for line in self.output))

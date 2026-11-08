@@ -2,19 +2,19 @@
 """Review saved customer identities interactively, without Excel or a database."""
 import argparse
 import json
-from difflib import SequenceMatcher
 from pathlib import Path
 
-from customer_identity import CustomerIdentity, canon_key, norm_name, norm_phone, save_decisions
+from customer_identity import (CustomerIdentity, canon_key, is_automatic_decision,
+                               norm_name, norm_phone, save_decisions)
 
 DEFAULT_DECISIONS = Path(__file__).resolve().parent / "customer-decisions.json"
 
 
-def pending_pairs(identity):
-    """Keep only unresolved file entries, collapsing decisions implied by aliases."""
+def review_pairs(identity):
+    """Refresh file pairs and number-gap evidence after resolving aliases."""
     pairs = {}
     for row in identity.decisions:
-        if row["decision"] != "pending":
+        if row["decision"] != "pending" and not is_automatic_decision(row):
             continue
         left, right = (identity.key(name, row["phone"]) for name in row["names"])
         if left == right or frozenset((left, right)) in identity.separate:
@@ -22,11 +22,13 @@ def pending_pairs(identity):
         names = sorted((left[0], right[0]))
         key = (left[1], *names)
         records = pairs.get(key, {}).get("measurements", []) + row.get("measurements", [])
-        pairs[key] = {**row, "phone": left[1], "names": names, "decision": "pending",
-                      "name_similarity": round(SequenceMatcher(None, *names).ratio(), 3)}
-        if records:
-            pairs[key]["measurements"] = list({json.dumps(r, sort_keys=True): r for r in records}.values())
+        records = list({json.dumps(r, sort_keys=True): r for r in records}.values())
+        pairs[key] = identity.review_pair(left, right, records)
     return sorted(pairs.values(), key=lambda row: (-row["name_similarity"], row["phone"], row["names"]))
+
+
+def pending_pairs(identity):
+    return [row for row in review_pairs(identity) if row["decision"] == "pending"]
 
 
 def pair_key(row):
@@ -45,10 +47,12 @@ def pending_names(identity):
 
 
 def record_decisions(identity, rows):
-    reviewed = [row for row in identity.decisions if row["decision"] not in {"pending", "name_pending"}]
-    pending = [row for row in identity.decisions if row["decision"] in {"pending", "name_pending"}]
+    reviewed = [row for row in identity.decisions
+                if row["decision"] not in {"pending", "name_pending"} and not is_automatic_decision(row)]
+    pending = [row for row in identity.decisions
+               if row["decision"] in {"pending", "name_pending"} or is_automatic_decision(row)]
     updated = CustomerIdentity(reviewed + rows + pending, canon_key)
-    return CustomerIdentity(reviewed + rows + pending_names(updated) + pending_pairs(updated), canon_key)
+    return CustomerIdentity(reviewed + rows + pending_names(updated) + review_pairs(updated), canon_key)
 
 
 def record_name(identity, row, name):
@@ -97,6 +101,13 @@ def review(path, *, phone=None, min_similarity=0, input_fn=input, output_fn=prin
 
     output_fn(f"Decisions: {path.resolve()}")
     output_fn("Each answer is saved immediately. Unmeasured contacts need one name; shared measured profiles need identity verification.")
+    refreshed = record_decisions(identity, [])
+    automatic_count = sum(is_automatic_decision(row) for row in refreshed.decisions)
+    if automatic_count or any(is_automatic_decision(row) for row in identity.decisions):
+        if refreshed.decisions != identity.decisions:
+            save(refreshed)
+            identity = refreshed
+        output_fn(f"Automatically separated pairs: {automatic_count} (Measurement Nos are 1–5 apart).")
     try:
         while True:
             pairs = pending_pairs(identity)

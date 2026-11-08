@@ -54,18 +54,18 @@ class PhonePolicyTests(unittest.TestCase):
     def test_only_multiple_measured_identities_need_verification(self):
         policy = CustomerIdentity([], canon_key)
         names = [(name, "33333333") for name in ["Father", "Son"]]
-        records = [measured("Father", 7, "42"), measured("Son", 8, "30")]
+        records = [measured("Father", 7, "42"), measured("Son", 13, "30")]
         policy.configure_phones(names, records)
         review = policy.review(names)
         self.assertEqual(len(review), 1)
         self.assertEqual(review[0]["decision"], "pending")
-        self.assertEqual([r["measurementNo"] for r in review[0]["measurements"]], [7, 8])
+        self.assertEqual([r["measurementNo"] for r in review[0]["measurements"]], [7, 13])
         self.assertNotEqual(policy.key("Father", "33333333"), policy.key("Son", "33333333"))
 
     def test_identical_values_do_not_automatically_merge_different_measured_names(self):
         policy = CustomerIdentity([], canon_key)
         names = [(n, "33333333") for n in ["Ali", "Aly"]]
-        policy.configure_phones(names, [measured("Ali", 7), measured("Aly", 8)])
+        policy.configure_phones(names, [measured("Ali", 7), measured("Aly", 20)])
         self.assertEqual(len(policy.review(names)), 1)
         self.assertNotEqual(policy.key("Ali", "33333333"), policy.key("Aly", "33333333"))
 
@@ -92,7 +92,7 @@ class PhonePolicyTests(unittest.TestCase):
         policy.configure_phones(names, [measured("Father"), measured("Son", 8, "30")])
         self.assertEqual(policy.key("Alias A", "33333333"), policy.key("Father", "33333333"))
         self.assertNotEqual(policy.key("Father", "33333333"), policy.key("Son", "33333333"))
-        self.assertEqual([r["decision"] for r in policy.review(names)], ["pending"])
+        self.assertEqual([r["decision"] for r in policy.review(names)], ["different"])
 
     def test_new_measurement_data_supersedes_an_old_contact_name_choice(self):
         policy = CustomerIdentity([choice("Old name")], canon_key)

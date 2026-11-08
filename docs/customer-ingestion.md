@@ -7,7 +7,7 @@ which names need identity verification:
 | --- | --- | --- |
 | None | All names share one customer. | Choose one display name if there are several names. |
 | One | All contacts use the measured customer and its measurement-sheet name. | None. |
-| Several | Measured customers stay separate until explicitly approved as the same person. | Verify the measured name pairs using their measurement details. |
+| Several | Measured customers stay separate until explicitly approved as the same person. | Measurement Nos 1–5 apart mean different people automatically; verify the remaining pairs. |
 
 Repeated snapshots under the same normalized name and phone count as one
 identity. Case and whitespace differences match automatically. Blank or
@@ -21,6 +21,24 @@ them; choosing an existing measured name attaches only those unmeasured contacts
 to that measured customer. A display-name choice never combines two measured
 customers. Similarity sorts identity suggestions and never merges people.
 
+Two distinct measured names on the same phone are automatically considered
+different when any Measurement No from one profile is 1–5 away from a number
+on the other profile. For example, 100 and 105 mean different customers; 100
+and 106 still need review. Compare the workbook's `Measurement No`, using the
+absolute difference. Saved same/different answers take precedence over this rule.
+
+Automatic decisions are saved as `different` with `rule: "measurement_number_gap"`,
+the two source numbers and their difference. They are refreshed from current
+measurements on every dry-run, so changed source numbers do not leave stale
+automatic answers. Human answers remain saved. The reviewer can also apply the
+rule from measurement details already saved in an older review file.
+
+Equal Measurement Nos follow the existing duplicate-row selection. Repeated
+measurements under the same normalized name and phone remain one identity.
+Missing source numbers, including database-only snapshots without an Excel
+Measurement No, do not trigger the rule. Neither measurement values nor the
+app's per-customer snapshot numbers are used for the comparison.
+
 Decisions are saved in `scripts/customer-decisions.json` by default. This file
 is ignored by Git because it contains customer names, phones and measurement
 details. Name choices are saved per phone; identity decisions are saved per
@@ -33,8 +51,9 @@ name pair and phone, so they survive workbook updates.
    ```
 
    This creates or refreshes the decisions file with one `name_pending` question
-   per unmeasured phone needing a name, plus `pending` pairs for measured
-   identities sharing a phone. Rerun this once for an older, large review file
+   per unmeasured phone needing a name, plus automatic `different` entries and
+   remaining `pending` pairs for measured identities sharing a phone. Rerun
+   this once for an older, large review file
    to replace receipt-only pair comparisons with a single name choice per phone.
    Previously answered decisions are preserved. New receipt spellings on a
    phone with a saved name choice reuse that choice; new measured identities
@@ -47,9 +66,10 @@ name pair and phone, so they survive workbook updates.
    ```
 
    For a name choice, enter a listed number or `n` to type a custom name.
-   For measured identities, choose `s` for the same person or `d` for different
-   people. The reviewer shows recent measurement values for both names; `v`
-   shows every available snapshot and value. Choose `k` to skip, `u` to undo a
+   Pairs with Measurement Nos 1–5 apart are saved as different automatically.
+   For the remaining measured identities, choose `s` for the same person or
+   `d` for different people. The reviewer shows recent measurement values for
+   both names; `v` shows every available snapshot and value. Choose `k` to skip, `u` to undo a
    recent answer, or `q` to quit. Every answer is saved immediately, so stopping
    and restarting resumes the remaining review. Blank input skips a question.
 
@@ -93,7 +113,8 @@ gets an empty `[]` decisions file on dry-run.
 
 For a different location, pass `--customer-decisions /path/to/decisions.json`
 on both local and production runs. Optional `--customer-review /tmp/review.json`
-writes a separate report of pending name choices and measured identity pairs.
+writes a separate report of pending name choices, measured identity pairs and
+automatic separation evidence.
 A normal import's report includes existing database measurements; dry-run
 reports include workbook measurements only. Report output must differ from the
 saved decisions file. These files transfer decisions, not database records;
@@ -101,8 +122,9 @@ keep them out of version control.
 
 `same` decisions apply transitively within the specified phone. They apply to
 invoice and measurement ownership, measurement comparison, and legacy customer
-numbers. `different` decisions suppress future identity comparisons for that
-pair. `pending` measured identities stay separate. A `name` choice saves the
+numbers. Human `different` decisions suppress future identity comparisons for
+that pair; rule-generated decisions are recomputed from current measurements.
+`pending` measured identities stay separate. A `name` choice saves the
 preferred display name for contacts without measurements; a single measured
 identity takes precedence if measurement data is added later. Conflicting
 same/different decisions or conflicting preferred names are rejected before

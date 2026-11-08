@@ -7,6 +7,13 @@ import tempfile
 from difflib import SequenceMatcher
 from pathlib import Path
 
+MEASUREMENT_GAP_RULE = "measurement_number_gap"
+MAX_DISTINCT_MEASUREMENT_GAP = 5
+
+
+def is_automatic_decision(row):
+    return row.get("decision") == "different" and row.get("rule") == MEASUREMENT_GAP_RULE
+
 
 def norm_name(value: object) -> str | None:
     if value is None:
@@ -108,7 +115,10 @@ class CustomerIdentity:
             keys = [canonical_key(n, row.get("phone")) for n in names]
             if not all(keys) or keys[0] == keys[1]:
                 raise ValueError("Decisions need two distinct names and a phone")
-            pairs.append((decision, *keys))
+            # Derived decisions are evidence, refreshed from measurement records.
+            # Human answers take precedence, including a later explicit alias.
+            if not is_automatic_decision(row):
+                pairs.append((decision, *keys))
         for decision, left, right in pairs:
             if decision == "same":
                 self.parents[self.resolve(right)] = self.resolve(left)
@@ -181,6 +191,32 @@ class CustomerIdentity:
     def display_name(self, key, fallback):
         return self.labels.get(key, fallback)
 
+    def review_pair(self, left, right, records):
+        left, right = self.resolve(left), self.resolve(right)
+        if left == right or left[1] != right[1] or frozenset((left, right)) in self.separate:
+            return None
+        left, right = sorted((left, right))
+        row = {"phone": left[1], "names": [left[0], right[0]], "decision": "pending",
+               "name_similarity": round(SequenceMatcher(None, left[0], right[0]).ratio(), 3)}
+        if records:
+            row["measurements"] = records
+        numbers = {left: set(), right: set()}
+        for record in records:
+            key = self.base_key(record["name"], record.get("phone", left[1]))
+            number = record.get("measurementNo")
+            if key in numbers and type(number) is int and number > 0:
+                numbers[key].add(number)
+        # Check a bounded window rather than every combination of snapshots.
+        matches = [(abs(a - b), a, b) for a in numbers[left]
+                   for b in range(max(1, a - MAX_DISTINCT_MEASUREMENT_GAP),
+                                  a + MAX_DISTINCT_MEASUREMENT_GAP + 1)
+                   if b != a and b in numbers[right]]
+        if matches:
+            gap, a, b = min(matches)
+            row.update(decision="different", rule=MEASUREMENT_GAP_RULE,
+                       measurement_nos=[a, b], measurement_no_difference=gap)
+        return row
+
     def review(self, identities):
         if self.phone_measured is None:
             by_phone = {}
@@ -194,14 +230,10 @@ class CustomerIdentity:
         rows = []
         for phone, names in sorted(by_phone.items()):
             for left, right in itertools.combinations(sorted(names), 2):
-                if frozenset(((left, phone), (right, phone))) in self.separate:
-                    continue
-                row = {"phone": phone, "names": [left, right], "decision": "pending",
-                       "name_similarity": round(SequenceMatcher(None, left, right).ratio(), 3)}
                 records = self.profile_records.get((left, phone), []) + self.profile_records.get((right, phone), [])
-                if records:
-                    row["measurements"] = records
-                rows.append(row)
+                row = self.review_pair((left, phone), (right, phone), records)
+                if row:
+                    rows.append(row)
         questions = sorted(self.name_questions, key=lambda row: row["phone"])
         return questions + sorted(rows, key=lambda row: (-row["name_similarity"], row["phone"], row["names"]))
 
@@ -213,7 +245,8 @@ def load_identity(path, canonical_key):
 
 def save_review(path, identity, identities):
     """Preserve reviewed decisions and refresh pending questions atomically."""
-    reviewed = [row for row in identity.decisions if row["decision"] not in {"pending", "name_pending"}]
+    reviewed = [row for row in identity.decisions
+                if row["decision"] not in {"pending", "name_pending"} and not is_automatic_decision(row)]
     save_decisions(path, reviewed + identity.review(identities))
 
 
