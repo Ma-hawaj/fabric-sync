@@ -133,6 +133,40 @@ would resolve multiple existing records to one identity, ingestion stops and
 rolls back for reconciliation. Existing invoice numbers and their ownership
 are skipped on reruns.
 
+## Finding records with parsing issues
+
+Every workbook read writes `scripts/parsing-issues.csv` and prints its path,
+issue count and affected-row count. Generate it locally without a database:
+
+```bash
+python3 scripts/ingest_xlsm.py --dry-run
+```
+
+Open the CSV in Excel or another spreadsheet tool. Each entry identifies the
+source workbook, sheet, original Excel row and cell, column, invoice number,
+measurement number, customer name and phone when available. It includes the
+original cell value, the issue, and the import behavior, such as importing a
+measurement as NULL, using a fallback amount/date, or skipping the row. Several
+bad cells on one record produce several entries. All issues are included;
+the ten-sample console limit does not apply to this file.
+
+The report covers invalid invoice/measurement numbers, unusable measurement
+references, unparseable or out-of-range measurement values, invalid amounts,
+missing required dates and invalid non-empty optional dates. Measurement-value
+checks apply to the selected row when duplicate measurement numbers exist.
+Intentional exclusions, such as cancelled rows or repairs outside 2026, are not
+parsing issues; ordinary empty optional cells are also omitted.
+
+Correct the indicated cells in the original workbook, save it, then rerun
+`--dry-run`. Each run replaces the report, so fixed issues disappear; a clean
+run writes a header-only CSV. Customer decisions remain in their separate file
+and are reused. The report is generated before database writes and is ignored
+by Git because it contains customer data. To choose another output location:
+
+```bash
+python3 scripts/ingest_xlsm.py --dry-run --parsing-report /tmp/parsing-issues.csv
+```
+
 ## Unknown materials
 
 The original `0001_core_schema.sql` baseline supports unknown legacy materials.

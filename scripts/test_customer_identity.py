@@ -108,7 +108,8 @@ class DecisionCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "decisions.json"
             workbook = {"invoices": [], "measurements": []}
-            with patch("sys.argv", ["ingest", "--dry-run", "--customer-decisions", str(path)]), \
+            with patch("sys.argv", ["ingest", "--dry-run", "--customer-decisions", str(path),
+                                    "--parsing-report", str(path.parent / "parsing.csv")]), \
                     patch("ingest_xlsm.read_workbook", return_value=workbook), \
                     patch("ingest_xlsm.psycopg2.connect") as connect, \
                     contextlib.redirect_stdout(io.StringIO()) as output:

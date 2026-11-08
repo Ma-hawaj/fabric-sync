@@ -144,12 +144,14 @@ from __future__ import annotations
 
 import argparse
 import collections
+import csv
 import datetime as dt
 import json
 import hashlib
 import os
 import re
 import sys
+import tempfile
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
@@ -163,6 +165,7 @@ from customer_identity import (CustomerIdentity, canon_key, canon_name, load_ide
 ROOT = Path(__file__).resolve().parents[1]
 WORKBOOK = ROOT / "2026 Orders.xlsm"
 CUSTOMER_DECISIONS = ROOT / "scripts" / "customer-decisions.json"
+PARSING_REPORT = ROOT / "scripts" / "parsing-issues.csv"
 DEFAULT_MATERIAL = None
 PLACEHOLDER_DATE = dt.datetime(2026, 1, 1, 0, 0, 0)
 DEFAULT_BRANCH = "Main Branch"
@@ -222,16 +225,13 @@ def _is_placeholder(value: object) -> bool:
 def parse_money(value: object) -> Decimal | None:
     if value is None:
         return None
-    if isinstance(value, Decimal):
-        return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    if isinstance(value, (int, float)):
-        return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     s = str(value).strip()
     if not s:
         return None
     s = s.replace(",", "").replace(" ", "")
     try:
-        return Decimal(s).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        parsed = Decimal(s)
+        return parsed.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if parsed.is_finite() else None
     except Exception:
         return None
 
@@ -442,7 +442,8 @@ def load_sheet_rows(wb, name: str):
     for i, h in enumerate(header):
         if h and h not in index:
             index[h] = i
-    rows = [r for r in it if any(v is not None for v in r)]
+    rows = [(number, r) for number, r in enumerate(it, start=2)
+            if any(v is not None for v in r)]
     return rows, index
 
 
@@ -458,6 +459,7 @@ class Report:
     def __init__(self) -> None:
         self.numeric = collections.Counter()
         self.samples = collections.Counter()
+        self.parsing_issues = []
 
     def count(self, key: str, n: int = 1) -> None:
         self.numeric[key] += n
@@ -466,6 +468,39 @@ class Report:
         self.numeric[key] += 1
         if self.numeric[key] <= 10:
             self.samples[f"{key}: {sample!r}"] += 1
+
+    def parsing_issue(self, workbook, sheet, row_number, row, index, column, reason, action):
+        """Keep every affected cell with its original Excel location and owner."""
+        is_measurement = sheet == "Measurments"
+        column_index = index.get(column)
+        cell = (f"{openpyxl.utils.get_column_letter(column_index + 1)}{row_number}"
+                if column_index is not None else "")
+        self.parsing_issues.append({
+            "workbook": str(Path(workbook).resolve()), "sheet": sheet,
+            "row": row_number, "cell": cell, "column": column,
+            "invoice_number": get(row, index, "Invoice"),
+            "measurement_no": get(row, index, "Measurement No"),
+            "customer_name": get(row, index, "Customer Name" if is_measurement else "Name"),
+            "phone": get(row, index, "Customer Telephone" if is_measurement else "Telephone"),
+            "raw_value": get(row, index, column), "issue": reason, "action": action,
+        })
+        self.count("parsing issues (see CSV)")
+
+    def write_parsing_report(self, path):
+        """Write an uncapped, Excel-readable CSV, replacing the old report atomically."""
+        destination = Path(path)
+        fields = ("workbook", "sheet", "row", "cell", "column", "invoice_number",
+                  "measurement_no", "customer_name", "phone", "raw_value", "issue", "action")
+        fd, temporary = tempfile.mkstemp(prefix=destination.name + ".", dir=destination.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8-sig", newline="") as output:
+                writer = csv.DictWriter(output, fieldnames=fields)
+                writer.writeheader()
+                writer.writerows(self.parsing_issues)
+            os.replace(temporary, destination)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
     def summary(self, header: str) -> str:
         lines = [f"== {header} =="]
@@ -486,13 +521,38 @@ class Report:
 def read_workbook(path: Path, report: Report) -> dict:
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
 
+    def issue(sheet, row_number, row, index, column, reason, action):
+        report.parsing_issue(path, sheet, row_number, row, index, column, reason, action)
+
+    def money(sheet, row_number, row, index, column, action):
+        raw = get(row, index, column)
+        parsed = parse_money(raw)
+        if parsed is None and raw is not None and str(raw).strip():
+            issue(sheet, row_number, row, index, column, "Unparseable money value", action)
+        return parsed
+
+    def optional_date(sheet, row_number, row, index, column, action):
+        raw = get(row, index, column)
+        if raw is not None and str(raw).strip() and not isinstance(raw, dt.datetime):
+            issue(sheet, row_number, row, index, column, "Unparseable date", action)
+        return raw
+
+    def measurement_numbers(sheet, row_number, row, index):
+        raw = get(row, index, "Measurement No")
+        numbers = parse_measurement_numbers(raw)
+        if not numbers and raw is not None and str(raw).strip():
+            issue(sheet, row_number, row, index, "Measurement No",
+                  "No measurement numbers found", "No measurement references imported")
+        return numbers
+
     # ---- New: invoices + orders ---------------------------------------------
     rows, idx = load_sheet_rows(wb, "New")
     invoices = []
-    for r in rows:
+    for row_number, r in rows:
         date = get(r, idx, "Invoice Date")
         if not isinstance(date, dt.datetime):
             report.anomaly("New: undated row skipped (shell)", r[0])
+            issue("New", row_number, r, idx, "Invoice Date", "Missing or unparseable invoice date", "Row skipped")
             continue
         status = str(get(r, idx, "Status") or "").strip().lower()
         if status == "cancel":
@@ -503,12 +563,12 @@ def read_workbook(path: Path, report: Report) -> dict:
             "invoice_date": date.date(),
             "name": norm_name(get(r, idx, "Name")),
             "phone": norm_phone(get(r, idx, "Telephone")),
-            "discount": parse_money(get(r, idx, "Discount")) or Decimal("0"),
-            "final": parse_money(get(r, idx, "Final Amount")),
-            "advance": parse_money(get(r, idx, "Adavance")) or Decimal("0"),
+            "discount": money("New", row_number, r, idx, "Discount", "Discount defaults to 0") or Decimal("0"),
+            "final": money("New", row_number, r, idx, "Final Amount", "Use INCL. VAT AMT, or 0 if unavailable"),
+            "advance": money("New", row_number, r, idx, "Adavance", "Advance defaults to 0") or Decimal("0"),
             "pay1": norm_payment_type(get(r, idx, "Payment Type")),
             "pay2": norm_payment_type(get(r, idx, "Payment Type 2")),
-            "meas_nos": parse_measurement_numbers(get(r, idx, "Measurement No")),
+            "meas_nos": measurement_numbers("New", row_number, r, idx),
             "thobs": get(r, idx, "Thobs No"),
             # The receipt's embroidery choice, kept verbatim (case included):
             # combos like '6,TV' are legacy free text, like any uncatalogued
@@ -516,8 +576,8 @@ def read_workbook(path: Path, report: Report) -> dict:
             "emd": norm_name(get(r, idx, "EMD")),
             # Sheet material names are ignored entirely (see module
             # docstring): fabric is unknown unless a placeholder is requested.
-            "delivery": get(r, idx, "Delivery Date"),
-            "approval": get(r, idx, "Approval By Mess Date"),
+            "delivery": optional_date("New", row_number, r, idx, "Delivery Date", "Value ignored as a date"),
+            "approval": optional_date("New", row_number, r, idx, "Approval By Mess Date", "Value ignored as a date"),
             "status": status,
             "cutting_by": norm_name(get(r, idx, "Cutting By")),
             "tailor_by": norm_name(get(r, idx, "Tailor By")),
@@ -525,15 +585,17 @@ def read_workbook(path: Path, report: Report) -> dict:
         }
         if invoice["invoice_number"] is None:
             report.anomaly("New: dated row without invoice number", r[0])
+            issue("New", row_number, r, idx, "Invoice", "Missing invoice number", "Row skipped")
             continue
         try:
             invoice["invoice_number"] = int(invoice["invoice_number"])
         except (TypeError, ValueError, OverflowError):
             report.anomaly("New: invalid invoice number skipped",
                            invoice["invoice_number"])
+            issue("New", row_number, r, idx, "Invoice", "Invalid invoice number", "Row skipped")
             continue
         if invoice["final"] is None:
-            invoice["final"] = parse_money(get(r, idx, "INCL. VAT AMT")) or Decimal("0")
+            invoice["final"] = money("New", row_number, r, idx, "INCL. VAT AMT", "Final amount defaults to 0") or Decimal("0")
         invoices.append(invoice)
     report.count("New: dated rows -> invoices", len(invoices))
 
@@ -551,30 +613,31 @@ def read_workbook(path: Path, report: Report) -> dict:
     # ---- Measurments: customers + measurements ------------------------------
     rows, idx = load_sheet_rows(wb, "Measurments")
     kept: dict[int, tuple] = {}
-    for r in rows:
+    for row_number, r in rows:
         raw_no = get(r, idx, "Measurement No")
         try:
             no = int(raw_no)
         except (TypeError, ValueError, OverflowError):
             report.anomaly("Measurments: invalid measurement number skipped", raw_no)
+            issue("Measurments", row_number, r, idx, "Measurement No", "Invalid measurement number", "Row skipped")
             continue
         if no not in kept:
-            kept[no] = r
+            kept[no] = (row_number, r)
             continue
-        existing = kept[no]
+        _, existing = kept[no]
         new_date = get(r, idx, "Date")
         old_date = get(existing, idx, "Date")
         new_real = isinstance(new_date, dt.datetime) and not _is_placeholder(new_date)
         old_real = isinstance(old_date, dt.datetime) and not _is_placeholder(old_date)
         if new_real and (not old_real or new_date > old_date):
-            kept[no] = r
+            kept[no] = (row_number, r)
             report.count("Measurments: edit kept over placeholder")
         else:
             report.count("Measurments: duplicate number dropped")
     report.count("Measurments: kept measurement rows", len(kept))
 
     measurements = []
-    for no, r in kept.items():
+    for no, (row_number, r) in kept.items():
         name = norm_name(get(r, idx, "Customer Name"))
         phone = norm_phone(get(r, idx, "Customer Telephone"))
         values = {}
@@ -582,11 +645,13 @@ def read_workbook(path: Path, report: Report) -> dict:
             parsed, ok = parse_measurement(get(r, idx, src))
             if not ok:
                 report.anomaly(f"Measurments: unparseable {src}", get(r, idx, src))
+                issue("Measurments", row_number, r, idx, src, "Unparseable measurement", "Value imported as NULL")
             # NUMERIC(7, 3) tops out below 10 000; a larger figure is a
             # data-entry slip (e.g. hips 45436), not a real measurement.
             if parsed is not None and abs(parsed) >= 10000:
                 report.anomaly(f"Measurments: out of NUMERIC(7,3) range {src}",
                                get(r, idx, src))
+                issue("Measurments", row_number, r, idx, src, "Outside NUMERIC(7,3) range", "Value imported as NULL")
                 parsed = None
             values[dst] = parsed
         for src, dst in MEASUREMENT_TEXT.items():
@@ -602,6 +667,7 @@ def read_workbook(path: Path, report: Report) -> dict:
                     report.count(f"Measurments: ignored '- {suffix}' design variant")
         date = get(r, idx, "Date")
         if not isinstance(date, dt.datetime):
+            optional_date("Measurments", row_number, r, idx, "Date", "Use placeholder date 2026-01-01")
             date = PLACEHOLDER_DATE
         measurements.append({
             "measurement_no": no,  # Also supplies the readable customer number.
@@ -675,25 +741,29 @@ def read_workbook(path: Path, report: Report) -> dict:
     repair_sheet = "Repairing" if "Repairing" in wb.sheetnames else "Reparing"
     rows, idx = load_sheet_rows(wb, repair_sheet)
     repairs = []
-    for r in rows:
+    for row_number, r in rows:
         date = get(r, idx, "RECEIPT DATE")
-        if not isinstance(date, dt.datetime) or date.year != 2026:
+        if not isinstance(date, dt.datetime):
+            issue(repair_sheet, row_number, r, idx, "RECEIPT DATE", "Missing or unparseable receipt date", "Row skipped")
+            continue
+        if date.year != 2026:
             continue
         status = str(get(r, idx, "STUTES") or "").strip().lower()
         if status == "cancel":
             report.count("Repairing: cancelled rows skipped")
             continue
         repairs.append({
-            "meas_nos": parse_measurement_numbers(get(r, idx, "Measurement No")),
+            "meas_nos": measurement_numbers(repair_sheet, row_number, r, idx),
             "reported_on": date.date(),
             "reason": norm_name(get(r, idx, "Problem")) or "Repair",
-            "charge": parse_money(get(r, idx, " INCL. VAT AMT")) or Decimal("0"),
+            "charge": money(repair_sheet, row_number, r, idx, "INCL. VAT AMT", "Repair charge defaults to 0") or Decimal("0"),
             "raw_status": status,
-            "collected": get(r, idx, "RECEIVED     DATE"),
+            "collected": optional_date(repair_sheet, row_number, r, idx, "RECEIVED     DATE", "Value ignored as a completion date"),
         })
     report.count("Repairing: 2026 rows -> repair candidates", len(repairs))
 
     # Gift Orders is deliberately ignored: old coupons are not imported.
+    wb.close()
     return {
         "invoices": invoices,
         "measurements": measurements,
@@ -1349,7 +1419,13 @@ def main() -> int:
                         help="saved JSON decisions (default: scripts/customer-decisions.json; "
                              "created/refreshed by dry-run, required for import)")
     parser.add_argument("--customer-review", help="write pending name choices and measured identity pairs as JSON")
+    parser.add_argument("--parsing-report", default=str(PARSING_REPORT),
+                        help="CSV of every parsing issue with Excel locations (default: scripts/parsing-issues.csv)")
     args = parser.parse_args()
+    protected_paths = [args.workbook, args.customer_decisions, args.customer_review]
+    if any(Path(args.parsing_report).resolve() == Path(path).resolve()
+           for path in protected_paths if path):
+        parser.error("Parsing report must differ from the workbook and customer decision/review files")
     if (args.customer_decisions and args.customer_review
             and Path(args.customer_decisions).resolve() == Path(args.customer_review).resolve()):
         parser.error("Customer review output must differ from the decisions file")
@@ -1364,6 +1440,10 @@ def main() -> int:
 
     report = Report()
     workbook = read_workbook(Path(args.workbook), report)
+    report.write_parsing_report(args.parsing_report)
+    affected_rows = {(row["sheet"], row["row"]) for row in report.parsing_issues}
+    print(f"Parsing report: {Path(args.parsing_report).resolve()} "
+          f"({len(report.parsing_issues)} issues in {len(affected_rows)} rows)")
     apply_customer_identity(workbook, identity)
     sources = {m["measurement_no"]: m for m in workbook["measurements"]}
     identities = list(customer_display(workbook, sources)[0].values())
