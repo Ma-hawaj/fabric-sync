@@ -117,6 +117,7 @@ pub async fn fetch_invoice_detail(
             i.target_date,
             i.issuing_branch_name,
             i.urgent_charge::float8 AS "urgent_charge!",
+            i.delivery_charge::float8 AS "delivery_charge!",
             i.collection_method,
             i.created_at,
             i.created_by,
@@ -337,6 +338,7 @@ pub async fn fetch_invoice_detail(
             date: invoice.invoice_date,
             target_date: invoice.target_date,
             urgent_charge: invoice.urgent_charge,
+            delivery_charge: invoice.delivery_charge,
             collection_method: invoice.collection_method,
             created_at: invoice.created_at,
             created_by: invoice.created_by,
@@ -608,12 +610,12 @@ pub async fn insert_invoice(
             target_date, branch_id, discount, discount_unit,
             total_price, customer_id, gift_card_redeemed,
             urgent_charge, collection_method, created_by, vat_rate, taxable_amount, vat_amount,
-            issuing_branch_id, issuing_branch_name
+            issuing_branch_id, issuing_branch_name, delivery_charge
         )
         VALUES (
             $1, $2, $3::float8, $4, $5::float8, $6, $7::float8,
             $8::float8, $9, $10, $11::float8, $12::float8, $13::float8,
-            $14, (SELECT name FROM branch WHERE id = $14)
+            $14, (SELECT name FROM branch WHERE id = $14), $15::float8
         )
         RETURNING id, invoice_date
         "#,
@@ -631,6 +633,7 @@ pub async fn insert_invoice(
         taxable_amount,
         vat_amount,
         input.issuing_branch_id,
+        input.delivery_charge,
     )
     .fetch_one(&mut **tx)
     .await
@@ -641,6 +644,8 @@ pub async fn insert_invoice(
 /// That later read observes any changes committed while lock acquisition
 /// waited. `None` means the invoice does not exist.
 pub struct LockedInvoice {
+    pub delivery_charge: f64,
+    pub collection_method: String,
     pub vat_rate: f64,
     /// The server-set creation date. Gift card expiry on an edit is checked
     /// against this — the date the sale happened — not the editable target.
@@ -653,7 +658,7 @@ pub async fn lock_invoice(
 ) -> Result<Option<LockedInvoice>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT invoice_date, vat_rate::float8 AS "vat_rate!"
+        SELECT invoice_date, vat_rate::float8 AS "vat_rate!", delivery_charge::float8 AS "delivery_charge!", collection_method
         FROM invoices
         WHERE id = $1
         FOR UPDATE
@@ -664,6 +669,8 @@ pub async fn lock_invoice(
     .await?;
 
     Ok(row.map(|row| LockedInvoice {
+        delivery_charge: row.delivery_charge,
+        collection_method: row.collection_method,
         vat_rate: row.vat_rate,
         invoice_date: row.invoice_date,
     }))
@@ -1019,6 +1026,7 @@ pub async fn fetch_invoice_edit(
             i.invoice_date,
             i.target_date,
             i.urgent_charge::float8 AS "urgent_charge!",
+            i.delivery_charge::float8 AS "delivery_charge!",
             i.collection_method,
             i.branch_id,
             i.issuing_branch_id,
@@ -1275,6 +1283,7 @@ pub async fn fetch_invoice_edit(
         date: header.invoice_date,
         target_date: header.target_date,
         urgent_charge: header.urgent_charge,
+        delivery_charge: header.delivery_charge,
         collection_method: header.collection_method,
         branch_id: header.branch_id,
         branch_name: header.branch_name,
@@ -1637,6 +1646,7 @@ pub async fn update_invoice_header(
             collection_method = $10,
             taxable_amount = $11::float8,
             vat_amount = $12::float8,
+            delivery_charge = $14::float8,
             issuing_branch_id = $13,
             issuing_branch_name = CASE WHEN issuing_branch_id IS NOT DISTINCT FROM $13
                 THEN issuing_branch_name ELSE (SELECT name FROM branch WHERE id = $13) END
@@ -1655,6 +1665,7 @@ pub async fn update_invoice_header(
         taxable_amount,
         vat_amount,
         input.issuing_branch_id,
+        input.delivery_charge,
     )
     .execute(&mut **tx)
     .await?;

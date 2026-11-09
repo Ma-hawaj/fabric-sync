@@ -159,11 +159,25 @@ describe('invoiceFormSchema', () => {
   it('uses customer addresses without requiring a separate delivery-address field', () => {
     const input = values({
       collectionMethod: 'delivery',
+      deliveryCharge: 3,
       products: [validProductLine()],
       productBranch: 'stock',
     })
     expect(firstErrorFor(input)).toBeNull()
     input.collectionMethod = 'pickup'
+    expect(firstErrorFor(input)).toBeNull()
+  })
+  it('requires delivery pricing only for delivery invoices', () => {
+    const input = values({
+      collectionMethod: 'delivery',
+      products: [validProductLine()],
+      productBranch: 'stock',
+    })
+    expect(firstErrorFor(input)?.path).toEqual(['deliveryCharge'])
+    input.deliveryCharge = 3
+    expect(firstErrorFor(input)).toBeNull()
+    input.collectionMethod = 'pickup'
+    input.deliveryCharge = ''
     expect(firstErrorFor(input)).toBeNull()
   })
   it('requires a target date when any order is urgent', () => {

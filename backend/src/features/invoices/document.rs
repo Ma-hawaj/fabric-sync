@@ -354,6 +354,7 @@ fn formatted_amounts(detail: &InvoiceDetail) -> std::collections::BTreeMap<Strin
         ("subtotal", totals.subtotal),
         ("prepaidAmount", totals.prepaid_amount),
         ("urgentCharge", totals.urgent_charge),
+        ("deliveryCharge", totals.delivery_charge),
         ("discountAmount", totals.discount_amount),
         ("taxable", totals.taxable),
         ("vat", totals.vat),
@@ -954,6 +955,7 @@ mod tests_support {
             payments: Vec::new(),
             has_adjustments: false,
             totals: InvoiceTotalsBreakdown {
+                delivery_charge: 0.0,
                 prepaid_amount: 0.0,
                 sales_amount: 0.0,
                 urgent_charge: 0.0,

@@ -163,7 +163,10 @@ describe('mapInvoiceEditToForm', () => {
       issuingBranchId: 'issuer',
       issuingBranchName: 'Issuing office',
       collectionMethod: 'delivery',
+      deliveryCharge: 3,
     })
+    expect(values.deliveryCharge).toBe(3)
+    expect(invoicePayload(values).expectedDeliveryCharge).toBe(3)
     expect(values.issuingBranch).toBe('issuer')
     expect(
       seeds.customers.get(values.customers[0].existingCustomerId)?.address,

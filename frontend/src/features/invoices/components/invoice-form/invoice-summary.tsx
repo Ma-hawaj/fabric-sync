@@ -84,6 +84,11 @@ function invoiceTotals(values: InvoiceFormValues) {
     discount: values.discount === '' ? 0 : values.discount,
     discountUnit: values.discountUnit,
     urgentCharge: computeUrgentCharges(values.customers),
+    deliveryCharge:
+      values.collectionMethod === 'delivery' &&
+      typeof values.deliveryCharge === 'number'
+        ? values.deliveryCharge
+        : 0,
     redeemed: values.redemptions.reduce(
       (sum, line) => sum + computeRedemptionTotal(line),
       0,
@@ -277,6 +282,18 @@ export function InvoiceSummary({
                 </span>
               </div>
             )}
+            {values.collectionMethod === 'delivery' &&
+              typeof values.deliveryCharge === 'number' &&
+              values.deliveryCharge > 0 && (
+                <div className="flex items-center justify-between gap-4">
+                  <dt className="text-muted-foreground">
+                    Delivery charge (incl. VAT)
+                  </dt>
+                  <dd className="font-medium tabular-nums">
+                    {CURRENCY} {values.deliveryCharge.toFixed(2)}
+                  </dd>
+                </div>
+              )}
             {urgentCharge > 0 && (
               <div className="flex justify-between gap-3 text-sm">
                 <span className="text-muted-foreground">
@@ -361,6 +378,13 @@ export function InvoiceSummary({
               </Field>
             )}
           </form.Field>
+          {values.collectionMethod === 'delivery' &&
+            values.deliveryCharge === '' && (
+              <p role="alert" className="text-sm text-destructive">
+                Delivery pricing is unavailable. Configure the delivery charge
+                before saving.
+              </p>
+            )}
           {values.collectionMethod === 'pickup' ? (
             <form.Field name={'receivingBranch' as never}>
               {(field: any) => (

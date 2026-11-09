@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            i.invoice_number,\n            i.vat_rate::float8 AS \"vat_rate!\",\n            i.invoice_date,\n            i.target_date,\n            i.urgent_charge::float8 AS \"urgent_charge!\",\n            i.collection_method,\n            i.branch_id,\n            i.issuing_branch_id,\n            i.issuing_branch_name,\n            b.name AS \"branch_name?\",\n            i.discount::float8 AS \"discount!\",\n            i.discount_unit,\n            i.customer_id\n        FROM invoices i\n        LEFT JOIN branch b ON b.id = i.branch_id\n        WHERE i.id = $1\n        ",
+  "query": "\n        SELECT\n            i.invoice_number,\n            i.vat_rate::float8 AS \"vat_rate!\",\n            i.invoice_date,\n            i.target_date,\n            i.urgent_charge::float8 AS \"urgent_charge!\",\n            i.delivery_charge::float8 AS \"delivery_charge!\",\n            i.collection_method,\n            i.branch_id,\n            i.issuing_branch_id,\n            i.issuing_branch_name,\n            b.name AS \"branch_name?\",\n            i.discount::float8 AS \"discount!\",\n            i.discount_unit,\n            i.customer_id\n        FROM invoices i\n        LEFT JOIN branch b ON b.id = i.branch_id\n        WHERE i.id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -30,41 +30,46 @@
       },
       {
         "ordinal": 5,
+        "name": "delivery_charge!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
         "name": "collection_method",
         "type_info": "Text"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "branch_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "issuing_branch_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "issuing_branch_name",
         "type_info": "Text"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "branch_name?",
         "type_info": "Text"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "discount!",
         "type_info": "Float8"
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "discount_unit",
         "type_info": "Text"
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "customer_id",
         "type_info": "Uuid"
       }
@@ -80,6 +85,7 @@
       false,
       true,
       null,
+      null,
       false,
       true,
       true,
@@ -90,5 +96,5 @@
       true
     ]
   },
-  "hash": "88092d2d07b9ce3144032a577ac0356b3918800617819896a67c55f9959c1922"
+  "hash": "32dd2cc51d3ffdd6d1c5db5732327a6b2697a9207a7eb6217493ada8daf08a1a"
 }

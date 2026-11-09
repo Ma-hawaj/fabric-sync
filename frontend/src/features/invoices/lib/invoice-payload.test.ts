@@ -30,6 +30,8 @@ describe('invoice material payload', () => {
       branchId: 'pickup',
     })
     values.collectionMethod = 'delivery'
+    values.deliveryCharge = 3
+    expect(invoicePayload(values).expectedDeliveryCharge).toBe(3)
     expect(invoicePayload(values)).toMatchObject({
       issuingBranchId: 'issuer',
       branchId: null,

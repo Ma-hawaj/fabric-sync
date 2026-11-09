@@ -134,6 +134,7 @@ export function computeInvoiceTotals(input: {
   giftCardSales: number
   discount: number
   discountUnit: 'amount' | 'percent'
+  deliveryCharge?: number
   urgentCharge?: number
   redeemed: number
   prepaidAmount?: number
@@ -147,8 +148,11 @@ export function computeInvoiceTotals(input: {
     input.discountUnit,
   )
   const urgentCharge = Math.round((input.urgentCharge ?? 0) * 100) / 100
+  const deliveryCharge = Math.round((input.deliveryCharge ?? 0) * 100) / 100
   const gross =
-    Math.round((grossSubtotal - discountAmount + urgentCharge) * 100) / 100
+    Math.round(
+      (grossSubtotal - discountAmount + urgentCharge + deliveryCharge) * 100,
+    ) / 100
   const giftCardSales = Math.round(input.giftCardSales * 100) / 100
   const total = Math.round((gross + giftCardSales) * 100) / 100
   const redeemed = Math.min(input.redeemed, total)

@@ -205,6 +205,11 @@ pub struct CreatePaymentInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateInvoiceInput {
+    #[serde(default)]
+    pub expected_delivery_charge: Option<f64>,
+    // Server-resolved: a client cannot choose the fee being charged.
+    #[serde(skip)]
+    pub delivery_charge: f64,
     pub expected_vat_rate: f64,
     #[serde(default)]
     pub collection_method: CollectionMethod,
@@ -384,6 +389,7 @@ pub struct InvoicePayment {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEdit {
+    pub delivery_charge: f64,
     pub issuing_branch_id: Option<Uuid>,
     pub issuing_branch_name: Option<String>,
     pub vat_rate: f64,
@@ -566,6 +572,7 @@ pub struct InvoiceRedemptionLine {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceTotalsBreakdown {
+    pub delivery_charge: f64,
     /// Value already taxed when the single-purpose vouchers were issued.
     pub prepaid_amount: f64,
     /// Merchandise sales excluding VAT, voucher funding and return credits.
@@ -601,6 +608,7 @@ pub struct InvoiceTotalsBreakdown {
 /// the table no longer stores them.
 #[derive(Clone, Debug)]
 pub struct InvoiceRecord {
+    pub delivery_charge: f64,
     pub issuing_branch_name: Option<String>,
     pub vat_rate: f64,
     pub taxable_amount: f64,

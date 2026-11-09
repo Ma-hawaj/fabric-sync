@@ -348,6 +348,12 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
                   value={detail.totals.salesAmount}
                 />
               )}
+              {(detail.totals.deliveryCharge ?? 0) > 0 && (
+                <TotalRow
+                  label="Delivery charge (incl. VAT)"
+                  value={detail.totals.deliveryCharge!}
+                />
+              )}
               {detail.totals.urgentCharge > 0 && (
                 <TotalRow
                   label="Urgent charges (incl. VAT)"

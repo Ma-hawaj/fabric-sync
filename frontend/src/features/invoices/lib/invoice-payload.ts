@@ -102,6 +102,10 @@ function redemptionPayload(redemption: GiftCardRedemptionDraft) {
 export function invoicePayload(values: InvoiceFormValues) {
   return {
     expectedVatRate: values.expectedVatRate,
+    expectedDeliveryCharge:
+      values.collectionMethod === 'delivery' && values.deliveryCharge !== ''
+        ? values.deliveryCharge
+        : null,
     targetDate: values.targetDate || null,
     collectionMethod: values.collectionMethod,
     branchId:

@@ -125,6 +125,7 @@ export interface PaymentDraft {
 }
 
 export interface InvoiceFormValues {
+  deliveryCharge: NumberInput
   expectedVatRate: NumberInput
   collectionMethod: CollectionMethod
   // When the garment is promised for, if at all — blank means no committed
@@ -208,6 +209,7 @@ export function createEmptyCustomer(): InvoiceCustomerDraft {
 // can't be added to InvoiceFormValues without both picking it up.
 export function createEmptyInvoiceForm(): InvoiceFormValues {
   return {
+    deliveryCharge: '',
     expectedVatRate: '',
     // Blank: a target date is promised explicitly, not assumed. The form
     // never records when the invoice was opened (the backend stamps that

@@ -28,6 +28,8 @@ SQLx applies the files in version order:
    Readiness excludes closed orders, and credits/refunds invalidate previews.
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
    return-line lookups and the unique index allowing one closure per garment.
+5. `0005_delivery_charge.sql` snapshots the VAT-inclusive delivery fee per
+   invoice. Existing invoices retain a zero fee and their original totals.
 
 The core schema defines readable customer IDs (`C-6216`) and permanent
 per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.
