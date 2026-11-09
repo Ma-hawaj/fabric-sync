@@ -6,4 +6,4 @@ Selecting Delivery adds the fee once per invoice, after merchandise discounts. I
 
 Invoices save the fee used at issue. Editing an invoice that remains Delivery preserves that saved fee, including zero for invoices predating this feature. Switching a pickup invoice to Delivery uses the current configured fee; switching to Pickup clears it. Invoice details and printed documents show the saved fee.
 
-Apply migration `0005_delivery_charge.sql` before running the updated API. Do not edit older migrations.
+The delivery-charge column and its constraints are defined in the original `0001_core_schema.sql` migration for fresh databases.

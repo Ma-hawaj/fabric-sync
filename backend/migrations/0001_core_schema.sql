@@ -81,6 +81,9 @@ CREATE TABLE invoices (
     urgent_charge NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (urgent_charge >= 0),
     collection_method TEXT NOT NULL DEFAULT 'pickup'
         CHECK (collection_method IN ('delivery', 'pickup')),
+    -- VAT-inclusive delivery fee saved at issue; pickup invoices have no fee.
+    delivery_charge NUMERIC(10, 2) NOT NULL DEFAULT 0
+        CHECK (delivery_charge >= 0 AND (collection_method = 'delivery' OR delivery_charge = 0)),
     -- Customer pickup destination; unused for delivery invoices.
     branch_id UUID REFERENCES branch(id),
     -- Issuing is independent of fulfilment. Keep the issued branch name stable
