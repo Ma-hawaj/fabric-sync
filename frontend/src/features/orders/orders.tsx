@@ -1,11 +1,11 @@
 import * as React from 'react'
 import { useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
 import { useDataTable } from '@/hooks/use-data-table'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableAdvancedToolbar } from '@/components/data-table/data-table-advanced-toolbar'
 import { getOrderColumns } from './components/order-columns'
 import { CollectOrderDialog } from './components/collect-order-dialog'
+import { OrderManageDialog } from './components/order-manage-dialog'
 import { useAllInventory } from '@/features/inventory/hooks/use-inventory'
 import { useOrderStages } from '@/features/order-stages/hooks/use-order-stages'
 import { useAllLocations } from '@/features/locations/hooks/use-locations'
@@ -19,7 +19,7 @@ import type { Order } from './types/orders'
 
 export function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
-  const navigate = useNavigate()
+  const [managedOrderId, setManagedOrderId] = useState<string | null>(null)
 
   // The material and stage filters come from their own whole-list queries.
   // Deriving the options from the orders on screen would, under server-side
@@ -55,13 +55,9 @@ export function OrdersPage() {
       receiving,
       production,
       setSelectedOrder,
-      (order) =>
-        void navigate({
-          to: '/orders/$orderId',
-          params: { orderId: order.id },
-        }),
+      (order) => setManagedOrderId(order.id),
     )
-  }, [materials, stages, locations, navigate])
+  }, [materials, stages, locations])
 
   const { searchParams } = useListParams({ columns })
   const {
@@ -119,6 +115,10 @@ export function OrdersPage() {
       <CollectOrderDialog
         order={selectedOrder}
         onOpenChange={(open) => !open && setSelectedOrder(null)}
+      />
+      <OrderManageDialog
+        orderId={managedOrderId}
+        onOpenChange={(open) => !open && setManagedOrderId(null)}
       />
     </div>
   )

@@ -1,13 +1,12 @@
 import { PermissionGuard } from '@/components/permission-guard'
 import { defineColumns } from '@/lib/define-columns'
 import { Link } from '@tanstack/react-router'
-import { ListChecksIcon, CheckIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/status-badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
-import { RowActions } from '@/components/data-table/row-actions'
 import { CURRENCY } from '@/lib/currency'
 import { OrderPriorityIndicator } from './order-priority-indicator'
+import { OrderTableActions } from './order-table-actions'
 import {
   COMPLETED,
   currentStageLabel,
@@ -47,7 +46,7 @@ export function getOrderColumns(
   receivingOptions: { label: string; value: string }[],
   productionOptions: { label: string; value: string }[],
   onCollect: (order: Order) => void,
-  onOpen: (order: Order) => void,
+  onManage: (order: Order) => void,
 ) {
   return defineColumns<Order>()([
     {
@@ -472,26 +471,10 @@ export function getOrderColumns(
       cell: ({ row }) => {
         const order = row.original
         return (
-          <RowActions
-            items={[
-              {
-                label: 'Details',
-                icon: ListChecksIcon,
-                onClick: () => onOpen(order),
-              },
-              {
-                permission: { method: 'POST', path: '/orders/:id/collect' },
-                label:
-                  order.status === 'collected' ? 'Collected' : 'Mark Collected',
-                icon: CheckIcon,
-                disabled:
-                  order.status === 'collected' ||
-                  order.outcome === 'cancelled' ||
-                  order.outcome === 'returned',
-                onClick: () => onCollect(order),
-                separatorBefore: true,
-              },
-            ]}
+          <OrderTableActions
+            order={order}
+            onManage={onManage}
+            onCollect={onCollect}
           />
         )
       },
