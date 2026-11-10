@@ -8,7 +8,8 @@ SQLx applies the files in version order:
 1. `0001_core_schema.sql` creates the business tables, including independent stock, pickup, and production capabilities and the complete
    order lifecycle (`pending`, `ready`, `collected`), customer addresses,
    notification preferences, invoice collection method, a separate issuing branch
-   with its saved name, and per-order urgency and automatic charges. Delivery uses
+   with its saved name, per-order urgency and automatic charges, and the saved
+   VAT-inclusive delivery fee. Pickup invoices have no delivery fee. Delivery uses
    the customer address; the existing invoice branch is the pickup destination.
    Invoices snapshot the applied VAT rate and rounded
    taxable/VAT amounts so later configuration changes cannot alter issued tax figures. The invoice charge column stores the computed sum of its

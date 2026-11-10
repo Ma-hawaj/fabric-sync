@@ -576,3 +576,21 @@ it('includes direct material sales in the summary and VAT total', () => {
   expect(screen.getByText(`${CURRENCY} 2.50`)).toBeTruthy()
   expect(screen.getAllByText(`${CURRENCY} 27.50`).length).toBeGreaterThan(0)
 })
+
+it('adds the configured delivery fee and removes it when switching to pickup', () => {
+  render(
+    <Harness
+      defaultValues={baseValues({
+        customers: [customerWithOrder(100)],
+        deliveryCharge: 3,
+      })}
+    />,
+  )
+  expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 100.00`)
+  fireEvent.click(screen.getByRole('radio', { name: 'Delivery' }))
+  expect(rowValue('Delivery charge (incl. VAT)')).toBe(`${CURRENCY} 3.00`)
+  expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 103.00`)
+  fireEvent.click(screen.getByRole('radio', { name: 'Pickup' }))
+  expect(screen.queryByText('Delivery charge (incl. VAT)')).toBeNull()
+  expect(rowValue('Total incl. VAT')).toBe(`${CURRENCY} 100.00`)
+})

@@ -46,6 +46,7 @@ function clientForForm() {
   })
   client.setQueryData(['pricing'], {
     vatRate: 0.1,
+    deliveryCharge: 3,
     urgentCharge: { amount: 5, unit: 'amount' },
     customerMaterialBasePrice: 20,
   })

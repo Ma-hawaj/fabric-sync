@@ -322,6 +322,7 @@ export const invoiceFormSchema = z
       .finite()
       .min(0)
       .max(1, 'VAT pricing is unavailable. Reload to try again.'),
+    deliveryCharge: numberInputSchema,
     collectionMethod: z.enum(['delivery', 'pickup']),
     customerId: z.string(),
     productBranch: z.string(),
@@ -475,6 +476,18 @@ export const invoiceFormSchema = z
         ),
       0,
     )
+    if (
+      value.collectionMethod === 'delivery' &&
+      (typeof value.deliveryCharge !== 'number' ||
+        !Number.isFinite(value.deliveryCharge) ||
+        value.deliveryCharge < 0)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['deliveryCharge'],
+        message: 'Delivery pricing is unavailable. Reload to try again.',
+      })
+    }
     const totals = computeInvoiceTotals({
       vatRate: value.expectedVatRate,
       orderTotal,
@@ -489,6 +502,11 @@ export const invoiceFormSchema = z
       discount: value.discount === '' ? 0 : value.discount,
       discountUnit: value.discountUnit,
       urgentCharge: computeUrgentCharges(value.customers),
+      deliveryCharge:
+        value.collectionMethod === 'delivery' &&
+        typeof value.deliveryCharge === 'number'
+          ? value.deliveryCharge
+          : 0,
       redeemed: value.redemptions.reduce(
         (sum, redemption) => sum + computeRedemptionTotal(redemption),
         0,

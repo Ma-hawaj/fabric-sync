@@ -119,6 +119,7 @@ export interface InvoiceEdit {
   issuingBranchName?: string | null
   vatRate: number
   urgentCharge: number
+  deliveryCharge?: number
   collectionMethod: 'delivery' | 'pickup'
   id: string
   invoiceNumber: number

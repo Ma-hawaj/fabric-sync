@@ -81,6 +81,7 @@ interface InvoiceFormProps {
   invoiceDate?: string
 }
 
+/** Edit and validate invoice lines, fulfilment charges, and tender before saving. */
 export function InvoiceForm({
   defaultValues,
   title,
@@ -195,6 +196,13 @@ export function InvoiceForm({
           `Invoice ${savedVerb} — total ${CURRENCY} ${invoice.totalPrice.toFixed(2)}.`,
         error: (error) => {
           if (error instanceof ApiError && error.status === 409) {
+            if (error.message.startsWith('delivery pricing changed')) {
+              setPricingNeedsRefresh(true)
+              void pricing.refetch().then((result) => {
+                if (!result.isError) setPricingNeedsRefresh(false)
+              })
+              return 'Delivery pricing changed. Review the refreshed total before saving again.'
+            }
             if (error.message.startsWith('VAT rate has changed')) {
               setPricingNeedsRefresh(true)
               if (!editing) {
@@ -242,6 +250,14 @@ export function InvoiceForm({
   useEffect(() => {
     form.setFieldValue('expectedVatRate', vatRate ?? '')
   }, [form, vatRate])
+
+  const deliveryCharge =
+    editing && defaultValues.collectionMethod === 'delivery'
+      ? defaultValues.deliveryCharge
+      : (pricing.data?.deliveryCharge ?? '')
+  useEffect(() => {
+    form.setFieldValue('deliveryCharge', deliveryCharge)
+  }, [form, deliveryCharge])
 
   useEffect(() => {
     if (!editing && issuingDefault && form.state.values.issuingBranch === '') {

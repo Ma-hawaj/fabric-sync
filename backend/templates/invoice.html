@@ -852,7 +852,7 @@
         </figure>
       </section>
 
-      {% if invoice.totals.discountAmount > 0 or invoice.totals.urgentCharge > 0 or invoice.totals.giftCardSales > 0 %}
+      {% if invoice.totals.discountAmount > 0 or invoice.totals.urgentCharge > 0 or invoice.totals.deliveryCharge > 0 or invoice.totals.giftCardSales > 0 %}
         <section class="price-breakdown" aria-label="Price breakdown">
           <h4 class="summary-heading">تفاصيل السعر <span class="en">Price breakdown</span></h4>
           <dl class="breakdown-items">
@@ -870,6 +870,12 @@
                   <span class="en">Discount</span>
                 </dt>
                 <dd class="num">− {{ currency }} {{ amounts.discountAmount }}</dd>
+              </div>
+            {% endif %}
+            {% if invoice.totals.deliveryCharge > 0 %}
+              <div>
+                <dt>رسوم التوصيل <span class="en">Delivery charge (incl. VAT)</span></dt>
+                <dd class="num">{{ currency }} {{ amounts.deliveryCharge }}</dd>
               </div>
             {% endif %}
             {% if invoice.totals.urgentCharge > 0 %}

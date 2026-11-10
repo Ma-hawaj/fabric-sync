@@ -27,7 +27,7 @@ async fn delivery_uses_the_customer_address_and_keeps_the_issuing_branch(pool: P
     let state = test_support::state(pool.clone(), None, None).await;
     let mut payload = json!({
         "expectedVatRate": 0.1, "discountUnit": "amount", "issuingBranchId": issuer,
-        "branchId": stock, "collectionMethod": "delivery", "customerId": customer,
+        "expectedDeliveryCharge": 3, "branchId": stock, "collectionMethod": "delivery", "customerId": customer,
         "products": [{ "productId": product, "branchId": stock, "quantity": 1, "unitPrice": 20 }]
     });
     let created = service::create_invoice(
@@ -42,6 +42,21 @@ async fn delivery_uses_the_customer_address_and_keeps_the_issuing_branch(pool: P
         .unwrap();
     assert_eq!(saved.issuing_branch_id, Some(issuer));
     assert_eq!(saved.branch_id, None);
+    assert_eq!(saved.delivery_charge, 3.0);
+    assert_eq!(created.total_price, 23.0);
+    let mut stale = payload.clone();
+    stale["expectedDeliveryCharge"] = json!(1);
+    assert!(matches!(
+        service::create_invoice(&state, serde_json::from_value(stale).unwrap(), "staff").await,
+        Err(AppError::Conflict(_))
+    ));
+    service::update_invoice(
+        &state,
+        created.id,
+        serde_json::from_value(payload.clone()).unwrap(),
+    )
+    .await
+    .unwrap();
     let detail = service::get_invoice(&state, created.id).await.unwrap();
     assert_eq!(
         detail.buyer.as_ref().unwrap().address.as_deref(),
@@ -50,6 +65,9 @@ async fn delivery_uses_the_customer_address_and_keeps_the_issuing_branch(pool: P
     let html = super::document::render_invoice_document(&state, created.id)
         .await
         .unwrap();
+    assert!(html.contains("Delivery charge (incl. VAT)"));
+    assert!(html.contains("3.000"));
+    assert!(html.contains("23.000"));
     assert!(html.contains("Issuing branch"));
     assert!(html.contains("Building 2 &lt;Road 3&gt;"));
     assert!(!html.contains("Collection branch"));
@@ -71,6 +89,8 @@ async fn delivery_uses_the_customer_address_and_keeps_the_issuing_branch(pool: P
         detail.issuing_branch_name.as_deref(),
         Some("Issuing office")
     );
+    assert_eq!(detail.totals.delivery_charge, 0.0);
+    assert_eq!(detail.totals.total, 20.0);
     assert!(detail.branch_name.is_some());
     let input: CreateInvoiceInput = serde_json::from_value(payload.clone()).unwrap();
     assert!(matches!(
