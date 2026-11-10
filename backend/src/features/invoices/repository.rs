@@ -198,7 +198,7 @@ pub async fn fetch_invoice_detail(
             c.address AS customer_address,
             CASE WHEN o.material_source = 'customer'
                 THEN 'Customer material: ' || o.customer_material_description
-                ELSE mat.name END AS "material_name!",
+                ELSE COALESCE(mat.name, 'Unknown material') END AS "material_name!",
             COALESCE(mat.unit, 'meters') AS "material_unit!",
             o.material_amount::float8 AS "material_amount!",
             o.price::float8 AS "price!",
@@ -471,7 +471,7 @@ const SPEC: ListSpec = ListSpec {
                 )) AS customers,
                 string_agg(DISTINCT c.name, ', ') AS customer_names,
                 string_agg(DISTINCT c.mobile_no, ', ') AS customer_mobiles,
-                array_agg(DISTINCT CASE WHEN o.material_source = 'customer' THEN 'Customer material' ELSE mat.name END) AS material_names,
+                array_agg(DISTINCT CASE WHEN o.material_source = 'customer' THEN 'Customer material' ELSE COALESCE(mat.name, 'Unknown material') END) AS material_names,
                 json_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_locations,
                 array_agg(DISTINCT prod.name) FILTER (WHERE prod.name IS NOT NULL) AS production_location_names,
                 MAX(o.collected_at) AS last_collected_at
@@ -1084,7 +1084,7 @@ pub async fn fetch_invoice_edit(
             o.material_id,
             o.material_source,
             o.customer_material_description,
-            COALESCE(mat.name, o.customer_material_description) AS "material_name!",
+            COALESCE(mat.name, o.customer_material_description, 'Unknown material') AS "material_name!",
             COALESCE(mat.unit, 'meters') AS "material_unit!",
             o.material_amount::float8 AS "material_amount!",
             o.production_branch_id,

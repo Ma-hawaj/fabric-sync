@@ -52,14 +52,14 @@ export interface GarmentPrice {
   total: number
 }
 
-// Null means pricing is incomplete: never silently treat a missing price or
-// an unknown selected design as free.
+/** Price known fabric and design choices, returning null when pricing is unavailable. */
 export function calculateGarmentPrice(
   order: InvoiceOrderDraft,
   material: Material | null,
   options: DesignOption[],
   customerMaterialBasePrice: number | null = null,
 ): GarmentPrice | null {
+  if (order.materialSource === 'unknown') return null
   if (
     order.materialAmount === '' ||
     !isMoney(order.materialAmount) ||

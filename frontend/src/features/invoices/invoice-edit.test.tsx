@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { InvoiceEditPage } from './invoice-edit'
 import type { InvoiceEdit } from './types/invoice-edit'
+import { createEmptyMeasurement } from '@/features/customers/types/measurement-form'
+import { measurementPayload } from '@/features/customers/hooks/use-create-customer'
 
 // Hoisted by vitest above these imports at transform time.
 const { save, navigate } = vi.hoisted(() => ({
@@ -78,6 +80,68 @@ function renderPage(edit: InvoiceEdit = EDIT_FIXTURE) {
 }
 
 describe('InvoiceEditPage', () => {
+  it('saves an imported unknown-material order without selecting fabric or changing its price', async () => {
+    save.mockResolvedValue({ id: EDIT_FIXTURE.id, totalPrice: 100 })
+    renderPage({
+      ...EDIT_FIXTURE,
+      discount: 0,
+      giftCards: [],
+      customers: [
+        {
+          existingCustomerId: 'customer-1',
+          customerNumber: 1,
+          customerName: 'Ahmed',
+          customerMobileNo: '+97333112233',
+          measurementId: 'measurement-1',
+          measurement: measurementPayload({
+            ...createEmptyMeasurement(),
+            date: '2026-11-09',
+            type: 'body',
+            fit: 'medium',
+          }),
+          orders: [
+            {
+              originalOrderId: 'order-1',
+              materialSource: 'unknown',
+              customerMaterialDescription: null,
+              materialId: null,
+              materialName: 'Unknown material',
+              materialUnit: 'meters',
+              materialAmount: 1,
+              materialLocationId: null,
+              materialLocationName: null,
+              productionLocationId: 'workshop',
+              productionLocationName: 'Workshop',
+              stockQuantity: null,
+              basePrice: 0,
+              price: 100,
+              isUrgent: false,
+              urgentCharge: 0,
+              thobeType: null,
+              fPocket: null,
+              sPocket: null,
+              collar: null,
+              sleeve: null,
+              patti: null,
+              emd: null,
+              moreDetails: null,
+            },
+          ],
+        },
+      ],
+    })
+    expect(await screen.findByRole('radio', { name: 'Unknown' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    await waitFor(() => expect(save).toHaveBeenCalledOnce())
+    expect(save.mock.calls[0][0].customers[0].orders[0]).toMatchObject({
+      originalOrderId: 'order-1',
+      materialSource: 'unknown',
+      materialId: '',
+      materialLocationId: '',
+      price: 100,
+    })
+  })
+
   it('offers an updated-invoice preview after saving and keeps the edit when skipped', async () => {
     save.mockResolvedValue({ id: EDIT_FIXTURE.id, totalPrice: 140 })
     renderPage()

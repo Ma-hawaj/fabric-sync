@@ -3,6 +3,8 @@ import { recipientPhoneSchema } from '@/features/gift-cards/lib/gift-card-schema
 import { customerIdentitySchema } from '@/features/customers/lib/customer-schema'
 import { measurementPayload } from '@/features/customers/hooks/use-create-customer'
 import { isMoney } from '@/lib/money'
+import type { InvoiceOrderDraft } from '../types/invoice-form'
+import { preservesOriginalOrderPricing } from './garment-pricing'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 import { MEASUREMENT_TYPES } from '@/features/customers/types/measurement-form'
 import {
@@ -28,9 +30,14 @@ const measurementDraftSchema = z.custom<MeasurementDraft>()
 
 const MEASUREMENT_TYPE_VALUES = MEASUREMENT_TYPES as readonly string[]
 
+/** Validate order details, retaining unknown fabric only with unchanged saved pricing. */
 export const orderDraftSchema = z
   .object({
     key: z.string(),
+    originalOrderId: z.string().optional(),
+    originalPricing: z
+      .custom<NonNullable<InvoiceOrderDraft['originalPricing']>>()
+      .optional(),
     thobeType: z.string(),
     fPocket: z.string(),
     sPocket: z.string(),
@@ -39,7 +46,7 @@ export const orderDraftSchema = z
     patti: z.string(),
     emd: z.string(),
     moreDetails: z.string(),
-    materialSource: z.enum(['shop', 'customer']),
+    materialSource: z.enum(['shop', 'customer', 'unknown']),
     customerMaterialDescription: z.string(),
     materialId: z.string(),
     materialAmount: numberInputSchema,
@@ -50,6 +57,20 @@ export const orderDraftSchema = z
     urgentCharge: numberInputSchema,
   })
   .superRefine((order, ctx) => {
+    if (
+      order.materialSource === 'unknown' &&
+      (!preservesOriginalOrderPricing(order) ||
+        order.materialId ||
+        order.materialLocationId ||
+        order.customerMaterialDescription.trim())
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'Choose the material before changing this order’s fabric or pricing.',
+        path: ['materialSource'],
+      })
+    }
     if (
       order.materialSource === 'shop' &&
       (!order.materialId || order.materialAmount === '')

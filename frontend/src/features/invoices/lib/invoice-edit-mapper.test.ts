@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { mapInvoiceEditToForm } from './invoice-edit-mapper'
 import { invoicePayload } from './invoice-payload'
+import { orderDraftSchema } from './invoice-schema'
+import {
+  calculateGarmentPrice,
+  preservesOriginalOrderPricing,
+} from './garment-pricing'
 import type { InvoiceEdit } from '../types/invoice-edit'
 
 function editFixture(): InvoiceEdit {
@@ -106,6 +111,64 @@ function editFixture(): InvoiceEdit {
 }
 
 describe('mapInvoiceEditToForm', () => {
+  it('preserves unknown material and saved pricing during unrelated edits', () => {
+    const fixture = editFixture()
+    const line = fixture.customers[0].orders[0]
+    line.materialSource = 'unknown'
+    line.materialId = null
+    line.materialLocationId = null
+    line.customerMaterialDescription = null
+    line.materialName = 'Unknown material'
+    const { values, seeds } = mapInvoiceEditToForm(fixture)
+    const order = values.customers[0].orders[0]
+    order.moreDetails = 'Updated delivery notes'
+    expect(order).toMatchObject({
+      materialSource: 'unknown',
+      materialId: '',
+      materialLocationId: '',
+      customerMaterialDescription: '',
+    })
+    expect(preservesOriginalOrderPricing(order)).toBe(true)
+    expect(orderDraftSchema.safeParse(order).success).toBe(true)
+    expect(invoicePayload(values).customers[0].orders[0]).toMatchObject({
+      materialSource: 'unknown',
+      materialId: null,
+      materialLocationId: null,
+      customerMaterialDescription: null,
+    })
+    expect(calculateGarmentPrice(order, null, [], 25)).toBeNull()
+    expect(seeds.materials.size).toBe(0)
+  })
+
+  it('requires a known material for new orders or changes that would reprice unknown fabric', () => {
+    const fixture = editFixture()
+    const line = fixture.customers[0].orders[0]
+    line.materialSource = 'unknown'
+    line.materialId = null
+    line.materialLocationId = null
+    const { values } = mapInvoiceEditToForm(fixture)
+    const order = values.customers[0].orders[0]
+    for (const changed of [
+      { ...order, originalOrderId: undefined },
+      { ...order, materialAmount: 3 },
+      { ...order, collar: 'new-design' },
+      { ...order, isUrgent: true },
+      { ...order, materialId: 'unexpected-material' },
+      { ...order, materialLocationId: 'unexpected-location' },
+    ]) {
+      const result = orderDraftSchema.safeParse(changed)
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error.issues).toContainEqual(
+          expect.objectContaining({
+            path: ['materialSource'],
+            message: expect.stringMatching(/choose the material/i),
+          }),
+        )
+      }
+    }
+  })
+
   it('restores prepaid provenance for the preview without sending a tax override', () => {
     const edit = editFixture()
     edit.giftCardRedemptions = [
