@@ -627,6 +627,8 @@ pub async fn collect_order(
 
     if amount > 0.0 {
         let payment_type = payment_type.expect("validated: payment type is set");
+        crate::features::reports::day_service::require_invoice_trading(state, &mut tx, invoice_id)
+            .await?;
         let balance = crate::features::returns::repository::settlement(&mut tx, invoice_id).await?;
         crate::features::invoices::service::validate_payment_amount(
             amount,
@@ -984,8 +986,22 @@ pub async fn receive_repair(
         ));
     }
 
-    let received_at = repair_received_time(RepairStatus::Received, Utc::now())
-        .expect("received status always stamps a time");
+    if amount > 0.0 {
+        let order = repository::lock_order(&mut tx, order_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Order not found.".into()))?;
+        crate::features::reports::day_service::require_invoice_trading(
+            state,
+            &mut tx,
+            order.invoice_id,
+        )
+        .await?;
+    }
+    let received_at = repair_received_time(
+        RepairStatus::Received,
+        crate::features::reports::day_service::transaction_time(&mut tx).await?,
+    )
+    .expect("received status always stamps a time");
     repository::mark_repair_received(
         &mut tx,
         repair_id,
@@ -1822,7 +1838,7 @@ mod repair_collection_tests {
         )
         .await
         .unwrap();
-        receive_repair(&state, order_id, repair_id, 0.0, None)
+        receive_repair(&state, order_id, repair_id, 5.0, Some(PaymentType::Cash))
             .await
             .unwrap();
 

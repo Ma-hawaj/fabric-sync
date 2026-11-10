@@ -16,6 +16,7 @@ import {
 } from './types/invoice-form'
 import type { InvoiceFormValues } from './types/invoice-form'
 import { apiGetMock } from '@/lib/list-fixtures'
+import type { BranchDayStatus } from '@/features/reports/types/sales-closing'
 
 // Hoisted by vitest above these imports at transform time.
 vi.mock('@tanstack/react-router', () => ({
@@ -33,7 +34,7 @@ vi.mock('@/lib/api', () => ({
   ApiError: class ApiError extends Error {},
 }))
 
-function clientForForm() {
+function clientForForm(dayOverrides: Partial<BranchDayStatus> = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -49,17 +50,33 @@ function clientForForm() {
     urgentCharge: { amount: 5, unit: 'amount' },
     customerMaterialBasePrice: 20,
   })
+  const branchDay = {
+    branchId: 'workshop',
+    date: '2026-11-09',
+    openingRecorded: true,
+    closed: false,
+    previousUnclosedDate: null,
+    canCreateOrders: true,
+    ...dayOverrides,
+  }
+  for (const branchId of ['workshop', 'issuer', 'only-location']) {
+    client.setQueryData(['branch-day-status', branchId], {
+      ...branchDay,
+      branchId,
+    })
+  }
   client.setQueryData(['default-location'], {
     defaultLocation: null,
     defaultLocationId: null,
   })
-  apiGet.mockImplementation(
-    apiGetMock({
-      '/customers': [],
-      '/locations': [],
-      '/materials': [],
-      '/products': [],
-    }),
+  const pickers = apiGetMock({
+    '/customers': [],
+    '/locations': [],
+    '/materials': [],
+    '/products': [],
+  })
+  apiGet.mockImplementation(async (url: string) =>
+    url === '/sales-closing/status' ? { data: branchDay } : pickers(url),
   )
   return client
 }
@@ -77,6 +94,8 @@ function validInvoice(): InvoiceFormValues {
   values.payments = [
     { ...createEmptyPayment(), amount: 10, paymentType: 'cash' },
   ]
+  values.issuingBranch = 'workshop'
+  values.receivingBranch = 'workshop'
   values.customers[0].existingCustomerId = 'customer-1'
   values.customers[0].measurement.type = 'body'
   values.customers[0].measurement.fit = 'medium'
@@ -91,7 +110,12 @@ function validInvoice(): InvoiceFormValues {
   return values
 }
 
-function renderInvoice(values = validInvoice(), client = clientForForm()) {
+function renderInvoice(
+  values = validInvoice(),
+  client = clientForForm(),
+  dayOverrides?: Partial<BranchDayStatus>,
+) {
+  if (dayOverrides) client = clientForForm(dayOverrides)
   const save = vi
     .fn()
     .mockResolvedValue({ id: 'saved-invoice', totalPrice: 40 })
@@ -146,21 +170,25 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
 
   it('automatically selects the sole eligible location for each invoice role', async () => {
     const client = clientForForm()
-    apiGet.mockImplementation(
-      apiGetMock({
-        '/locations': [
-          {
-            id: 'only-location',
-            name: 'Only branch',
-            isActive: true,
-            receivesOrders: true,
-            holdsStock: true,
-            producesOrders: true,
-          },
-        ],
-      }),
+    const originalGet = apiGet.getMockImplementation()!
+    const locationsGet = apiGetMock({
+      '/locations': [
+        {
+          id: 'only-location',
+          name: 'Only branch',
+          isActive: true,
+          receivesOrders: true,
+          holdsStock: true,
+          producesOrders: true,
+        },
+      ],
+    })
+    apiGet.mockImplementation((url: string) =>
+      url === '/sales-closing/status' ? originalGet(url) : locationsGet(url),
     )
     const values = validInvoice()
+    values.issuingBranch = ''
+    values.receivingBranch = ''
     values.customers[0].orders[0].productionLocationId = ''
     const save = renderInvoice(values, client)
     await waitFor(() =>
@@ -343,6 +371,34 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
 })
 
 describe('Invoice workspace', () => {
+  it.each([
+    [{ openingRecorded: false }, /Record today’s opening cash/],
+    [{ previousUnclosedDate: '2026-11-06' }, /Close the active day 2026-11-06/],
+    [{ closed: true }, /This branch is closed for today/],
+  ] as const)(
+    'blocks new orders when the branch is unavailable: %j',
+    async (overrides, message) => {
+      const save = renderInvoice(validInvoice(), clientForForm(), {
+        ...overrides,
+        canCreateOrders: false,
+      })
+      expect(await screen.findByText(message)).toBeTruthy()
+      const button = screen.getByRole<HTMLButtonElement>('button', {
+        name: 'Save invoice',
+      })
+      expect(button.disabled).toBe(true)
+      fireEvent.click(button)
+      expect(save).not.toHaveBeenCalled()
+      expect(
+        screen
+          .getByRole('link', { name: 'Open branch closing' })
+          .getAttribute('href'),
+      ).toContain(
+        'previousUnclosedDate' in overrides ? '2026-11-06' : '2026-11-09',
+      )
+    },
+  )
+
   it('keeps optional sections out of the initial workspace until added', () => {
     renderInvoice()
     expect(screen.queryByRole('region', { name: 'Products' })).toBeNull()

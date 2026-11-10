@@ -212,6 +212,8 @@ pub async fn create_return(
     )? {
         return Ok(result);
     }
+    crate::features::reports::day_service::require_invoice_trading(state, &mut tx, invoice_id)
+        .await?;
     let lines = load_lines(&mut tx, invoice_id).await?;
     let mut seen = HashSet::new();
     let mut planned = Vec::new();
@@ -298,6 +300,8 @@ pub async fn create_refund(
     )? {
         return Ok(result);
     }
+    crate::features::reports::day_service::require_invoice_trading(state, &mut tx, invoice_id)
+        .await?;
     let balance = repository::settlement(&mut tx, invoice_id).await?;
     let available = if let Some(card_id) = input.gift_card_id {
         repository::refundable_cards(&mut tx, invoice_id)
@@ -475,6 +479,8 @@ pub async fn cancel_order(
     )? {
         return Ok(result);
     }
+    crate::features::reports::day_service::require_invoice_trading(state, &mut tx, invoice_id)
+        .await?;
     let details = repository::cancellation_details(&mut tx, order_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?;

@@ -1,0 +1,115 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id, e.branch_id, e.business_date, e.amount::float8 AS \"amount!\",\n       e.payment_type, e.reason, e.paid_to, e.reference, e.recorded_at, e.recorded_by,\n       e.request_hash,\n       v.recorded_at AS \"voided_at?\", v.reason AS \"void_reason?\",\n       v.recorded_by AS \"voided_by?\", v.request_id AS \"void_request_id?\",\n       v.request_hash AS \"void_request_hash?\"\nFROM branch_expenses e LEFT JOIN branch_expense_voids v ON v.expense_id = e.id\nWHERE ($1::uuid IS NULL OR e.branch_id = $1)\n  AND ($2::date IS NULL OR e.business_date = $2)\n  AND ($3::uuid IS NULL OR e.request_id = $3)\n  AND ($4::uuid IS NULL OR e.id = $4)\nORDER BY e.recorded_at, e.id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "branch_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "business_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "payment_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "paid_to",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "reference",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "recorded_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "recorded_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "request_hash",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 11,
+        "name": "voided_at?",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "void_reason?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "voided_by?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 14,
+        "name": "void_request_id?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 15,
+        "name": "void_request_hash?",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "51bf8b8fba42c8ed5ce17762fbfced9ffd8bcca5fbd34028d1151bcc718cdb84"
+}

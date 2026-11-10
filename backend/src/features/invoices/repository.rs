@@ -641,6 +641,8 @@ pub async fn insert_invoice(
 /// That later read observes any changes committed while lock acquisition
 /// waited. `None` means the invoice does not exist.
 pub struct LockedInvoice {
+    pub issuing_branch_id: Option<Uuid>,
+    pub branch_id: Option<Uuid>,
     pub vat_rate: f64,
     /// The server-set creation date. Gift card expiry on an edit is checked
     /// against this — the date the sale happened — not the editable target.
@@ -653,7 +655,7 @@ pub async fn lock_invoice(
 ) -> Result<Option<LockedInvoice>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT invoice_date, vat_rate::float8 AS "vat_rate!"
+        SELECT issuing_branch_id, branch_id, invoice_date, vat_rate::float8 AS "vat_rate!"
         FROM invoices
         WHERE id = $1
         FOR UPDATE
@@ -664,6 +666,8 @@ pub async fn lock_invoice(
     .await?;
 
     Ok(row.map(|row| LockedInvoice {
+        issuing_branch_id: row.issuing_branch_id,
+        branch_id: row.branch_id,
         vat_rate: row.vat_rate,
         invoice_date: row.invoice_date,
     }))

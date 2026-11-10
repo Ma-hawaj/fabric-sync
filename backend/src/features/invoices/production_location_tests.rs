@@ -76,7 +76,7 @@ async fn warehouse_stock_and_production_only_workshop_stay_independent_through_e
         .execute(&db)
         .await
         .unwrap();
-    let mut payload = json!({"expectedVatRate":0.1,"discountUnit":"amount","customers":[{
+    let mut payload = json!({"issuingBranchId":test_support::trading_branch(&db).await,"expectedVatRate":0.1,"discountUnit":"amount","customers":[{
         "newCustomer":{"name":"Buyer","mobileNo":"33112233"},
         "measurement":{"date":"2026-11-06","type":"body","fit":"medium"},
         "orders":[{"materialId":material,"materialLocationId":warehouse,"productionLocationId":workshop,"materialAmount":3}]

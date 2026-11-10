@@ -1,7 +1,9 @@
 import { SendGiftCardDialog } from '@/features/gift-cards/components/send-gift-card-dialog'
 import { NotificationDialog } from '@/features/notifications/notification-dialog'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useForm } from '@tanstack/react-form'
+import { useForm, useStore } from '@tanstack/react-form'
+import { useBranchDayStatus } from '@/features/reports/hooks/use-sales-closing'
+import { BranchDayNotice } from '@/features/reports/components/branch-day-notice'
 import { useNavigate } from '@tanstack/react-router'
 import {
   FileDownIcon,
@@ -185,6 +187,11 @@ export function InvoiceForm({
     },
     onSubmit: async ({ value }) => {
       if (savedInvoice || vatRate == null || pricingNeedsRefresh) return
+      if (!value.issuingBranch) {
+        toast.error('Choose an issuing branch before saving the invoice.')
+        return
+      }
+      if (branchBlocked || !branchDay.data) return
       const pending = mutation.mutateAsync({
         ...value,
         expectedVatRate: vatRate,
@@ -238,6 +245,18 @@ export function InvoiceForm({
       }
     },
   })
+
+  const issuingBranch = useStore(
+    form.store,
+    (state) => state.values.issuingBranch,
+  )
+  const branchDay = useBranchDayStatus(issuingBranch)
+  const branchBlocked = Boolean(
+    issuingBranch &&
+    (branchDay.isPending ||
+      branchDay.isError ||
+      !branchDay.data.canCreateOrders),
+  )
 
   useEffect(() => {
     form.setFieldValue('expectedVatRate', vatRate ?? '')
@@ -341,7 +360,8 @@ export function InvoiceForm({
                 mutation.isPending ||
                 savedInvoice !== null ||
                 vatRate == null ||
-                pricingNeedsRefresh
+                pricingNeedsRefresh ||
+                branchBlocked
               )
                 return
               const submitter = event.nativeEvent.submitter
@@ -583,6 +603,12 @@ export function InvoiceForm({
                 paymentsLocked={editing}
                 redemptionDate={redemptionDate}
               >
+                <BranchDayNotice
+                  branchId={issuingBranch}
+                  status={branchDay.data}
+                  loading={branchDay.isPending}
+                  failed={branchDay.isError}
+                />
                 <form.Subscribe
                   selector={(state) =>
                     [state.submissionAttempts, state.isValid] as const
@@ -610,7 +636,8 @@ export function InvoiceForm({
                       mutation.isPending ||
                       savedInvoice !== null ||
                       vatRate == null ||
-                      pricingNeedsRefresh
+                      pricingNeedsRefresh ||
+                      branchBlocked
                     }
                   >
                     {mutation.isPending ? 'Saving...' : 'Save invoice'}
@@ -625,7 +652,8 @@ export function InvoiceForm({
                       mutation.isPending ||
                       savedInvoice !== null ||
                       vatRate == null ||
-                      pricingNeedsRefresh
+                      pricingNeedsRefresh ||
+                      branchBlocked
                     }
                   >
                     <FileDownIcon className="size-4" />

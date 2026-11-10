@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COALESCE(i.issuing_branch_id, i.branch_id) AS \"branch_id?\", e.id AS \"id!\", e.invoice_id AS \"invoice_id!\",\n               i.invoice_number AS \"invoice_number!\", e.occurred_at AS \"occurred_at!\",\n               e.kind AS \"kind!\", e.method AS \"method?\",\n               (e.amount * 100)::bigint AS \"amount_cents!\",\n               (e.taxable * 100)::bigint AS \"taxable_cents!\",\n               (e.vat * 100)::bigint AS \"vat_cents!\",\n               (e.gift_sales * 100)::bigint AS \"gift_sales_cents!\"\n        FROM (\n            SELECT i.id, i.id AS invoice_id, i.invoice_date AS occurred_at,\n                   'sale'::text AS kind, NULL::text AS method, i.total_price AS amount,\n                   i.taxable_amount AS taxable, i.vat_amount AS vat,\n                   COALESCE((SELECT SUM(line_total) FROM invoice_items\n                             WHERE invoice_id = i.id AND kind = 'gift_card'), 0) AS gift_sales\n            FROM invoices i\n            UNION ALL\n            SELECT id, invoice_id, paid_at, 'payment', payment_type, amount, 0, 0, 0\n            FROM invoice_payments\n            UNION ALL\n            SELECT id, invoice_id, created_at, 'credit', NULL, amount, 0, 0, 0\n            FROM invoice_returns\n            UNION ALL\n            SELECT id, invoice_id, created_at, 'refund', payment_type, amount, 0, 0, 0\n            FROM invoice_refunds\n            UNION ALL\n            SELECT id, invoice_id, redeemed_at, 'gift_card_redemption', 'gift_card', amount, 0, 0, 0\n            FROM gift_card_redemptions\n            UNION ALL\n            SELECT r.id, o.invoice_id, r.received_at, 'repair_payment',\n                   r.received_payment_type, r.received_amount, 0, 0, 0\n            FROM order_repairs r JOIN orders o ON o.id = r.order_id\n            WHERE r.received_amount > 0 AND r.received_at IS NOT NULL\n        ) e\n        JOIN invoices i ON i.id = e.invoice_id\n        WHERE e.occurred_at >= $1 AND e.occurred_at < $2\n          AND (COALESCE(i.issuing_branch_id, i.branch_id) = $3 OR COALESCE(i.issuing_branch_id, i.branch_id) IS NULL)\n        ORDER BY e.occurred_at, e.kind, e.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "branch_id?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "invoice_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "invoice_number!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "occurred_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "method?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "amount_cents!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "taxable_cents!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "vat_cents!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "gift_sales_cents!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "991f9773336d8231ab7fdd278b70e98cbfded3de006f11d112ca603cd88f27e7"
+}

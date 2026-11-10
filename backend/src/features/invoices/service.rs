@@ -229,6 +229,8 @@ pub async fn record_payment(
         verify_request_hash(&stored, &hash)?;
         payment
     } else {
+        crate::features::reports::day_service::require_invoice_trading(state, &mut tx, invoice_id)
+            .await?;
         if let Some(order_id) = input.order_id {
             if !repository::order_belongs_to_invoice(&mut tx, order_id, invoice_id).await? {
                 return Err(AppError::NotFound(format!(
@@ -293,6 +295,8 @@ pub async fn collect_invoice(
     };
 
     let payment_method = if summary.balance_due > 0.0 {
+        crate::features::reports::day_service::require_invoice_trading(state, &mut tx, invoice_id)
+            .await?;
         let payment_type = payment_type.ok_or_else(|| {
             AppError::BadRequest("settling this invoice needs a paymentType".to_string())
         })?;
@@ -1337,6 +1341,7 @@ mod tests {
         customer_fabric["urgentCharge"] = serde_json::json!(777.0);
         // Deserialize the HTTP shape directly: submitted prices cannot override the catalog.
         let mut input: CreateInvoiceInput = serde_json::from_value(serde_json::json!({
+            "issuingBranchId": production, "branchId": production,
             "targetDate": "2026-11-01",
             "discount": 10.0,
             "expectedVatRate": 0.1, "discountUnit": "percent",
@@ -2268,6 +2273,12 @@ pub async fn create_invoice(
     let mut tx = state.db().begin().await?;
     normalize_fulfilment(&mut input);
     validate_invoice_locations(&mut tx, &input, None).await?;
+    crate::features::reports::day_service::require_new_orders(
+        state,
+        &mut tx,
+        input.issuing_branch_id,
+    )
+    .await?;
     resolve_order_prices(
         &mut tx,
         &mut input,
@@ -2408,6 +2419,27 @@ pub async fn update_invoice(
     normalize_fulfilment(&mut input);
     validate_invoice_locations(&mut tx, &input, Some(invoice_id)).await?;
     validate_expected_vat(input.expected_vat_rate, locked.vat_rate)?;
+    let financial_branch = locked.issuing_branch_id.or(locked.branch_id);
+    // Keep the financial branch when an older client omits the new field.
+    if input.issuing_branch_id.is_none() {
+        input.issuing_branch_id = financial_branch;
+    }
+    if input.issuing_branch_id != financial_branch {
+        return Err(AppError::Conflict(
+            "The issuing branch cannot be changed after an invoice is issued.".into(),
+        ));
+    }
+    let today =
+        crate::features::reports::day_service::require_trading(state, &mut tx, financial_branch)
+            .await?;
+    if locked
+        .invoice_date
+        .with_timezone(&state.timezone()?)
+        .date_naive()
+        != today
+    {
+        return Err(AppError::Conflict("Invoices from older business days are read-only. Record a return or adjustment today instead.".into()));
+    }
     let saved: HashMap<_, _> = repository::saved_order_prices(&mut tx, invoice_id)
         .await?
         .into_iter()

@@ -96,6 +96,8 @@ all protected routes have exactly one policy entry per method.
 | Locations/catalog administration | admin only |
 | Design options and order stages lookup | sales, production |
 | Invoice create/edit/read, pricing, payments and collection | sales |
+| Branch closing, opening cash, paid expenses, checks, final close and exports | sales |
+| Opening corrections and expense voids | manager |
 | Orders, repair lookup and slips | sales, production |
 | Production location | sales, production (the order PATCH accepts only this field) |
 | Stage progress | production |

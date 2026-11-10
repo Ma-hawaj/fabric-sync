@@ -64,6 +64,17 @@ beforeEach(() => {
   firstCardUnavailable = false
   vi.mocked(downloadInvoicePdf).mockResolvedValue(undefined)
   vi.mocked(apiClient.get).mockImplementation((url) => {
+    if (url === '/sales-closing/status')
+      return Promise.resolve({
+        data: {
+          branchId: 'gift-counter',
+          date: '2026-11-09',
+          openingRecorded: true,
+          closed: false,
+          previousUnclosedDate: null,
+          canCreateOrders: true,
+        },
+      })
     const index = cards.findIndex(
       (card) => url === `/gift-cards/${card.id}/preview`,
     )
@@ -121,12 +132,22 @@ function renderForm({
     defaultLocation: null,
     defaultLocationId: null,
   })
+  client.setQueryData(['branch-day-status', 'gift-counter'], {
+    branchId: 'gift-counter',
+    date: '2026-11-09',
+    openingRecorded: true,
+    closed: false,
+    previousUnclosedDate: null,
+    canCreateOrders: true,
+  })
   render(
     <QueryClientProvider client={client}>
       <InvoiceForm
         defaultValues={{
           ...createEmptyInvoiceForm(),
           expectedVatRate: 0.1,
+          issuingBranch: 'gift-counter',
+          receivingBranch: 'gift-counter',
           customers: [],
           payments: editing
             ? []

@@ -15,6 +15,22 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('./hooks/use-update-invoice', () => ({
   useUpdateInvoice: () => ({ mutateAsync: save, isPending: false }),
 }))
+vi.mock('@/features/reports/hooks/use-sales-closing', () => ({
+  useBranchDayStatus: () => ({
+    data: {
+      issuingBranchId: 'edit-counter',
+      issuingBranchName: 'Edit counter',
+      branchId: 'edit-counter',
+      date: '2026-07-19',
+      openingRecorded: true,
+      closed: false,
+      previousUnclosedDate: null,
+      canCreateOrders: true,
+    },
+    isPending: false,
+    isError: false,
+  }),
+}))
 vi.mock('@/features/notifications/notification-dialog', () => ({
   NotificationDialog: ({
     invoiceId,
@@ -46,8 +62,10 @@ const EDIT_FIXTURE: InvoiceEdit = {
   urgentCharge: 0,
   date: '2026-07-19',
   targetDate: null,
-  branchId: null,
-  branchName: null,
+  issuingBranchId: 'edit-counter',
+  issuingBranchName: 'Edit counter',
+  branchId: 'edit-counter',
+  branchName: 'Edit counter',
   discount: 10,
   discountUnit: 'amount',
   payments: [],

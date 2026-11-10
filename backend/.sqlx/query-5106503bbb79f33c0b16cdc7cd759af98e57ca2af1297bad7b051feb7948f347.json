@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, checked_at, report_fingerprint, request_hash,\n               counts AS \"counts!: sqlx::types::Json<ClosingCounts>\",\n               comparison AS \"comparison!: sqlx::types::Json<Comparison>\"\n        FROM branch_closing_checks WHERE branch_id = $1 AND report_date = $2\n        ORDER BY checked_at DESC, id DESC LIMIT 1\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "checked_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "report_fingerprint",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "request_hash",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "counts!: sqlx::types::Json<ClosingCounts>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "comparison!: sqlx::types::Json<Comparison>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5106503bbb79f33c0b16cdc7cd759af98e57ca2af1297bad7b051feb7948f347"
+}

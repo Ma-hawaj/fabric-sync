@@ -159,6 +159,7 @@ describe('role policy', () => {
         '/locations',
         '/design-options',
         '/pricing',
+        '/sales-closing',
         '/gift-cards/by-code/CODE',
         '/me/preferences',
         '/invoices/1/edit',
@@ -173,6 +174,9 @@ describe('role policy', () => {
         '/invoices',
         '/customers',
         '/invoices/1/payments',
+        '/sales-closing/checks',
+        '/sales-closing/openings',
+        '/sales-closing/expenses',
         '/invoices/1/collect',
         '/orders/1/repairs',
         '/gift-cards',
@@ -255,6 +259,29 @@ describe('role policy', () => {
     expect(canVisit(principal('inventory'), '/products/new')).toBe(true)
     expect(canVisit(principal('manager'), '/design-options/new')).toBe(false)
     expect(canVisit(principal('sales'), '/users')).toBe(false)
+    expect(canVisit(principal('sales'), '/sales-closing')).toBe(true)
+    expect(
+      canAccess(principal('sales'), 'POST', '/sales-closing/expenses/1/void'),
+    ).toBe(false)
+    expect(
+      canAccess(
+        principal('sales'),
+        'POST',
+        '/sales-closing/openings/1/corrections',
+      ),
+    ).toBe(false)
+    expect(
+      canAccess(principal('manager'), 'POST', '/sales-closing/expenses/1/void'),
+    ).toBe(true)
+    expect(
+      canAccess(
+        principal('manager'),
+        'POST',
+        '/sales-closing/openings/1/corrections',
+      ),
+    ).toBe(true)
+    expect(canVisit(principal('production'), '/sales-closing')).toBe(false)
+    expect(canVisit(principal('inventory'), '/sales-closing')).toBe(false)
     expect(homePath(principal('production'))).toBe('/orders')
     expect(homePath(principal('inventory'))).toBe('/inventory')
   })

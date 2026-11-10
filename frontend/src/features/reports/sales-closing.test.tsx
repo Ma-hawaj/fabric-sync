@@ -1,0 +1,358 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { NuqsTestingAdapter } from 'nuqs/adapters/testing'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
+import { apiClient } from '@/lib/api'
+import { SalesClosingPage } from './sales-closing'
+import { closingFixture } from './test-fixtures'
+import { compareCounts } from './lib/closing-counts'
+import type { ClosingCounts } from './types/sales-closing'
+
+vi.mock('@/lib/api', () => ({
+  apiClient: { get: vi.fn(), post: vi.fn() },
+  ApiError: class ApiError extends Error {},
+}))
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+}))
+const branch = closingFixture().branchId
+const secondBranch = '00000000-0000-4000-8000-000000000002'
+
+function setup(searchParams = '') {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  client.setQueryData(['locations', ''], {
+    data: [
+      {
+        id: branch,
+        name: 'Main Branch',
+        receivesOrders: true,
+        holdsStock: true,
+        isActive: true,
+      },
+      {
+        id: secondBranch,
+        name: 'Second Branch',
+        receivesOrders: true,
+        holdsStock: false,
+        isActive: false,
+      },
+    ],
+    page: 1,
+    perPage: 2,
+    total: 2,
+    pageCount: 1,
+  })
+  client.setQueryData(['default-location'], {
+    defaultLocationId: null,
+    defaultLocation: null,
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <NuqsTestingAdapter searchParams={searchParams} hasMemory>
+        <SalesClosingPage />
+      </NuqsTestingAdapter>
+    </QueryClientProvider>,
+  )
+  return client
+}
+
+beforeEach(() => {
+  vi.mocked(apiClient.get).mockReset()
+  vi.mocked(apiClient.post).mockReset()
+  vi.mocked(apiClient.get).mockImplementation(async (_url, options) => {
+    const params = options?.params as { date?: string; branchId: string }
+    const report = closingFixture(params.date)
+    report.branchId = params.branchId
+    if (params.branchId === secondBranch) report.branchName = 'Second Branch'
+    if (params.date === '2026-10-31') report.activity = []
+    return { data: report }
+  })
+})
+
+describe('branch closing workflow', () => {
+  it('finalizes an explained difference and displays a read-only saved report', async () => {
+    const report = closingFixture()
+    report.businessDate = report.date
+    const counts: ClosingCounts = {
+      branchActivityConfirmed: true,
+      openingCash: 20,
+      cashAdded: 0,
+      cashRemoved: 0,
+      actualCash: 70,
+      actualBenefit: 0,
+      actualCard: 0,
+      notes: 'Recounted: BHD 2 short; manager informed.',
+    }
+    report.lastCheck = {
+      id: 'final-check',
+      checkedAt: '2026-11-02T18:00:00Z',
+      fingerprint: report.fingerprint,
+      counts,
+      comparison: compareCounts(report, counts),
+    }
+    vi.mocked(apiClient.get).mockResolvedValue({ data: report })
+    vi.mocked(apiClient.post).mockImplementation(async (path) => {
+      expect(path).toBe('/sales-closing/close')
+      report.closure = {
+        id: 'closure-1',
+        checkId: 'final-check',
+        closedAt: '2026-11-02T18:30:00Z',
+        closedBy: 'test-closer',
+      }
+      return { data: { ...report } }
+    })
+    const client = setup(`?branchId=${branch}&date=2026-11-02`)
+    const button = await screen.findByRole<HTMLButtonElement>('button', {
+      name: 'Close branch day',
+    })
+    expect(button.disabled).toBe(true)
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /I have finished recording/ }),
+    )
+    expect(button.disabled).toBe(false)
+    fireEvent.click(button)
+    await screen.findByText('Closed · Read-only')
+    expect(
+      screen.queryByRole('button', { name: 'Save branch check' }),
+    ).toBeNull()
+    expect(screen.queryByText('Add paid expense')).toBeNull()
+    expect(screen.queryByLabelText('Cash physically counted (BHD)')).toBeNull()
+    expect(screen.getByText(counts.notes)).toBeTruthy()
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Export CSV' })
+        .disabled,
+    ).toBe(false)
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/sales-closing/close',
+      expect.objectContaining({
+        branchId: branch,
+        date: report.date,
+        checkId: 'final-check',
+        fingerprint: report.fingerprint,
+      }),
+    )
+    client.clear()
+  })
+
+  it('shows the earlier active day and keeps older expenses read-only', async () => {
+    const report = closingFixture()
+    report.businessDate = '2026-11-09'
+    report.previousUnclosedDate = '2026-11-01'
+    vi.mocked(apiClient.get).mockResolvedValue({ data: report })
+    const client = setup(`?branchId=${branch}&date=2026-11-02`)
+    await screen.findByText('Main Branch · 2026-11-02')
+    expect(
+      screen.getByRole('link', { name: '2026-11-01' }).getAttribute('href'),
+    ).toContain('date=2026-11-01')
+    expect(screen.queryByText('Add paid expense')).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Close branch day' }),
+    ).toBeNull()
+    expect(screen.getByLabelText('Cash physically counted (BHD)')).toBeTruthy()
+    client.clear()
+  })
+
+  it('requires a branch and keeps dates and branch caches separate', async () => {
+    const client = setup()
+    expect(screen.getByText('Choose the branch you are closing.')).toBeTruthy()
+    expect(apiClient.get).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Branch'), {
+      target: { value: branch },
+    })
+    await screen.findByText('Main Branch · 2026-11-02')
+    expect(apiClient.get).toHaveBeenCalledWith('/sales-closing', {
+      params: { branchId: branch },
+    })
+    fireEvent.change(screen.getByLabelText('Report date'), {
+      target: { value: '2026-10-31' },
+    })
+    await screen.findByText('Main Branch · 2026-10-31')
+    expect(screen.getByText('No activity for this day.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Branch'), {
+      target: { value: secondBranch },
+    })
+    await screen.findByText('Second Branch · 2026-10-31')
+    expect(apiClient.get).toHaveBeenLastCalledWith('/sales-closing', {
+      params: { branchId: secondBranch, date: '2026-10-31' },
+    })
+    client.clear()
+  })
+  it('saves counted amounts and disables exporting unsaved changes', async () => {
+    vi.mocked(apiClient.post).mockImplementation(async (_url, body) => {
+      const input = body as { counts: ClosingCounts; fingerprint: string }
+      return {
+        data: {
+          id: 'check-1',
+          checkedAt: '2026-11-02T18:00:00Z',
+          fingerprint: input.fingerprint,
+          counts: input.counts,
+          comparison: compareCounts(closingFixture(), input.counts),
+        },
+      }
+    })
+    const client = setup(`?branchId=${branch}&date=2026-11-02`)
+    await screen.findByText('Main Branch · 2026-11-02')
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Export CSV' })
+        .disabled,
+    ).toBe(true)
+    for (const [label, value] of [
+      ['Other cash added (BHD)', '0'],
+      ['Cash banked / transferred out (BHD)', '0'],
+      ['Cash physically counted (BHD)', '72'],
+      ['Confirmed net Benefit (BHD)', '0'],
+      ['Confirmed net Card (BHD)', '0'],
+    ])
+      fireEvent.change(screen.getByLabelText(label), { target: { value } })
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /I verified the listed payments/ }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save branch check' }))
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/sales-closing/checks',
+        expect.objectContaining({
+          branchId: branch,
+          date: '2026-11-02',
+          fingerprint: 'test-fingerprint',
+          counts: expect.objectContaining({ actualCash: 72, openingCash: 20 }),
+        }),
+      ),
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>('button', { name: 'Export CSV' })
+          .disabled,
+      ).toBe(false),
+    )
+    fireEvent.change(screen.getByLabelText('Cash physically counted (BHD)'), {
+      target: { value: '71' },
+    })
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Export CSV' })
+        .disabled,
+    ).toBe(true)
+    expect(screen.getAllByText('Difference found').length).toBeGreaterThan(0)
+    client.clear()
+  })
+  it('records opening first and deducts a paid delivery expense from the closing comparison', async () => {
+    const report = closingFixture()
+    report.opening = null
+    vi.mocked(apiClient.get).mockImplementation(async () => ({
+      data: structuredClone(report),
+    }))
+    vi.mocked(apiClient.post).mockImplementation(async (url, body) => {
+      const input = body as Record<string, unknown>
+      if (url === '/sales-closing/openings') {
+        report.opening = {
+          id: 'opening-saved',
+          amount: Number(input.amount),
+          recordedAt: '2026-11-02T05:00:00Z',
+          recordedBy: 'staff',
+          notes: '',
+          supersedesId: null,
+        }
+        report.fingerprint = 'opening-saved'
+        return { data: report.opening }
+      }
+      if (url === '/sales-closing/expenses') {
+        report.expenses = [
+          {
+            id: 'expense-saved',
+            amount: Number(input.amount),
+            paymentType: 'cash',
+            reason: String(input.reason),
+            paidTo: String(input.paidTo),
+            reference: String(input.reference),
+            recordedAt: '2026-11-02T09:00:00Z',
+            recordedBy: 'staff',
+            voidedAt: null,
+            voidReason: null,
+            voidedBy: null,
+          },
+        ]
+        report.tenders[0].expenses = Number(input.amount)
+        report.tenders[0].afterExpenses = 46.995
+        report.fingerprint = 'expense-saved'
+        return { data: report.expenses[0] }
+      }
+      const counts = input.counts as ClosingCounts
+      return {
+        data: {
+          id: 'check',
+          checkedAt: '2026-11-02T18:00:00Z',
+          fingerprint: report.fingerprint,
+          counts,
+          comparison: compareCounts(report, counts),
+        },
+      }
+    })
+    const client = setup(`?branchId=${branch}&date=2026-11-02`)
+    await screen.findByLabelText('Opening cash counted (BHD)')
+    expect(screen.queryByLabelText('Cash physically counted (BHD)')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Opening cash counted (BHD)'), {
+      target: { value: '20' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save opening cash' }))
+    await screen.findByLabelText('Cash physically counted (BHD)')
+    expect(screen.queryByLabelText('Opening cash counted (BHD)')).toBeNull()
+    fireEvent.click(screen.getByText('Add paid expense'))
+    for (const [label, value] of [
+      ['Expense amount (BHD)', '5.005'],
+      ['Reason (for example, delivery fee)', 'Delivery fee'],
+      ['Paid to (optional)', 'Courier'],
+      ['Receipt / reference (optional)', 'D100'],
+    ])
+      fireEvent.change(screen.getByLabelText(label), { target: { value } })
+    fireEvent.click(screen.getByRole('button', { name: 'Record paid expense' }))
+    await screen.findByText(/Paid from cash drawer: BHD 5.005/)
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/sales-closing/expenses',
+      expect.objectContaining({
+        branchId: branch,
+        amount: 5.005,
+        reason: 'Delivery fee',
+        paymentType: 'cash',
+        reference: 'D100',
+      }),
+    )
+    for (const [label, value] of [
+      ['Other cash added (BHD)', '0'],
+      ['Cash banked / transferred out (BHD)', '0'],
+      ['Cash physically counted (BHD)', '66.995'],
+      ['Confirmed net Benefit (BHD)', '0'],
+      ['Confirmed net Card (BHD)', '0'],
+    ])
+      fireEvent.change(screen.getByLabelText(label), { target: { value } })
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /I verified the listed payments/ }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save branch check' }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>('button', { name: 'Export CSV' })
+          .disabled,
+      ).toBe(false),
+    )
+    expect(screen.getAllByText('66.995').length).toBeGreaterThan(0)
+    client.clear()
+  })
+  it('shows a request failure instead of presenting zero totals', async () => {
+    vi.mocked(apiClient.get).mockRejectedValue(new Error('unavailable'))
+    const client = setup(`?branchId=${branch}&date=2026-11-01`)
+    await screen.findByText(/Could not load the closing report/)
+    expect(screen.queryByText('No activity for this day.')).toBeNull()
+    client.clear()
+  })
+  it('does not query malformed dates', async () => {
+    const client = setup(`?branchId=${branch}&date=2026-02-30`)
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Choose a valid branch and report date',
+    )
+    expect(apiClient.get).not.toHaveBeenCalled()
+    client.clear()
+  })
+})

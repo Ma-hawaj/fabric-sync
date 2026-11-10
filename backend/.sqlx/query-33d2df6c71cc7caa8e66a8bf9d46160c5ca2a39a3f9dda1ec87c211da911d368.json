@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO branch_closing_checks(branch_id, report_date, request_id, request_hash, report_fingerprint, counts, comparison, report_snapshot, checked_by)\n        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)\n        RETURNING id, checked_at, report_fingerprint, request_hash,\n                  counts AS \"counts!: sqlx::types::Json<ClosingCounts>\",\n                  comparison AS \"comparison!: sqlx::types::Json<Comparison>\"\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "checked_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "report_fingerprint",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "request_hash",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "counts!: sqlx::types::Json<ClosingCounts>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "comparison!: sqlx::types::Json<Comparison>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "33d2df6c71cc7caa8e66a8bf9d46160c5ca2a39a3f9dda1ec87c211da911d368"
+}

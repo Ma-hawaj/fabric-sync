@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO branch_expense_voids(expense_id,reason,request_id,request_hash,recorded_by)\n        VALUES($1,$2,$3,$4,$5)\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0afd03a7c79e2a859d0f2ce5305805b3ae8536c89cc8906304a8908079ab8581"
+}

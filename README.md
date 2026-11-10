@@ -198,6 +198,19 @@ cd frontend
 VITE_API_BASE_URL=http://localhost:8000 pnpm run dev
 ```
 
+## Branch closing report
+
+Use **Branch Closing** to choose a branch and day, count the cash drawer,
+confirm Benefit/Card totals, and see any over/short amounts. Opening float is
+saved separately before closing. Delivery fees and other paid branch expenses
+are logged and cash expenses reduce expected drawer cash. Final closing locks
+the saved report. New sales require opening cash and closure of every earlier
+active branch day; quiet days are skipped. Explained differences are retained
+at closing.
+Cash movements, notes and saved checks are included. Export a checked report
+as CSV or print/save PDF. See [branch reconciliation](docs/sales-closing.md)
+for the invoice-branch attribution rule and saved-check behavior.
+
 ## Direct material sales
 
 On **New Invoice**, remove the tailoring customer block for a material-only

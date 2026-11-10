@@ -64,6 +64,11 @@ export function orderReceivingLocations(locations: Location[]): Location[] {
   )
 }
 
+/** Closing reports retain retired branches so their historical days remain accessible. */
+export function closingBranches(locations: Location[]): Location[] {
+  return locations
+}
+
 /** Locations material stock can be held at. */
 export function stockLocations(locations: Location[]): Location[] {
   return locations.filter(

@@ -123,7 +123,7 @@ async fn standalone_issuance_requires_a_named_identity_before_writing(pool: PgPo
 async fn invoice_cards_resolve_the_original_invoice_creator_after_edits(pool: PgPool) {
     use crate::features::invoices::service as invoices;
     let state = test_support::state(pool.clone(), None, None).await;
-    let payload = json!({"expectedVatRate":0.1,"discountUnit":"amount",
+    let payload = json!({"issuingBranchId":test_support::trading_branch(&pool).await,"expectedVatRate":0.1,"discountUnit":"amount",
         "giftCards":[{"amount":110,"recipientPhone":"33112233"}]});
     let created = invoices::create_invoice(
         &state,

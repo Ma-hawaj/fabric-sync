@@ -1,4 +1,28 @@
 [
+  { "method": "GET", "path": "/sales-closing/status", "roles": ["sales"] },
+  { "method": "POST", "path": "/sales-closing/close", "roles": ["sales"] },
+  { "method": "POST", "path": "/sales-closing/openings", "roles": ["sales"] },
+  {
+    "method": "POST",
+    "path": "/sales-closing/openings/:id/corrections",
+    "roles": ["manager"]
+  },
+  { "method": "POST", "path": "/sales-closing/expenses", "roles": ["sales"] },
+  {
+    "method": "POST",
+    "path": "/sales-closing/expenses/:id/void",
+    "roles": ["manager"]
+  },
+  {
+    "method": "POST",
+    "path": "/sales-closing/checks",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/sales-closing",
+    "roles": ["sales"]
+  },
   {
     "method": "GET",
     "path": "/me/preferences",
