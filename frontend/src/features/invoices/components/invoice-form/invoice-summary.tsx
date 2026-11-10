@@ -285,13 +285,13 @@ export function InvoiceSummary({
             {values.collectionMethod === 'delivery' &&
               typeof values.deliveryCharge === 'number' &&
               values.deliveryCharge > 0 && (
-                <div className="flex items-center justify-between gap-4">
-                  <dt className="text-muted-foreground">
+                <div className="flex justify-between gap-3 text-sm">
+                  <span className="text-muted-foreground">
                     Delivery charge (incl. VAT)
-                  </dt>
-                  <dd className="font-medium tabular-nums">
+                  </span>
+                  <span className="shrink-0 tabular-nums">
                     {CURRENCY} {values.deliveryCharge.toFixed(2)}
-                  </dd>
+                  </span>
                 </div>
               )}
             {urgentCharge > 0 && (
