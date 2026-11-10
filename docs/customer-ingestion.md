@@ -25,6 +25,11 @@ only measured customers as numbered options. Custom names and extra customers
 without measurements are unavailable on that phone. This selection never combines
 two measured customers. Similarity sorts identity suggestions and never merges people.
 
+Automatic contact grouping applies to identities present in the workbook.
+An existing app customer absent from the workbook keeps their own identity,
+even if an imported contact shares their phone. Explicit saved aliases still
+apply; if they combine two existing customer records, import stops for reconciliation.
+
 Older mixed-option questions are restricted to measured choices by the reviewer.
 An old answer choosing an unmeasured name is reopened when measurements are
 available, and import stops until a valid measured customer is selected. With no
@@ -254,5 +259,8 @@ order lists and invoice documents display “Unknown material”. The quantity s
 uses `--material-amount` (default 1 metre), since order quantities must be positive.
 To explicitly keep the previous placeholder behavior, pass `--material General`.
 Existing imported orders are skipped on reruns and retain their current material.
-When editing an invoice containing unknown fabric, select the actual shop or
-customer-provided material before saving.
+Invoice edits retain unknown fabric and its recorded price when the pricing
+inputs stay the same. Notes, measurements, production location and delivery
+details can be updated without selecting a material or allocating stock. Choose
+the actual shop or customer-provided material before changing fabric quantity,
+design choices or urgency, since those changes require current pricing.

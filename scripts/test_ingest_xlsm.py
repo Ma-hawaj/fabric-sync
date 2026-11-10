@@ -28,6 +28,7 @@ from ingest_xlsm import (
 
 class InvoiceInsertTests(unittest.TestCase):
     def test_default_import_inserts_null_material_without_inventory_queries(self):
+        """Default import inserts null material without inventory queries."""
         fixture = ReadWorkbookTests()
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
@@ -67,6 +68,7 @@ class InvoiceInsertTests(unittest.TestCase):
                 conn.cursor.assert_not_called()
 
     def test_import_saves_ten_percent_vat_without_changing_charged_total(self):
+        """Import saves ten percent vat without changing charged total."""
         for gross, net, vat in [
             ("28.00", "25.45", "2.55"),
             ("11.00", "10.00", "1.00"),
@@ -162,6 +164,7 @@ class ParseMeasurementTests(unittest.TestCase):
 
 class MeasurementConsolidationTests(unittest.TestCase):
     def test_changed_or_removed_records_are_rejected_before_references_are_rewritten(self):
+        """Changed or removed records are rejected before references are rewritten."""
         date = dt.date(2026, 5, 1)
         baseline = [42 if col == "chest" else None for col in MEASUREMENT_MATCH_COLS]
         changed = [43 if col == "chest" else None for col in MEASUREMENT_MATCH_COLS]
@@ -183,6 +186,7 @@ class MeasurementConsolidationTests(unittest.TestCase):
         self.assertNotEqual(key("c", {"chest": Decimal("42.125")}), key("c", {"chest": Decimal("42.13")}))
 
     def test_type_fit_and_unmapped_body_fields_are_part_of_an_exact_match(self):
+        """Type fit and unmapped body fields are part of an exact match."""
         key = measurement_values_signature
         baseline = {"chest": 42}
         for field, value in [("type", "body"), ("fit", "medium"), ("shoulder_down", 1),
@@ -330,6 +334,7 @@ class ReadWorkbookTests(unittest.TestCase):
         ], 1)
 
     def test_linked_measurement_name_replaces_receipt_variants(self):
+        """Linked measurement name replaces receipt variants."""
         workbook, _ = self.read(
             invoices=[[101, self.date, "Receipt variation", "33333333", "7", 30]],
             measurements=[[7, self.date, "Measurement name", "34444444", 42]],
@@ -341,6 +346,7 @@ class ReadWorkbookTests(unittest.TestCase):
         self.assertEqual(display, {expected: ("Measurement name", "+97334444444")})
 
     def test_shared_phone_with_multiple_measurement_customers_stays_separate(self):
+        """Shared phone with multiple measurement customers stays separate."""
         workbook, _ = self.read(
             invoices=[[101, self.date, "Family buyer", "33333333", "7 & 8", 30]],
             measurements=[[7, self.date, "Father", "33333333", 42],
@@ -354,6 +360,7 @@ class ReadWorkbookTests(unittest.TestCase):
                          canon_key("Family buyer", "33333333"))
 
     def test_measurement_name_can_use_linked_receipt_phone(self):
+        """Measurement name can use linked receipt phone."""
         workbook, report = self.read(
             invoices=[[101, self.date, "Receipt variation", "33333333", "7", 30]],
             measurements=[[7, self.date, "Measurement name", None, 42]],
@@ -367,6 +374,7 @@ class ReadWorkbookTests(unittest.TestCase):
                          [("Measurement name", "+97333333333")])
 
     def test_receipt_name_is_fallback_when_measurement_has_no_name(self):
+        """Receipt name is fallback when measurement has no name."""
         workbook, _ = self.read(
             invoices=[[101, self.date, "Receipt name", "33333333", "7", 30]],
             measurements=[[7, self.date, None, None, 42]],
@@ -378,6 +386,7 @@ class ReadWorkbookTests(unittest.TestCase):
                          [("Receipt name", "+97333333333")])
 
     def test_measurement_spelling_wins_for_reviewed_aliases(self):
+        """Measurement spelling wins for reviewed aliases."""
         workbook, _ = self.read(
             invoices=[[101, self.date, "Ali Ahmad", "33333333", "7", 30]],
             measurements=[[20, dt.datetime(2026, 6, 1), "Ali Ahmad", "33333333", 42],
@@ -391,6 +400,7 @@ class ReadWorkbookTests(unittest.TestCase):
                          [("Ali Ahmed", "+97333333333")])
 
     def test_last_measurement_name_uses_sheet_order_with_missing_phones(self):
+        """Last measurement name uses sheet order with missing phones."""
         for phones in [("33333333", None), (None, "33333333"), (None, None)]:
             with self.subTest(phones=phones):
                 workbook, _ = self.read(
@@ -407,6 +417,7 @@ class ReadWorkbookTests(unittest.TestCase):
                                  [("Ali Ahmed", "+97333333333")])
 
     def test_last_name_uses_retained_duplicate_row_position_without_reordering_history(self):
+        """Last name uses retained duplicate row position without reordering history."""
         workbook, _ = self.read(invoices=[], measurements=[
             [7, dt.datetime(2026, 1, 1), "Discarded spelling", "33333333", 40],
             [20, self.date, "Ali Ahmad", "33333333", 42],
@@ -422,6 +433,7 @@ class ReadWorkbookTests(unittest.TestCase):
         self.assertEqual(workbook["measurement_source_order"], [20, 7])
 
     def test_measurements_identify_receipt_with_missing_contact(self):
+        """Measurements identify receipt with missing contact."""
         workbook, _ = self.read(
             invoices=[[101, self.date, None, None, "7", 30]],
             measurements=[[7, self.date, "Measurement name", "33333333", 42]],
@@ -598,6 +610,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(cur.fetchone(), (False, True))
 
     def test_workbook_insert_payments_repairs_and_idempotent_rerun(self):
+        """Workbook insert payments repairs and idempotent rerun."""
         fixture = ReadWorkbookTests()
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
@@ -669,6 +682,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(cur.fetchone()[0], 10)
 
     def test_identical_history_and_orders_share_one_set_with_its_latest_date(self):
+        """Identical history and orders share one set with its latest date."""
         fixture = ReadWorkbookTests()
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
@@ -698,6 +712,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(cur.fetchall(), rows)
 
     def test_existing_exact_duplicates_repoint_orders_and_repair_fixes_without_reusing_numbers(self):
+        """Existing exact duplicates repoint orders and repair fixes without reusing numbers."""
         workbook, report = self.sample_workbook()
         with self.conn.cursor() as cur:
             cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Existing duplicates',TRUE) RETURNING id")
@@ -732,6 +747,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
         self.assertEqual(rerun.numeric["measurements existing duplicates consolidated"], 1)
 
     def test_exact_comparison_covers_every_stored_field_and_keeps_distinct_sets(self):
+        """Exact comparison covers every stored field and keeps distinct sets."""
         with self.conn.cursor() as cur:
             cur.execute("INSERT INTO customers(name,mobile_no) VALUES('Stored fields','+97333333333') RETURNING id")
             customer = cur.fetchone()[0]
@@ -761,6 +777,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(cur.fetchone()[0], 7)
 
     def test_measurement_spelling_updates_a_matched_customer_without_renumbering(self):
+        """Measurement spelling updates a matched customer without renumbering."""
         fixture = ReadWorkbookTests()
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
@@ -791,6 +808,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
         self.assertEqual(rerun.numeric["customer names updated from measurement sheet"], 0)
 
     def test_measurement_name_with_missing_phone_uses_receipt_phone(self):
+        """Measurement name with missing phone uses receipt phone."""
         fixture = ReadWorkbookTests()
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
@@ -808,7 +826,43 @@ class DatabaseIntegrationTests(unittest.TestCase):
             cur.execute("SELECT count(*) FROM orders")
             self.assertEqual(cur.fetchone()[0], 1)
 
+    def test_database_only_unmeasured_customer_does_not_block_shared_phone_imports(self):
+        """A database-only contact keeps their ID while workbook contacts use a measured owner."""
+        fixture = ReadWorkbookTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tempdir.cleanup)
+        with self.conn.cursor() as cur:
+            cur.execute("INSERT INTO branch(name,produces_orders) VALUES('Database contact scope',TRUE) RETURNING id")
+            branch = cur.fetchone()[0]
+            cur.execute("INSERT INTO customers(name,mobile_no) VALUES('Father','+97333333333') RETURNING id")
+            father = cur.fetchone()[0]
+            cur.execute("INSERT INTO measurements(customer_id,measurement_date,chest) VALUES(%s,%s,42)",
+                        (father, fixture.date.date()))
+            cur.execute("INSERT INTO customers(name,mobile_no) VALUES('Mother','+97333333333') RETURNING id")
+            mother = cur.fetchone()[0]
+        for multiple in [False, True]:
+            with self.subTest(multiple_measured_owners=multiple):
+                workbook, report = fixture.read(
+                    invoices=[[102 if multiple else 101, fixture.date, "Buyer", "33333333",
+                               "7 & 8" if multiple else "7", 30]],
+                    measurements=[[7, fixture.date, "Father", "33333333", 42]] +
+                                 ([[8, fixture.date, "Son", "33333333", 30]] if multiple else []))
+                if multiple:
+                    apply_customer_identity(workbook, CustomerIdentity([
+                        {"phone": "33333333", "names": ["Father", "Son"], "decision": "name", "name": "Father"}
+                    ], canon_key))
+                perform_insert(self.conn, workbook, branch, report)
+                perform_insert(self.conn, workbook, branch, Report())
+                with self.conn.cursor() as cur:
+                    cur.execute("SELECT name,mobile_no FROM customers WHERE id=%s", (mother,))
+                    self.assertEqual(cur.fetchone(), ("Mother", "+97333333333"))
+                    cur.execute("SELECT COUNT(*) FROM measurements WHERE customer_id=%s", (mother,))
+                    self.assertEqual(cur.fetchone()[0], 0)
+                    cur.execute("SELECT customer_id FROM invoices WHERE invoice_number=%s", (102 if multiple else 101,))
+                    self.assertEqual(cur.fetchone()[0], father)
+
     def test_father_and_son_on_one_receipt_keep_separate_customers(self):
+        """Father and son on one receipt keep separate customers."""
         fixture = ReadWorkbookTests()
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
@@ -842,6 +896,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(cur.fetchall(), original_customers)
 
     def test_unmeasured_receipt_names_share_one_chosen_customer(self):
+        """Unmeasured receipt names share one chosen customer."""
         fixture = ReadWorkbookTests()
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
@@ -870,6 +925,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(cur.fetchone()[0], 1)
 
     def test_measurement_references_assign_unreferenced_alias_receipts_to_the_right_family_member(self):
+        """Measurement references assign unreferenced alias receipts to the right family member."""
         fixture = ReadWorkbookTests()
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
@@ -897,6 +953,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(cur.fetchall(), customers)
 
     def test_one_measurement_identity_absorbs_unlinked_receipt_names(self):
+        """One measurement identity absorbs unlinked receipt names."""
         fixture = ReadWorkbookTests()
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
@@ -917,6 +974,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(cur.fetchall(), [(rows[0][0],)])
 
     def test_verified_measured_variations_become_one_customer_with_all_history(self):
+        """Verified measured variations become one customer with all history."""
         fixture = ReadWorkbookTests()
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
@@ -937,6 +995,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(cur.fetchone()[0], 2)
 
     def test_existing_measured_father_is_not_renamed_to_new_measured_son(self):
+        """Existing measured father is not renamed to new measured son."""
         fixture = ReadWorkbookTests()
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
@@ -957,6 +1016,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(cur.fetchone()[0], "Father")
 
     def test_chosen_unmeasured_name_reuses_an_existing_single_contact(self):
+        """Chosen unmeasured name reuses an existing single contact."""
         fixture = ReadWorkbookTests()
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)
@@ -1047,6 +1107,7 @@ class DatabaseIntegrationTests(unittest.TestCase):
             self.assertEqual(cur.fetchone()[0], 9)
 
     def test_later_workbook_falls_back_when_an_earlier_import_took_the_number(self):
+        """Later workbook falls back when an earlier import took the number."""
         fixture = ReadWorkbookTests()
         fixture.setUp()
         self.addCleanup(fixture.tempdir.cleanup)

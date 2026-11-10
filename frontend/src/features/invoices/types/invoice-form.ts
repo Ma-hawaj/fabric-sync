@@ -45,7 +45,7 @@ export interface InvoiceOrderDraft {
   emd: string
   moreDetails: string
 
-  materialSource: 'shop' | 'customer'
+  materialSource: 'shop' | 'customer' | 'unknown'
   customerMaterialDescription: string
   materialId: string
   materialAmount: NumberInput

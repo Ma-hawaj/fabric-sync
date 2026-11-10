@@ -20,11 +20,14 @@ class InteractiveReviewTests(unittest.TestCase):
         self.output = []
 
     def seed(self, names=("Ali Ahmed", "Ali Ahmad", "Son"), phone="33333333"):
+        """Write the initial decisions and measurement context for an interactive review."""
         save_review(self.path, CustomerIdentity([], canon_key), [(name, phone) for name in names])
 
     def run_review(self, answers, **options):
+        """Run the reviewer with scripted answers and capture its output."""
         answers = iter(answers)
         def read(_prompt):
+            """Return the next scripted answer or raise the requested interruption."""
             answer = next(answers)
             if isinstance(answer, BaseException):
                 raise answer
@@ -57,6 +60,7 @@ class InteractiveReviewTests(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), original)
 
     def test_bulk_only_marks_requested_phone_and_preserves_aliases(self):
+        """Bulk only marks requested phone and preserves aliases."""
         self.seed()
         self.run_review(["s", "q"])
         rows = json.loads(self.path.read_text())
@@ -75,6 +79,7 @@ class InteractiveReviewTests(unittest.TestCase):
         self.assertEqual(json.loads(self.path.read_text()), original)
 
     def test_answers_survive_interruption_and_resume(self):
+        """Answers survive interruption and resume."""
         self.seed()
         self.run_review(["s", KeyboardInterrupt()])
         self.assertEqual(len(pending_pairs(self.policy())), 1)
@@ -83,6 +88,7 @@ class InteractiveReviewTests(unittest.TestCase):
         self.assertEqual({row["decision"] for row in self.policy().decisions}, {"same", "different"})
 
     def test_similarity_filter_leaves_other_pairs_pending(self):
+        """Similarity filter leaves other pairs pending."""
         self.seed()
         self.run_review(["d", "q"], min_similarity=0.8)
         policy = self.policy()
@@ -91,6 +97,7 @@ class InteractiveReviewTests(unittest.TestCase):
         self.assertEqual(reviewed[0]["names"], ["ali ahmad", "ali ahmed"])
 
     def test_external_edits_are_not_overwritten(self):
+        """External edits are not overwritten."""
         self.seed()
         other = b"[]\n"
         def external_edit(_prompt):
@@ -116,6 +123,7 @@ class InteractiveReviewTests(unittest.TestCase):
         self.assertIn("Saved 1 decision", result.stdout)
 
     def test_invalid_saved_decisions_do_not_change_file(self):
+        """Invalid saved decisions do not change file."""
         original = b'[{"decision":"merge"}]'
         self.path.write_bytes(original)
         with self.assertRaises(ValueError):
@@ -123,6 +131,7 @@ class InteractiveReviewTests(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), original)
 
     def test_failed_save_keeps_previous_answers(self):
+        """Failed save keeps previous answers."""
         self.seed()
         original = self.path.read_bytes()
         with patch("customer_identity.os.replace", side_effect=OSError("disk full")):
@@ -136,12 +145,14 @@ class PhoneNameReviewTests(unittest.TestCase):
     run_review = InteractiveReviewTests.run_review
     policy = InteractiveReviewTests.policy
     def seed(self, names=("Alias A", "Alias B"), phone="33333333"):
+        """Write the initial decisions and measurement context for an interactive review."""
         identities = [(name, phone) for name in names]
         policy = CustomerIdentity([], canon_key)
         policy.configure_phones(identities, [])
         save_review(self.path, policy, identities)
 
     def test_chooses_a_name_instead_of_asking_same_or_different(self):
+        """Chooses a name instead of asking same or different."""
         self.seed()
         self.run_review(["2", "q"])
         policy = self.policy()
@@ -172,6 +183,7 @@ class PhoneNameReviewTests(unittest.TestCase):
         self.assertEqual(self.policy().preferred_names["+97333333333"], "Alias A")
 
     def test_measurement_context_survives_answer_and_save(self):
+        """Measurement context survives answer and save."""
         identities = [(name, "33333333") for name in ["Ali", "Aly", "Son"]]
         records = [{"name": name, "phone": "33333333", "measurementNo": i * 10,
                     "date": "2026-11-07", "values": {"chest": str(42-i)}}
@@ -192,6 +204,7 @@ class MeasuredCustomerReviewTests(unittest.TestCase):
     policy = InteractiveReviewTests.policy
 
     def seed(self, decision="name_pending"):
+        """Write the initial decisions and measurement context for an interactive review."""
         row = {"phone": "+97333333333", "names": ["Receipt A", "Receipt B", "Father", "Son"],
                "decision": decision, "measurement_names": ["Father", "Son"]}
         if decision == "name":
@@ -199,6 +212,7 @@ class MeasuredCustomerReviewTests(unittest.TestCase):
         self.path.write_text(json.dumps([row], indent=2) + "\n")
 
     def test_old_mixed_options_only_offer_measured_customers_and_reject_custom_names(self):
+        """Old mixed options only offer measured customers and reject custom names."""
         self.seed()
         self.run_review(["n", "3", "2", "q"])
         self.assertEqual(self.policy().preferred_names, {"+97333333333": "Son"})
@@ -215,6 +229,7 @@ class MeasuredCustomerReviewTests(unittest.TestCase):
         self.assertEqual(len(policy.decisions), 1)
 
     def test_saving_an_unmeasured_name_for_a_measured_group_is_rejected(self):
+        """Saving an unmeasured name for a measured group is rejected."""
         self.seed()
         policy = self.policy()
         row, = pending_names(policy)

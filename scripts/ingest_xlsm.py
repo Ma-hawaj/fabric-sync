@@ -171,7 +171,7 @@ from psycopg2.extras import execute_values
 
 from ingest_locations import require_branch, select_branch
 from customer_identity import (CustomerIdentity, canon_key, canon_name, load_identity, norm_name,
-                               norm_phone, save_review)
+                               norm_phone, save_decisions, save_review)
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKBOOK = ROOT / "2026 Orders.xlsm"
@@ -234,6 +234,7 @@ def _is_placeholder(value: object) -> bool:
 
 
 def parse_money(value: object) -> Decimal | None:
+    """Parse finite money to two decimals; blank or invalid cells return None."""
     if value is None:
         return None
     s = str(value).strip()
@@ -301,27 +302,45 @@ def parse_measurement(value: object) -> tuple[Decimal | None, bool]:
 
 
 def customer_key(workbook, name, phone):
+    """Resolve a workbook contact with its configured identity policy when available."""
     identity = workbook.get("customer_identity")
     return identity.key(name, phone) if identity else canon_key(name, phone)
 
 
+def existing_customer_key(workbook, name, phone):
+    """Apply automatic grouping only to database identities present in this workbook."""
+    identity = workbook.get("customer_identity")
+    if identity is None:
+        return canon_key(name, phone)
+    base = identity.base_key(name, phone)
+    if base in workbook.get("customer_contact_keys", set()):
+        return identity.key(name, phone)
+    return base
+
+
 def apply_customer_identity(workbook, identity, state=None):
+    """Rebuild workbook identity evidence from source rows and existing measured customers."""
     # Rebuild from original names, not a previous automatic phone grouping.
     identity.phone_measured = None
     identity.phone_defaults = {}
     identity.measurement_links = {}
     identity.labels = {}
     workbook["customer_identity"] = identity
+    workbook["customer_contact_keys"] = set()
     if "invoices" not in workbook or "measurements" not in workbook:
         return
     for measurement in workbook["measurements"]:
         measurement["key"] = identity.base_key(measurement["name"], measurement["phone"])
     sources = {m["measurement_no"]: m for m in workbook["measurements"]}
     display, _ = customer_display(workbook, sources)
+    workbook["customer_contact_keys"] = set(display) | {
+        key for row in workbook["measurements"] + workbook["invoices"]
+        if (key := identity.base_key(row["name"], row["phone"])) is not None}
     records = []
     seen = set()
 
     def add_record(measurement, key):
+        """Collect each source measurement once per resolved customer for identity review."""
         if key is None or (key, measurement["measurement_no"]) in seen:
             return
         seen.add((key, measurement["measurement_no"]))
@@ -384,6 +403,7 @@ def measurement_customer_key(workbook, measurement, invoice=None):
 
 
 def invoice_customer_key(workbook, invoice, sources):
+    """Use the sole referenced measurement owner, or resolve the receipt contact."""
     owners = {key for no in invoice["meas_nos"] if no in sources
               if any(v is not None for v in sources[no].get("values", {}).values())
               if (key := measurement_customer_key(workbook, sources[no], invoice)) is not None}
@@ -459,6 +479,7 @@ def split_price(total: Decimal, count: int) -> list[Decimal]:
 
 
 def load_sheet_rows(wb, name: str):
+    """Read sheet data with original Excel row numbers and a normalized header index."""
     try:
         ws = wb[name]
     except KeyError:
@@ -553,12 +574,14 @@ class Report:
 
 
 def read_workbook(path: Path, report: Report) -> dict:
+    """Parse source sheets, recording invalid cells and retaining the chosen source rows."""
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
 
     def issue(sheet, row_number, row, index, column, reason, action):
         report.parsing_issue(path, sheet, row_number, row, index, column, reason, action)
 
     def money(sheet, row_number, row, index, column, action):
+        """Parse a money cell and report the fallback when its nonblank value is invalid."""
         raw = get(row, index, column)
         parsed = parse_money(raw)
         if parsed is None and raw is not None and str(raw).strip():
@@ -566,12 +589,14 @@ def read_workbook(path: Path, report: Report) -> dict:
         return parsed
 
     def optional_date(sheet, row_number, row, index, column, action):
+        """Parse an optional date and report invalid nonblank source values."""
         raw = get(row, index, column)
         if raw is not None and str(raw).strip() and not isinstance(raw, dt.datetime):
             issue(sheet, row_number, row, index, column, "Unparseable date", action)
         return raw
 
     def measurement_numbers(sheet, row_number, row, index):
+        """Parse reference numbers while reporting invalid tokens with their source cells."""
         raw = get(row, index, "Measurement No")
         numbers = parse_measurement_numbers(raw)
         if not numbers and raw is not None and str(raw).strip():
@@ -872,6 +897,7 @@ def measurement_values_signature(customer_id: str, values: dict) -> tuple:
 
 
 def load_db_state(conn) -> dict:
+    """Index existing customers, imports and exact measurements for an idempotent run."""
     with conn.cursor() as cur:
         cur.execute("SELECT invoice_number FROM invoices")
         invoice_numbers = {row[0] for row in cur.fetchall()}
@@ -980,6 +1006,7 @@ def consolidate_existing_measurements(cur, state, report):
 
 
 def reuse_or_insert_measurement(cur, customer_id, measurement, state, report):
+    """Reuse an exact customer snapshot or insert it, tracking its latest source date."""
     key = measurement_values_signature(customer_id, measurement["values"])
     measurement_ids = state.setdefault("measurement_ids", {})
     if key in measurement_ids:
@@ -999,6 +1026,7 @@ def reuse_or_insert_measurement(cur, customer_id, measurement, state, report):
 
 
 def note_measurement_date(state, key, measurement_id, date):
+    """Queue only a later date for a reused measurement snapshot."""
     date = date.isoformat()
     dates = state.setdefault("measurement_dates", {})
     if key not in dates or date > dates[key]:
@@ -1007,6 +1035,7 @@ def note_measurement_date(state, key, measurement_id, date):
 
 
 def advance_measurement_dates(cur, state, report):
+    """Apply queued latest dates without moving a measurement backward in time."""
     updates = list(state.get("measurement_date_updates", {}).items())
     if not updates:
         return
@@ -1097,6 +1126,7 @@ def report_measurement_consolidation(workbook, report):
     candidates = 0
 
     def include(owner, measurement):
+        """Count exact snapshot reuse for one resolved owner without writing to the database."""
         nonlocal candidates
         if owner:
             candidates += 1
@@ -1171,6 +1201,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                    material_name: str | None = DEFAULT_MATERIAL,
                    material_amount: Decimal = Decimal("1"),
                    production_branch_id: object | None = None) -> None:
+    """Import reviewed customers, measurements and invoices in the caller's transaction."""
     if (not material_amount.is_finite() or material_amount <= 0
             or material_amount > Decimal("99999999.99")
             or material_amount != material_amount.quantize(Decimal("0.01"))):
@@ -1183,7 +1214,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
     # Never silently choose between existing records after adding an alias.
     existing = {}
     for name, phone, customer_id in state["customer_rows"]:
-        key = customer_key(workbook, name, phone)
+        key = existing_customer_key(workbook, name, phone)
         if key and key in existing and existing[key] != customer_id:
             raise ValueError(
                 f"Multiple existing customers resolve to {key}; reconcile those records before importing")
@@ -1220,7 +1251,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
         display, measurement_keys = customer_display(workbook, source_by_no)
         db_customers: dict[tuple[str, str], str] = {}
         for name, mobile, id_ in state["customer_rows"]:
-            key = customer_key(workbook, name, mobile)
+            key = existing_customer_key(workbook, name, mobile)
             if key is None:
                 continue
             if key not in db_customers:
@@ -1280,7 +1311,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
         cur.execute("SELECT name, mobile_no, id FROM customers")
         customer_ids: dict[tuple[str, str], str] = {}
         for n, m, id_ in cur.fetchall():
-            key = customer_key(workbook, str(n), str(m))
+            key = existing_customer_key(workbook, str(n), str(m))
             if key and key not in customer_ids:
                 customer_ids[key] = str(id_)
 
@@ -1568,6 +1599,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
 
 
 def main() -> int:
+    """Validate options, write portable review reports and run a dry run or database import."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workbook", default=str(WORKBOOK),
                         help="path to the workbook (default: repo root)")
@@ -1620,7 +1652,7 @@ def main() -> int:
     digest = hashlib.sha256(decisions_path.read_bytes()).hexdigest()
     print(f"Customer decisions: {decisions_path.resolve()} (SHA-256: {digest})")
     if args.customer_review:
-        Path(args.customer_review).write_text(json.dumps(identity.review(identities), indent=2, ensure_ascii=False) + "\n")
+        save_decisions(args.customer_review, identity.review(identities))
     if args.dry_run:
         legacy_customer_numbers(workbook, report)
         report_measurement_consolidation(workbook, report)
@@ -1647,7 +1679,7 @@ def main() -> int:
         apply_customer_identity(workbook, identity, state)
         if args.customer_review:
             identities.extend((n, p) for n, p, _ in state["customer_rows"])
-            Path(args.customer_review).write_text(json.dumps(identity.review(identities), indent=2, ensure_ascii=False) + "\n")
+            save_decisions(args.customer_review, identity.review(identities))
         if identity.name_questions:
             print("Choose the pending customer names with scripts/review_customers.py before importing.", file=sys.stderr)
             conn.rollback()

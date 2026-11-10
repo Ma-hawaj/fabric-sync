@@ -68,13 +68,16 @@ pub enum MaterialSource {
     #[default]
     Shop,
     Customer,
+    Unknown,
 }
 
 impl MaterialSource {
+    /// Return the database representation, including imported unknown fabric.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Shop => "shop",
             Self::Customer => "customer",
+            Self::Unknown => "unknown",
         }
     }
 }

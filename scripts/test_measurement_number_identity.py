@@ -20,12 +20,14 @@ def record(name, number, phone=PHONE):
 
 class MeasurementNumberIdentityTests(unittest.TestCase):
     def policy(self, left, right, decisions=None):
+        """Build an identity policy from the fixture and its saved decisions."""
         identity = CustomerIdentity(decisions or [], canon_key)
         records = [record("Father", n) for n in left] + [record("Son", n) for n in right]
         identity.configure_phones([("Father", PHONE), ("Son", PHONE)], records)
         return identity
 
     def test_gaps_one_through_five_are_different_in_either_direction(self):
+        """Gaps one through five are different in either direction."""
         for a, b in [(100, 101), (100, 105), (105, 100), (101, 100)]:
             with self.subTest(numbers=(a, b)):
                 identity = self.policy([a], [b])
@@ -36,6 +38,7 @@ class MeasurementNumberIdentityTests(unittest.TestCase):
                 self.assertNotEqual(identity.key("Father", PHONE), identity.key("Son", PHONE))
 
     def test_equal_distant_missing_or_invalid_numbers_still_need_review(self):
+        """Equal distant missing or invalid numbers still need review."""
         for a, b in [(100, 100), (100, 106), (None, 101), (0, 1), (-1, 1), (True, 2), (100, "105")]:
             with self.subTest(numbers=(a, b)):
                 row, = self.policy([a], [b]).review([])
@@ -60,6 +63,7 @@ class MeasurementNumberIdentityTests(unittest.TestCase):
         self.assertEqual(identity.review([]), [])
 
     def test_explicit_answers_override_the_automatic_rule(self):
+        """Explicit answers override the automatic rule."""
         for answer in ["same", "different"]:
             with self.subTest(answer=answer):
                 decision = {"phone": PHONE, "names": ["Father", "Son"], "decision": answer}
@@ -68,6 +72,7 @@ class MeasurementNumberIdentityTests(unittest.TestCase):
                 self.assertEqual(identity.key("Father", PHONE) == identity.key("Son", PHONE), answer == "same")
 
     def test_automatic_evidence_is_saved_portable_and_refreshed(self):
+        """Automatic evidence is saved portable and refreshed."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "decisions.json"
             save_review(path, self.policy([100], [105]), [])
@@ -95,6 +100,7 @@ class MeasurementNumberIdentityTests(unittest.TestCase):
         self.assertEqual(identity.key("Father", PHONE), identity.key("Son", PHONE))
 
     def test_reviewer_refreshes_old_pending_metadata_without_a_question(self):
+        """Reviewer refreshes old pending metadata without a question."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "decisions.json"
             automatic, = self.policy([100], [101]).review([])
@@ -111,6 +117,7 @@ class MeasurementNumberIdentityTests(unittest.TestCase):
             self.assertTrue(any("Automatically separated pairs: 1" in line for line in output))
 
     def test_reviewer_keeps_automatic_evidence_when_other_pairs_are_answered(self):
+        """Reviewer keeps automatic evidence when other pairs are answered."""
         identity = self.policy([100], [101])
         records = [record("Father", 100), record("Son", 101), record("Alias", 200)]
         identity.configure_phones([(r["name"], r["phone"]) for r in records], records)
@@ -121,6 +128,7 @@ class MeasurementNumberIdentityTests(unittest.TestCase):
         self.assertEqual(len(pending_pairs(updated)), 1)
 
     def test_alias_resolution_rechecks_numbers_across_all_merged_snapshots(self):
+        """Alias resolution rechecks numbers across all merged snapshots."""
         records = [record("Alias", 100), record("Father", 1000), record("Son", 105)]
         identity = CustomerIdentity([], canon_key)
         identity.configure_phones([(r["name"], r["phone"]) for r in records], records)
@@ -133,6 +141,7 @@ class MeasurementNumberIdentityTests(unittest.TestCase):
         self.assertEqual({r["measurementNo"] for r in automatic[0]["measurements"]}, {100, 1000, 105})
 
     def test_external_file_edits_are_protected_during_automatic_saving(self):
+        """External file edits are protected during automatic saving."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "decisions.json"
             automatic, = self.policy([100], [101]).review([])

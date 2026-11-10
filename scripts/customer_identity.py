@@ -12,10 +12,12 @@ MAX_DISTINCT_MEASUREMENT_GAP = 5
 
 
 def is_automatic_decision(row):
+    """Identify derived number-gap evidence so human decisions can take precedence."""
     return row.get("decision") == "different" and row.get("rule") == MEASUREMENT_GAP_RULE
 
 
 def norm_name(value: object) -> str | None:
+    """Trim a name and collapse whitespace without changing its spelling."""
     if value is None:
         return None
     s = re.sub(r"\s+", " ", str(value).strip())
@@ -78,6 +80,7 @@ def canon_key(name_value: object, phone_value: object) -> tuple[str, str] | None
 
 class CustomerIdentity:
     def __init__(self, decisions, canonical_key):
+        """Validate saved choices and build transitive aliases and explicit separations."""
         self.canonical_key = canonical_key
         self.parents = {}
         self.separate = set()
@@ -132,6 +135,7 @@ class CustomerIdentity:
                 self.separate.add(frozenset((left, right)))
 
     def resolve(self, key):
+        """Follow reviewed aliases to the surviving canonical identity."""
         while key in self.parents and self.parents[key] != key:
             key = self.parents[key]
         return key
@@ -205,6 +209,7 @@ class CustomerIdentity:
                                                 "measurement_names": [self.labels[k] for k in sorted(measured)]})
 
     def key(self, name, phone):
+        """Resolve a contact through reviewed aliases, measurement links and phone defaults."""
         key = self.base_key(name, phone)
         if key is None or self.phone_measured is None:
             return key
@@ -219,6 +224,7 @@ class CustomerIdentity:
         return self.labels.get(key, fallback)
 
     def review_pair(self, left, right, records):
+        """Build one unresolved comparison or derive separation from nearby measurement numbers."""
         left, right = self.resolve(left), self.resolve(right)
         if left == right or left[1] != right[1] or frozenset((left, right)) in self.separate:
             return None
@@ -245,6 +251,7 @@ class CustomerIdentity:
         return row
 
     def review(self, identities):
+        """Return name choices and measured-identity comparisons still relevant to this workbook."""
         if self.phone_measured is None:
             by_phone = {}
             for name, phone in identities:
@@ -266,7 +273,8 @@ class CustomerIdentity:
 
 
 def load_identity(path, canonical_key):
-    decisions = json.loads(Path(path).read_text()) if path else []
+    """Load portable UTF-8 decisions and validate their identity rules."""
+    decisions = json.loads(Path(path).read_text(encoding="utf-8")) if path else []
     return CustomerIdentity(decisions, canonical_key)
 
 

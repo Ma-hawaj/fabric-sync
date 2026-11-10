@@ -21,6 +21,7 @@ def measured(name, number=7, chest="42", phone="33333333"):
 
 class PhonePolicyTests(unittest.TestCase):
     def test_unmeasured_names_only_need_one_name_choice(self):
+        """Unmeasured names only need one name choice."""
         policy = CustomerIdentity([], canon_key)
         identities = [(name, "33333333") for name in ["Ali", "Aly", "Ali Ahmed"]]
         policy.configure_phones(identities, [])
@@ -31,6 +32,7 @@ class PhonePolicyTests(unittest.TestCase):
         self.assertEqual(len({policy.key(n, p) for n, p in identities}), 1)
 
     def test_chosen_name_is_portable_and_applies_to_all_receipt_aliases(self):
+        """Chosen name is portable and applies to all receipt aliases."""
         identities = [(name, "33333333") for name in ["Alias A", "Alias B"]]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "decisions.json"
@@ -45,6 +47,7 @@ class PhonePolicyTests(unittest.TestCase):
             self.assertEqual(copied.review(identities), [])
 
     def test_one_measured_identity_wins_without_any_review(self):
+        """One measured identity wins without any review."""
         policy = CustomerIdentity([choice()], canon_key)
         names = [(name, "33333333") for name in ["Measurement name", "Alias A", "Alias B"]]
         policy.configure_phones(names, [measured("Measurement name")])
@@ -60,6 +63,7 @@ class PhonePolicyTests(unittest.TestCase):
         self.assertEqual(policy.review(names), [])
 
     def test_only_multiple_measured_identities_need_verification(self):
+        """Only multiple measured identities need verification."""
         policy = CustomerIdentity([], canon_key)
         names = [(name, "33333333") for name in ["Father", "Son"]]
         records = [measured("Father", 7, "42"), measured("Son", 13, "30")]
@@ -71,6 +75,7 @@ class PhonePolicyTests(unittest.TestCase):
         self.assertNotEqual(policy.key("Father", "33333333"), policy.key("Son", "33333333"))
 
     def test_identical_values_do_not_automatically_merge_different_measured_names(self):
+        """Identical values do not automatically merge different measured names."""
         policy = CustomerIdentity([], canon_key)
         names = [(n, "33333333") for n in ["Ali", "Aly"]]
         policy.configure_phones(names, [measured("Ali", 7), measured("Aly", 20)])
@@ -78,6 +83,7 @@ class PhonePolicyTests(unittest.TestCase):
         self.assertNotEqual(policy.key("Ali", "33333333"), policy.key("Aly", "33333333"))
 
     def test_repeat_snapshots_under_one_identity_do_not_add_identity_questions(self):
+        """Repeat snapshots under one identity do not add identity questions."""
         policy = CustomerIdentity([], canon_key)
         names = [(n, "33333333") for n in ["Ali", "Alias"]]
         policy.configure_phones(names, [measured("Ali", 7), measured("Ali", 8, "43")])
@@ -85,6 +91,7 @@ class PhonePolicyTests(unittest.TestCase):
         self.assertEqual(policy.key("Ali", "33333333"), policy.key("Alias", "33333333"))
 
     def test_explicit_same_and_different_answers_are_reused(self):
+        """Explicit same and different answers are reused."""
         names = [(n, "33333333") for n in ["Ali", "Aly"]]
         records = [measured("Ali"), measured("Aly", 8)]
         for answer in ["same", "different"]:
@@ -95,6 +102,7 @@ class PhonePolicyTests(unittest.TestCase):
                 self.assertEqual(policy.key("Ali", "33333333") == policy.key("Aly", "33333333"), answer == "same")
 
     def test_name_choice_does_not_merge_measured_family_members(self):
+        """Name choice does not merge measured family members."""
         policy = CustomerIdentity([choice("Father")], canon_key)
         names = [(n, "33333333") for n in ["Father", "Son", "Alias A", "Alias B"]]
         policy.configure_phones(names, [measured("Father"), measured("Son", 8, "30")])
@@ -103,6 +111,7 @@ class PhonePolicyTests(unittest.TestCase):
         self.assertEqual([r["decision"] for r in policy.review(names)], ["different"])
 
     def test_multiple_measured_customers_only_allow_measured_owners_for_receipt_contacts(self):
+        """Multiple measured customers only allow measured owners for receipt contacts."""
         for contacts in [["Alias A"], ["Alias A", "Alias B"]]:
             for decisions in [[], [choice("Old unmeasured name")]]:
                 with self.subTest(contacts=contacts, decisions=decisions):
@@ -117,6 +126,7 @@ class PhonePolicyTests(unittest.TestCase):
                     self.assertTrue(all(policy.key(n, "33333333") in measured_keys for n in contacts))
 
     def test_saved_measured_selection_stays_valid_after_new_receipt_spellings(self):
+        """Saved measured selection stays valid after new receipt spellings."""
         policy = CustomerIdentity([choice("Son")], canon_key)
         names = [(n, "33333333") for n in ["Father", "Son", "Alias A", "New receipt spelling"]]
         policy.configure_phones(names, [measured("Father", 7), measured("Son", 8, "30")])
@@ -125,6 +135,7 @@ class PhonePolicyTests(unittest.TestCase):
         self.assertNotEqual(policy.key("Father", "33333333"), policy.key("Son", "33333333"))
 
     def test_new_measurement_data_supersedes_an_old_contact_name_choice(self):
+        """New measurement data supersedes an old contact name choice."""
         policy = CustomerIdentity([choice("Old name")], canon_key)
         names = [(n, "33333333") for n in ["New measured name", "Alias A"]]
         policy.configure_phones(names, [measured("New measured name")])
@@ -138,6 +149,7 @@ class PhonePolicyTests(unittest.TestCase):
         self.assertNotEqual(policy.key("Alias A", "33333333"), policy.key("Alias A", "34444444"))
 
     def test_invalid_or_conflicting_name_choices_are_rejected(self):
+        """Invalid or conflicting name choices are rejected."""
         for rows in [[{**choice(), "name": " "}], [choice(), choice("Other name")]]:
             with self.subTest(rows=rows), self.assertRaises(ValueError):
                 CustomerIdentity(rows, canon_key)
@@ -145,10 +157,12 @@ class PhonePolicyTests(unittest.TestCase):
 
 class WorkbookPhonePolicyTests(unittest.TestCase):
     def workbook(self, measurements=None):
+        """Build workbook evidence for the phone identity scenario."""
         return {"measurements": measurements or [], "invoices": [
             {"name": name, "phone": "+97333333333", "meas_nos": []} for name in ["Alias A", "Alias B"]]}
 
     def test_blank_measurement_rows_only_need_a_contact_name(self):
+        """Blank measurement rows only need a contact name."""
         row = {"name": "Sheet name", "phone": "33333333", "measurement_no": 7, "values": {"chest": None}}
         workbook = self.workbook([row])
         policy = CustomerIdentity([], canon_key)
@@ -156,6 +170,7 @@ class WorkbookPhonePolicyTests(unittest.TestCase):
         self.assertEqual([r["decision"] for r in policy.review([])], ["name_pending"])
 
     def test_a_linked_blank_row_does_not_remove_receipt_name_options(self):
+        """A linked blank row does not remove receipt name options."""
         row = {"name": "Sheet name", "phone": "33333333", "measurement_no": 7, "values": {"chest": None}}
         workbook = self.workbook([row])
         for invoice in workbook["invoices"]:
@@ -167,6 +182,7 @@ class WorkbookPhonePolicyTests(unittest.TestCase):
         self.assertEqual(set(question["names"]), {"Sheet name", "Alias A", "Alias B"})
 
     def test_measured_database_customer_is_not_absorbed_by_a_new_sheet_profile(self):
+        """Measured database customer is not absorbed by a new sheet profile."""
         row = {"name": "Son", "phone": "33333333", "measurement_no": 7, "values": {"chest": 30}}
         workbook = {"measurements": [row], "invoices": []}
         state = {"customer_rows": [("Father", "+97333333333", "father-id")],
@@ -177,6 +193,7 @@ class WorkbookPhonePolicyTests(unittest.TestCase):
         self.assertEqual(len(policy.review([])), 1)
 
     def test_pending_name_choice_blocks_before_any_database_writes(self):
+        """Pending name choice blocks before any database writes."""
         workbook = self.workbook()
         conn = MagicMock()
         with patch("ingest_xlsm.load_db_state", return_value={"customer_rows": [], "measurement_sigs": set()}):
@@ -185,6 +202,7 @@ class WorkbookPhonePolicyTests(unittest.TestCase):
         conn.cursor.assert_not_called()
 
     def test_old_unmeasured_choice_cannot_create_an_extra_customer_when_measurements_exist(self):
+        """Old unmeasured choice cannot create an extra customer when measurements exist."""
         workbook = self.workbook([
             {"name": name, "phone": "33333333", "measurement_no": number, "values": {"chest": 42}}
             for name, number in [("Father", 7), ("Son", 8)]])
@@ -204,6 +222,7 @@ class WorkbookPhonePolicyTests(unittest.TestCase):
 
 class MeasurementReferenceLinkTests(unittest.TestCase):
     def workbook(self, contacts):
+        """Build workbook evidence for the phone identity scenario."""
         return {"measurements": [
             {"measurement_no": number, "name": name, "phone": "+97333333333", "values": {"chest": chest}}
             for name, number, chest in [("Father", 7, 42), ("Son", 8, 30)]],
@@ -211,6 +230,7 @@ class MeasurementReferenceLinkTests(unittest.TestCase):
                          for name, phone, numbers in contacts]}
 
     def test_exact_references_link_unreferenced_receipts_for_each_contact(self):
+        """Exact references link unreferenced receipts for each contact."""
         phone = "+97333333333"
         workbook = self.workbook([("Alias A", phone, [7]), ("Alias B", phone, [8]),
                                   ("Alias A", phone, []), ("Alias B", phone, [])])
@@ -223,6 +243,7 @@ class MeasurementReferenceLinkTests(unittest.TestCase):
         self.assertEqual({name for name, _ in customer_display(workbook, {})[0].values()}, {"Father", "Son"})
 
     def test_conflicting_references_and_family_receipts_still_need_a_choice(self):
+        """Conflicting references and family receipts still need a choice."""
         phone = "+97333333333"
         for references in [([7], [8], []), ([7, 8], []), ([7], [7, 8], [])]:
             with self.subTest(references=references):
@@ -235,6 +256,7 @@ class MeasurementReferenceLinkTests(unittest.TestCase):
                 self.assertEqual(question["names"], ["Father", "Son"])
 
     def test_missing_or_unusable_measurement_numbers_do_not_infer_links(self):
+        """Missing or unusable measurement numbers do not infer links."""
         phone = "+97333333333"
         for numbers in [[], [999], [9], [7, 999], [7, 9]]:
             with self.subTest(numbers=numbers):
@@ -247,6 +269,7 @@ class MeasurementReferenceLinkTests(unittest.TestCase):
                 self.assertEqual(identity.name_questions[0]["contact_names"], ["Alias A"])
 
     def test_reference_reuse_is_phone_scoped_and_does_not_remap_measured_people(self):
+        """Reference reuse is phone scoped and does not remap measured people."""
         phone = "+97333333333"
         other = "+97334444444"
         workbook = self.workbook([("Alias A", other, [7]), ("Alias A", other, []),
@@ -286,6 +309,7 @@ class MeasurementReferenceLinkTests(unittest.TestCase):
         self.assertEqual(identity.key("Alias B", phone), canon_key("Father", phone))
 
     def test_reference_linking_is_recomputed_with_the_same_saved_decisions_on_production(self):
+        """Reference linking is recomputed with the same saved decisions on production."""
         phone = "+97333333333"
         workbook = self.workbook([("Alias A", phone, [7]), ("Alias A", phone, []),
                                   ("Alias B", phone, [8]), ("Alias B", phone, [])])

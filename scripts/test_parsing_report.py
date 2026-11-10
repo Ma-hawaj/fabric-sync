@@ -42,10 +42,12 @@ class ParsingReportTests(unittest.TestCase):
         return read_workbook(self.path, report), report
 
     def csv_rows(self, path):
+        """Read the complete parsing report as UTF-8 CSV records."""
         with path.open(encoding="utf-8-sig", newline="") as source:
             return list(csv.DictReader(source))
 
     def test_keeps_every_issue_after_the_ten_console_samples(self):
+        """Keeps every issue after the ten console samples."""
         sheet = self.book["Measurments"]
         sheet.append([None] * 6)
         for number in range(1, 16):
@@ -62,6 +64,7 @@ class ParsingReportTests(unittest.TestCase):
         self.assertEqual(len(self.csv_rows(output)), 15)
 
     def test_multiple_bad_cells_include_owner_identifiers_and_original_values(self):
+        """Multiple bad cells include owner identifiers and original values."""
         name = 'علي, "Ahmed"\nFamily'
         self.book["Measurments"].append([7, self.date, name, "33333333", "17-18", 45436])
         workbook, report = self.read()
@@ -82,6 +85,7 @@ class ParsingReportTests(unittest.TestCase):
         self.assertTrue(output.read_bytes().startswith(b"\xef\xbb\xbf"))
 
     def test_invalid_numbers_and_missing_dates_identify_skipped_rows(self):
+        """Invalid numbers and missing dates identify skipped rows."""
         self.book["New"].append(["bad-invoice", self.date, "Receipt", "33333333", 7, 20])
         self.book["New"].append([101, "bad-date", "Receipt", "33333333", 7, 20])
         self.book["New"].append([None, self.date, "Receipt", "33333333", 7, 20])
@@ -104,6 +108,7 @@ class ParsingReportTests(unittest.TestCase):
         self.assertEqual(report.parsing_issues[0]["raw_value"], "selected-bad-value")
 
     def test_bad_money_reports_fallbacks_and_valid_repair_charge_is_preserved(self):
+        """Bad money reports fallbacks and valid repair charge is preserved."""
         self.book["New"].append([101, self.date, "Receipt", "33333333", 7,
                                  "bad-final", "NaN", "bad-advance", "12.50"])
         self.book["Repairing"].append([self.date, 7, "bad-charge", "Repair", "33333333"])
@@ -119,6 +124,7 @@ class ParsingReportTests(unittest.TestCase):
         self.assertEqual(repair["action"], "Repair charge defaults to 0")
 
     def test_bad_dates_report_the_existing_placeholder_or_skip_behavior(self):
+        """Bad dates report the existing placeholder or skip behavior."""
         self.book["New"].append([101, self.date, "Receipt", "33333333", 7, 20,
                                  0, 0, None, "bad-delivery", "bad-approval"])
         self.book["Measurments"].append([7, "bad-date", "Sheet", "33333333", 42])
@@ -133,6 +139,7 @@ class ParsingReportTests(unittest.TestCase):
                          {"bad-delivery", "bad-approval", "bad-date", "bad-receipt-date", "bad-completion"})
 
     def test_invalid_references_and_misspelled_repair_sheet_keep_source_locations(self):
+        """Invalid references and misspelled repair sheet keep source locations."""
         self.book["New"].append([101, self.date, "Receipt", "33333333", "bad-reference", 20])
         self.book["Repairing"].title = "Reparing"
         self.book["Reparing"].append([self.date, "bad-reference", 0])
@@ -161,6 +168,7 @@ class ParsingReportTests(unittest.TestCase):
         self.assertIn("raw_value", output.read_text(encoding="utf-8-sig"))
 
     def test_failed_report_write_preserves_previous_report(self):
+        """Failed report write preserves previous report."""
         output = self.directory / "issues.csv"
         output.write_text("previous report")
         with patch("ingest_xlsm.os.replace", side_effect=OSError("write failed")):
@@ -170,6 +178,7 @@ class ParsingReportTests(unittest.TestCase):
         self.assertEqual(list(self.directory.glob("issues.csv.*")), [])
 
     def test_dry_run_writes_full_report_without_database_access(self):
+        """Dry run writes full report without database access."""
         self.book["Measurments"].append([7, self.date, "Sheet", "33333333", "SHIRT"])
         self.book.save(self.path)
         report_path = self.directory / "issues.csv"
@@ -186,6 +195,7 @@ class ParsingReportTests(unittest.TestCase):
         self.assertIn(str(report_path.resolve()), output.getvalue())
 
     def test_report_cannot_overwrite_workbook_or_customer_files(self):
+        """Report cannot overwrite workbook or customer files."""
         decisions = self.directory / "decisions.json"
         review = self.directory / "review.json"
         for destination in (self.path, decisions, review):
@@ -201,6 +211,7 @@ class ParsingReportTests(unittest.TestCase):
                 read.assert_not_called()
 
     def test_nonfinite_and_invalid_money_can_be_reported_instead_of_raising(self):
+        """Nonfinite and invalid money can be reported instead of raising."""
         for value in (float("nan"), float("inf"), Decimal("Infinity"), "NaN", "bad", True):
             with self.subTest(value=value):
                 self.assertIsNone(parse_money(value))

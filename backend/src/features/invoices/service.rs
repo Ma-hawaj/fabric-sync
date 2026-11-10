@@ -547,6 +547,7 @@ fn validate_original_ids(
     Ok(())
 }
 
+/// Price new or changed orders from the catalog; unknown fabric must retain saved pricing.
 fn price_order(
     order: &mut CreateOrderInput,
     materials: &HashMap<Uuid, Option<(f64, f64, f64)>>,
@@ -571,6 +572,11 @@ fn price_order(
         MaterialSource::Customer => customer_material_base_price.ok_or_else(|| {
             AppError::BadRequest("customer-material tailoring price is not configured".into())
         })?,
+        MaterialSource::Unknown => {
+            return Err(AppError::BadRequest(
+                "choose the actual material before changing an unknown-material order's fabric or pricing".into(),
+            ));
+        }
     };
     validate_amount(base)?;
     let mut surcharge = 0.0;
@@ -693,6 +699,7 @@ async fn resolve_order_prices(
     Ok(())
 }
 
+/// Validate quantities and mutually exclusive details for each material source.
 fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
     if order.material_amount < 0.01
         || crate::features::pricing::service::validate_amount(order.material_amount).is_err()
@@ -721,8 +728,14 @@ fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
         {
             Ok(())
         }
+        MaterialSource::Unknown
+            if order.original_order_id.is_some() && order.material_id.is_none()
+                && order.material_location_id.is_none() && order.customer_material_description.is_none() =>
+        {
+            Ok(())
+        }
         _ => Err(AppError::BadRequest(
-            "shop material needs a materialId and materialLocationId; customer material needs only a fabric description"
+            "shop material needs a materialId and materialLocationId; customer material needs only a fabric description; unknown material is only retained on an unchanged existing order"
                 .into(),
         )),
     }
@@ -1132,6 +1145,35 @@ mod tests {
         let mut missing_shop_material = order(100.0);
         missing_shop_material["materialId"] = serde_json::Value::Null;
         assert!(validate_order(&parse(missing_shop_material)).is_err());
+    }
+
+    #[test]
+    fn unknown_material_can_only_retain_an_existing_orders_saved_price() {
+        let mut raw = order(100.0);
+        raw["materialSource"] = serde_json::json!("unknown");
+        raw["materialId"] = serde_json::Value::Null;
+        raw["materialLocationId"] = serde_json::Value::Null;
+        let parse = |value| serde_json::from_value::<CreateOrderInput>(value).unwrap();
+        assert!(validate_order(&parse(raw.clone())).is_err());
+        raw["originalOrderId"] = serde_json::json!(Uuid::new_v4());
+        assert!(validate_order(&parse(raw.clone())).is_ok());
+        let mut unknown = parse(raw.clone());
+        assert!(matches!(
+            price_order(&mut unknown, &HashMap::new(), &HashMap::new(), None),
+            Err(AppError::BadRequest(message)) if message.contains("choose the actual material")
+        ));
+        for (field, value) in [
+            ("materialId", serde_json::json!(Uuid::new_v4())),
+            ("materialLocationId", serde_json::json!(Uuid::new_v4())),
+            (
+                "customerMaterialDescription",
+                serde_json::json!("White linen"),
+            ),
+        ] {
+            let mut contradictory = raw.clone();
+            contradictory[field] = value;
+            assert!(validate_order(&parse(contradictory)).is_err());
+        }
     }
 
     #[test]

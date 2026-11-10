@@ -28,6 +28,7 @@ def review_pairs(identity):
 
 
 def pending_pairs(identity):
+    """Return identity comparisons that still need a human decision."""
     return [row for row in review_pairs(identity) if row["decision"] == "pending"]
 
 
@@ -36,6 +37,7 @@ def pair_key(row):
 
 
 def pending_names(identity):
+    """Refresh unanswered name choices, limiting measured groups to measured owners."""
     rows = []
     # A refreshed pending row supersedes an older saved choice for the same phone.
     by_phone = {norm_phone(row["phone"]): row for row in identity.decisions
@@ -60,6 +62,7 @@ def pending_names(identity):
 
 
 def record_decisions(identity, rows):
+    """Preserve explicit answers and recompute pending questions and automatic evidence."""
     reviewed = [row for row in identity.decisions
                 if row["decision"] not in {"pending", "name_pending"} and not is_automatic_decision(row)]
     pending = [row for row in identity.decisions
@@ -69,6 +72,7 @@ def record_decisions(identity, rows):
 
 
 def record_name(identity, row, name):
+    """Save a nonblank name choice without assigning contacts to an unmeasured extra customer."""
     chosen = norm_name(name)
     if not chosen:
         raise ValueError("Choose a non-empty customer name")
@@ -81,6 +85,7 @@ def record_name(identity, row, name):
 
 
 def show_measurements(row, identity, output_fn, full=False):
+    """Display recent measurement context, or all values when full details are requested."""
     grouped = {}
     for record in row.get("measurements", []):
         key = identity.base_key(record["name"], record.get("phone", row["phone"]))
@@ -102,6 +107,7 @@ def show_measurements(row, identity, output_fn, full=False):
 
 
 def review(path, *, phone=None, min_similarity=0, input_fn=input, output_fn=print):
+    """Review portable decisions interactively, saving each answer and detecting outside edits."""
     path = Path(path)
     expected = path.read_bytes()
     identity = CustomerIdentity(json.loads(expected), canon_key)
@@ -109,6 +115,7 @@ def review(path, *, phone=None, min_similarity=0, input_fn=input, output_fn=prin
     history = []
 
     def save(updated):
+        """Atomically save an answer only if the decisions file has not changed externally."""
         nonlocal expected
         if path.read_bytes() != expected:
             raise ValueError("The decisions file changed outside this session. Restart to load it; no changes were overwritten.")
@@ -237,6 +244,7 @@ def review(path, *, phone=None, min_similarity=0, input_fn=input, output_fn=prin
 
 
 def main(argv=None):
+    """Parse review filters and run the standalone decision reviewer."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--customer-decisions", type=Path, default=DEFAULT_DECISIONS,
                         help="saved decisions JSON (default: scripts/customer-decisions.json)")
