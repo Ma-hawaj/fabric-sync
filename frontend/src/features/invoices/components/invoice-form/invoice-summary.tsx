@@ -267,7 +267,7 @@ export function InvoiceSummary({
             vatRate={values.expectedVatRate as number}
           >
             <dl className="space-y-2">
-              <div className="flex justify-between gap-3 border-t pt-4 text-sm">
+              <div className="flex justify-between gap-3 text-sm">
                 <dt className="text-muted-foreground">Subtotal (incl. VAT)</dt>
                 <dd className="shrink-0 tabular-nums">
                   {subtotal == null
