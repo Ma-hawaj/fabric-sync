@@ -72,6 +72,12 @@ pub struct TenderSummary {
 #[serde(rename_all = "camelCase")]
 pub struct SalesClosing {
     #[serde(default)]
+    pub policy: Option<ClosingPolicy>,
+    #[serde(default)]
+    pub missed_closing: Option<MissedClosing>,
+    #[serde(default)]
+    pub read_only: bool,
+    #[serde(default)]
     pub closure: Option<DayClosure>,
     #[serde(default)]
     pub business_date: Option<NaiveDate>,
@@ -227,10 +233,46 @@ pub struct CloseDayInput {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BranchDayStatus {
+    pub controls_start_date: Option<NaiveDate>,
+    pub setup_required: bool,
     pub branch_id: Uuid,
     pub date: NaiveDate,
     pub opening_recorded: bool,
     pub closed: bool,
     pub previous_unclosed_date: Option<NaiveDate>,
     pub can_create_orders: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClosingPolicy {
+    pub starts_on: NaiveDate,
+    pub configured_at: DateTime<Utc>,
+    pub configured_by: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ConfigureClosingInput {
+    pub request_id: Uuid,
+    pub branch_id: Uuid,
+    pub starts_on: NaiveDate,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissedClosing {
+    pub id: Uuid,
+    pub reason: String,
+    pub resolved_at: DateTime<Utc>,
+    pub resolved_by: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ResolveMissedClosingInput {
+    pub request_id: Uuid,
+    pub branch_id: Uuid,
+    pub date: NaiveDate,
+    pub reason: String,
 }

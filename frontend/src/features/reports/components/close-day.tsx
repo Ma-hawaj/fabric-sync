@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { useCloseDay } from '../hooks/use-sales-closing'
-import { formatBhd, methodLabel } from '../lib/sales-closing'
+import { formatBhd, methodLabel, isClosingReadOnly } from '../lib/sales-closing'
 import type { SalesClosing } from '../types/sales-closing'
 
 export function CloseDay({
@@ -20,7 +20,7 @@ export function CloseDay({
   const mutation = useCloseDay(queryDate, report.branchId)
   const check = report.lastCheck
   if (
-    report.closure ||
+    isClosingReadOnly(report) ||
     (report.businessDate && report.date > report.businessDate)
   )
     return null
@@ -36,7 +36,8 @@ export function CloseDay({
       </p>
       {report.previousUnclosedDate ? (
         <p role="alert" className="text-sm">
-          Close the earlier active day {report.previousUnclosedDate} first.
+          A manager must resolve the missed closing for{' '}
+          {report.previousUnclosedDate} first.
         </p>
       ) : (
         <>
@@ -98,10 +99,26 @@ export function CloseDay({
 
 export function ClosedDayCounts({ report }: { report: SalesClosing }) {
   const check = report.lastCheck
-  if (!check) return null
+  if (!check)
+    return (
+      <p className="rounded-xl border bg-card p-5 text-sm">
+        No actual closing count was recorded. Recorded transactions remain
+        available for viewing and export.
+      </p>
+    )
   return (
     <section className="space-y-4 rounded-xl border bg-card p-5">
-      <h2 className="text-lg font-semibold">Final closing count</h2>
+      <h2 className="text-lg font-semibold">
+        {report.closure
+          ? 'Final closing count'
+          : 'Last saved count · Read-only'}
+      </h2>
+      {check.fingerprint !== report.fingerprint && (
+        <p className="text-sm">
+          Activity changed after this saved count. These comparison values are
+          from the saved check; this day is unreconciled.
+        </p>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>

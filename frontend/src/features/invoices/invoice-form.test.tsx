@@ -373,7 +373,10 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
 describe('Invoice workspace', () => {
   it.each([
     [{ openingRecorded: false }, /Record today’s opening cash/],
-    [{ previousUnclosedDate: '2026-11-06' }, /Close the active day 2026-11-06/],
+    [
+      { previousUnclosedDate: '2026-11-06' },
+      /A manager must resolve the missed closing for 2026-11-06/,
+    ],
     [{ closed: true }, /This branch is closed for today/],
   ] as const)(
     'blocks new orders when the branch is unavailable: %j',

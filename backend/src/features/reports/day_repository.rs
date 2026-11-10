@@ -77,6 +77,7 @@ impl ClosureRow {
             closed_at: self.closed_at,
             closed_by: self.closed_by,
         });
+        report.read_only = true;
         report
     }
 }

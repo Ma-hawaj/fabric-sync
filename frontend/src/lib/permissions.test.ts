@@ -286,3 +286,14 @@ describe('role policy', () => {
     expect(homePath(principal('inventory'))).toBe('/inventory')
   })
 })
+
+describe('branch rollout and missed closings', () => {
+  for (const path of ['/sales-closing/setup', '/sales-closing/missed']) {
+    it(`requires a manager for ${path}`, () => {
+      expect(canAccess(principal('sales'), 'POST', path)).toBe(false)
+      expect(canAccess(principal('manager'), 'POST', path)).toBe(true)
+      expect(canAccess(principal('admin'), 'POST', path)).toBe(true)
+      expect(canAccess(principal('production'), 'POST', path)).toBe(false)
+    })
+  }
+})

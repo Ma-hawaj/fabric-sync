@@ -17,6 +17,8 @@ import {
   methodLabel,
   reportNotes,
   summaryRows,
+  closingDayStatus,
+  isClosingReadOnly,
 } from './lib/sales-closing'
 import {
   downloadSalesClosing,
@@ -26,6 +28,7 @@ import { ClosingCountsForm } from './components/closing-counts'
 import { OpeningCashSection } from './components/till-forms'
 import { BranchExpenses } from './components/branch-expenses'
 import { CloseDay, ClosedDayCounts } from './components/close-day'
+import { RolloutSetup, MissedClosingResolution } from './components/rollout'
 import { useAllLocations } from '@/features/locations/hooks/use-locations'
 import { usePreferences } from '@/features/locations/hooks/use-default-location'
 import { closingBranches } from '@/features/locations/lib/location-filters'
@@ -229,10 +232,11 @@ function ReportContent({
 }) {
   const [dirty, setDirty] = useState(false)
   const check = report.lastCheck
+  const readOnly = isClosingReadOnly(report)
   const current = Boolean(check && check.fingerprint === report.fingerprint)
-  const ready = current && !dirty && !refreshing
-  const status = report.closure
-    ? 'Closed · Read-only'
+  const ready = (readOnly || (current && !dirty)) && !refreshing
+  const status = readOnly
+    ? closingDayStatus(report)
     : !check
       ? 'Not checked'
       : !current
@@ -280,6 +284,11 @@ function ReportContent({
           </Button>
         </div>
       </div>
+      <RolloutSetup
+        key={report.branchId}
+        report={report}
+        disabled={refreshing}
+      />
       {report.closure ? (
         <p role="status" className="rounded-xl border bg-muted/40 p-4 text-sm">
           Closed{' '}
@@ -291,24 +300,34 @@ function ReportContent({
             ? ' Differences or unresolved activity remain recorded below.'
             : ''}
         </p>
-      ) : report.previousUnclosedDate ? (
-        <p role="alert" className="rounded-xl border p-4 text-sm">
-          An earlier active day is still open:{' '}
-          <a
-            className="underline"
-            href={`/sales-closing?branchId=${report.branchId}&date=${report.previousUnclosedDate}`}
-          >
-            {report.previousUnclosedDate}
-          </a>
-          . Close it before recording new orders or opening a later day.
-        </p>
-      ) : report.businessDate && report.date < report.businessDate ? (
+      ) : report.missedClosing ? (
+        <div role="status" className="space-y-2 rounded-xl border p-4 text-sm">
+          <p>
+            Missed closing resolved separately. This day remains unreconciled;
+            its saved figures cannot be changed.
+          </p>
+          <p className="whitespace-pre-wrap">{report.missedClosing.reason}</p>
+          <p className="text-xs text-muted-foreground">
+            Recorded{' '}
+            {new Date(report.missedClosing.resolvedAt).toLocaleString('en-GB', {
+              timeZone: report.timezone,
+            })}{' '}
+            · {report.missedClosing.resolvedBy}
+          </p>
+        </div>
+      ) : readOnly ? (
         <p className="rounded-xl border p-4 text-sm">
-          This older day is unfinished. Complete its closing count and close it.
-          Existing opening amounts and expenses are read-only.
+          This report is read-only. Opening cash, actual counts, expenses and
+          closing details cannot be added or changed for past days or history
+          before go-live.
         </p>
       ) : null}
-      {!report.closure && (
+      <MissedClosingResolution
+        key={report.previousUnclosedDate}
+        report={report}
+        disabled={refreshing}
+      />
+      {!readOnly && (
         <p className="text-xs text-muted-foreground">
           Save the branch check to include actual amounts in exports. Any
           unsaved changes must be saved first.
@@ -355,7 +374,7 @@ function ReportContent({
       </div>
       <OpeningCashSection report={report} disabled={refreshing} />
       <BranchExpenses report={report} disabled={refreshing} />
-      {report.closure ? (
+      {readOnly ? (
         <ClosedDayCounts report={report} />
       ) : report.opening ? (
         <ClosingCountsForm

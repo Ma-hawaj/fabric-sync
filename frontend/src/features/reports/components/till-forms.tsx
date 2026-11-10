@@ -14,7 +14,7 @@ import {
   openingSchema,
   voidExpenseSchema,
 } from '../lib/till-schema'
-import { formatBhd } from '../lib/sales-closing'
+import { formatBhd, isClosingReadOnly } from '../lib/sales-closing'
 import type { BranchExpense, SalesClosing } from '../types/sales-closing'
 
 function failure(error: unknown): string {
@@ -33,10 +33,7 @@ export function OpeningCashSection({
   disabled: boolean
 }) {
   const opening = report.opening
-  const readOnly = Boolean(
-    report.closure ||
-    (report.businessDate && report.date < report.businessDate),
-  )
+  const readOnly = isClosingReadOnly(report)
   return (
     <section className="space-y-4 rounded-xl border bg-card p-5">
       <h2 className="text-lg font-semibold">1. Opening cash</h2>
@@ -75,7 +72,7 @@ export function OpeningCashSection({
             </PermissionGuard>
           )}
         </>
-      ) : report.closure ? (
+      ) : readOnly ? (
         <p className="text-sm">No opening amount recorded.</p>
       ) : (
         <>

@@ -48,6 +48,20 @@ pub(super) async fn editable(
             "Future branch days cannot be changed or closed.".into(),
         ));
     }
+    if date < today {
+        return Err(AppError::Conflict("Past reports are read-only. A manager may separately resolve a missed closing without changing its figures.".into()));
+    }
+    let policy = super::rollout_repository::policy(db, branch)
+        .await?
+        .ok_or_else(|| {
+            AppError::Conflict("A manager must set this branch's go-live date first.".into())
+        })?;
+    if date < policy.starts_on {
+        return Err(AppError::Conflict(format!(
+            "Closing controls start on {}. Earlier history is read-only.",
+            policy.starts_on
+        )));
+    }
     if storage::closure(db, branch, date).await?.is_some() {
         return Err(AppError::Conflict(
             "This branch day is closed. Its report is read-only.".into(),
@@ -81,15 +95,19 @@ async fn load_status(
         .await?
         .is_some();
     let closed = storage::closure(db, branch, today).await?.is_some();
+    let starts = super::rollout_repository::policy(db, branch)
+        .await?
+        .map(|p| p.starts_on);
     Ok(BranchDayStatus {
+        controls_start_date: starts,
+        setup_required: starts.is_none(),
         branch_id: branch,
         date: today,
         opening_recorded: opening,
         closed,
         previous_unclosed_date: previous,
-        can_create_orders: opening
-            && !closed
-            && previous.is_none()
+        can_create_orders: !closed
+            && starts.is_some_and(|start| today < start || (opening && previous.is_none()))
             && storage::active_branch(db, branch).await?,
     })
 }
@@ -106,11 +124,17 @@ pub(crate) async fn require_trading(
     lock_branch(db, branch).await?;
     let today = business_date(state, db).await?;
     let status = load_status(state, db, branch, today).await?;
-    if let Some(previous) = status.previous_unclosed_date {
-        return Err(AppError::Conflict(format!("Close this branch's active day {previous} before recording new orders or financial activity.")));
-    }
     if status.closed {
         return Err(AppError::Conflict("This branch is closed for today. New orders and financial activity are blocked until the next business day.".into()));
+    }
+    let starts = status.controls_start_date.ok_or_else(|| {
+        AppError::Conflict("A manager must set this branch's go-live date before trading.".into())
+    })?;
+    if today < starts {
+        return Ok(today);
+    }
+    if let Some(previous) = status.previous_unclosed_date {
+        return Err(AppError::Conflict(format!("A manager must resolve this branch's missed closing for {previous} before new orders or financial activity.")));
     }
     if !status.opening_recorded {
         return Err(AppError::Conflict("Record today's opening cash for this branch before recording new orders or financial activity.".into()));

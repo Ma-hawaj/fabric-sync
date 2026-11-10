@@ -199,26 +199,30 @@ fn physical_counts_keep_fils_and_never_match_unknown_methods() {
 
 #[sqlx::test]
 async fn branch_checks_are_isolated_idempotent_and_detect_later_activity(pool: PgPool) {
+    let day = chrono::Utc::now()
+        .with_timezone(&chrono_tz::Asia::Bahrain)
+        .date_naive();
     let (invoice, _, _, branch) = crate::test_support::invoice(&pool, 1, false).await;
-    sqlx::query("UPDATE invoices SET invoice_date='2026-11-02T08:00:00Z' WHERE id=$1")
-        .bind(invoice)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO invoice_payments(invoice_id,amount,payment_type,paid_at) VALUES($1,10,'cash','2026-11-02T09:00:00Z')").bind(invoice).execute(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,10,'cash')",
+    )
+    .bind(invoice)
+    .execute(&pool)
+    .await
+    .unwrap();
     let other: Uuid =
         sqlx::query_scalar("INSERT INTO branch(name) VALUES('Other report branch') RETURNING id")
             .fetch_one(&pool)
             .await
             .unwrap();
-    sqlx::query("INSERT INTO invoices(branch_id,total_price,vat_rate,taxable_amount,vat_amount,invoice_date) VALUES($1,50,.1,45.45,4.55,'2026-11-02T09:00:00Z')").bind(other).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO invoices(branch_id,total_price,vat_rate,taxable_amount,vat_amount) VALUES($1,50,.1,45.45,4.55)").bind(other).execute(&pool).await.unwrap();
     let state = crate::test_support::state_without_openings(pool.clone(), None, None).await;
     super::till_service::save_opening(
         &state,
         SaveOpeningInput {
             request_id: Uuid::new_v4(),
             branch_id: branch,
-            date: date("2026-11-02"),
+            date: day,
             amount: 5.0,
             notes: String::new(),
         },
@@ -227,7 +231,7 @@ async fn branch_checks_are_isolated_idempotent_and_detect_later_activity(pool: P
     )
     .await
     .unwrap();
-    let report = service::sales_closing(&state, Some(date("2026-11-02")), branch)
+    let report = service::sales_closing(&state, Some(day), branch)
         .await
         .unwrap();
     assert_eq!(report.summary.invoice_count, 1);
@@ -263,7 +267,11 @@ async fn branch_checks_are_isolated_idempotent_and_detect_later_activity(pool: P
         service::save_check(&state, changed, "staff-one").await,
         Err(crate::error::AppError::Conflict(_))
     ));
-    sqlx::query("INSERT INTO invoice_payments(invoice_id,amount,payment_type,paid_at) VALUES($1,1,'cash','2026-11-02T09:01:00Z')").bind(invoice).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,1,'cash')")
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
     let after = service::sales_closing(&state, Some(report.date), branch)
         .await
         .unwrap();
@@ -295,8 +303,14 @@ async fn branch_checks_are_isolated_idempotent_and_detect_later_activity(pool: P
         .unwrap();
     assert_eq!(other_report.summary.invoice_total, 50.0);
     assert!(other_report.last_check.is_none());
-    let unassigned: Uuid = sqlx::query_scalar("INSERT INTO invoices(total_price,vat_rate,taxable_amount,vat_amount,invoice_date) VALUES(20,.1,18.18,1.82,'2026-11-02T09:00:00Z') RETURNING id").fetch_one(&pool).await.unwrap();
-    sqlx::query("INSERT INTO invoice_payments(invoice_id,amount,payment_type,paid_at) VALUES($1,20,'cash','2026-11-02T10:00:00Z')").bind(unassigned).execute(&pool).await.unwrap();
+    let unassigned: Uuid = sqlx::query_scalar("INSERT INTO invoices(total_price,vat_rate,taxable_amount,vat_amount) VALUES(20,.1,18.18,1.82) RETURNING id").fetch_one(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,20,'cash')",
+    )
+    .bind(unassigned)
+    .execute(&pool)
+    .await
+    .unwrap();
     let with_unassigned = service::sales_closing(&state, Some(report.date), branch)
         .await
         .unwrap();

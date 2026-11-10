@@ -74,37 +74,16 @@ pub async fn save_opening(
     }
     validate_day(state, &mut tx, input.branch_id, input.date).await?;
     let current = storage::opening(&mut tx, input.branch_id, input.date, None).await?;
-    let today = super::day_service::business_date(state, &mut tx).await?;
-    if previous.is_some() && input.date < today {
-        return Err(AppError::Conflict(
-            "Older days' opening amounts are read-only.".into(),
-        ));
-    }
-    if input.date < today {
-        // Only supply a missing opening to finish an existing historical day.
-        let first = super::day_repository::previous_unclosed(
-            &mut tx,
-            input.branch_id,
-            state.timezone()?.name(),
-            input.date.succ_opt().unwrap(),
-        )
-        .await?;
-        if first != Some(input.date) {
-            return Err(AppError::Conflict(
-                "Only an existing unfinished historical day can receive its missing opening."
-                    .into(),
-            ));
-        }
-    } else if let Some(day) = super::day_repository::previous_unclosed(
+    if let Some(day) = super::day_repository::previous_unclosed(
         &mut tx,
         input.branch_id,
         state.timezone()?.name(),
-        today,
+        input.date,
     )
     .await?
     {
         return Err(AppError::Conflict(format!(
-            "Close the earlier active day {day} before opening today."
+            "A manager must resolve the missed closing for {day} before opening today."
         )));
     }
     if previous.is_some() {

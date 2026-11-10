@@ -239,7 +239,9 @@ async fn opening_is_required_and_explained_final_close_locks_every_financial_ent
 }
 
 #[sqlx::test]
-async fn earlier_activity_blocks_only_its_branch_and_quiet_days_are_skipped(pool: PgPool) {
+async fn missed_days_stay_read_only_and_separate_resolutions_unblock_only_their_branch(
+    pool: PgPool,
+) {
     let (invoice, _, _, branch) = crate::test_support::invoice(&pool, 1, false).await;
     let earlier = today().checked_sub_days(chrono::Days::new(3)).unwrap();
     let when = super::service::day_bounds(earlier, chrono_tz::Asia::Bahrain)
@@ -252,11 +254,21 @@ async fn earlier_activity_blocks_only_its_branch_and_quiet_days_are_skipped(pool
         .execute(&pool)
         .await
         .unwrap();
+    sqlx::query("INSERT INTO branch_closing_policies(branch_id,starts_on,configured_by,request_id,request_hash) VALUES($1,$2,'fixture',uuidv7(),decode(repeat('00',32),'hex'))").bind(branch).bind(earlier).execute(&pool).await.unwrap();
     let state = crate::test_support::state_without_openings(pool.clone(), None, None).await;
-    let status = day_service::status(&state, branch).await.unwrap();
-    assert_eq!(status.previous_unclosed_date, Some(earlier));
+    assert_eq!(
+        day_service::status(&state, branch)
+            .await
+            .unwrap()
+            .previous_unclosed_date,
+        Some(earlier)
+    );
     assert!(matches!(
         till_service::save_opening(&state, opening(branch, today()), None, "staff").await,
+        Err(AppError::Conflict(_))
+    ));
+    assert!(matches!(
+        till_service::save_opening(&state, opening(branch, earlier), None, "staff").await,
         Err(AppError::Conflict(_))
     ));
     let other = crate::test_support::trading_branch(&pool).await;
@@ -266,44 +278,41 @@ async fn earlier_activity_blocks_only_its_branch_and_quiet_days_are_skipped(pool
             .unwrap()
             .can_create_orders
     );
-    let historical_opening =
-        till_service::save_opening(&state, opening(branch, earlier), None, "staff")
-            .await
-            .unwrap();
-    let mut correction = opening(branch, earlier);
-    correction.notes = "Recount".into();
-    assert!(matches!(
-        till_service::save_opening(&state, correction, Some(historical_opening.id), "manager")
-            .await,
-        Err(AppError::Conflict(_))
-    ));
-    assert!(matches!(
-        till_service::record_expense(
-            &state,
-            RecordExpenseInput {
-                request_id: Uuid::new_v4(),
-                branch_id: branch,
-                date: earlier,
-                amount: 5.0,
-                payment_type: PaymentType::Cash,
-                reason: "Late entry".into(),
-                paid_to: String::new(),
-                reference: String::new()
-            },
-            "staff"
-        )
-        .await,
-        Err(AppError::Conflict(_))
-    ));
-    let (_, close) = check(&state, branch, earlier, false).await;
-    day_service::close_day(&state, close, "staff")
+    let before = service::sales_closing(&state, Some(earlier), branch)
         .await
         .unwrap();
-    assert!(day_service::status(&state, branch)
+    assert!(before.read_only);
+    let resolution = ResolveMissedClosingInput {
+        request_id: Uuid::new_v4(),
+        branch_id: branch,
+        date: earlier,
+        reason: "Staff missed the count. No historical physical balance is being supplied.".into(),
+    };
+    let resolved = super::rollout_service::resolve_missed(&state, resolution.clone(), "manager")
         .await
-        .unwrap()
-        .previous_unclosed_date
-        .is_none());
+        .unwrap();
+    assert!(resolved.read_only && resolved.closure.is_none() && resolved.last_check.is_none());
+    assert_eq!(resolved.fingerprint, before.fingerprint);
+    assert_eq!(
+        resolved.missed_closing.as_ref().unwrap().resolved_by,
+        "manager"
+    );
+    assert_eq!(
+        super::rollout_service::resolve_missed(&state, resolution.clone(), "manager")
+            .await
+            .unwrap()
+            .missed_closing
+            .unwrap()
+            .id,
+        resolved.missed_closing.unwrap().id
+    );
+    let mut changed = resolution;
+    changed.request_id = Uuid::new_v4();
+    changed.reason = "Try to replace the explanation".into();
+    assert!(matches!(
+        super::rollout_service::resolve_missed(&state, changed, "manager").await,
+        Err(AppError::Conflict(_))
+    ));
     till_service::save_opening(&state, opening(branch, today()), None, "staff")
         .await
         .unwrap();
@@ -317,18 +326,19 @@ async fn earlier_activity_blocks_only_its_branch_and_quiet_days_are_skipped(pool
         invoices::update_invoice(&state, invoice, sale(branch)).await,
         Err(AppError::Conflict(_))
     ));
-    // A new receipt on the older invoice belongs to today's open day.
     invoices::record_payment(&state, invoice, payment(), "staff")
         .await
         .unwrap();
-    assert_eq!(
-        service::sales_closing(&state, Some(earlier), branch)
-            .await
-            .unwrap()
-            .summary
-            .invoice_payments,
-        0.0
-    );
+    sqlx::query("UPDATE invoices SET total_price=99 WHERE id=$1")
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let frozen = service::sales_closing(&state, Some(earlier), branch)
+        .await
+        .unwrap();
+    assert_eq!(frozen.summary.invoice_total, 100.0);
+    assert_eq!(frozen.summary.invoice_payments, 0.0);
     assert_eq!(
         service::sales_closing(&state, Some(today()), branch)
             .await

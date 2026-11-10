@@ -73,6 +73,110 @@ beforeEach(() => {
 })
 
 describe('branch closing workflow', () => {
+  it('sets a fixed go-live date without adding counts to earlier history', async () => {
+    const report = closingFixture()
+    report.policy = null
+    report.readOnly = true
+    vi.mocked(apiClient.get).mockImplementation(async () => ({
+      data: { ...report },
+    }))
+    vi.mocked(apiClient.post).mockImplementation(async (path, body) => {
+      expect(path).toBe('/sales-closing/setup')
+      const input = body as { startsOn: string }
+      report.policy = {
+        startsOn: input.startsOn,
+        configuredAt: '2026-11-02T10:00:00Z',
+        configuredBy: 'manager',
+      }
+      return { data: report.policy }
+    })
+    const client = setup(`?branchId=${branch}&date=2026-11-02`)
+    const date = await screen.findByLabelText<HTMLInputElement>('Go-live date')
+    expect(date.value).toBe('2026-11-03')
+    expect(screen.queryByLabelText('Cash physically counted (BHD)')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Set go-live date' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Set go-live date' }),
+      ).toBeNull(),
+    )
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/sales-closing/setup',
+      expect.objectContaining({ branchId: branch, startsOn: '2026-11-03' }),
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Save branch check' }),
+    ).toBeNull()
+    client.clear()
+  })
+
+  it('resolves a missed close separately and keeps every past count field locked', async () => {
+    const report = closingFixture()
+    report.businessDate = '2026-11-03'
+    report.readOnly = true
+    report.previousUnclosedDate = report.date
+    const fingerprint = report.fingerprint
+    vi.mocked(apiClient.get).mockImplementation(async () => ({
+      data: { ...report },
+    }))
+    vi.mocked(apiClient.post).mockImplementation(async (path, body) => {
+      expect(path).toBe('/sales-closing/missed')
+      const input = body as { reason: string }
+      report.missedClosing = {
+        id: 'missed-1',
+        reason: input.reason,
+        resolvedAt: '2026-11-03T06:00:00Z',
+        resolvedBy: 'manager',
+      }
+      report.previousUnclosedDate = null
+      return { data: { ...report } }
+    })
+    const client = setup(`?branchId=${branch}&date=2026-11-02`)
+    const reason = await screen.findByLabelText(
+      'Manager explanation for the missed closing',
+    )
+    fireEvent.change(reason, {
+      target: {
+        value:
+          'Staff missed the cash count. No historical balance is being supplied.',
+      },
+    })
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /I understand that this does not reconcile/,
+      }),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Resolve missed closing' }),
+    )
+    await screen.findByText(
+      'Missed closing resolved · Unreconciled · Read-only',
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Resolve missed closing' }),
+    ).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Save branch check' }),
+    ).toBeNull()
+    expect(screen.queryByLabelText('Cash physically counted (BHD)')).toBeNull()
+    expect(report.fingerprint).toBe(fingerprint)
+    const body = vi.mocked(apiClient.post).mock.calls[0][1] as Record<
+      string,
+      unknown
+    >
+    expect(Object.keys(body).sort()).toEqual([
+      'branchId',
+      'date',
+      'reason',
+      'requestId',
+    ])
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Export CSV' })
+        .disabled,
+    ).toBe(false)
+    client.clear()
+  })
+
   it('finalizes an explained difference and displays a read-only saved report', async () => {
     const report = closingFixture()
     report.businessDate = report.date
@@ -137,7 +241,7 @@ describe('branch closing workflow', () => {
     client.clear()
   })
 
-  it('shows the earlier active day and keeps older expenses read-only', async () => {
+  it('locks every older report and offers a separate missed-closing resolution', async () => {
     const report = closingFixture()
     report.businessDate = '2026-11-09'
     report.previousUnclosedDate = '2026-11-01'
@@ -145,13 +249,21 @@ describe('branch closing workflow', () => {
     const client = setup(`?branchId=${branch}&date=2026-11-02`)
     await screen.findByText('Main Branch · 2026-11-02')
     expect(
-      screen.getByRole('link', { name: '2026-11-01' }).getAttribute('href'),
+      screen
+        .getByRole('link', { name: 'View the missed day' })
+        .getAttribute('href'),
     ).toContain('date=2026-11-01')
     expect(screen.queryByText('Add paid expense')).toBeNull()
     expect(
       screen.queryByRole('button', { name: 'Close branch day' }),
     ).toBeNull()
-    expect(screen.getByLabelText('Cash physically counted (BHD)')).toBeTruthy()
+    expect(screen.queryByLabelText('Cash physically counted (BHD)')).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Save branch check' }),
+    ).toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'Resolve missed closing' }),
+    ).toBeTruthy()
     client.clear()
   })
 

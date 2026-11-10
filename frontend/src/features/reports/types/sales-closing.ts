@@ -15,6 +15,14 @@ export interface ClosingActivity {
 }
 
 export interface SalesClosing {
+  policy?: ClosingPolicy | null
+  missedClosing?: {
+    id: string
+    reason: string
+    resolvedAt: string
+    resolvedBy: string
+  } | null
+  readOnly?: boolean
   closure?: {
     id: string
     checkId: string
@@ -62,12 +70,20 @@ export interface SalesClosing {
 }
 
 export interface BranchDayStatus {
+  controlsStartDate?: string | null
+  setupRequired?: boolean
   branchId: string
   date: string
   openingRecorded: boolean
   closed: boolean
   previousUnclosedDate: string | null
   canCreateOrders: boolean
+}
+
+export interface ClosingPolicy {
+  startsOn: string
+  configuredAt: string
+  configuredBy: string
 }
 
 export interface CashOpening {

@@ -6,6 +6,7 @@ import {
   methodLabel,
   reportNotes,
   summaryRows,
+  closingDayStatus,
 } from './sales-closing'
 import type { SalesClosing } from '../types/sales-closing'
 
@@ -23,10 +24,17 @@ export function salesClosingCsv(report: SalesClosing): string {
     ['Timezone', report.timezone],
     ['Generated at', report.generatedAt],
     ['Currency', 'BHD'],
-    [
-      'Day status',
-      report.closure ? 'Closed — read-only' : 'Open — draft check',
-    ],
+    ['Day status', closingDayStatus(report)],
+    ...(report.policy ? [['Controls start date', report.policy.startsOn]] : []),
+    ...(report.missedClosing
+      ? [
+          ['Missed closing resolution ID', report.missedClosing.id],
+          ['Resolution reason', report.missedClosing.reason],
+          ['Resolved at', report.missedClosing.resolvedAt],
+          ['Resolved by', report.missedClosing.resolvedBy],
+          ['Reconciliation status', 'Unreconciled — past figures unchanged'],
+        ]
+      : []),
     ...(report.closure
       ? [
           ['Closure ID', report.closure.id],
@@ -158,7 +166,9 @@ export function salesClosingHtml(report: SalesClosing): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Sales closing ${escapeHtml(report.date)}</title>
     <style>@page{size:A4;margin:15mm}body{font:12px system-ui,sans-serif;color:#172b25}h1{font-size:24px}h2{font-size:16px;margin-top:24px}table{border-collapse:collapse;width:100%;margin:12px 0}th,td{padding:7px;border-bottom:1px solid #ddd;text-align:left}th{background:#f1f4f2}td:last-child{text-align:right;font-variant-numeric:tabular-nums}tr{break-inside:avoid}thead{display:table-header-group}p,li{line-height:1.5}.notes{font-size:10px;color:#555}</style></head><body>
     <h1>Branch closing report</h1><p>${escapeHtml(report.branchName)} · ${escapeHtml(report.date)} · ${escapeHtml(report.timezone)} · BHD<br>Generated ${escapeHtml(new Date(report.generatedAt).toLocaleString('en-GB', { timeZone: report.timezone }))}</p>
-    <p>${report.closure ? `Closed — read-only · ${escapeHtml(report.closure.closedAt)} · By ${escapeHtml(report.closure.closedBy)} · Reference ${escapeHtml(report.closure.id)}` : 'Open — draft check. This day has not been closed.'}</p>
+    <p>${escapeHtml(closingDayStatus(report))}${report.closure ? ` · ${escapeHtml(report.closure.closedAt)} · By ${escapeHtml(report.closure.closedBy)} · Reference ${escapeHtml(report.closure.id)}` : ''}</p>
+    ${report.policy ? `<p>Closing controls start: ${escapeHtml(report.policy.startsOn)}</p>` : ''}
+    ${report.missedClosing ? `<p>Missed closing resolved separately — unreconciled. Figures unchanged.<br>Reason: ${escapeHtml(report.missedClosing.reason)}<br>Resolved ${escapeHtml(report.missedClosing.resolvedAt)} · By ${escapeHtml(report.missedClosing.resolvedBy)} · Reference ${escapeHtml(report.missedClosing.id)}</p>` : ''}
     <p>Check status: ${!report.lastCheck ? 'Not checked' : report.lastCheck.fingerprint !== report.fingerprint ? 'Recheck required: recorded activity changed' : report.lastCheck.comparison.matched ? 'Matched' : 'Differences / review required'}. Unassigned activities excluded: ${report.unassignedActivityCount}.</p>
     ${report.opening ? `<p>Saved opening cash: ${formatBhd(report.opening.amount)} BHD · Recorded ${escapeHtml(new Date(report.opening.recordedAt).toLocaleString('en-GB', { timeZone: report.timezone }))}${report.opening.supersedesId ? ' · Corrected opening' : ''}<br>Opening notes: ${escapeHtml(report.opening.notes)}</p>` : ''}
     ${report.lastCheck ? `<h2>Recorded vs actual — saved check</h2><p>Checked ${escapeHtml(report.lastCheck.checkedAt)} · Reference ${escapeHtml(report.lastCheck.id)}</p><table><thead><tr><th>Method</th><th>Recorded net</th><th>Expected</th><th>Actual</th><th>Over / short</th></tr></thead><tbody>${report.lastCheck.comparison.lines.map((line) => cells([methodLabel(line.method), formatBhd(line.recorded), formatBhd(line.expected), formatBhd(line.actual), formatBhd(line.difference)])).join('')}</tbody></table><p>Opening cash: ${formatBhd(report.lastCheck.counts.openingCash)} · Other cash added: ${formatBhd(report.lastCheck.counts.cashAdded)} · Cash removed / banked: ${formatBhd(report.lastCheck.counts.cashRemoved)}</p><p>Notes: ${escapeHtml(report.lastCheck.counts.notes)}</p>` : ''}

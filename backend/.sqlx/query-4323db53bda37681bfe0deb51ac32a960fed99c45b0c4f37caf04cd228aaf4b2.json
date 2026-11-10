@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, reason, resolved_at, resolved_by, request_id, request_hash,\n        report_snapshot AS \"snapshot!: sqlx::types::Json<SalesClosing>\"\n        FROM branch_missed_closings WHERE branch_id=$1 AND business_date=$2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "resolved_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "resolved_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "request_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "request_hash",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 6,
+        "name": "snapshot!: sqlx::types::Json<SalesClosing>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4323db53bda37681bfe0deb51ac32a960fed99c45b0c4f37caf04cd228aaf4b2"
+}

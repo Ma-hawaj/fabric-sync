@@ -36,17 +36,33 @@ pub async fn sales_closing(
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
         .execute(&mut *tx)
         .await?;
-    let mut report =
-        if let Some(closed) = super::day_repository::closure(&mut tx, branch_id, date).await? {
-            closed.into_report()
-        } else {
-            let mut report = load(&mut tx, date, zone, now, branch_id).await?;
-            report.last_check = repository::latest_check(&mut tx, branch_id, date).await?;
-            report
-        };
+    let mut report = if let Some(closed) =
+        super::day_repository::closure(&mut tx, branch_id, date).await?
+    {
+        closed.into_report()
+    } else if let Some(missed) = super::rollout_repository::missed(&mut tx, branch_id, date).await?
+    {
+        missed.into_report()
+    } else {
+        let mut report = load(&mut tx, date, zone, now, branch_id).await?;
+        report.last_check = repository::latest_check(&mut tx, branch_id, date).await?;
+        report
+    };
     report.business_date = Some(now.with_timezone(&zone).date_naive());
-    report.previous_unclosed_date =
-        super::day_repository::previous_unclosed(&mut tx, branch_id, zone.name(), date).await?;
+    report.policy = super::rollout_repository::policy(&mut tx, branch_id)
+        .await?
+        .map(|p| p.into_policy());
+    report.read_only = report.closure.is_some()
+        || report.missed_closing.is_some()
+        || date != report.business_date.unwrap()
+        || report.policy.as_ref().is_none_or(|p| date < p.starts_on);
+    report.previous_unclosed_date = super::day_repository::previous_unclosed(
+        &mut tx,
+        branch_id,
+        zone.name(),
+        now.with_timezone(&zone).date_naive(),
+    )
+    .await?;
     tx.commit().await?;
     Ok(report)
 }
@@ -194,6 +210,9 @@ pub(super) fn assemble(
         });
     }
     let mut report = SalesClosing {
+        policy: None,
+        missed_closing: None,
+        read_only: false,
         closure: None,
         business_date: None,
         previous_unclosed_date: None,

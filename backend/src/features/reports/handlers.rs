@@ -43,6 +43,26 @@ pub async fn day_status(
     ))
 }
 
+pub async fn configure_closing(
+    State(state): State<AppState>,
+    Extension(user): Extension<crate::auth::AuthenticatedUser>,
+    Json(input): Json<ConfigureClosingInput>,
+) -> Result<Json<ClosingPolicy>, AppError> {
+    Ok(Json(
+        super::rollout_service::configure(&state, input, actor(&user)?).await?,
+    ))
+}
+
+pub async fn resolve_missed(
+    State(state): State<AppState>,
+    Extension(user): Extension<crate::auth::AuthenticatedUser>,
+    Json(input): Json<ResolveMissedClosingInput>,
+) -> Result<Json<SalesClosing>, AppError> {
+    Ok(Json(
+        super::rollout_service::resolve_missed(&state, input, actor(&user)?).await?,
+    ))
+}
+
 pub async fn close_day(
     State(state): State<AppState>,
     Extension(user): Extension<crate::auth::AuthenticatedUser>,

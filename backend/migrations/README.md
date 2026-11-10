@@ -41,6 +41,11 @@ SQLx applies the files in version order:
    checked report snapshots. The API requires daily opening cash and closure of
    every earlier active day before new financial activity; quiet days are skipped.
 
+8. `0008_closing_rollout_and_missed_days.sql` adds immutable per-branch go-live
+   dates and separate manager resolutions for missed closings. Earlier history
+   remains read-only without becoming a backlog. Existing opening records seed
+   a branch's original start date, preserving controls already in use.
+
 The core schema defines readable customer IDs (`C-6216`) and permanent
 per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.
 Customer numbers use an identity sequence; the workbook importer preserves each

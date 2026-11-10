@@ -4,6 +4,25 @@ import { salesClosingCsv, salesClosingHtml } from './export-sales-closing'
 import { isReportDate } from './sales-closing'
 
 describe('sales closing exports', () => {
+  it('exports a missed closing as unreconciled without inventing an actual count', () => {
+    const report = closingFixture()
+    report.readOnly = true
+    report.missedClosing = {
+      id: 'missed-1',
+      reason: '<script>Unrecorded count</script>',
+      resolvedAt: '2026-11-03T06:00:00Z',
+      resolvedBy: 'manager',
+    }
+    const csv = salesClosingCsv(report)
+    const html = salesClosingHtml(report)
+    expect(csv).toContain('Missed closing resolved · Unreconciled · Read-only')
+    expect(csv).toContain('Unreconciled — past figures unchanged')
+    expect(csv).not.toContain('"Cash physically counted"')
+    expect(html).toContain('Figures unchanged.')
+    expect(html).not.toContain('<script>')
+    expect(html).not.toContain('Recorded vs actual — saved check')
+  })
+
   it('exports the selected day, business time, totals, and every event', () => {
     const report = closingFixture()
     const csv = salesClosingCsv(report)

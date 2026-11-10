@@ -9,6 +9,14 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/sales-closing", get(super::handlers::sales_closing))
         .route("/sales-closing/status", get(super::handlers::day_status))
+        .route(
+            "/sales-closing/setup",
+            post(super::handlers::configure_closing),
+        )
+        .route(
+            "/sales-closing/missed",
+            post(super::handlers::resolve_missed),
+        )
         .route("/sales-closing/close", post(super::handlers::close_day))
         .route("/sales-closing/checks", post(super::handlers::save_check))
         .route(

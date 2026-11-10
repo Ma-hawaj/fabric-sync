@@ -4,7 +4,7 @@ import { PermissionGuard } from '@/components/permission-guard'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
 import { useDataTable } from '@/hooks/use-data-table'
-import { formatBhd, methodLabel } from '../lib/sales-closing'
+import { formatBhd, methodLabel, isClosingReadOnly } from '../lib/sales-closing'
 import type { BranchExpense, SalesClosing } from '../types/sales-closing'
 import { ExpenseForm, VoidExpenseForm } from './till-forms'
 
@@ -15,10 +15,7 @@ export function BranchExpenses({
   report: SalesClosing
   disabled: boolean
 }) {
-  const readOnly = Boolean(
-    report.closure ||
-    (report.businessDate && report.date !== report.businessDate),
-  )
+  const readOnly = isClosingReadOnly(report)
   const paid = report.expenses.filter((expense) => !expense.voidedAt)
   const total =
     paid.reduce((sum, expense) => sum + Math.round(expense.amount * 1000), 0) /

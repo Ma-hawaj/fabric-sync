@@ -17,6 +17,10 @@ WITH events AS (
 )
 SELECT MIN(day) AS "day?" FROM days d
 WHERE d.day < $3
+AND d.day >= (SELECT starts_on FROM branch_closing_policies WHERE branch_id=$1)
 AND NOT EXISTS (
     SELECT 1 FROM branch_day_closures c WHERE c.branch_id = $1 AND c.business_date = d.day
+)
+AND NOT EXISTS (
+    SELECT 1 FROM branch_missed_closings m WHERE m.branch_id=$1 AND m.business_date=d.day
 )

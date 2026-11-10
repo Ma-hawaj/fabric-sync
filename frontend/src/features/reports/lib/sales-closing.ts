@@ -1,6 +1,29 @@
 import { parseFilterDate } from '@/lib/filter-date'
 import type { ClosingActivity, SalesClosing } from '../types/sales-closing'
 
+export function isClosingReadOnly(report: SalesClosing): boolean {
+  return Boolean(
+    report.readOnly ||
+    report.closure ||
+    report.missedClosing ||
+    (report.businessDate && report.date !== report.businessDate),
+  )
+}
+
+export function closingDayStatus(report: SalesClosing): string {
+  if (report.closure) return 'Closed · Read-only'
+  if (report.missedClosing)
+    return 'Missed closing resolved · Unreconciled · Read-only'
+  if (isClosingReadOnly(report) && !report.policy)
+    return 'Setup required · Read-only'
+  if (report.policy && report.date < report.policy.startsOn)
+    return 'Before go-live · Read-only'
+  if (report.businessDate && report.date > report.businessDate)
+    return 'Future report · Read-only'
+  if (isClosingReadOnly(report)) return 'Historical report · Read-only'
+  return 'Open · Draft check'
+}
+
 export const activityLabels: Record<ClosingActivity['kind'], string> = {
   sale: 'Invoice issued',
   payment: 'Invoice payment',
@@ -15,7 +38,7 @@ export const reportNotes = [
   'Invoice totals include VAT and gift card sales, after discounts. Credits reduce invoiced activity; refunds reduce receipts. Gift card tender is separate from external receipts.',
   'Taxable amount and VAT are the saved figures on invoices issued that day, before credits. This is an operational report, not a VAT return.',
   'A saved check preserves counted amounts and the recorded figures at that time. New or changed activity requires another check. Saving does not lock the till or change payment records.',
-  'Final closing locks the saved report, opening cash and expenses. Explained shortages or overages remain visible. The branch cannot record new sales or financial activity until the next business day has an opening and all earlier active days are closed.',
+  'Past reports and closed days are read-only. From the fixed go-live date, earlier missed closings block new financial activity until a manager records a separate resolution. That resolution preserves the figures and leaves the day unreconciled.',
   'Opening cash is saved separately and read-only at closing. Cash expenses reduce expected drawer cash; do not also include them as cash banked or transferred out. Benefit/Card expenses do not reduce merchant receipt totals.',
 ]
 

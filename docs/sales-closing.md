@@ -24,9 +24,9 @@ Each expense belongs explicitly to the selected branch and business date and
 has a server-recorded timestamp and authenticated staff subject. Opening must
 exist first. Expenses and opening corrections are permitted only on the current,
 unclosed business day. Older days' expenses cannot be added or voided, and their
-existing opening amounts cannot be corrected. A missing opening can be supplied
-once to complete an existing unfinished historical day; its recording time shows
-when staff actually supplied it. Future days cannot be changed.
+existing opening amounts cannot be corrected. Past days cannot receive a missing
+opening, a new count, a recheck, an expense or a normal final close. Future days
+cannot be changed either. Only the current, active business day can be edited.
 
 Cash expenses are paid from this drawer and reduce expected drawer cash.
 Benefit/Card expenses are shown in the expense history and totals but do not
@@ -96,14 +96,16 @@ Final closing permanently locks that branch/day. Its report is served from the
 checked snapshot, including counted amounts, notes, opening cash and expenses.
 It remains available for CSV and PDF export. Rechecks, opening corrections,
 expense additions and expense voids are rejected after closing. There is no
-reopen or administrator bypass. Unfinished older days can still have their
-counts saved and be finalized, so they cannot leave the branch permanently stuck.
+reopen operation. Every past day is read-only even if staff never finalized it.
+A manager can resolve a missed closing only through the separate audit workflow
+described below; that does not supply or change past counts.
 
-Before a branch can take new orders or record financial activity, every earlier
-active day must be closed and today's opening cash must be recorded explicitly.
+From the branch's fixed go-live date, every earlier active day must be closed
+or have a separate missed-closing resolution before new financial activity can
+be recorded. Today's opening cash must then be recorded explicitly.
 Activity includes an invoice (even unpaid), receipt, credit, refund, gift-card
 redemption, paid repair receipt, opening, expense or saved check. Completely
-quiet days are skipped. The earliest unfinished active day is shown as a link.
+quiet days are skipped. The earliest unresolved active day is shown with a manager resolution action.
 The restriction applies separately to each branch. Closing today prevents further
 financial activity at that branch until the next business day is opened.
 
@@ -111,6 +113,7 @@ These rules are enforced in the API transaction for invoice creation, invoice
 edits, payments, paid pickups, paid repair collections, returns, cancellations,
 refunds and expenses. Writes and final closing share a branch transaction lock:
 a concurrent payment either makes the check stale or is rejected after closing.
+Rollout setup and missed-closing resolutions use that same branch lock.
 Unchanged idempotent retries can return their original result after closing.
 Production tracking and collections without money may continue.
 
@@ -120,9 +123,44 @@ older invoice are new activity on today's open branch day; the earlier finalized
 report remains fixed. Inactive branches cannot receive new orders; an adjustment
 on an older invoice still follows its recorded issuing branch and day controls.
 
-Existing databases with historical activity will need their unfinished active
-days closed in date order before new sales can resume. The migration does not
-invent physical cash counts or silently mark previous days as closed.
+## First rollout
+
+A manager opens **Branch Closing**, selects a branch, and sets its **Go-live
+date** once. The date, manager and recording time are audited and cannot be
+changed afterward. Repeat this setup for each branch; new financial activity is
+blocked until its setup is saved.
+
+Choose the next business day when deployment happens during trading. Choosing
+today is allowed only if the branch has no recorded activity today. Until a
+scheduled future start date, existing trading continues normally. On the start
+date, staff must count and save opening cash before the first sale or payment.
+This avoids treating a mid-day cash count as an opening float and then counting
+that day's earlier receipts twice.
+
+History before go-live remains viewable and exportable, but all figures are
+read-only. It is not marked reconciled or silently closed, and it never creates
+a backlog that blocks new orders. The migration neither fabricates old physical
+cash balances nor asks staff to backfill them. If a branch already has recorded
+openings when migration 0008 runs, its earliest opening becomes its fixed start
+date; existing controls are not reset.
+
+## Missed closings after go-live
+
+If an active day passes without a final close, its report locks at the business
+date boundary and new financial activity is blocked for that branch. A manager
+must resolve the earliest missed closing first, entering a nonblank explanation
+and acknowledging that the day remains unreconciled.
+
+The resolution is a separate, append-only audit record with the explanation,
+manager, timestamp and frozen report snapshot. It does not add or alter an
+opening, physical count, expense, saved check or invoice. The day is labelled
+**Missed closing resolved — unreconciled**, never matched or normally closed.
+Once recorded, this resolution cannot be edited or replaced; unchanged retries
+return the original result. An already-closed day cannot be resolved or reopened.
+
+After all outstanding missed days are resolved, staff can record today's
+opening and resume trading. Any later correction to financial records must be a
+new, permitted transaction on the current day, with its own audit trail.
 
 New or edited transactions change the report fingerprint and mark an older check
 as requiring review. The server rechecks the fingerprint when saving and returns
@@ -171,8 +209,15 @@ takes `requestId` and `reason`. These records live in additive migration
 `0006_branch_openings_and_expenses.sql`.
 
 `GET /api/sales-closing/status?branchId=<uuid>` reports today's opening,
-closure, earliest previous unfinished day and whether new orders are allowed.
+closure, the earliest unresolved missed day and whether new orders are allowed.
 `POST /api/sales-closing/close` takes `requestId`, `branchId`, `date`, `checkId`
-and `fingerprint`. It rejects stale or superseded checks and closes earlier days
-first. Migration `0007_branch_day_closures.sql` retains final-close references,
+and `fingerprint`. It rejects stale or superseded checks and accepts only the
+current active business day. Earlier missed days require a separate resolution. Migration `0007_branch_day_closures.sql` retains final-close references,
 request hashes, staff subjects and timestamps without changing existing ledgers.
+
+`POST /api/sales-closing/setup` is manager-only and takes `requestId`, `branchId`
+and `startsOn`. `POST /api/sales-closing/missed` is manager-only and takes
+`requestId`, `branchId`, `date` and `reason`; it accepts no count or amount fields.
+Migration `0008_closing_rollout_and_missed_days.sql` adds these immutable records.
+The report response exposes `policy`, `readOnly` and `missedClosing`; branch
+status includes `controlsStartDate` and `setupRequired`.
