@@ -1,3 +1,6 @@
+mod attention;
+#[cfg(test)]
+mod attention_tests;
 mod handlers;
 pub(crate) mod phone;
 pub(crate) mod repository;

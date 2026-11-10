@@ -214,6 +214,52 @@ statuses. These routes authenticate Meta rather than staff OAuth tokens.
 
 ## Delivery and resending
 
+### Notifications attention queue
+
+The **Notifications** workspace page opens on **Needs attention**, ordered by
+the oldest outstanding item. Its sidebar badge counts all outstanding invoice
+and pickup messages, independently of pagination or table filters. The page
+refreshes every 30 seconds and has a manual Refresh action.
+
+Every row has an explicit **Notification type**: **Invoice send**, **Ready**,
+or **Gift card**. The type filter also includes **Repair ready**; selecting it
+explains that repair-ready sending is not implemented and has no notification
+history yet. Completed repairs are not treated as sent messages.
+
+Gift cards use their own card code as the reference and open the existing
+gift-card preview. The queue includes cards without a linked invoice and
+keeps multiple cards on one invoice separate. Active cards with balance that
+have not expired appear as outstanding until a send is approved; failed,
+uncertain, cancelled, and overdue queued gift-card deliveries join the same
+attention count as invoice/pickup notices. Inactive, spent, and expired cards
+do not create outstanding work, while their recorded outcomes remain in History.
+
+- **Not sent** includes customer invoices without an approved invoice send,
+  cancelled deliveries, and pickup-ready invoices without a notice for their
+  current readiness generation. Skipped, closed, and abandoned previews do not
+  count as sends. Walk-in invoices without a customer and customers who have
+  disabled notifications do not create new obligations.
+- **Failed** includes partial failures. The recipient review shows each
+  destination's latest outcome across sends of the same approved content, so
+  resending to one recipient cannot hide another recipient's failure.
+- **Check delivery** identifies uncertain submissions. Staff must confirm they
+  checked delivery before opening the resend preview.
+- **Waiting too long** identifies messages still queued/submitting 30 minutes
+  after approval. They may be waiting for automatic retries; this view offers
+  review rather than a new send.
+- **History** shows the latest invoice/pickup outcomes that do not currently
+  require action, including queued and provider-accepted messages. Accepted is
+  distinct from delivered. Per-version/send history remains on the invoice.
+
+Pickup notices are actionable only for pickup invoices currently ready, with
+new readiness generations requiring a new notice. Collection, reopening, and
+opting out remove obsolete pickup work from the attention count. Sending from
+this page always opens the shared preview/approval flow; viewing the queue
+never prepares or submits a message. Sales, managers, and administrators can
+access it under the existing notification permissions.
+
+### Delivery history
+
 Send commits the approved recipient selection and queues one delivery per
 unique mobile. A Postgres-backed worker claims jobs across application
 instances. Notification history distinguishes queued, provider-accepted,

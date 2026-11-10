@@ -27,6 +27,8 @@ pub struct Snapshot {
     pub invoice_number: i64,
     pub source_hash: String,
     pub revision: i64,
+    #[serde(default)]
+    pub readiness_generation: Option<i64>,
     pub body: String,
     pub template_name: String,
     pub language: String,
@@ -113,6 +115,37 @@ pub struct History {
     pub failed_count: i64,
     pub uncertain_count: i64,
     pub cancelled_count: i64,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct AttentionRow {
+    pub entity_id: Uuid,
+    pub reference: String,
+    pub invoice_id: Option<Uuid>,
+    pub invoice_number: Option<i64>,
+    pub gift_card_id: Option<Uuid>,
+    pub gift_card_code: Option<String>,
+    pub branch_name: Option<String>,
+    #[sqlx(json)]
+    pub customers: Value,
+    pub kind: String,
+    pub status: String,
+    pub eligible: bool,
+    pub needs_attention: bool,
+    pub waiting_since: DateTime<Utc>,
+    pub last_attempt_at: Option<DateTime<Utc>>,
+    pub notification_id: Option<Uuid>,
+    pub recipient_count: i64,
+    pub queued_count: i64,
+    pub accepted_count: i64,
+    pub delivered_count: i64,
+    pub failed_count: i64,
+    pub uncertain_count: i64,
+    pub cancelled_count: i64,
+    #[sqlx(json)]
+    pub recipients: Value,
+    pub error_message: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]

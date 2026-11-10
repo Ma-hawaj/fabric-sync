@@ -14,6 +14,23 @@ import type { Role } from './permissions'
 
 const principal = (...roles: Role[]) => ({ roles })
 
+describe('notification attention access', () => {
+  it('permits sales staff and operational managers without granting production or inventory access', () => {
+    for (const role of ['sales', 'manager', 'admin'] as const) {
+      expect(canVisit(principal(role), '/notifications')).toBe(true)
+      expect(canAccess(principal(role), 'GET', '/notifications/summary')).toBe(
+        true,
+      )
+    }
+    for (const role of ['production', 'inventory'] as const) {
+      expect(canVisit(principal(role), '/notifications')).toBe(false)
+      expect(canAccess(principal(role), 'GET', '/notifications/summary')).toBe(
+        false,
+      )
+    }
+  })
+})
+
 describe('Zitadel roles', () => {
   it('accepts only explicit project and organization grants', () => {
     const profile = {

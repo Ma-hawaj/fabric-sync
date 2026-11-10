@@ -108,6 +108,7 @@ pub(crate) async fn source(
             invoice_number: detail.invoice_number,
             source_hash,
             revision,
+            readiness_generation: Some(generation),
             body,
             template_name: template_name.clone(),
             language: config.language.clone(),

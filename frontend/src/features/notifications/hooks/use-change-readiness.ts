@@ -33,6 +33,10 @@ export function useChangeReadiness() {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ['orders'] })
       void client.invalidateQueries({ queryKey: ['invoices'] })
+      void client.invalidateQueries({ queryKey: ['notification-attention'] })
+      void client.invalidateQueries({
+        queryKey: ['notification-attention-summary'],
+      })
     },
   })
 }

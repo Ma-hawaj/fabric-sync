@@ -1,4 +1,4 @@
-use super::{repository, service, types::*, worker};
+use super::{attention, repository, service, types::*, worker};
 use crate::{auth::AuthenticatedUser, error::AppError, state::AppState};
 use axum::{
     body::Bytes,
@@ -10,6 +10,19 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
+
+pub async fn list(
+    State(state): State<AppState>,
+    params: crate::list::ListParams,
+) -> Result<Json<crate::list::Page<AttentionRow>>, AppError> {
+    Ok(Json(attention::list(state.db(), &params).await?))
+}
+
+pub async fn attention_summary(
+    State(state): State<AppState>,
+) -> Result<Json<attention::AttentionSummary>, AppError> {
+    Ok(Json(attention::summary(state.db()).await?))
+}
 
 pub async fn prepare(
     State(state): State<AppState>,

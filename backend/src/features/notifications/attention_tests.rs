@@ -1,0 +1,316 @@
+use super::{attention, types::AttentionRow};
+use crate::{features::orders::readiness, list::ListParams, test_support};
+use serde_json::json;
+use sqlx::PgPool;
+use uuid::Uuid;
+
+async fn rows(pool: &PgPool) -> Vec<AttentionRow> {
+    attention::list(pool, &ListParams::default())
+        .await
+        .unwrap()
+        .data
+}
+
+async fn approved(pool: &PgPool, invoice: Uuid, kind: &str, generation: i64) -> Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,state,snapshot,created_by,approved_by,approved_at) \
+         VALUES($1,$2,$3,'test', $4,'approved',$5,'staff','staff',now()) RETURNING id",
+    )
+    .bind(invoice)
+    .bind(kind)
+    .bind(format!("test:{}", Uuid::new_v4()))
+    .bind(Uuid::new_v4())
+    .bind(json!({"readinessGeneration":generation}))
+    .fetch_one(pool).await.unwrap()
+}
+
+async fn recipient(pool: &PgPool, notification: Uuid, mobile: &str, status: &str) {
+    sqlx::query("INSERT INTO notification_recipients(notification_id,normalized_mobile,customers,status,error_message) VALUES($1,$2,'[]',$3,CASE WHEN $3='failed' THEN 'Invalid destination' END)")
+        .bind(notification).bind(mobile).bind(status).execute(pool).await.unwrap();
+}
+
+#[sqlx::test]
+async fn attention_includes_invoices_without_any_preview_or_approved_send(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let result = rows(&pool).await;
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].invoice_id, Some(invoice));
+    assert_eq!(result[0].status, "not_sent");
+    assert!(result[0].needs_attention);
+    assert!(result[0].notification_id.is_none());
+    // An unapproved preview, including one abandoned in another tab, isn't a send.
+    sqlx::query("INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,snapshot,created_by) VALUES($1,'invoice_created','created','test',$2,'{}','staff')")
+        .bind(invoice).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
+    assert_eq!(attention::summary(&pool).await.unwrap().not_sent, 1);
+}
+
+#[sqlx::test]
+async fn attention_shows_partial_failures_and_resolves_after_a_successful_resend(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let first = approved(&pool, invoice, "invoice_created", 0).await;
+    recipient(&pool, first, "+97333112233", "delivered").await;
+    recipient(&pool, first, "+97333991122", "failed").await;
+    let result = rows(&pool).await;
+    assert_eq!(result[0].status, "failed");
+    assert_eq!(result[0].recipient_count, 2);
+    assert_eq!(result[0].failed_count, 1);
+    assert_eq!(result[0].delivered_count, 1);
+    assert_eq!(
+        result[0].error_message.as_deref(),
+        Some("Invalid destination")
+    );
+    let resend = approved(&pool, invoice, "manual_resend", 0).await;
+    recipient(&pool, resend, "+97333991122", "read").await;
+    let result = rows(&pool).await;
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].notification_id, Some(resend));
+    assert_eq!(result[0].status, "delivered");
+    assert!(!result[0].needs_attention);
+    assert_eq!(attention::summary(&pool).await.unwrap().total, 0);
+}
+
+#[sqlx::test]
+async fn attention_keeps_other_failures_visible_after_a_selective_resend(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let original = approved(&pool, invoice, "invoice_created", 0).await;
+    recipient(&pool, original, "+97333112233", "delivered").await;
+    recipient(&pool, original, "+97333991122", "failed").await;
+    recipient(&pool, original, "+97333445566", "failed").await;
+    let resend = approved(&pool, invoice, "manual_resend", 0).await;
+    recipient(&pool, resend, "+97333991122", "delivered").await;
+    let result = rows(&pool).await;
+    assert_eq!(result[0].recipient_count, 3);
+    assert_eq!(result[0].delivered_count, 2);
+    assert_eq!(result[0].failed_count, 1);
+    assert!(result[0].needs_attention);
+    assert_eq!(result[0].recipients.as_array().unwrap().len(), 3);
+    assert_eq!(attention::summary(&pool).await.unwrap().failed, 1);
+}
+
+#[sqlx::test]
+async fn attention_separates_queued_delayed_accepted_and_uncertain_messages(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let send = approved(&pool, invoice, "invoice_created", 0).await;
+    recipient(&pool, send, "+97333112233", "queued").await;
+    assert_eq!(rows(&pool).await[0].status, "queued");
+    assert_eq!(attention::summary(&pool).await.unwrap().total, 0);
+    sqlx::query("UPDATE notifications SET approved_at=now()-interval '31 minutes' WHERE id=$1")
+        .bind(send)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(attention::summary(&pool).await.unwrap().delayed, 1);
+    sqlx::query("UPDATE notification_recipients SET status='accepted' WHERE notification_id=$1")
+        .bind(send)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows(&pool).await[0].status, "accepted");
+    assert_eq!(attention::summary(&pool).await.unwrap().total, 0);
+    sqlx::query("UPDATE notification_recipients SET status='uncertain' WHERE notification_id=$1")
+        .bind(send)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(attention::summary(&pool).await.unwrap().uncertain, 1);
+}
+
+#[sqlx::test]
+async fn attention_preserves_an_old_queued_destination_after_a_selective_resend(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let original = approved(&pool, invoice, "invoice_created", 0).await;
+    recipient(&pool, original, "+97333112233", "queued").await;
+    sqlx::query("UPDATE notifications SET approved_at=now()-interval '31 minutes' WHERE id=$1")
+        .bind(original)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let resend = approved(&pool, invoice, "manual_resend", 0).await;
+    recipient(&pool, resend, "+97333991122", "delivered").await;
+    let result = rows(&pool).await;
+    assert_eq!(result[0].status, "delayed");
+    assert_eq!(result[0].queued_count, 1);
+    assert_eq!(result[0].delivered_count, 1);
+}
+
+#[sqlx::test]
+async fn attention_requires_a_new_pickup_notice_after_production_is_reopened(pool: PgPool) {
+    let (invoice, orders, _, pickup) = test_support::invoice(&pool, 1, false).await;
+    test_support::finish_stages(&pool, orders[0], pickup).await;
+    readiness::confirm(&pool, invoice, None, "staff", true)
+        .await
+        .unwrap();
+    assert_eq!(attention::summary(&pool).await.unwrap().not_sent, 2);
+    let ready = approved(&pool, invoice, "invoice_ready", 1).await;
+    recipient(&pool, ready, "+97333112233", "delivered").await;
+    assert_eq!(attention::summary(&pool).await.unwrap().not_sent, 1);
+    readiness::reopen(&pool, orders[0], "staff", "Recheck stitching")
+        .await
+        .unwrap();
+    assert!(
+        !rows(&pool)
+            .await
+            .iter()
+            .find(|r| r.kind == "invoice_ready")
+            .unwrap()
+            .eligible
+    );
+    readiness::confirm(&pool, invoice, None, "staff", true)
+        .await
+        .unwrap();
+    let result = rows(&pool).await;
+    let ready = result.iter().find(|r| r.kind == "invoice_ready").unwrap();
+    assert_eq!(ready.status, "not_sent");
+    assert!(ready.needs_attention);
+    assert_eq!(ready.delivered_count, 0);
+    assert!(ready.recipients.as_array().unwrap().is_empty());
+}
+
+#[sqlx::test]
+async fn attention_excludes_opted_out_walk_in_and_delivery_pickup_notices(pool: PgPool) {
+    let (invoice, orders, _, pickup) = test_support::invoice(&pool, 1, false).await;
+    test_support::finish_stages(&pool, orders[0], pickup).await;
+    readiness::confirm(&pool, invoice, None, "staff", true)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE invoices SET collection_method='delivery' WHERE id=$1")
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows(&pool).await.len(), 1);
+    sqlx::query("UPDATE customers SET whatsapp_notifications_enabled=false")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(rows(&pool).await.is_empty());
+    sqlx::query("UPDATE customers SET name='Existing customer'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (walk_in, _, _, _) = test_support::invoice(&pool, 0, false).await;
+    assert!(!rows(&pool)
+        .await
+        .iter()
+        .any(|row| row.invoice_id == Some(walk_in)));
+}
+
+#[sqlx::test]
+async fn attention_summary_counts_all_matching_items_beyond_the_current_page(pool: PgPool) {
+    test_support::invoice(&pool, 1, false).await;
+    sqlx::query("UPDATE customers SET name='Existing customer'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    test_support::invoice(&pool, 1, false).await;
+    let params = ListParams {
+        page: 1,
+        per_page: Some(1),
+        ..Default::default()
+    };
+    let result = attention::list(&pool, &params).await.unwrap();
+    assert_eq!(result.data.len(), 1);
+    assert_eq!(result.total, 2);
+    assert_eq!(attention::summary(&pool).await.unwrap().total, 2);
+}
+
+async fn gift_card(pool: &PgPool) -> Uuid {
+    sqlx::query_scalar("INSERT INTO gift_cards(code,initial_amount,balance,bought_for,recipient_phone) VALUES('GC-ATTENTION',25,25,'Fatima','33991122') RETURNING id")
+        .fetch_one(pool).await.unwrap()
+}
+
+async fn gift_card_delivery(pool: &PgPool, card: Uuid, status: &str) -> Uuid {
+    sqlx::query_scalar("INSERT INTO gift_card_deliveries(gift_card_id,request_id,approved_by,source_hash,normalized_mobile,body,parameters,template_name,language,image_png,image_filename,image_sha256,state,last_error) VALUES($1,$2,'staff','test','+97333991122','Gift card','[]','gift_card_image_v1','en_US',decode('01','hex'),'card.png',repeat('a',64),$3,CASE WHEN $3='failed' THEN 'Invalid destination' END) RETURNING id")
+        .bind(card).bind(Uuid::new_v4()).bind(status).fetch_one(pool).await.unwrap()
+}
+
+#[sqlx::test]
+async fn attention_identifies_unsent_standalone_gift_cards(pool: PgPool) {
+    let card = gift_card(&pool).await;
+    let result = rows(&pool).await;
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].kind, "gift_card");
+    assert_eq!(result[0].entity_id, card);
+    assert_eq!(result[0].gift_card_id, Some(card));
+    assert_eq!(result[0].reference, "GC-ATTENTION");
+    assert!(result[0].invoice_id.is_none());
+    assert_eq!(result[0].status, "not_sent");
+    assert_eq!(result[0].customers[0]["name"], "Fatima");
+    assert_eq!(attention::summary(&pool).await.unwrap().not_sent, 1);
+}
+
+#[sqlx::test]
+async fn attention_includes_gift_card_failures_and_uses_the_latest_resend(pool: PgPool) {
+    let card = gift_card(&pool).await;
+    gift_card_delivery(&pool, card, "failed").await;
+    let result = rows(&pool).await;
+    assert_eq!(result[0].failed_count, 1);
+    assert_eq!(result[0].recipient_count, 1);
+    assert_eq!(result[0].recipients[0]["normalizedMobile"], "+97333991122");
+    assert_eq!(
+        result[0].error_message.as_deref(),
+        Some("Invalid destination")
+    );
+    assert_eq!(attention::summary(&pool).await.unwrap().failed, 1);
+    let resend = gift_card_delivery(&pool, card, "read").await;
+    let result = rows(&pool).await;
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].notification_id, Some(resend));
+    assert_eq!(result[0].status, "delivered");
+    assert_eq!(result[0].delivered_count, 1);
+    assert_eq!(attention::summary(&pool).await.unwrap().total, 0);
+}
+
+#[sqlx::test]
+async fn attention_normalizes_gift_card_queue_states_and_excludes_retired_cards(pool: PgPool) {
+    let card = gift_card(&pool).await;
+    let send = gift_card_delivery(&pool, card, "sending").await;
+    assert_eq!(rows(&pool).await[0].status, "queued");
+    sqlx::query(
+        "UPDATE gift_card_deliveries SET created_at=now()-interval '31 minutes' WHERE id=$1",
+    )
+    .bind(send)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(attention::summary(&pool).await.unwrap().delayed, 1);
+    sqlx::query("UPDATE gift_card_deliveries SET state='uncertain' WHERE id=$1")
+        .bind(send)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(attention::summary(&pool).await.unwrap().uncertain, 1);
+    sqlx::query("UPDATE gift_card_deliveries SET state='cancelled' WHERE id=$1")
+        .bind(send)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(attention::summary(&pool).await.unwrap().not_sent, 1);
+    sqlx::query("UPDATE gift_cards SET is_active=false WHERE id=$1")
+        .bind(card)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(attention::summary(&pool).await.unwrap().total, 0);
+    assert!(!rows(&pool).await[0].eligible);
+}
+
+#[sqlx::test]
+async fn attention_filters_notification_types_while_summary_includes_all_types(pool: PgPool) {
+    test_support::invoice(&pool, 1, false).await;
+    gift_card(&pool).await;
+    let params = ListParams {
+        page: 1,
+        per_page: Some(1),
+        filters: serde_json::from_value(json!([
+            {"id":"kind","value":["gift_card"],"variant":"multiSelect","operator":"inArray"},
+            {"id":"reference","value":"GC-ATTENTION","variant":"text","operator":"iLike"}
+        ]))
+        .unwrap(),
+        ..Default::default()
+    };
+    let result = attention::list(&pool, &params).await.unwrap();
+    assert_eq!(result.total, 1);
+    assert_eq!(result.data[0].kind, "gift_card");
+    assert_eq!(attention::summary(&pool).await.unwrap().total, 2);
+}
