@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,9 +11,7 @@ import {
 } from '@/components/ui/table'
 import { useOrders } from '@/features/orders/hooks/use-orders'
 import { OrderPriorityIndicator } from '@/features/orders/components/order-priority-indicator'
-import { OrderManageDialog } from '@/features/orders/components/order-manage-dialog'
 import { OrderTableActions } from '@/features/orders/components/order-table-actions'
-import { CollectOrderDialog } from '@/features/orders/components/collect-order-dialog'
 import { StatusBadge } from '@/components/status-badge'
 import { currentStageLabel } from '@/features/orders/lib/order-tracking'
 import type { Order } from '@/features/orders/types/orders'
@@ -25,9 +22,15 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: CURRENCY,
 })
 
-export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
-  const [managedOrderId, setManagedOrderId] = useState<string | null>(null)
-  const [collectOrderId, setCollectOrderId] = useState<string | null>(null)
+export function InvoiceOrderBreakdown({
+  invoiceId,
+  onManageOrder,
+  onCollectOrder,
+}: {
+  invoiceId: string
+  onManageOrder: (order: Order) => void
+  onCollectOrder: (order: Order) => void
+}) {
   const params = new URLSearchParams({
     filters: JSON.stringify([
       { id: 'invoiceId', value: invoiceId, variant: 'text', operator: 'eq' },
@@ -170,8 +173,8 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
                     <TableCell>
                       <OrderTableActions
                         order={order}
-                        onManage={(selected) => setManagedOrderId(selected.id)}
-                        onCollect={(selected) => setCollectOrderId(selected.id)}
+                        onManage={onManageOrder}
+                        onCollect={onCollectOrder}
                       />
                     </TableCell>
                   </TableRow>
@@ -181,14 +184,6 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
           </section>
         ))
       )}
-      <OrderManageDialog
-        orderId={managedOrderId}
-        onOpenChange={(open) => !open && setManagedOrderId(null)}
-      />
-      <CollectOrderDialog
-        order={orders.find((order) => order.id === collectOrderId) ?? null}
-        onOpenChange={(open) => !open && setCollectOrderId(null)}
-      />
     </div>
   )
 }
