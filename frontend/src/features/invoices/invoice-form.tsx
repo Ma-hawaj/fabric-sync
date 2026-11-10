@@ -81,6 +81,7 @@ interface InvoiceFormProps {
   invoiceDate?: string
 }
 
+/** Edit and validate invoice lines, fulfilment charges, and tender before saving. */
 export function InvoiceForm({
   defaultValues,
   title,

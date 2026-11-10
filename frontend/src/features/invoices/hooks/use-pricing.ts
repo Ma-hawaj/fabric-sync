@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import type { UrgentChargeRule } from '../lib/garment-pricing'
 
+/** Fetch and cache the server pricing rules used for invoice previews. */
 export function usePricing() {
   return useQuery({
     queryKey: ['pricing'],

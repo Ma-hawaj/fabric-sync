@@ -216,6 +216,7 @@ impl Config {
         Ok(Some(amount))
     }
 
+    /// Parse the optional VAT-inclusive delivery fee, rejecting nonpositive or invalid money amounts.
     pub fn delivery_charge(&self) -> Result<Option<f64>, String> {
         let Some(raw) = &self.delivery_charge else {
             return Ok(None);
