@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as ApiModule from '@/lib/api'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { getCoreRowModel, useReactTable } from '@tanstack/react-table'
@@ -10,7 +11,10 @@ import type { Invoice } from '../types/invoices'
 import { getInvoiceColumns } from './invoice-columns'
 import { InvoiceOrderBreakdown } from './invoice-order-breakdown'
 
-vi.mock('@/lib/api', () => ({ apiClient: { get: vi.fn() } }))
+vi.mock('@/lib/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof ApiModule>()),
+  apiClient: { get: vi.fn(), post: vi.fn() },
+}))
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
     children,
@@ -103,7 +107,7 @@ const orders = [
     status: 'pending',
     productionLocation: null,
   },
-]
+].map((order) => ({ ...order, stages: [], currentStage: null, repairs: [] }))
 const columns = getInvoiceColumns(
   [],
   [],
@@ -186,6 +190,25 @@ describe('Invoice table', () => {
     expect(screen.getByRole('link', { name: 'INV-42' })).toBeTruthy()
     expect(screen.getByText(/of.*records/, { exact: false })).toBeTruthy()
     expect(apiClient.get).not.toHaveBeenCalled()
+  })
+  it('opens the orders from the invoice action menu and offers order actions', async () => {
+    renderTable()
+    fireEvent.click(screen.getByRole('button', { name: 'Actions' }))
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Manage Orders' }),
+    )
+    const orderLink = await screen.findByRole('link', { name: 'ORD-102' })
+    const orderRow = within(orderLink.closest('tr')!)
+    expect(orderRow.getByText('Completed')).toBeTruthy()
+    fireEvent.click(orderRow.getByRole('button', { name: 'Actions' }))
+    expect(
+      await screen.findByRole('menuitem', { name: 'Manage Order' }),
+    ).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Export PDF' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mark Collected' }))
+    expect(
+      await screen.findByRole('dialog', { name: 'Mark Order Collected' }),
+    ).toBeTruthy()
   })
   it('preserves the invoice total and shows credits, paid refunds and pending refunds separately', () => {
     renderTable([

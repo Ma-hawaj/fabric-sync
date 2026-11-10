@@ -25,6 +25,7 @@ export function useUpdateOrder() {
       // needed" to outstanding, which moves the current stage — refetch rather
       // than patching one row.
       void queryClient.invalidateQueries({ queryKey: ['orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
     },
   })
 }
