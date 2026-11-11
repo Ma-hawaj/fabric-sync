@@ -1168,3 +1168,83 @@ async fn resends_update_one_version_entry_and_reject_older_links(pool: PgPool) {
     ));
     assert_eq!(mock.renders.load(Ordering::SeqCst), 2);
 }
+
+#[sqlx::test]
+async fn repair_resends_keep_separate_attention_after_original_collection(pool: PgPool) {
+    let (invoice, orders, _, _) = test_support::invoice(&pool, 1, false).await;
+    sqlx::query("UPDATE orders SET status='collected',collected_at=now() WHERE id=$1")
+        .bind(orders[0])
+        .execute(&pool)
+        .await
+        .unwrap();
+    let first: Uuid = sqlx::query_scalar("INSERT INTO order_repairs(order_id,reason,status,completed_at) VALUES($1,'First repair','completed',now()) RETURNING id")
+        .bind(orders[0]).fetch_one(&pool).await.unwrap();
+    let second: Uuid = sqlx::query_scalar("INSERT INTO order_repairs(order_id,reason,status,completed_at) VALUES($1,'Second repair','completed',now()) RETURNING id")
+        .bind(orders[0]).fetch_one(&pool).await.unwrap();
+    let (url, _) = mock_server().await;
+    let state = test_support::state(pool.clone(), None, Some(url)).await;
+    let mut input = prepare("invoice_ready");
+    input.repair_id = Some(first);
+    let first_notice = service::prepare(&state, invoice, input, "staff")
+        .await
+        .unwrap();
+    service::approve(&state, first_notice.id, send(&first_notice), "staff", true)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE notification_recipients SET status='failed' WHERE notification_id=$1")
+        .bind(first_notice.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut input = prepare("invoice_ready");
+    input.repair_id = Some(second);
+    let second_notice = service::prepare(&state, invoice, input, "staff")
+        .await
+        .unwrap();
+    service::approve(
+        &state,
+        second_notice.id,
+        send(&second_notice),
+        "staff",
+        true,
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE notification_recipients SET status='delivered' WHERE notification_id=$1")
+        .bind(second_notice.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let list = super::attention::list(&pool, &crate::list::ListParams::default())
+        .await
+        .unwrap();
+    let failed = list
+        .data
+        .iter()
+        .find(|row| row.repair_id == Some(first))
+        .unwrap();
+    assert_eq!(failed.status, "failed");
+    assert!(failed.needs_attention);
+    assert_eq!(
+        list.data
+            .iter()
+            .find(|row| row.repair_id == Some(second))
+            .unwrap()
+            .status,
+        "delivered"
+    );
+    assert!(!list.data.iter().any(|row| row.kind == "invoice_ready"));
+    let resend = service::resend(&state, first_notice.id, Uuid::new_v4(), "staff")
+        .await
+        .unwrap();
+    assert_eq!(resend.snapshot.repair_id, Some(first));
+    service::approve(&state, resend.id, send(&resend), "staff", true)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE notification_recipients SET status='read' WHERE notification_id=$1")
+        .bind(resend.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(super::attention::summary(&pool).await.unwrap().failed, 0);
+}

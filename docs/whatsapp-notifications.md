@@ -231,11 +231,10 @@ and pickup messages, independently of pagination or table filters. The page
 refreshes every 30 seconds and has a manual Refresh action.
 
 Every row has an explicit **Notification type**: **Invoice send**, **Ready**,
-**Repair ready**, or **Gift card**. Repair notices use the repair-ready preview
-flow from PR #108, carrying the repair ID through preparation, refreshing, and
-resending. A preview for a different repair cannot be sent. Until that workflow
-is available, the server rejects repair requests instead of preparing an ordinary
-pickup notice under the wrong context.
+**Repair ready**, or **Gift card**. Repair notices reuse the existing repair-ready
+preview flow, carrying the repair ID through preparation, refreshing, and
+resending. The server and preview reject a different repair context before
+sending.
 
 Completed repairs awaiting a notice appear separately, including repairs of
 already-collected orders. Each repair has its own latest send and completion
