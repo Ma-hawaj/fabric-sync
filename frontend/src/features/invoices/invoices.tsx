@@ -12,6 +12,9 @@ import { getInvoiceColumns } from './components/invoice-columns'
 import { InvoiceOrderBreakdown } from './components/invoice-order-breakdown'
 import { CollectInvoiceDialog } from './components/collect-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
+import { OrderManageDialog } from '@/features/orders/components/order-manage-dialog'
+import { CollectOrderDialog } from '@/features/orders/components/collect-order-dialog'
+import type { Order } from '@/features/orders/types/orders'
 import { useListParams } from '@/hooks/use-list-params'
 import { useInvoices } from './hooks/use-invoices'
 import { useMaterials } from './hooks/use-materials'
@@ -27,6 +30,11 @@ import type { Invoice } from './types/invoices'
 export function InvoicesPage() {
   const [collectInvoice, setCollectInvoice] = useState<Invoice | null>(null)
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null)
+  const [orderAction, setOrderAction] = useState<
+    | { kind: 'manage'; orderId: string }
+    | { kind: 'collect'; order: Order }
+    | null
+  >(null)
   const navigate = useNavigate()
   const [resendId, setResendId] = useState<string | null>(null)
 
@@ -152,7 +160,15 @@ export function InvoicesPage() {
         isFetching={isFetching}
         table={table}
         renderExpandedRow={(row) => (
-          <InvoiceOrderBreakdown invoiceId={row.original.id} />
+          <InvoiceOrderBreakdown
+            invoiceId={row.original.id}
+            onManageOrder={(order) =>
+              setOrderAction({ kind: 'manage', orderId: order.id })
+            }
+            onCollectOrder={(order) =>
+              setOrderAction({ kind: 'collect', order })
+            }
+          />
         )}
       >
         <DataTableAdvancedToolbar
@@ -162,6 +178,18 @@ export function InvoicesPage() {
         />
       </DataTable>
 
+      {orderAction?.kind === 'manage' && (
+        <OrderManageDialog
+          orderId={orderAction.orderId}
+          onOpenChange={(open) => !open && setOrderAction(null)}
+        />
+      )}
+      {orderAction?.kind === 'collect' && (
+        <CollectOrderDialog
+          order={orderAction.order}
+          onOpenChange={(open) => !open && setOrderAction(null)}
+        />
+      )}
       <NotificationDialog
         invoiceId={resendId}
         kind="manual_resend"

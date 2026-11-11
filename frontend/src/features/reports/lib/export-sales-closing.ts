@@ -7,6 +7,9 @@ import {
   reportNotes,
   summaryRows,
   closingDayStatus,
+  comparisonStatus,
+  comparisonHeaders,
+  comparisonRows,
 } from './sales-closing'
 import type { SalesClosing } from '../types/sales-closing'
 
@@ -42,16 +45,7 @@ export function salesClosingCsv(report: SalesClosing): string {
           ['Closed by', report.closure.closedBy],
         ]
       : []),
-    [
-      'Check status',
-      !report.lastCheck
-        ? 'Not checked'
-        : report.lastCheck.fingerprint !== report.fingerprint
-          ? 'Recheck required'
-          : report.lastCheck.comparison.matched
-            ? 'Matched'
-            : 'Differences / review required',
-    ],
+    ['Closing count status', comparisonStatus(report)],
     ['Unassigned activities excluded', report.unassignedActivityCount],
     ...(report.opening
       ? [
@@ -68,14 +62,10 @@ export function salesClosingCsv(report: SalesClosing): string {
           ['Other cash added', report.lastCheck.counts.cashAdded],
           ['Cash removed / banked', report.lastCheck.counts.cashRemoved],
           ['Closing notes', report.lastCheck.counts.notes],
-          ['Method', 'Recorded net', 'Expected', 'Actual', 'Over / short'],
-          ...report.lastCheck.comparison.lines.map((line) => [
-            methodLabel(line.method),
-            line.recorded,
-            line.expected,
-            line.actual,
-            line.difference,
-          ]),
+          comparisonHeaders,
+          ...comparisonRows(report.lastCheck.comparison).map((row) =>
+            row.map((value) => value ?? ''),
+          ),
         ]
       : []),
     [],
@@ -169,9 +159,26 @@ export function salesClosingHtml(report: SalesClosing): string {
     <p>${escapeHtml(closingDayStatus(report))}${report.closure ? ` · ${escapeHtml(report.closure.closedAt)} · By ${escapeHtml(report.closure.closedBy)} · Reference ${escapeHtml(report.closure.id)}` : ''}</p>
     ${report.policy ? `<p>Closing controls start: ${escapeHtml(report.policy.startsOn)}</p>` : ''}
     ${report.missedClosing ? `<p>Missed closing resolved separately — unreconciled. Figures unchanged.<br>Reason: ${escapeHtml(report.missedClosing.reason)}<br>Resolved ${escapeHtml(report.missedClosing.resolvedAt)} · By ${escapeHtml(report.missedClosing.resolvedBy)} · Reference ${escapeHtml(report.missedClosing.id)}</p>` : ''}
-    <p>Check status: ${!report.lastCheck ? 'Not checked' : report.lastCheck.fingerprint !== report.fingerprint ? 'Recheck required: recorded activity changed' : report.lastCheck.comparison.matched ? 'Matched' : 'Differences / review required'}. Unassigned activities excluded: ${report.unassignedActivityCount}.</p>
+    <p>Check status: ${escapeHtml(comparisonStatus(report))}. Unassigned activities excluded: ${report.unassignedActivityCount}.</p>
     ${report.opening ? `<p>Saved opening cash: ${formatBhd(report.opening.amount)} BHD · Recorded ${escapeHtml(new Date(report.opening.recordedAt).toLocaleString('en-GB', { timeZone: report.timezone }))}${report.opening.supersedesId ? ' · Corrected opening' : ''}<br>Opening notes: ${escapeHtml(report.opening.notes)}</p>` : ''}
-    ${report.lastCheck ? `<h2>Recorded vs actual — saved check</h2><p>Checked ${escapeHtml(report.lastCheck.checkedAt)} · Reference ${escapeHtml(report.lastCheck.id)}</p><table><thead><tr><th>Method</th><th>Recorded net</th><th>Expected</th><th>Actual</th><th>Over / short</th></tr></thead><tbody>${report.lastCheck.comparison.lines.map((line) => cells([methodLabel(line.method), formatBhd(line.recorded), formatBhd(line.expected), formatBhd(line.actual), formatBhd(line.difference)])).join('')}</tbody></table><p>Opening cash: ${formatBhd(report.lastCheck.counts.openingCash)} · Other cash added: ${formatBhd(report.lastCheck.counts.cashAdded)} · Cash removed / banked: ${formatBhd(report.lastCheck.counts.cashRemoved)}</p><p>Notes: ${escapeHtml(report.lastCheck.counts.notes)}</p>` : ''}
+    ${
+      report.lastCheck
+        ? `<h2>Recorded vs actual — saved closing count</h2><p>Checked ${escapeHtml(report.lastCheck.checkedAt)} · Reference ${escapeHtml(report.lastCheck.id)}</p><table><thead><tr>${comparisonHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${comparisonRows(
+            report.lastCheck.comparison,
+          )
+            .map(([method, ...amounts]) =>
+              cells([
+                method,
+                ...amounts.map((value) =>
+                  value === null ? '—' : formatBhd(value),
+                ),
+              ]),
+            )
+            .join(
+              '',
+            )}</tbody></table><p>Opening cash: ${formatBhd(report.lastCheck.counts.openingCash)} · Other cash added: ${formatBhd(report.lastCheck.counts.cashAdded)} · Cash removed / banked: ${formatBhd(report.lastCheck.counts.cashRemoved)}</p><p>Notes: ${escapeHtml(report.lastCheck.counts.notes)}</p>`
+        : ''
+    }
     <h2>Daily summary</h2><table><tbody>${summaryRows(report)
       .map(([label, amount], index) =>
         cells([label, index === 0 ? String(amount) : formatBhd(amount)]),

@@ -10,11 +10,13 @@ export interface AsyncComboboxOption {
 }
 
 /**
- * One or more `ListSpec` columns the search text matches against. A single
- * field combines `AND` with any static `filters`; several search fields are
+ * Numeric identifiers use exact matching, with an optional displayed prefix.
+ * Text columns use substring matching. A single field combines `AND` with any
+ * static `filters`; several search fields are
  * `OR`-joined and therefore cannot be combined with static filters.
  */
-export type SearchField = string | readonly string[]
+export type SearchField =
+  string | readonly (string | { id: string; type: 'number'; prefix?: string })[]
 
 /** A static filter attached to every request, e.g. only stock-holding rows. */
 export interface PickerFilter {
@@ -35,8 +37,10 @@ interface PickerRequestParams {
 /**
  * The query string for one infinite-scroll page of a searchable picker: the
  * page slice plus static filters and, once the user has typed something, an
- * `iLike` filter per search field. Matches the backend `ListSpec` filter DSL
- * exactly. The clear path for "either column" searches (e.g. name OR mobile)
+ * `iLike` filter per text field and an `eq` filter for numeric identifiers.
+ * Numeric filters are omitted for nonnumeric input so name searches still work.
+ * Matches the backend `ListSpec` filter DSL exactly.
+ * The clear path for "either column" searches (e.g. name OR mobile)
  * is several fields OR-joined; the clear path for "only these rows" pickers
  * (e.g. just stock-holding branches) is a single field AND-joined with static
  * filters — the backend applies one connector across all filters, so the two
@@ -53,7 +57,7 @@ export function buildPickerRequestParams({
   params.set('page', String(page))
   params.set('perPage', String(perPage))
 
-  const fields = Array.isArray(searchField) ? searchField : [searchField]
+  const fields = typeof searchField === 'string' ? [searchField] : searchField
   const filterItems = [
     ...filters.map(({ id, value, variant, operator }) => ({
       id,
@@ -62,12 +66,23 @@ export function buildPickerRequestParams({
       operator,
     })),
     ...(search
-      ? fields.map((id) => ({
-          id,
-          value: search,
-          variant: 'text',
-          operator: 'iLike',
-        }))
+      ? fields.flatMap((field) => {
+          if (typeof field === 'string') {
+            return [
+              { id: field, value: search, variant: 'text', operator: 'iLike' },
+            ]
+          }
+          let value = search.trim()
+          if (
+            field.prefix &&
+            value.toLowerCase().startsWith(field.prefix.toLowerCase())
+          ) {
+            value = value.slice(field.prefix.length).trim()
+          }
+          return /^\d+$/.test(value)
+            ? [{ id: field.id, value, variant: 'number', operator: 'eq' }]
+            : []
+        })
       : []),
   ]
   if (filterItems.length > 0) {

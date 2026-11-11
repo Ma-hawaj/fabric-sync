@@ -52,6 +52,13 @@ impl AppState {
             .map_err(crate::error::AppError::Config)
     }
 
+    /// Return the configured delivery fee, mapping invalid configuration to an application error.
+    pub fn delivery_charge(&self) -> Result<Option<f64>, crate::error::AppError> {
+        self.config
+            .delivery_charge()
+            .map_err(crate::error::AppError::Config)
+    }
+
     pub fn urgent_charge_rule(
         &self,
     ) -> Result<Option<crate::features::pricing::types::UrgentChargeRule>, crate::error::AppError>

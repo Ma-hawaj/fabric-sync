@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
+import { RoleGuard } from '@/components/role-guard'
 import { Link } from '@tanstack/react-router'
 import { parseAsInteger, parseAsString, useQueryStates } from 'nuqs'
 import { DownloadIcon, PrinterIcon, RefreshCwIcon } from 'lucide-react'
@@ -27,7 +28,7 @@ import {
 import { ClosingCountsForm } from './components/closing-counts'
 import { OpeningCashSection } from './components/till-forms'
 import { BranchExpenses } from './components/branch-expenses'
-import { CloseDay, ClosedDayCounts } from './components/close-day'
+import { ClosedDayCounts } from './components/closing-comparison'
 import { RolloutSetup, MissedClosingResolution } from './components/rollout'
 import { useAllLocations } from '@/features/locations/hooks/use-locations'
 import { usePreferences } from '@/features/locations/hooks/use-default-location'
@@ -211,7 +212,7 @@ export function SalesClosingPage() {
         </p>
       ) : (
         <ReportContent
-          key={`${report.branchId}:${report.date}:${report.fingerprint}`}
+          key={`${report.branchId}:${report.date}`}
           report={report}
           queryDate={date}
           refreshing={query.isFetching}
@@ -230,22 +231,10 @@ function ReportContent({
   queryDate: string
   refreshing: boolean
 }) {
-  const [dirty, setDirty] = useState(false)
   const check = report.lastCheck
   const readOnly = isClosingReadOnly(report)
-  const current = Boolean(check && check.fingerprint === report.fingerprint)
-  const ready = (readOnly || (current && !dirty)) && !refreshing
-  const status = readOnly
-    ? closingDayStatus(report)
-    : !check
-      ? 'Not checked'
-      : !current
-        ? 'Recheck required'
-        : check.comparison.matched
-          ? 'Matched'
-          : check.comparison.lines.some((line) => line.difference !== 0)
-            ? 'Difference found'
-            : 'Needs review'
+  const ready = readOnly && !refreshing
+  const status = closingDayStatus(report)
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -255,7 +244,6 @@ function ReportContent({
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
             {status}
-            {dirty ? ' · Unsaved changes' : ''}
             {refreshing ? ' · Refreshing…' : ''}
           </p>
         </div>
@@ -284,11 +272,6 @@ function ReportContent({
           </Button>
         </div>
       </div>
-      <RolloutSetup
-        key={report.branchId}
-        report={report}
-        disabled={refreshing}
-      />
       {report.closure ? (
         <p role="status" className="rounded-xl border bg-muted/40 p-4 text-sm">
           Closed{' '}
@@ -322,15 +305,49 @@ function ReportContent({
           before go-live.
         </p>
       ) : null}
-      <MissedClosingResolution
-        key={report.previousUnclosedDate}
-        report={report}
-        disabled={refreshing}
-      />
+      {(!report.policy || report.previousUnclosedDate) &&
+        !report.closure &&
+        !report.missedClosing && (
+          <RoleGuard
+            role="manager"
+            fallback={
+              <p role="alert" className="text-sm">
+                A manager must{' '}
+                {report.policy
+                  ? `resolve the missed closing for ${report.previousUnclosedDate}`
+                  : 'set this branch’s go-live date'}{' '}
+                before trading.
+              </p>
+            }
+          >
+            <details
+              className="rounded-xl border bg-card p-5"
+              id="manager-actions"
+            >
+              <summary className="cursor-pointer font-semibold">
+                Manager actions ·{' '}
+                {report.policy
+                  ? 'Missed closing needs resolution'
+                  : 'Branch setup required'}
+              </summary>
+              <div className="mt-4 space-y-4">
+                <RolloutSetup
+                  key={report.branchId}
+                  report={report}
+                  disabled={refreshing}
+                />
+                <MissedClosingResolution
+                  key={report.previousUnclosedDate}
+                  report={report}
+                  disabled={refreshing}
+                />
+              </div>
+            </details>
+          </RoleGuard>
+        )}
       {!readOnly && (
         <p className="text-xs text-muted-foreground">
-          Save the branch check to include actual amounts in exports. Any
-          unsaved changes must be saved first.
+          Close the day to save actual counts and enable report exports.
         </p>
       )}
       {(report.summary.unrecordedMethodCount > 0 ||
@@ -353,7 +370,8 @@ function ReportContent({
             </p>
           )}
           <p className="mt-1 font-medium">
-            The check can be saved for review, but cannot be marked matched.
+            Closing requires an explanation for these items and will remain
+            unreconciled.
           </p>
         </div>
       )}
@@ -380,20 +398,13 @@ function ReportContent({
         <ClosingCountsForm
           report={report}
           queryDate={queryDate}
-          disabled={refreshing}
-          onDirty={setDirty}
+          disabled={refreshing || Boolean(report.previousUnclosedDate)}
         />
       ) : (
         <p className="rounded-xl border p-5 text-sm text-muted-foreground">
           Closing counts become available after opening cash has been saved.
         </p>
       )}
-      <CloseDay
-        key={check?.id}
-        report={report}
-        queryDate={queryDate}
-        ready={ready}
-      />
       <details className="rounded-xl border bg-card p-5">
         <summary className="cursor-pointer font-semibold">
           Sales and recorded receipts

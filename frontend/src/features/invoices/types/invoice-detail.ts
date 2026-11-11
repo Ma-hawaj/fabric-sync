@@ -45,6 +45,7 @@ export interface InvoiceRedemption {
 export interface InvoiceTotals {
   prepaidAmount?: number
   salesAmount?: number
+  deliveryCharge?: number
   urgentCharge: number
   subtotal: number
   discount: number

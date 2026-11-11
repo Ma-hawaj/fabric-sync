@@ -28,6 +28,7 @@ export interface NotificationDraft {
   artifactId: string | null
   canSend: boolean
   snapshot: {
+    repairId?: string | null
     invoiceNumber: number
     body: string
     language: string

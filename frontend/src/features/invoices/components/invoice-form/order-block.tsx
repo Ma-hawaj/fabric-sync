@@ -290,10 +290,12 @@ export function OrderBlock({
       option.category === 'thob_type' && option.slug === draft?.thobeType,
   )
   const fabric =
-    materialSource === 'customer'
-      ? draft?.customerMaterialDescription || 'Customer fabric'
-      : (resolvedMaterial?.name ??
-        (draft?.materialId ? materialLabelForId?.(draft.materialId) : null))
+    materialSource === 'unknown'
+      ? 'Unknown material'
+      : materialSource === 'customer'
+        ? draft?.customerMaterialDescription || 'Customer fabric'
+        : (resolvedMaterial?.name ??
+          (draft?.materialId ? materialLabelForId?.(draft.materialId) : null))
   const finishEditing = () => {
     if (!validation.success) {
       setShowErrors(true)
@@ -422,12 +424,26 @@ export function OrderBlock({
                   </FieldLabel>
                   <SegmentedOptions
                     id={field.name}
-                    options={['Shop', 'Customer']}
+                    options={
+                      draft?.originalPricing?.inputs.materialSource ===
+                      'unknown'
+                        ? ['Unknown', 'Shop', 'Customer']
+                        : ['Shop', 'Customer']
+                    }
                     value={
-                      field.state.value === 'customer' ? 'Customer' : 'Shop'
+                      field.state.value === 'unknown'
+                        ? 'Unknown'
+                        : field.state.value === 'customer'
+                          ? 'Customer'
+                          : 'Shop'
                     }
                     onChange={(label) => {
-                      const source = label === 'Customer' ? 'customer' : 'shop'
+                      const source =
+                        label === 'Unknown'
+                          ? 'unknown'
+                          : label === 'Customer'
+                            ? 'customer'
+                            : 'shop'
                       if (source === field.state.value) return
                       field.handleChange(source)
                       form.setFieldValue(
@@ -454,7 +470,15 @@ export function OrderBlock({
                 materialSource === 'shop' ? 'lg:grid-cols-6' : 'lg:grid-cols-5',
               )}
             >
-              {materialSource === 'customer' ? (
+              {materialSource === 'unknown' ? (
+                <div className="lg:col-span-2">
+                  <p className="text-sm font-medium">Unknown material</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Keep the recorded price. Choose Shop or Customer before
+                    changing fabric or pricing.
+                  </p>
+                </div>
+              ) : materialSource === 'customer' ? (
                 <div className="lg:col-span-2">
                   <TextField
                     form={form}

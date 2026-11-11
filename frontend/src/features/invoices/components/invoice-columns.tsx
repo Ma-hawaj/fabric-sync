@@ -10,6 +10,7 @@ import {
   CheckIcon,
   PencilIcon,
   WalletIcon,
+  ListChecksIcon,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/status-badge'
@@ -548,21 +549,35 @@ export const getInvoiceColumns = (
           <RowActions
             items={[
               {
+                permission: { method: 'GET', path: '/orders' },
+                label: 'Manage Orders',
+                icon: ListChecksIcon,
+                disabled: !row.getCanExpand(),
+                onClick: () => row.toggleExpanded(true),
+              },
+              {
+                permission: {
+                  method: 'POST',
+                  path: '/invoices/:id/notifications',
+                },
                 label: 'Resend invoice via WhatsApp',
                 icon: FileDownIcon,
                 onClick: () => onResend?.(invoice),
               },
               {
+                permission: { method: 'GET', path: '/invoices/:id' },
                 label: 'View Details',
                 icon: EyeIcon,
                 onClick: () => onViewDetails(invoice),
               },
               {
+                permission: { method: 'GET', path: '/invoices/:id/document' },
                 label: 'Export PDF',
                 icon: FileDownIcon,
                 onClick: () => onExportPdf(invoice),
               },
               {
+                permission: { method: 'PUT', path: '/invoices/:id' },
                 label: 'Edit',
                 icon: PencilIcon,
                 onClick: () => onEdit(invoice),
@@ -572,6 +587,7 @@ export const getInvoiceColumns = (
                 // remainder after everything was already collected. Disabled
                 // once nothing is left to pay.
                 label: 'Record Payment',
+                permission: { method: 'POST', path: '/invoices/:id/payments' },
                 icon: WalletIcon,
                 disabled: invoice.balanceDue <= 0,
                 onClick: () => onRecordPayment(invoice),
@@ -581,6 +597,7 @@ export const getInvoiceColumns = (
                 // Always available: on a paid invoice this just collects the
                 // orders without taking money.
                 label: 'Mark Collected',
+                permission: { method: 'POST', path: '/invoices/:id/collect' },
                 icon: CheckIcon,
                 onClick: () => onCollect(invoice),
               },

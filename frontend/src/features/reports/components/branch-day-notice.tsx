@@ -5,11 +5,13 @@ export function BranchDayNotice({
   branchId,
   loading,
   failed,
+  editing = false,
 }: {
   status?: BranchDayStatus
   branchId: string
   loading: boolean
   failed: boolean
+  editing?: boolean
 }) {
   if (!branchId)
     return (
@@ -48,7 +50,7 @@ export function BranchDayNotice({
         required from that date.
       </p>
     )
-  if (status.canCreateOrders)
+  if (editing ? status.canTrade : status.canCreateOrders)
     return (
       <p className="text-xs text-muted-foreground">
         Branch open · {status.date} · Opening cash recorded
@@ -65,7 +67,9 @@ export function BranchDayNotice({
           ? `A manager must resolve the missed closing for ${status.previousUnclosedDate} before saving new orders.`
           : status.closed
             ? 'This branch is closed for today. New orders are blocked until the next business day.'
-            : 'Record today’s opening cash for this branch before saving new orders.'}
+            : status.canTrade
+              ? 'This branch is inactive. New orders cannot be created here.'
+              : 'Record today’s opening cash for this branch before saving new orders.'}
       </p>
       <a
         className="underline underline-offset-4"

@@ -123,6 +123,8 @@ export function countsSchema(report: SalesClosing) {
       const compared = compareCounts(report, counts)
       if (
         (compared.lines.some((line) => line.difference !== 0) ||
+          report.summary.unrecordedMethodCount > 0 ||
+          report.unassignedActivityCount > 0 ||
           counts.cashAdded > 0 ||
           counts.cashRemoved > 0) &&
         !counts.notes.trim()

@@ -105,11 +105,12 @@ pub async fn closure(
 pub async fn insert_closure(
     db: &mut PgConnection,
     input: &CloseDayInput,
+    check_id: Uuid,
     hash: &[u8],
     actor: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(r#"INSERT INTO branch_day_closures(branch_id,business_date,check_id,request_id,request_hash,closed_by)
-        VALUES ($1,$2,$3,$4,$5,$6)"#, input.branch_id,input.date,input.check_id,input.request_id,hash,actor)
+        VALUES ($1,$2,$3,$4,$5,$6)"#, input.branch_id,input.date,check_id,input.request_id,hash,actor)
         .execute(db).await?;
     Ok(())
 }

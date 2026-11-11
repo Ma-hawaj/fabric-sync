@@ -1,17 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as ApiModule from '@/lib/api'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { NuqsTestingAdapter } from 'nuqs/adapters/testing'
 import { getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { DataTable } from '@/components/data-table/data-table'
 import { apiClient } from '@/lib/api'
 import { apiGetMock } from '@/lib/list-fixtures'
 import { STAFF_USER } from '@/features/users/test-fixtures'
+import * as CollectOrderHooks from '@/features/orders/hooks/use-collect-order'
+import { InvoicesPage } from '../invoices'
 import type { Invoice } from '../types/invoices'
 import { getInvoiceColumns } from './invoice-columns'
 import { InvoiceOrderBreakdown } from './invoice-order-breakdown'
 
-vi.mock('@/lib/api', () => ({ apiClient: { get: vi.fn() } }))
+vi.mock('@/lib/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof ApiModule>()),
+  apiClient: { get: vi.fn(), post: vi.fn() },
+}))
 vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => vi.fn(),
   Link: ({
     children,
     to,
@@ -19,8 +27,10 @@ vi.mock('@tanstack/react-router', () => ({
   }: {
     children: React.ReactNode
     to: string
-    params: Record<string, string>
-  }) => <a href={to.replace(/\$\w+/, Object.values(params)[0])}>{children}</a>,
+    params?: Record<string, string>
+  }) => (
+    <a href={to.replace(/\$\w+/, Object.values(params ?? {})[0])}>{children}</a>
+  ),
 }))
 
 const invoice: Invoice = {
@@ -103,7 +113,7 @@ const orders = [
     status: 'pending',
     productionLocation: null,
   },
-]
+].map((order) => ({ ...order, stages: [], currentStage: null, repairs: [] }))
 const columns = getInvoiceColumns(
   [],
   [],
@@ -114,6 +124,8 @@ const columns = getInvoiceColumns(
   vi.fn(),
   vi.fn(),
 )
+const onManageOrder = vi.fn()
+const onCollectOrder = vi.fn()
 function InvoiceTable({ data = [invoice] }: { data?: Invoice[] }) {
   const table = useReactTable({
     data,
@@ -128,7 +140,11 @@ function InvoiceTable({ data = [invoice] }: { data?: Invoice[] }) {
     <DataTable
       table={table}
       renderExpandedRow={(row) => (
-        <InvoiceOrderBreakdown invoiceId={row.original.id} />
+        <InvoiceOrderBreakdown
+          invoiceId={row.original.id}
+          onManageOrder={onManageOrder}
+          onCollectOrder={onCollectOrder}
+        />
       )}
     />
   )
@@ -168,6 +184,8 @@ describe('Invoice table', () => {
     vi.mocked(apiClient.get).mockImplementation(
       apiGetMock({ '/orders': orders }),
     )
+    onManageOrder.mockClear()
+    onCollectOrder.mockClear()
   })
   it('keeps one invoice row with paired, stacked customer names and phones', () => {
     renderTable()
@@ -186,6 +204,104 @@ describe('Invoice table', () => {
     expect(screen.getByRole('link', { name: 'INV-42' })).toBeTruthy()
     expect(screen.getByText(/of.*records/, { exact: false })).toBeTruthy()
     expect(apiClient.get).not.toHaveBeenCalled()
+  })
+  it('opens the orders from the invoice action menu and offers order actions', async () => {
+    renderTable()
+    fireEvent.click(screen.getByRole('button', { name: 'Actions' }))
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Manage Orders' }),
+    )
+    const orderLink = await screen.findByRole('link', { name: 'ORD-102' })
+    const orderRow = within(orderLink.closest('tr')!)
+    expect(orderRow.getByText('Completed')).toBeTruthy()
+    fireEvent.click(orderRow.getByRole('button', { name: 'Actions' }))
+    expect(
+      await screen.findByRole('menuitem', { name: 'Manage Order' }),
+    ).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Export PDF' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Manage Order' }))
+    expect(onManageOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'a2' }),
+    )
+    fireEvent.click(orderRow.getByRole('button', { name: 'Actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mark Collected' }))
+    expect(onCollectOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'a2' }),
+    )
+  })
+  it('mounts a shared order dialog only on selection and keeps it open when its invoice collapses', async () => {
+    const collectionHook = vi.spyOn(CollectOrderHooks, 'useCollectOrder')
+    try {
+      vi.mocked(apiClient.get).mockImplementation(
+        apiGetMock({
+          '/invoices': [
+            invoice,
+            { ...invoice, id: 'invoice-two', invoiceNumber: 43 },
+          ],
+          '/orders': orders,
+          '/materials': [],
+          '/locations': [],
+        }),
+      )
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      })
+      client.setQueryData(['users'], [STAFF_USER])
+      render(
+        <QueryClientProvider client={client}>
+          <NuqsTestingAdapter>
+            <InvoicesPage />
+          </NuqsTestingAdapter>
+        </QueryClientProvider>,
+      )
+      const firstToggle = await screen.findByRole('button', {
+        name: 'Show orders for invoice INV-42',
+      })
+      fireEvent.click(firstToggle)
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Show orders for invoice INV-43' }),
+      )
+      const firstOrder = await screen.findByRole('link', { name: 'ORD-102' })
+      await screen.findByRole('link', { name: 'ORD-104' })
+      expect(collectionHook).not.toHaveBeenCalled()
+      expect(screen.queryByRole('dialog')).toBeNull()
+
+      fireEvent.click(
+        within(firstOrder.closest('tr')!).getByRole('button', {
+          name: 'Actions',
+        }),
+      )
+      fireEvent.click(
+        await screen.findByRole('menuitem', { name: 'Mark Collected' }),
+      )
+      const dialog = await screen.findByRole('dialog', {
+        name: 'Mark Order Collected',
+      })
+      expect(screen.getAllByRole('dialog')).toHaveLength(1)
+      fireEvent.click(firstToggle)
+      expect(firstToggle.getAttribute('aria-expanded')).toBe('false')
+      expect(screen.getByRole('dialog', { name: 'Mark Order Collected' })).toBe(
+        dialog,
+      )
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+      expect(screen.queryByRole('dialog')).toBeNull()
+      const secondOrder = screen.getByRole('link', { name: 'ORD-104' })
+      fireEvent.click(
+        within(secondOrder.closest('tr')!).getByRole('button', {
+          name: 'Actions',
+        }),
+      )
+      fireEvent.click(
+        await screen.findByRole('menuitem', { name: 'Mark Collected' }),
+      )
+      expect(screen.getAllByRole('dialog')).toHaveLength(1)
+      expect(
+        within(screen.getByRole('dialog')).getByText(/Other customer/),
+      ).toBeTruthy()
+    } finally {
+      collectionHook.mockRestore()
+    }
   })
   it('preserves the invoice total and shows credits, paid refunds and pending refunds separately', () => {
     renderTable([

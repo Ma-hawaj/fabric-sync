@@ -18,7 +18,6 @@ pub fn router() -> Router<AppState> {
             post(super::handlers::resolve_missed),
         )
         .route("/sales-closing/close", post(super::handlers::close_day))
-        .route("/sales-closing/checks", post(super::handlers::save_check))
         .route(
             "/sales-closing/openings",
             post(super::handlers::save_opening),

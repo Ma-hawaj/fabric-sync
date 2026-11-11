@@ -16,11 +16,6 @@
     "roles": ["manager"]
   },
   {
-    "method": "POST",
-    "path": "/sales-closing/checks",
-    "roles": ["sales"]
-  },
-  {
     "method": "GET",
     "path": "/sales-closing",
     "roles": ["sales"]

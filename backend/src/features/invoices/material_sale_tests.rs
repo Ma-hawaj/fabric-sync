@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 fn sale(material: Uuid, branch: Uuid, quantity: f64) -> CreateInvoiceInput {
     serde_json::from_value(json!({
-        "issuingBranchId": branch,"issuingBranchId": branch, "branchId": branch, "expectedVatRate": 0.1, "discountUnit": "amount",
+        "issuingBranchId": branch, "branchId": branch, "expectedVatRate": 0.1, "discountUnit": "amount",
         "materials": [{ "materialId": material, "branchId": branch, "quantity": quantity, "unitPrice": 11.0 }],
     })).unwrap()
 }
@@ -170,7 +170,9 @@ async fn material_sales_database() {
         27.5
     );
 
-    service::update_invoice(&state, created.id, sale(material, other, 3.0))
+    let mut edit = sale(material, branch, 3.0);
+    edit.materials[0].branch_id = other;
+    service::update_invoice(&state, created.id, edit)
         .await
         .unwrap();
     assert_eq!(stock(&pool, material, branch).await, 10.0);
@@ -244,7 +246,7 @@ async fn material_sales_database() {
 
     // Removing every material line returns the stock; the invoice still needs
     // a line of another kind, here a gift card.
-    let replacement: CreateInvoiceInput = serde_json::from_value(json!({ "issuingBranchId": branch,"issuingBranchId": branch, "branchId": branch, "expectedVatRate": 0.1, "discountUnit": "amount", "giftCards": [{ "amount": 10, "recipientPhone": "+97333112233" }] })).unwrap();
+    let replacement: CreateInvoiceInput = serde_json::from_value(json!({ "issuingBranchId": branch, "branchId": branch, "expectedVatRate": 0.1, "discountUnit": "amount", "giftCards": [{ "amount": 10, "recipientPhone": "+97333112233" }] })).unwrap();
     service::update_invoice(&state, created.id, replacement)
         .await
         .unwrap();
@@ -257,7 +259,8 @@ async fn material_sales_database() {
 
     // Persist the exact rounded line total used by pricing; independently
     // rounding the float multiplication in SQL can yield a different cent.
-    let mut rounding_sale = sale(material, other, 1.15);
+    let mut rounding_sale = sale(material, branch, 1.15);
+    rounding_sale.materials[0].branch_id = other;
     rounding_sale.materials[0].unit_price = 0.1;
     let rounding_created = service::create_invoice(&state, rounding_sale, "material-sale-test")
         .await

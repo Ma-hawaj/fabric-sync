@@ -22,7 +22,7 @@ export interface SalesClosing {
     resolvedAt: string
     resolvedBy: string
   } | null
-  readOnly?: boolean
+  readOnly: boolean
   closure?: {
     id: string
     checkId: string
@@ -77,6 +77,7 @@ export interface BranchDayStatus {
   openingRecorded: boolean
   closed: boolean
   previousUnclosedDate: string | null
+  canTrade: boolean
   canCreateOrders: boolean
 }
 

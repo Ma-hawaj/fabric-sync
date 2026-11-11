@@ -253,3 +253,22 @@ it('formats fractional VAT percentages without rounding to whole percent', () =>
   expect(formatVatPercent(0.125)).toBe('12.5')
   expect(formatVatPercent(0.1)).toBe('10')
 })
+
+it('adds one delivery charge after discounts and includes it in VAT and balance', () => {
+  const totals = computeInvoiceTotals({
+    vatRate: 0.1,
+    orderTotal: 100,
+    productTotal: 0,
+    giftCardSales: 0,
+    discount: 10,
+    discountUnit: 'percent',
+    deliveryCharge: 3,
+    redeemed: 0,
+    paid: 20,
+  })
+  expect(totals.discountAmount).toBe(10)
+  expect(totals.total).toBe(93)
+  expect(totals.taxable).toBe(84.55)
+  expect(totals.vat).toBe(8.45)
+  expect(totals.balanceDue).toBe(73)
+})

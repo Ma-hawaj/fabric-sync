@@ -7,7 +7,7 @@ import { apiClient } from '@/lib/api'
 import { SalesClosingPage } from './sales-closing'
 import { closingFixture } from './test-fixtures'
 import { compareCounts } from './lib/closing-counts'
-import type { ClosingCounts } from './types/sales-closing'
+import type { ClosingCounts, SalesClosing } from './types/sales-closing'
 
 vi.mock('@/lib/api', () => ({
   apiClient: { get: vi.fn(), post: vi.fn() },
@@ -59,6 +59,38 @@ function setup(searchParams = '') {
   return client
 }
 
+function enterCounts(cash = '72') {
+  for (const [label, value] of [
+    ['Other cash added (BHD)', '0'],
+    ['Cash banked / transferred out (BHD)', '0'],
+    ['Cash physically counted (BHD)', cash],
+    ['Confirmed net Benefit (BHD)', '0'],
+    ['Confirmed net Card (BHD)', '0'],
+  ])
+    fireEvent.change(screen.getByLabelText(label), { target: { value } })
+  fireEvent.click(
+    screen.getByRole('checkbox', { name: /I verified the listed payments/ }),
+  )
+}
+
+function finalize(report: SalesClosing, counts: ClosingCounts) {
+  report.lastCheck = {
+    id: 'final-check',
+    checkedAt: '2026-11-02T18:00:00Z',
+    fingerprint: report.fingerprint,
+    counts,
+    comparison: compareCounts(report, counts),
+  }
+  report.closure = {
+    id: 'closure-1',
+    checkId: 'final-check',
+    closedAt: '2026-11-02T18:30:00Z',
+    closedBy: 'test-closer',
+  }
+  report.readOnly = true
+  return { data: structuredClone(report) }
+}
+
 beforeEach(() => {
   vi.mocked(apiClient.get).mockReset()
   vi.mocked(apiClient.post).mockReset()
@@ -91,6 +123,8 @@ describe('branch closing workflow', () => {
       return { data: report.policy }
     })
     const client = setup(`?branchId=${branch}&date=2026-11-02`)
+    await screen.findByText(/Manager actions/)
+    fireEvent.click(screen.getByText(/Manager actions/))
     const date = await screen.findByLabelText<HTMLInputElement>('Go-live date')
     expect(date.value).toBe('2026-11-03')
     expect(screen.queryByLabelText('Cash physically counted (BHD)')).toBeNull()
@@ -105,7 +139,7 @@ describe('branch closing workflow', () => {
       expect.objectContaining({ branchId: branch, startsOn: '2026-11-03' }),
     )
     expect(
-      screen.queryByRole('button', { name: 'Save branch check' }),
+      screen.queryByRole('button', { name: 'Review and close day' }),
     ).toBeNull()
     client.clear()
   })
@@ -132,6 +166,8 @@ describe('branch closing workflow', () => {
       return { data: { ...report } }
     })
     const client = setup(`?branchId=${branch}&date=2026-11-02`)
+    await screen.findByText(/Manager actions/)
+    fireEvent.click(screen.getByText(/Manager actions/))
     const reason = await screen.findByLabelText(
       'Manager explanation for the missed closing',
     )
@@ -156,7 +192,7 @@ describe('branch closing workflow', () => {
       screen.queryByRole('button', { name: 'Resolve missed closing' }),
     ).toBeNull()
     expect(
-      screen.queryByRole('button', { name: 'Save branch check' }),
+      screen.queryByRole('button', { name: 'Review and close day' }),
     ).toBeNull()
     expect(screen.queryByLabelText('Cash physically counted (BHD)')).toBeNull()
     expect(report.fingerprint).toBe(fingerprint)
@@ -190,37 +226,25 @@ describe('branch closing workflow', () => {
       actualCard: 0,
       notes: 'Recounted: BHD 2 short; manager informed.',
     }
-    report.lastCheck = {
-      id: 'final-check',
-      checkedAt: '2026-11-02T18:00:00Z',
-      fingerprint: report.fingerprint,
-      counts,
-      comparison: compareCounts(report, counts),
-    }
-    vi.mocked(apiClient.get).mockResolvedValue({ data: report })
-    vi.mocked(apiClient.post).mockImplementation(async (path) => {
+    vi.mocked(apiClient.get).mockImplementation(async () => ({
+      data: structuredClone(report),
+    }))
+    vi.mocked(apiClient.post).mockImplementation(async (path, body) => {
       expect(path).toBe('/sales-closing/close')
-      report.closure = {
-        id: 'closure-1',
-        checkId: 'final-check',
-        closedAt: '2026-11-02T18:30:00Z',
-        closedBy: 'test-closer',
-      }
-      return { data: { ...report } }
+      return finalize(report, (body as { counts: ClosingCounts }).counts)
     })
     const client = setup(`?branchId=${branch}&date=2026-11-02`)
-    const button = await screen.findByRole<HTMLButtonElement>('button', {
-      name: 'Close branch day',
+    await screen.findByLabelText('Cash physically counted (BHD)')
+    enterCounts('70')
+    fireEvent.change(screen.getByLabelText('Closing notes'), {
+      target: { value: counts.notes },
     })
-    expect(button.disabled).toBe(true)
     fireEvent.click(
-      screen.getByRole('checkbox', { name: /I have finished recording/ }),
+      screen.getByRole('button', { name: 'Review and close day' }),
     )
-    expect(button.disabled).toBe(false)
-    fireEvent.click(button)
     await screen.findByText('Closed · Read-only')
     expect(
-      screen.queryByRole('button', { name: 'Save branch check' }),
+      screen.queryByRole('button', { name: 'Review and close day' }),
     ).toBeNull()
     expect(screen.queryByText('Add paid expense')).toBeNull()
     expect(screen.queryByLabelText('Cash physically counted (BHD)')).toBeNull()
@@ -234,7 +258,7 @@ describe('branch closing workflow', () => {
       expect.objectContaining({
         branchId: branch,
         date: report.date,
-        checkId: 'final-check',
+        counts,
         fingerprint: report.fingerprint,
       }),
     )
@@ -244,10 +268,12 @@ describe('branch closing workflow', () => {
   it('locks every older report and offers a separate missed-closing resolution', async () => {
     const report = closingFixture()
     report.businessDate = '2026-11-09'
+    report.readOnly = true
     report.previousUnclosedDate = '2026-11-01'
     vi.mocked(apiClient.get).mockResolvedValue({ data: report })
     const client = setup(`?branchId=${branch}&date=2026-11-02`)
     await screen.findByText('Main Branch · 2026-11-02')
+    fireEvent.click(screen.getByText(/Manager actions/))
     expect(
       screen
         .getByRole('link', { name: 'View the missed day' })
@@ -259,7 +285,7 @@ describe('branch closing workflow', () => {
     ).toBeNull()
     expect(screen.queryByLabelText('Cash physically counted (BHD)')).toBeNull()
     expect(
-      screen.queryByRole('button', { name: 'Save branch check' }),
+      screen.queryByRole('button', { name: 'Review and close day' }),
     ).toBeNull()
     expect(
       screen.getByRole('button', { name: 'Resolve missed closing' }),
@@ -292,62 +318,65 @@ describe('branch closing workflow', () => {
     })
     client.clear()
   })
-  it('saves counted amounts and disables exporting unsaved changes', async () => {
-    vi.mocked(apiClient.post).mockImplementation(async (_url, body) => {
-      const input = body as { counts: ClosingCounts; fingerprint: string }
-      return {
-        data: {
-          id: 'check-1',
-          checkedAt: '2026-11-02T18:00:00Z',
-          fingerprint: input.fingerprint,
-          counts: input.counts,
-          comparison: compareCounts(closingFixture(), input.counts),
-        },
-      }
-    })
+  it('preserves unsaved counts and notes after activity changes and requires a new review', async () => {
+    const report = closingFixture()
+    vi.mocked(apiClient.get).mockImplementation(async () => ({
+      data: structuredClone(report),
+    }))
     const client = setup(`?branchId=${branch}&date=2026-11-02`)
-    await screen.findByText('Main Branch · 2026-11-02')
-    expect(
-      screen.getByRole<HTMLButtonElement>('button', { name: 'Export CSV' })
-        .disabled,
-    ).toBe(true)
-    for (const [label, value] of [
-      ['Other cash added (BHD)', '0'],
-      ['Cash banked / transferred out (BHD)', '0'],
-      ['Cash physically counted (BHD)', '72'],
-      ['Confirmed net Benefit (BHD)', '0'],
-      ['Confirmed net Card (BHD)', '0'],
-    ])
-      fireEvent.change(screen.getByLabelText(label), { target: { value } })
-    fireEvent.click(
-      screen.getByRole('checkbox', { name: /I verified the listed payments/ }),
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Save branch check' }))
-    await waitFor(() =>
-      expect(apiClient.post).toHaveBeenCalledWith(
-        '/sales-closing/checks',
-        expect.objectContaining({
-          branchId: branch,
-          date: '2026-11-02',
-          fingerprint: 'test-fingerprint',
-          counts: expect.objectContaining({ actualCash: 72, openingCash: 20 }),
-        }),
-      ),
-    )
+    await screen.findByLabelText('Cash physically counted (BHD)')
+    enterCounts('71')
+    fireEvent.change(screen.getByLabelText('Closing notes'), {
+      target: { value: 'Recount in progress.' },
+    })
+    report.fingerprint = 'new-payment'
+    report.tenders[0].net += 5
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
     await waitFor(() =>
       expect(
-        screen.getByRole<HTMLButtonElement>('button', { name: 'Export CSV' })
-          .disabled,
+        screen.getByRole<HTMLInputElement>('checkbox', { name: /I verified/ })
+          .checked,
       ).toBe(false),
     )
-    fireEvent.change(screen.getByLabelText('Cash physically counted (BHD)'), {
-      target: { value: '71' },
-    })
     expect(
-      screen.getByRole<HTMLButtonElement>('button', { name: 'Export CSV' })
-        .disabled,
-    ).toBe(true)
-    expect(screen.getAllByText('Difference found').length).toBeGreaterThan(0)
+      screen.getByLabelText<HTMLInputElement>('Cash physically counted (BHD)')
+        .value,
+    ).toBe('71')
+    expect(
+      screen.getByLabelText<HTMLTextAreaElement>('Closing notes').value,
+    ).toBe('Recount in progress.')
+    expect(screen.getAllByText('-6.000').length).toBeGreaterThan(0)
+    expect(apiClient.post).not.toHaveBeenCalled()
+    client.clear()
+  })
+
+  it('recovers an uncertain close through refresh without submitting a second closing', async () => {
+    const report = closingFixture()
+    vi.mocked(apiClient.get).mockImplementation(async () => ({
+      data: structuredClone(report),
+    }))
+    vi.mocked(apiClient.post).mockImplementation(async (_path, body) => {
+      finalize(report, (body as { counts: ClosingCounts }).counts)
+      throw new Error('Response lost after commit')
+    })
+    const client = setup(`?branchId=${branch}&date=2026-11-02`)
+    await screen.findByLabelText('Cash physically counted (BHD)')
+    enterCounts()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Review and close day' }),
+    )
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledOnce())
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>('button', {
+          name: 'Review and close day',
+        }).disabled,
+      ).toBe(false),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await screen.findByText('Closed · Read-only')
+    expect(screen.queryByLabelText('Cash physically counted (BHD)')).toBeNull()
+    expect(apiClient.post).toHaveBeenCalledOnce()
     client.clear()
   })
   it('records opening first and deducts a paid delivery expense from the closing comparison', async () => {
@@ -391,16 +420,7 @@ describe('branch closing workflow', () => {
         report.fingerprint = 'expense-saved'
         return { data: report.expenses[0] }
       }
-      const counts = input.counts as ClosingCounts
-      return {
-        data: {
-          id: 'check',
-          checkedAt: '2026-11-02T18:00:00Z',
-          fingerprint: report.fingerprint,
-          counts,
-          comparison: compareCounts(report, counts),
-        },
-      }
+      return finalize(report, input.counts as ClosingCounts)
     })
     const client = setup(`?branchId=${branch}&date=2026-11-02`)
     await screen.findByLabelText('Opening cash counted (BHD)')
@@ -442,7 +462,9 @@ describe('branch closing workflow', () => {
     fireEvent.click(
       screen.getByRole('checkbox', { name: /I verified the listed payments/ }),
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Save branch check' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Review and close day' }),
+    )
     await waitFor(() =>
       expect(
         screen.getByRole<HTMLButtonElement>('button', { name: 'Export CSV' })

@@ -98,6 +98,8 @@ async fn load_status(
     let starts = super::rollout_repository::policy(db, branch)
         .await?
         .map(|p| p.starts_on);
+    let can_trade =
+        !closed && starts.is_some_and(|start| today < start || (opening && previous.is_none()));
     Ok(BranchDayStatus {
         controls_start_date: starts,
         setup_required: starts.is_none(),
@@ -106,9 +108,8 @@ async fn load_status(
         opening_recorded: opening,
         closed,
         previous_unclosed_date: previous,
-        can_create_orders: !closed
-            && starts.is_some_and(|start| today < start || (opening && previous.is_none()))
-            && storage::active_branch(db, branch).await?,
+        can_trade,
+        can_create_orders: can_trade && storage::active_branch(db, branch).await?,
     })
 }
 
@@ -169,7 +170,7 @@ pub async fn close_day(
     input: CloseDayInput,
     actor: &str,
 ) -> Result<SalesClosing, AppError> {
-    let hash = crate::idempotency::request_hash("branch.close.v1", input.branch_id, &input);
+    let hash = crate::idempotency::request_hash("branch.close.v2", input.branch_id, &input);
     let mut tx = state.db().begin().await?;
     lock_branch(&mut tx, input.branch_id).await?;
     if let Some(saved) = storage::closure(&mut tx, input.branch_id, input.date).await? {
@@ -194,12 +195,6 @@ pub async fn close_day(
             "Close the earlier active day {previous} first."
         )));
     }
-    let check = repository::latest_check(&mut tx, input.branch_id, input.date)
-        .await?
-        .filter(|check| check.id == input.check_id && check.fingerprint == input.fingerprint)
-        .ok_or_else(|| {
-            AppError::Conflict("Save a current closing check before closing this day.".into())
-        })?;
     let report = service::load(
         &mut tx,
         input.date,
@@ -208,19 +203,20 @@ pub async fn close_day(
         input.branch_id,
     )
     .await?;
-    if report.fingerprint != check.fingerprint {
+    if report.fingerprint != input.fingerprint {
         return Err(AppError::Conflict(
-            "Recorded transactions changed. Refresh and save a new check before closing.".into(),
+            "Recorded transactions changed. Refresh and review the totals before closing.".into(),
         ));
     }
-    // Revalidate stored counts. An explained difference is allowed and retained.
-    super::reconciliation::compare(&report, &check.counts)?;
-    if !check.comparison.matched && check.counts.notes.trim().is_empty() {
+    let comparison = super::reconciliation::compare(&report, &input.counts)?;
+    if !comparison.matched && input.counts.notes.trim().is_empty() {
         return Err(AppError::BadRequest(
             "Explain the difference or unresolved activity before closing.".into(),
         ));
     }
-    storage::insert_closure(&mut tx, &input, &hash, actor).await?;
+    // Counts and the final lock commit together; no draft can be selected by mistake.
+    let check = repository::save_check(&mut tx, &input, &hash, &comparison, &report, actor).await?;
+    storage::insert_closure(&mut tx, &input, check.id, &hash, actor).await?;
     let result = storage::closure(&mut tx, input.branch_id, input.date)
         .await?
         .expect("new closure exists")

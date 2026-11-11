@@ -110,7 +110,7 @@ export interface Order {
   customerName: string
   customerMobile: string
   material: string
-  materialSource: 'shop' | 'customer'
+  materialSource: 'shop' | 'customer' | 'unknown'
   /** The material's SKU — what the printed order sheet shows instead of the name. */
   materialSku: string | null
   materialAmount: number

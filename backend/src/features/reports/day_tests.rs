@@ -19,13 +19,14 @@ fn today() -> NaiveDate {
         .date_naive()
 }
 fn opening(branch: Uuid, date: NaiveDate) -> SaveOpeningInput {
-    SaveOpeningInput {
-        request_id: Uuid::new_v4(),
-        branch_id: branch,
-        date,
-        amount: 50.0,
-        notes: String::new(),
-    }
+    serde_json::from_value::<SaveOpeningInput>(serde_json::json!({
+        "requestId": Uuid::new_v4(),
+        "branchId": branch,
+        "date": date,
+        "amount": 50.0,
+        "notes": "",
+    }))
+    .unwrap()
 }
 fn sale(branch: Uuid) -> CreateInvoiceInput {
     serde_json::from_value(json!({"issuingBranchId":branch,"expectedVatRate":0.1,"discountUnit":"amount","giftCards":[{"amount":10,"recipientPhone":"33112233"}]})).unwrap()
@@ -34,12 +35,7 @@ fn payment() -> RecordPaymentInput {
     serde_json::from_value(json!({"requestId":Uuid::new_v4(),"amount":5,"paymentType":"cash"}))
         .unwrap()
 }
-async fn check(
-    state: &AppState,
-    branch: Uuid,
-    date: NaiveDate,
-    shortage: bool,
-) -> (SaveClosingInput, CloseDayInput) {
+async fn check(state: &AppState, branch: Uuid, date: NaiveDate, shortage: bool) -> CloseDayInput {
     let report = service::sales_closing(state, Some(date), branch)
         .await
         .unwrap();
@@ -51,46 +47,25 @@ async fn check(
             .unwrap()
             .net
     };
-    let input = SaveClosingInput {
-        request_id: Uuid::new_v4(),
-        branch_id: branch,
-        date,
-        fingerprint: report.fingerprint.clone(),
-        counts: ClosingCounts {
-            branch_activity_confirmed: true,
-            opening_cash: report.opening.as_ref().unwrap().amount,
-            cash_added: 0.0,
-            cash_removed: 0.0,
-            actual_cash: 50.0 + net("cash")
-                - report
-                    .tenders
-                    .iter()
-                    .find(|t| t.method == "cash")
-                    .unwrap()
-                    .expenses
-                - if shortage { 2.0 } else { 0.0 },
-            actual_benefit: net("benefit"),
-            actual_card: net("card"),
-            notes: if shortage {
-                "Drawer is two dinars short after recount; manager informed.".into()
-            } else {
-                String::new()
-            },
-        },
-    };
-    let saved = service::save_check(state, input.clone(), "staff")
-        .await
-        .unwrap();
-    (
-        input,
-        CloseDayInput {
-            request_id: Uuid::new_v4(),
-            branch_id: branch,
-            date,
-            check_id: saved.id,
-            fingerprint: report.fingerprint,
-        },
-    )
+    let actual_cash = report.opening.as_ref().unwrap().amount + net("cash")
+        - report
+            .tenders
+            .iter()
+            .find(|t| t.method == "cash")
+            .unwrap()
+            .expenses
+        - if shortage { 2.0 } else { 0.0 };
+    serde_json::from_value(json!({
+        "requestId": Uuid::new_v4(), "branchId": branch, "date": date,
+        "fingerprint": report.fingerprint,
+        "counts": {
+            "branchActivityConfirmed": true,
+            "openingCash": report.opening.as_ref().unwrap().amount,
+            "cashAdded": 0, "cashRemoved": 0,
+            "actualCash": actual_cash, "actualBenefit": net("benefit"), "actualCard": net("card"),
+            "notes": if shortage { "Drawer is two dinars short after recount; manager informed." } else { "" }
+        }
+    })).unwrap()
 }
 
 #[sqlx::test]
@@ -120,16 +95,17 @@ async fn opening_is_required_and_explained_final_close_locks_every_financial_ent
     let request = payment();
     let fee = till_service::record_expense(
         &state,
-        RecordExpenseInput {
-            request_id: Uuid::new_v4(),
-            branch_id: branch,
-            date: today(),
-            amount: 5.0,
-            payment_type: PaymentType::Cash,
-            reason: "Delivery".into(),
-            paid_to: String::new(),
-            reference: String::new(),
-        },
+        serde_json::from_value::<RecordExpenseInput>(serde_json::json!({
+            "requestId": Uuid::new_v4(),
+            "branchId": branch,
+            "date": today(),
+            "amount": 5.0,
+            "paymentType": PaymentType::Cash,
+            "reason": "Delivery",
+            "paidTo": "",
+            "reference": "",
+        }))
+        .unwrap(),
         "staff",
     )
     .await
@@ -137,7 +113,7 @@ async fn opening_is_required_and_explained_final_close_locks_every_financial_ent
     let receipt = invoices::record_payment(&state, invoice, request.clone(), "staff")
         .await
         .unwrap();
-    let (counts, close) = check(&state, branch, today(), true).await;
+    let close = check(&state, branch, today(), true).await;
     let report = day_service::close_day(&state, close.clone(), "closer")
         .await
         .unwrap();
@@ -148,7 +124,7 @@ async fn opening_is_required_and_explained_final_close_locks_every_financial_ent
     );
     assert!(!report.last_check.as_ref().unwrap().comparison.matched);
     assert_eq!(
-        day_service::close_day(&state, close, "closer")
+        day_service::close_day(&state, close.clone(), "closer")
             .await
             .unwrap()
             .closure
@@ -162,20 +138,21 @@ async fn opening_is_required_and_explained_final_close_locks_every_financial_ent
             .unwrap()
             .can_create_orders
     );
-    let mut new_check = counts;
+    let mut new_check = close;
     new_check.request_id = Uuid::new_v4();
     assert!(matches!(
-        service::save_check(&state, new_check, "staff").await,
+        day_service::close_day(&state, new_check, "staff").await,
         Err(AppError::Conflict(_))
     ));
     assert!(matches!(
         till_service::void_expense(
             &state,
             fee.id,
-            VoidExpenseInput {
-                request_id: Uuid::new_v4(),
-                reason: "Wrong fee".into()
-            },
+            serde_json::from_value::<VoidExpenseInput>(serde_json::json!({
+                "requestId": Uuid::new_v4(),
+                "reason": "Wrong fee",
+            }))
+            .unwrap(),
             "manager"
         )
         .await,
@@ -211,16 +188,17 @@ async fn opening_is_required_and_explained_final_close_locks_every_financial_ent
             .id,
         saved_opening.id
     );
-    let expense = RecordExpenseInput {
-        request_id: Uuid::new_v4(),
-        branch_id: branch,
-        date: today(),
-        amount: 5.0,
-        payment_type: PaymentType::Cash,
-        reason: "Delivery".into(),
-        paid_to: String::new(),
-        reference: String::new(),
-    };
+    let expense = serde_json::from_value::<RecordExpenseInput>(serde_json::json!({
+        "requestId": Uuid::new_v4(),
+        "branchId": branch,
+        "date": today(),
+        "amount": 5.0,
+        "paymentType": PaymentType::Cash,
+        "reason": "Delivery",
+        "paidTo": "",
+        "reference": "",
+    }))
+    .unwrap();
     assert!(matches!(
         till_service::record_expense(&state, expense, "staff").await,
         Err(AppError::Conflict(_))
@@ -282,12 +260,13 @@ async fn missed_days_stay_read_only_and_separate_resolutions_unblock_only_their_
         .await
         .unwrap();
     assert!(before.read_only);
-    let resolution = ResolveMissedClosingInput {
-        request_id: Uuid::new_v4(),
-        branch_id: branch,
-        date: earlier,
-        reason: "Staff missed the count. No historical physical balance is being supplied.".into(),
-    };
+    let resolution = serde_json::from_value::<ResolveMissedClosingInput>(serde_json::json!({
+        "requestId": Uuid::new_v4(),
+        "branchId": branch,
+        "date": earlier,
+        "reason": "Staff missed the count. No historical physical balance is being supplied.",
+    }))
+    .unwrap();
     let resolved = super::rollout_service::resolve_missed(&state, resolution.clone(), "manager")
         .await
         .unwrap();
@@ -356,7 +335,7 @@ async fn closing_and_payments_serialize_and_stale_checks_cannot_be_finalized(poo
     till_service::save_opening(&state, opening(branch, today()), None, "staff")
         .await
         .unwrap();
-    let (_, stale_close) = check(&state, branch, today(), false).await;
+    let stale_close = check(&state, branch, today(), false).await;
     invoices::record_payment(&state, invoice, payment(), "staff")
         .await
         .unwrap();
@@ -364,7 +343,7 @@ async fn closing_and_payments_serialize_and_stale_checks_cannot_be_finalized(poo
         day_service::close_day(&state, stale_close, "staff").await,
         Err(AppError::Conflict(_))
     ));
-    let (_, close) = check(&state, branch, today(), false).await;
+    let close = check(&state, branch, today(), false).await;
     let (closing, payment) = tokio::join!(
         day_service::close_day(&state, close, "staff"),
         invoices::record_payment(&state, invoice, payment(), "staff")
@@ -392,29 +371,15 @@ async fn unresolved_activity_requires_an_explanation_to_finalize(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let (mut input, close) = check(&state, branch, today(), false).await;
+    let mut close = check(&state, branch, today(), false).await;
     assert!(matches!(
-        day_service::close_day(&state, close, "staff").await,
+        day_service::close_day(&state, close.clone(), "staff").await,
         Err(AppError::BadRequest(_))
     ));
-    input.request_id = Uuid::new_v4();
-    input.counts.notes = "One imported receipt has no method; manager is investigating.".into();
-    let saved = service::save_check(&state, input.clone(), "staff")
+    close.counts.notes = "One imported receipt has no method; manager is investigating.".into();
+    let closed = day_service::close_day(&state, close, "staff")
         .await
         .unwrap();
-    let closed = day_service::close_day(
-        &state,
-        CloseDayInput {
-            request_id: Uuid::new_v4(),
-            branch_id: branch,
-            date: today(),
-            check_id: saved.id,
-            fingerprint: input.fingerprint,
-        },
-        "staff",
-    )
-    .await
-    .unwrap();
     assert!(!closed.last_check.as_ref().unwrap().comparison.matched);
     assert_eq!(closed.summary.unrecorded_method_count, 1);
 }
@@ -449,7 +414,7 @@ async fn issuing_branch_owns_financial_activity_independently_of_pickup(pool: Pg
         .await
         .unwrap();
     assert_eq!(collection.summary.invoice_total, 100.0);
-    let (_, close) = check(&state, issuer, today(), false).await;
+    let close = check(&state, issuer, today(), false).await;
     day_service::close_day(&state, close, "staff")
         .await
         .unwrap();
@@ -469,4 +434,28 @@ async fn issuing_branch_owns_financial_activity_independently_of_pickup(pool: Pg
     invoices::create_invoice(&state, sale(pickup), "staff")
         .await
         .unwrap();
+}
+
+#[sqlx::test]
+async fn retiring_a_branch_blocks_new_invoices_but_allows_current_day_edits(pool: PgPool) {
+    let branch = crate::test_support::trading_branch(&pool).await;
+    let state = crate::test_support::state(pool.clone(), None, None).await;
+    let input = sale(branch);
+    let invoice = invoices::create_invoice(&state, input.clone(), "staff")
+        .await
+        .unwrap();
+    sqlx::query("UPDATE branch SET is_active=false WHERE id=$1")
+        .bind(branch)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let status = day_service::status(&state, branch).await.unwrap();
+    assert!(status.can_trade && !status.can_create_orders);
+    invoices::update_invoice(&state, invoice.id, input.clone())
+        .await
+        .unwrap();
+    assert!(matches!(
+        invoices::create_invoice(&state, input, "staff").await,
+        Err(AppError::BadRequest(message)) if message.contains("issuing branch")
+    ));
 }

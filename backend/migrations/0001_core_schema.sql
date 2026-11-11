@@ -81,6 +81,9 @@ CREATE TABLE invoices (
     urgent_charge NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (urgent_charge >= 0),
     collection_method TEXT NOT NULL DEFAULT 'pickup'
         CHECK (collection_method IN ('delivery', 'pickup')),
+    -- VAT-inclusive delivery fee saved at issue; pickup invoices have no fee.
+    delivery_charge NUMERIC(10, 2) NOT NULL DEFAULT 0
+        CHECK (delivery_charge >= 0 AND (collection_method = 'delivery' OR delivery_charge = 0)),
     -- Customer pickup destination; unused for delivery invoices.
     branch_id UUID REFERENCES branch(id),
     -- Issuing is independent of fulfilment. Keep the issued branch name stable
@@ -192,7 +195,7 @@ $$;
 CREATE TABLE orders (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     measurement_id UUID NOT NULL REFERENCES measurements(id),
-    material_source TEXT NOT NULL DEFAULT 'shop' CHECK (material_source IN ('shop', 'customer')),
+    material_source TEXT NOT NULL DEFAULT 'shop' CHECK (material_source IN ('shop', 'customer', 'unknown')),
     material_id UUID REFERENCES materials(id),
     customer_material_description TEXT,
     material_amount NUMERIC(10, 2) NOT NULL CHECK (material_amount > 0),
@@ -202,6 +205,8 @@ CREATE TABLE orders (
         (material_source = 'customer' AND material_id IS NULL
          AND customer_material_description IS NOT NULL
          AND length(btrim(customer_material_description)) > 0)
+        OR
+        (material_source = 'unknown' AND material_id IS NULL AND customer_material_description IS NULL)
     ),
     invoice_id UUID NOT NULL REFERENCES invoices(id),
     price NUMERIC(10, 2) NOT NULL,

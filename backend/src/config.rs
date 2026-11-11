@@ -60,6 +60,19 @@ mod urgent_pricing_tests {
     }
 
     #[test]
+    fn delivery_charge_requires_positive_money_and_can_be_unconfigured() {
+        let mut config = Config::from_env();
+        config.delivery_charge = None;
+        assert_eq!(config.delivery_charge().unwrap(), None);
+        config.delivery_charge = Some("3.50".into());
+        assert_eq!(config.delivery_charge().unwrap(), Some(3.5));
+        for raw in ["0", "-1", "NaN", "inf", "invalid", "0.001", "100000000"] {
+            config.delivery_charge = Some(raw.into());
+            assert!(config.delivery_charge().is_err(), "{raw}");
+        }
+    }
+
+    #[test]
     fn customer_material_price_must_be_explicit_positive_money() {
         let mut config = Config::from_env();
         config.customer_material_base_price = None;
@@ -134,6 +147,7 @@ pub struct Config {
     /// API routes still work and every other path 404s until a build is
     /// dropped in (e.g. plain `cargo run` without building the frontend).
     pub static_dir: String,
+    pub delivery_charge: Option<String>,
     pub urgent_charge_amount: Option<String>,
     pub urgent_charge_unit: String,
     pub customer_material_base_price: Option<String>,
@@ -198,6 +212,20 @@ impl Config {
                 "CUSTOMER_MATERIAL_BASE_PRICE must be positive with at most two decimal places"
                     .into(),
             );
+        }
+        Ok(Some(amount))
+    }
+
+    /// Parse the optional VAT-inclusive delivery fee, rejecting nonpositive or invalid money amounts.
+    pub fn delivery_charge(&self) -> Result<Option<f64>, String> {
+        let Some(raw) = &self.delivery_charge else {
+            return Ok(None);
+        };
+        let amount: f64 = raw
+            .parse()
+            .map_err(|_| "DELIVERY_CHARGE must be a positive amount".to_string())?;
+        if crate::features::pricing::service::validate_amount(amount).is_err() || amount <= 0.0 {
+            return Err("DELIVERY_CHARGE must be positive with at most two decimal places".into());
         }
         Ok(Some(amount))
     }
@@ -288,6 +316,9 @@ impl Config {
         Self {
             port,
             vat_rate: env::var("VAT_RATE").unwrap_or_else(|_| "0.10".into()),
+            delivery_charge: env::var("DELIVERY_CHARGE")
+                .ok()
+                .filter(|value| !value.trim().is_empty()),
             urgent_charge_amount: env::var("URGENT_ORDER_CHARGE")
                 .ok()
                 .filter(|value| !value.trim().is_empty()),

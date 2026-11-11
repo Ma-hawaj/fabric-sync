@@ -11,6 +11,9 @@ import {
 } from '@/components/ui/table'
 import { useOrders } from '@/features/orders/hooks/use-orders'
 import { OrderPriorityIndicator } from '@/features/orders/components/order-priority-indicator'
+import { OrderTableActions } from '@/features/orders/components/order-table-actions'
+import { StatusBadge } from '@/components/status-badge'
+import { currentStageLabel } from '@/features/orders/lib/order-tracking'
 import type { Order } from '@/features/orders/types/orders'
 import { CURRENCY } from '@/lib/currency'
 
@@ -19,7 +22,15 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: CURRENCY,
 })
 
-export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
+export function InvoiceOrderBreakdown({
+  invoiceId,
+  onManageOrder,
+  onCollectOrder,
+}: {
+  invoiceId: string
+  onManageOrder: (order: Order) => void
+  onCollectOrder: (order: Order) => void
+}) {
   const params = new URLSearchParams({
     filters: JSON.stringify([
       { id: 'invoiceId', value: invoiceId, variant: 'text', operator: 'eq' },
@@ -99,8 +110,10 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
                   <TableHead>Material</TableHead>
                   <TableHead>Quantity</TableHead>
                   <TableHead>Made At</TableHead>
+                  <TableHead>Stage</TableHead>
                   <TableHead>Collection</TableHead>
                   <TableHead className="text-end">Price incl. VAT</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -123,6 +136,11 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
                     </TableCell>
                     <TableCell>{order.materialAmount} m</TableCell>
                     <TableCell>{order.productionLocation ?? '—'}</TableCell>
+                    <TableCell>
+                      <StatusBadge tone="info">
+                        {currentStageLabel(order)}
+                      </StatusBadge>
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant={
@@ -151,6 +169,13 @@ export function InvoiceOrderBreakdown({ invoiceId }: { invoiceId: string }) {
                           charge
                         </div>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <OrderTableActions
+                        order={order}
+                        onManage={onManageOrder}
+                        onCollect={onCollectOrder}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}

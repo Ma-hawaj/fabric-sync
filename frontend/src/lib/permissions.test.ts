@@ -174,7 +174,6 @@ describe('role policy', () => {
         '/invoices',
         '/customers',
         '/invoices/1/payments',
-        '/sales-closing/checks',
         '/sales-closing/openings',
         '/sales-closing/expenses',
         '/invoices/1/collect',

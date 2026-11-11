@@ -1,13 +1,12 @@
 import { parseFilterDate } from '@/lib/filter-date'
-import type { ClosingActivity, SalesClosing } from '../types/sales-closing'
+import type {
+  ClosingActivity,
+  ClosingComparison,
+  SalesClosing,
+} from '../types/sales-closing'
 
 export function isClosingReadOnly(report: SalesClosing): boolean {
-  return Boolean(
-    report.readOnly ||
-    report.closure ||
-    report.missedClosing ||
-    (report.businessDate && report.date !== report.businessDate),
-  )
+  return report.readOnly
 }
 
 export function closingDayStatus(report: SalesClosing): string {
@@ -21,7 +20,39 @@ export function closingDayStatus(report: SalesClosing): string {
   if (report.businessDate && report.date > report.businessDate)
     return 'Future report · Read-only'
   if (isClosingReadOnly(report)) return 'Historical report · Read-only'
-  return 'Open · Draft check'
+  return 'Open · Closing count not finalized'
+}
+
+export function comparisonStatus(report: SalesClosing): string {
+  if (!report.lastCheck) return 'No closing count recorded'
+  if (report.lastCheck.fingerprint !== report.fingerprint)
+    return 'Recorded activity changed'
+  return report.lastCheck.comparison.matched
+    ? 'Matched'
+    : 'Differences / review required'
+}
+
+export const comparisonHeaders = [
+  'Method',
+  'Recorded net',
+  'Expected',
+  'Actual',
+  'Over / short',
+]
+
+export function comparisonRows(
+  comparison?: ClosingComparison,
+): [string, ...(number | null)[]][] {
+  return ['cash', 'benefit', 'card'].map((method) => {
+    const line = comparison?.lines.find((item) => item.method === method)
+    return [
+      methodLabel(method),
+      line?.recorded ?? null,
+      line?.expected ?? null,
+      line?.actual ?? null,
+      line?.difference ?? null,
+    ]
+  })
 }
 
 export const activityLabels: Record<ClosingActivity['kind'], string> = {
@@ -34,10 +65,10 @@ export const activityLabels: Record<ClosingActivity['kind'], string> = {
 }
 
 export const reportNotes = [
-  'Payments and refunds are grouped by the invoice’s issuing branch, using the recorded collection branch only for legacy invoices without an issuer. Confirm they were handled here before saving a check. Each activity uses its recorded day in the business timezone, including payments on older invoices.',
+  'Payments and refunds are grouped by the invoice’s issuing branch, using the recorded collection branch only for legacy invoices without an issuer. Confirm they were handled here before closing. Each activity uses its recorded day in the business timezone, including payments on older invoices.',
   'Invoice totals include VAT and gift card sales, after discounts. Credits reduce invoiced activity; refunds reduce receipts. Gift card tender is separate from external receipts.',
   'Taxable amount and VAT are the saved figures on invoices issued that day, before credits. This is an operational report, not a VAT return.',
-  'A saved check preserves counted amounts and the recorded figures at that time. New or changed activity requires another check. Saving does not lock the till or change payment records.',
+  'Closing saves the counted amounts and recorded figures together, then locks the branch day. Refresh and review any new activity before closing.',
   'Past reports and closed days are read-only. From the fixed go-live date, earlier missed closings block new financial activity until a manager records a separate resolution. That resolution preserves the figures and leaves the day unreconciled.',
   'Opening cash is saved separately and read-only at closing. Cash expenses reduce expected drawer cash; do not also include them as cash banked or transferred out. Benefit/Card expenses do not reduce merchant receipt totals.',
 ]
@@ -80,7 +111,7 @@ export function summaryRows(report: SalesClosing): [string, number][] {
     ['Invoice total (VAT inclusive)', s.invoiceTotal],
     ['Taxable amount on issued invoices', s.taxableAmount],
     ['VAT on issued invoices', s.vatAmount],
-    ['Gift card sales (outside VAT)', s.giftCardSales],
+    ['Gift card sales (VAT included)', s.giftCardSales],
     ['Return / cancellation credits', s.credits],
     ['Net invoiced activity', s.netInvoiceActivity],
     ['Invoice payments received', s.invoicePayments],

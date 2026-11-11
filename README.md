@@ -209,9 +209,10 @@ history stays read-only and does not block trading. From go-live, new sales
 require opening cash and closure or manager resolution of earlier active days;
 quiet days are skipped. All past reports are read-only. Explained differences are retained
 at closing.
-Cash movements, notes and saved checks are included. Export a checked report
-as CSV or print/save PDF. See [branch reconciliation](docs/sales-closing.md)
-for the invoice-branch attribution rule and saved-check behavior.
+Review and close saves counts, cash movements and notes together and permanently locks
+the day. Export the saved report as CSV or print/save PDF. Setup and missed-closing
+resolution sit under Manager actions. See [branch reconciliation](docs/sales-closing.md)
+for financial ownership, immutable history and closing behavior.
 
 ## Direct material sales
 

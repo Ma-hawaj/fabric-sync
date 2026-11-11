@@ -1,76 +1,66 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { NumberField, TextareaField } from '@/components/form/fields'
 import { Field, FieldError } from '@/components/ui/field'
 import { compareCounts, countsSchema, emptyCounts } from '../lib/closing-counts'
-import { formatBhd, methodLabel } from '../lib/sales-closing'
-import { useSaveClosing } from '../hooks/use-sales-closing'
+import { CountsComparison } from './closing-comparison'
+import { formatBhd } from '../lib/sales-closing'
+import { useCloseDay } from '../hooks/use-sales-closing'
 import type { ClosingCounts, SalesClosing } from '../types/sales-closing'
 
 export function ClosingCountsForm({
   report,
   queryDate,
   disabled,
-  onDirty,
 }: {
   report: SalesClosing
   queryDate: string
   disabled: boolean
-  onDirty: (dirty: boolean) => void
 }) {
-  const [requestId, setRequestId] = useState(() => crypto.randomUUID())
-  const mutation = useSaveClosing(queryDate, report.branchId)
-  const saved = report.lastCheck
-  const stale = Boolean(saved && saved.fingerprint !== report.fingerprint)
+  const [requestId] = useState(() => crypto.randomUUID())
+  const mutation = useCloseDay(queryDate, report.branchId)
   const form = useForm({
-    defaultValues: saved
+    defaultValues: report.lastCheck
       ? {
-          ...saved.counts,
+          ...report.lastCheck.counts,
           openingCash: report.opening?.amount ?? '',
-          branchActivityConfirmed:
-            !stale && saved.counts.branchActivityConfirmed,
+          branchActivityConfirmed: false,
         }
       : { ...emptyCounts(), openingCash: report.opening?.amount ?? '' },
     validators: { onSubmit: countsSchema(report) },
-    listeners: { onChange: () => onDirty(true) },
     onSubmit: async ({ value }) => {
-      const counts = value as ClosingCounts
       const pending = mutation.mutateAsync({
         requestId,
         branchId: report.branchId,
         date: report.date,
         fingerprint: report.fingerprint,
-        counts,
+        counts: value as ClosingCounts,
       })
       toast.promise(pending, {
-        loading: 'Saving the branch check...',
-        success: (check) =>
-          check.comparison.matched
-            ? 'Branch totals match. Check saved.'
-            : 'Check saved with differences or items to review.',
+        loading: 'Closing branch day...',
+        success: 'Branch day closed. The saved report is read-only.',
         error: (error) =>
-          error instanceof ApiError && error.status === 409
-            ? 'This check may already be saved, or transactions changed. Refresh before checking again.'
-            : error instanceof ApiError && error.status === 400
-              ? error.message
-              : 'Could not confirm the save. Refresh the report, then retry the original values if needed.',
+          error instanceof ApiError
+            ? error.message
+            : 'Could not confirm closing. Refresh before retrying.',
       })
       try {
         await pending
       } catch {
         return
       }
-      setRequestId(crypto.randomUUID())
-      onDirty(false)
     },
   })
+  // Preserve counted money and notes across refreshes, but require a new review.
+  useEffect(() => {
+    form.setFieldValue('openingCash', report.opening?.amount ?? '')
+    form.setFieldValue('branchActivityConfirmed', false)
+  }, [form, report.fingerprint, report.opening?.amount])
   const amountField = (
     name:
-      | 'openingCash'
       | 'cashAdded'
       | 'cashRemoved'
       | 'actualCash'
@@ -79,54 +69,24 @@ export function ClosingCountsForm({
     label: string,
     signed = false,
   ) => (
-    <form.Field name={name}>
-      {(field) => (
-        <Field>
-          <label htmlFor={field.name} className="text-sm font-medium">
-            {label}
-          </label>
-          <Input
-            id={field.name}
-            type="number"
-            inputMode="decimal"
-            min={signed ? undefined : 0}
-            step="0.001"
-            placeholder="0.000"
-            value={field.state.value}
-            onBlur={field.handleBlur}
-            onChange={(event) =>
-              field.handleChange(
-                event.target.value === '' ? '' : Number(event.target.value),
-              )
-            }
-            aria-invalid={field.state.meta.errors.length > 0}
-          />
-          <FieldError errors={field.state.meta.errors} />
-        </Field>
-      )}
-    </form.Field>
+    <NumberField
+      form={form}
+      name={name}
+      label={label}
+      min={signed ? undefined : 0}
+      step={0.001}
+      format={{ maximumFractionDigits: 3 }}
+    />
   )
   return (
     <section className="space-y-4 rounded-xl border bg-card p-5">
       <div>
-        <h2 className="text-lg font-semibold">3. Closing count</h2>
+        <h2 className="text-lg font-semibold">3. Count and close</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Count the cash drawer and enter the confirmed net Benefit and Card
           totals after refunds. Enter zero explicitly when there is none.
         </p>
       </div>
-      {saved && (
-        <p
-          role="status"
-          className={
-            stale ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'
-          }
-        >
-          {stale
-            ? 'Transactions changed since the last saved check. Review and save a new check.'
-            : `Last check saved ${new Date(saved.checkedAt).toLocaleString('en-GB', { timeZone: report.timezone })}.`}
-        </p>
-      )}
       <form
         onSubmit={(event) => {
           event.preventDefault()
@@ -178,57 +138,19 @@ export function ClosingCountsForm({
                 : null
               return (
                 <div className="overflow-x-auto rounded-lg border">
-                  <table className="w-full text-sm">
-                    <caption className="p-3 text-start font-semibold">
-                      Recorded vs actual{' '}
-                      <span className="ms-2 text-xs font-normal text-muted-foreground">
-                        {!comparison
-                          ? 'Enter all amounts to check'
-                          : comparison.lines.some(
-                                (line) => line.difference !== 0,
-                              )
-                            ? 'Difference found'
-                            : comparison.matched
-                              ? 'Amounts match — save to record the check'
-                              : 'Amounts match — review outstanding items'}
-                      </span>
-                    </caption>
-                    <thead>
-                      <tr className="border-b bg-muted/40">
-                        <th className="p-3 text-start">Method</th>
-                        <th className="p-3 text-end">Expected (BHD)</th>
-                        <th className="p-3 text-end">Actual (BHD)</th>
-                        <th className="p-3 text-end">Over / short (BHD)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {['cash', 'benefit', 'card'].map((method) => {
-                        const line = comparison?.lines.find(
-                          (item) => item.method === method,
-                        )
-                        return (
-                          <tr key={method} className="border-b last:border-0">
-                            <th className="p-3 text-start font-medium">
-                              {methodLabel(method)}
-                            </th>
-                            <td className="p-3 text-end font-mono">
-                              {line ? formatBhd(line.expected) : '—'}
-                            </td>
-                            <td className="p-3 text-end font-mono">
-                              {line ? formatBhd(line.actual) : '—'}
-                            </td>
-                            <td
-                              className={`p-3 text-end font-mono ${line?.difference ? 'text-destructive' : ''}`}
-                            >
-                              {line
-                                ? `${line.difference > 0 ? '+' : ''}${formatBhd(line.difference)}`
-                                : '—'}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                  <div className="p-3 text-start font-semibold">
+                    Recorded vs actual{' '}
+                    <span className="ms-2 text-xs font-normal text-muted-foreground">
+                      {!comparison
+                        ? 'Enter all amounts to check'
+                        : comparison.lines.some((line) => line.difference !== 0)
+                          ? 'Difference found'
+                          : comparison.matched
+                            ? 'Amounts match — ready to close'
+                            : 'Amounts match — review outstanding items'}
+                    </span>
+                  </div>
+                  <CountsComparison comparison={comparison ?? undefined} />
                   <p className="px-3 pb-3 text-xs text-muted-foreground">
                     Positive = over. Negative = short. Gift cards are tracked
                     separately.
@@ -237,23 +159,7 @@ export function ClosingCountsForm({
               )
             }}
           </form.Subscribe>
-          <form.Field name="notes">
-            {(field) => (
-              <Field>
-                <label htmlFor="closing-notes" className="text-sm font-medium">
-                  Closing notes
-                </label>
-                <Textarea
-                  id="closing-notes"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="Explain any difference, cash added or cash removed."
-                />
-                <FieldError errors={field.state.meta.errors} />
-              </Field>
-            )}
-          </form.Field>
+          <TextareaField form={form} name="notes" label="Closing notes" />
           <form.Field name="branchActivityConfirmed">
             {(field) => (
               <Field>
@@ -267,7 +173,8 @@ export function ClosingCountsForm({
                     className="mt-1"
                   />
                   I verified the listed payments and refunds were handled at{' '}
-                  {report.branchName}.
+                  {report.branchName}, have finished recording today’s activity,
+                  and understand that closing permanently locks this report.
                 </label>
                 <FieldError errors={field.state.meta.errors} />
               </Field>
@@ -275,11 +182,12 @@ export function ClosingCountsForm({
           </form.Field>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
-              A saved check keeps these figures and notes. New transactions
-              require a fresh check.
+              Closing saves these counts and notes, locks opening cash and
+              expenses, and blocks new orders and payments until the next
+              business day.
             </p>
             <Button type="submit">
-              {mutation.isPending ? 'Saving…' : 'Save branch check'}
+              {mutation.isPending ? 'Closing…' : 'Review and close day'}
             </Button>
           </div>
         </fieldset>

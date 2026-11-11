@@ -27,7 +27,16 @@ pub(crate) async fn source(
     state: &AppState,
     invoice_id: Uuid,
     kind: &str,
+    repair_id: Option<Uuid>,
 ) -> Result<Source, AppError> {
+    if let Some(repair_id) = repair_id {
+        if kind != "invoice_ready" {
+            return Err(AppError::BadRequest(
+                "Repair notifications must be pickup notices.".into(),
+            ));
+        }
+        return repair_source(state, invoice_id, repair_id).await;
+    }
     if ![
         "invoice_created",
         "invoice_updated",
@@ -105,6 +114,7 @@ pub(crate) async fn source(
     }
     Ok(Source {
         snapshot: Snapshot {
+            repair_id: None,
             invoice_number: detail.invoice_number,
             source_hash,
             revision,
@@ -118,6 +128,76 @@ pub(crate) async fn source(
         artifact_hash,
         recipients,
         generation,
+    })
+}
+
+async fn repair_source(
+    state: &AppState,
+    invoice_id: Uuid,
+    repair_id: Uuid,
+) -> Result<Source, AppError> {
+    let (revision, _) = repository::revision(state.db(), invoice_id).await?;
+    let repair = repository::repair_ready_context(state.db(), invoice_id, repair_id).await?;
+    if repair.status != "completed" || repair.outcome != "active" {
+        return Err(AppError::Conflict(
+            "This repair is not ready for pickup. Refresh its status first.".into(),
+        ));
+    }
+    let completed = repair
+        .completed_at
+        .ok_or_else(|| AppError::Conflict("The repair has no completion date.".into()))?;
+    let config = state.notifications();
+    let (recipients, exclusions) = phone::destinations(
+        vec![Customer {
+            id: repair.customer_id,
+            name: repair.name.clone(),
+            mobile_no: repair.mobile_no.clone(),
+            enabled: repair.enabled,
+        }],
+        &config.default_region,
+    );
+    let parameters = vec![
+        format!(
+            "INV-{} (repair ORD-{})",
+            repair.invoice_number, repair.order_number
+        ),
+        repair
+            .branch_name
+            .clone()
+            .ok_or_else(|| AppError::BadRequest("Choose a pickup branch first.".into()))?,
+        format!("{} BHD", crate::document::format_amount(repair.balance)),
+    ];
+    let mut body = config.ready_body.clone();
+    for (index, value) in parameters.iter().enumerate() {
+        body = body.replace(&format!("{{{{{}}}}}", index + 1), value);
+    }
+    if body.contains("{{") {
+        return Err(AppError::Unavailable(
+            "The WhatsApp template contains an unconfigured parameter.".into(),
+        ));
+    }
+    let source_hash = hash(&serde_json::to_vec(&json!({"repairId":repair_id,"repair":repair,"revision":revision,"template":config.ready_template,"body":config.ready_body,"language":config.language})).map_err(|e| AppError::Config(e.to_string()))?);
+    if repository::revision(state.db(), invoice_id).await?.0 != revision {
+        return Err(AppError::Conflict(
+            "The repair changed while preparing the preview. Please refresh.".into(),
+        ));
+    }
+    Ok(Source {
+        snapshot: Snapshot {
+            repair_id: Some(repair_id),
+            invoice_number: repair.invoice_number,
+            source_hash,
+            revision,
+            body,
+            template_name: config.ready_template.clone(),
+            language: config.language.clone(),
+            parameters,
+            exclusions,
+        },
+        html: String::new(),
+        artifact_hash: String::new(),
+        recipients,
+        generation: completed.timestamp_micros(),
     })
 }
 
@@ -218,14 +298,30 @@ pub async fn prepare(
     input: PrepareInput,
     actor: &str,
 ) -> Result<Notification, AppError> {
-    let source = source(state, invoice_id, &input.kind).await?;
+    let repair_id = if let Some(original) = input.resend_of {
+        let previous = repository::get(state.db(), original).await?;
+        if previous.invoice_id != invoice_id
+            || (input.repair_id.is_some() && input.repair_id != previous.snapshot.repair_id)
+        {
+            return Err(AppError::BadRequest(
+                "Choose a notification for this repair and invoice.".into(),
+            ));
+        }
+        previous.snapshot.repair_id
+    } else {
+        input.repair_id
+    };
+    let source = source(state, invoice_id, &input.kind, repair_id).await?;
     let event_key = if input.resend_of.is_some() {
         format!("resend:{}", input.request_id)
     } else {
         match input.kind.as_str() {
             "invoice_created" => "created".into(),
             "invoice_updated" => format!("updated:{}", source.snapshot.revision),
-            "invoice_ready" => format!("ready:{}", source.generation),
+            "invoice_ready" => match repair_id {
+                Some(id) => format!("repair-ready:{id}:{}", source.generation),
+                None => format!("ready:{}", source.generation),
+            },
             _ => format!("manual:{}", input.request_id),
         }
     };
@@ -300,7 +396,13 @@ pub async fn approve(
     if send && !state.notifications().can_send() {
         return Err(AppError::Unavailable("WhatsApp delivery is not enabled or configured. The invoice is saved; this preview can be sent after configuration.".into()));
     }
-    let source = source(state, notification.invoice_id, &notification.kind).await?;
+    let source = source(
+        state,
+        notification.invoice_id,
+        &notification.kind,
+        notification.snapshot.repair_id,
+    )
+    .await?;
     if source.snapshot.source_hash != notification.source_hash {
         let mut tx = state.db().begin().await?;
         repository::lock_invoice(&mut tx, notification.invoice_id).await?;
@@ -420,7 +522,7 @@ pub async fn discard_preview(state: &AppState, id: Uuid) -> Result<(), AppError>
 }
 
 pub async fn document(state: &AppState, invoice_id: Uuid) -> Result<Uuid, AppError> {
-    let source = source(state, invoice_id, "manual_resend").await?;
+    let source = source(state, invoice_id, "manual_resend", None).await?;
     artifact(state, invoice_id, &source).await
 }
 
@@ -440,6 +542,7 @@ pub async fn resend(
         state,
         previous.invoice_id,
         PrepareInput {
+            repair_id: previous.snapshot.repair_id,
             kind: kind.into(),
             request_id,
             resend_of: Some(id),

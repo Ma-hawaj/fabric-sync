@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import { isReportDate } from '../lib/sales-closing'
 import type {
-  ClosingCheck,
   ClosingCounts,
   SalesClosing,
   BranchDayStatus,
@@ -65,7 +64,7 @@ export function useCloseDay(date: string, branchId: string) {
       requestId: string
       branchId: string
       date: string
-      checkId: string
+      counts: ClosingCounts
       fingerprint: string
     }) => {
       const { data } = await apiClient.post<SalesClosing>(
@@ -79,29 +78,5 @@ export function useCloseDay(date: string, branchId: string) {
       await client.invalidateQueries({ queryKey: ['sales-closing'] })
       await client.invalidateQueries({ queryKey: ['branch-day-status'] })
     },
-  })
-}
-
-export function useSaveClosing(date: string, branchId: string) {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: async (input: {
-      requestId: string
-      branchId: string
-      date: string
-      fingerprint: string
-      counts: ClosingCounts
-    }) => {
-      const { data } = await apiClient.post<ClosingCheck>(
-        '/sales-closing/checks',
-        input,
-      )
-      return data
-    },
-    onSuccess: (check) =>
-      client.setQueryData<SalesClosing>(
-        ['sales-closing', date, branchId],
-        (report) => (report ? { ...report, lastCheck: check } : report),
-      ),
   })
 }

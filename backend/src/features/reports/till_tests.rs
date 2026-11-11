@@ -11,37 +11,40 @@ fn day() -> NaiveDate {
         .date_naive()
 }
 fn opening(branch: Uuid) -> SaveOpeningInput {
-    SaveOpeningInput {
-        request_id: Uuid::new_v4(),
-        branch_id: branch,
-        date: day(),
-        amount: 50.0,
-        notes: String::new(),
-    }
+    serde_json::from_value::<SaveOpeningInput>(serde_json::json!({
+        "requestId": Uuid::new_v4(),
+        "branchId": branch,
+        "date": day(),
+        "amount": 50.0,
+        "notes": "",
+    }))
+    .unwrap()
 }
 fn expense(branch: Uuid, amount: f64, payment_type: PaymentType) -> RecordExpenseInput {
-    RecordExpenseInput {
-        request_id: Uuid::new_v4(),
-        branch_id: branch,
-        date: day(),
-        amount,
-        payment_type,
-        reason: "Delivery fee".into(),
-        paid_to: "Local courier".into(),
-        reference: "D-100".into(),
-    }
+    serde_json::from_value::<RecordExpenseInput>(serde_json::json!({
+        "requestId": Uuid::new_v4(),
+        "branchId": branch,
+        "date": day(),
+        "amount": amount,
+        "paymentType": payment_type,
+        "reason": "Delivery fee",
+        "paidTo": "Local courier",
+        "reference": "D-100",
+    }))
+    .unwrap()
 }
 fn counts(cash: f64) -> ClosingCounts {
-    ClosingCounts {
-        branch_activity_confirmed: true,
-        opening_cash: 50.0,
-        cash_added: 0.0,
-        cash_removed: 0.0,
-        actual_cash: cash,
-        actual_benefit: 20.0,
-        actual_card: 0.0,
-        notes: String::new(),
-    }
+    serde_json::from_value::<ClosingCounts>(serde_json::json!({
+        "branchActivityConfirmed": true,
+        "openingCash": 50.0,
+        "cashAdded": 0.0,
+        "cashRemoved": 0.0,
+        "actualCash": cash,
+        "actualBenefit": 20.0,
+        "actualCard": 0.0,
+        "notes": "",
+    }))
+    .unwrap()
 }
 
 #[sqlx::test]
@@ -125,25 +128,11 @@ async fn delivery_expenses_reduce_drawer_cash_once_and_preserve_an_audit_trail(p
         reconciliation::compare(&report, &tampered),
         Err(AppError::Conflict(_))
     ));
-    let saved = service::save_check(
-        &state,
-        SaveClosingInput {
-            request_id: Uuid::new_v4(),
-            branch_id: branch,
-            date: day(),
-            fingerprint: report.fingerprint.clone(),
-            counts: counts(124.995),
-        },
-        "closing-staff",
-    )
-    .await
+    let void = serde_json::from_value::<VoidExpenseInput>(serde_json::json!({
+        "requestId": Uuid::new_v4(),
+        "reason": "Courier returned the money; duplicate booking",
+    }))
     .unwrap();
-    assert!(saved.comparison.matched);
-
-    let void = VoidExpenseInput {
-        request_id: Uuid::new_v4(),
-        reason: "Courier returned the money; duplicate booking".into(),
-    };
     let voided = till_service::void_expense(&state, paid.id, void.clone(), "manager")
         .await
         .unwrap();
@@ -161,7 +150,7 @@ async fn delivery_expenses_reduce_drawer_cash_once_and_preserve_an_audit_trail(p
         .unwrap();
     assert_eq!(after_void.expenses.len(), 3);
     assert_eq!(after_void.tenders[0].expenses, 0.0);
-    assert_ne!(after_void.fingerprint, saved.fingerprint);
+    assert_ne!(after_void.fingerprint, report.fingerprint);
     assert!(
         reconciliation::compare(&after_void, &counts(130.0))
             .unwrap()
@@ -233,13 +222,11 @@ async fn expense_retries_serialize_and_invalid_inputs_never_reach_the_ledger(poo
         1
     );
     for amount in [0.0, -1.0, 0.0001, f64::NAN, f64::INFINITY] {
+        let mut invalid = expense(branch, 1.0, PaymentType::Cash);
+        // Nonfinite values cannot be expressed in JSON; also check the service boundary.
+        invalid.amount = amount;
         assert!(matches!(
-            till_service::record_expense(
-                &state,
-                expense(branch, amount, PaymentType::Cash),
-                "staff"
-            )
-            .await,
+            till_service::record_expense(&state, invalid, "staff").await,
             Err(AppError::BadRequest(_))
         ));
     }

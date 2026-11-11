@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{error::AppError, state::AppState};
 
-use super::{reconciliation, repository, till_repository, till_service, types::*};
+use super::{repository, till_repository, types::*};
 
 pub(super) fn day_bounds(
     date: NaiveDate,
@@ -100,39 +100,6 @@ pub(super) async fn load(
     }
     fingerprint(&mut report);
     Ok(report)
-}
-
-pub async fn save_check(
-    state: &AppState,
-    input: SaveClosingInput,
-    actor: &str,
-) -> Result<ClosingCheck, AppError> {
-    let hash = crate::idempotency::request_hash("branch.closing.v1", input.branch_id, &input);
-    let mut tx = state.db().begin().await?;
-    // Shared with financial writes and the final close.
-    till_service::lock_day(&mut tx, input.branch_id, input.date).await?;
-    if let Some(saved) = repository::replay(&mut tx, input.request_id).await? {
-        crate::idempotency::verify_request_hash(&saved.request_hash, &hash)?;
-        return Ok(saved.into_check());
-    }
-    super::day_service::editable(state, &mut tx, input.branch_id, input.date).await?;
-    let report = load(
-        &mut tx,
-        input.date,
-        state.timezone()?,
-        Utc::now(),
-        input.branch_id,
-    )
-    .await?;
-    if report.fingerprint != input.fingerprint {
-        return Err(AppError::Conflict(
-            "Recorded transactions changed. Refresh and check the totals again.".into(),
-        ));
-    }
-    let comparison = reconciliation::compare(&report, &input.counts)?;
-    let saved = repository::save_check(&mut tx, &input, &hash, &comparison, &report, actor).await?;
-    tx.commit().await?;
-    Ok(saved)
 }
 
 pub(super) fn assemble(

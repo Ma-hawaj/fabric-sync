@@ -97,11 +97,14 @@ function redemptionPayload(redemption: GiftCardRedemptionDraft) {
   }
 }
 
-// Shared by create and update: an edit sends a fresh copy of the same input,
-// and the backend rebuilds the invoice from it.
+/** Serialize an invoice draft for creation or replacement, including the quoted delivery fee. */
 export function invoicePayload(values: InvoiceFormValues) {
   return {
     expectedVatRate: values.expectedVatRate,
+    expectedDeliveryCharge:
+      values.collectionMethod === 'delivery' && values.deliveryCharge !== ''
+        ? values.deliveryCharge
+        : null,
     targetDate: values.targetDate || null,
     collectionMethod: values.collectionMethod,
     branchId:

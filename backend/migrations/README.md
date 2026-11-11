@@ -8,7 +8,8 @@ SQLx applies the files in version order:
 1. `0001_core_schema.sql` creates the business tables, including independent stock, pickup, and production capabilities and the complete
    order lifecycle (`pending`, `ready`, `collected`), customer addresses,
    notification preferences, invoice collection method, a separate issuing branch
-   with its saved name, and per-order urgency and automatic charges. Delivery uses
+   with its saved name, per-order urgency and automatic charges, and the saved
+   VAT-inclusive delivery fee. Pickup invoices have no delivery fee. Delivery uses
    the customer address; the existing invoice branch is the pickup destination.
    Invoices snapshot the applied VAT rate and rounded
    taxable/VAT amounts so later configuration changes cannot alter issued tax figures. The invoice charge column stores the computed sum of its
@@ -19,7 +20,9 @@ SQLx applies the files in version order:
    return-credit and refund tables. Gift-card issuer attribution, replacement
    links, original-card traversal, and the invoice voucher-accounting view are
    part of this original baseline. A card may have at most one direct replacement;
-   sale history stays attached to the original card.
+   sale history stays attached to the original card. Legacy orders may have an
+   unknown fabric source with a null material reference; shop/customer material
+   constraints remain enforced.
 2. `0002_notification_schema.sql` creates immutable PDF artifacts, notification
    previews and approvals, recipients, delivery attempts, webhook storage, and
    the staff-approved gift card delivery queue with its immutable PNG attachments.
@@ -30,8 +33,8 @@ SQLx applies the files in version order:
    return-line lookups and the unique index allowing one closure per garment.
 
 5. `0005_branch_closing_checks.sql` adds branch/day reconciliation snapshots,
-   counted amounts, notes and authenticated staff attribution. Rechecks append
-   new records and retain earlier checks.
+   counted amounts, notes and authenticated staff attribution. The API saves
+   counts and the final lock atomically; prior historical checks remain readable.
 
 6. `0006_branch_openings_and_expenses.sql` adds separately recorded opening
    cash, append-only opening corrections, paid branch expenses and auditable

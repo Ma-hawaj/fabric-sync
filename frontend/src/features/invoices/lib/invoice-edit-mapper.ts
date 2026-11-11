@@ -337,6 +337,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
 
   const values: InvoiceFormValues = {
     expectedVatRate: edit.vatRate,
+    deliveryCharge: edit.deliveryCharge ?? 0,
     targetDate: edit.targetDate ?? '',
     collectionMethod: edit.collectionMethod,
     receivingBranch: edit.branchId ?? '',

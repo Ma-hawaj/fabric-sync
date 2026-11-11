@@ -143,7 +143,7 @@ pub struct ClosingCheck {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SaveClosingInput {
+pub struct CloseDayInput {
     pub request_id: Uuid,
     pub branch_id: Uuid,
     pub date: NaiveDate,
@@ -220,16 +220,6 @@ pub struct DayClosure {
     pub closed_by: String,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CloseDayInput {
-    pub request_id: Uuid,
-    pub branch_id: Uuid,
-    pub date: NaiveDate,
-    pub check_id: Uuid,
-    pub fingerprint: String,
-}
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BranchDayStatus {
@@ -240,6 +230,7 @@ pub struct BranchDayStatus {
     pub opening_recorded: bool,
     pub closed: bool,
     pub previous_unclosed_date: Option<NaiveDate>,
+    pub can_trade: bool,
     pub can_create_orders: bool,
 }
 

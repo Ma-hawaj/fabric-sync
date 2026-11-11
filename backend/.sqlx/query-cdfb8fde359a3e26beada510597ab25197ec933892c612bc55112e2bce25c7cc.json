@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT issuing_branch_id, branch_id, invoice_date, vat_rate::float8 AS \"vat_rate!\"\n        FROM invoices\n        WHERE id = $1\n        FOR UPDATE\n        ",
+  "query": "\n        SELECT issuing_branch_id, branch_id, invoice_date, vat_rate::float8 AS \"vat_rate!\", delivery_charge::float8 AS \"delivery_charge!\", collection_method\n        FROM invoices\n        WHERE id = $1\n        FOR UPDATE\n        ",
   "describe": {
     "columns": [
       {
@@ -22,6 +22,16 @@
         "ordinal": 3,
         "name": "vat_rate!",
         "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "delivery_charge!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "collection_method",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -33,8 +43,10 @@
       true,
       true,
       false,
-      null
+      null,
+      null,
+      false
     ]
   },
-  "hash": "77835cf9569ea6f5ba9b03f6c3039b92847840bf4556f2a91b9e3f235d1a518c"
+  "hash": "cdfb8fde359a3e26beada510597ab25197ec933892c612bc55112e2bce25c7cc"
 }

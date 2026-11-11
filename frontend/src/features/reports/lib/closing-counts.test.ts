@@ -14,6 +14,25 @@ const counts = (): ClosingCounts => ({
   notes: '',
 })
 
+function expectIssue(
+  result: {
+    success: boolean
+    error?: { issues: { path: PropertyKey[]; message: string }[] }
+  },
+  path: string,
+  message: RegExp,
+) {
+  expect(result.success).toBe(false)
+  expect(result.error?.issues).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        path: [path],
+        message: expect.stringMatching(message),
+      }),
+    ]),
+  )
+}
+
 describe('branch reconciliation', () => {
   it('accounts for the float and cash movements and compares methods independently', () => {
     const report = closingFixture()
@@ -38,34 +57,48 @@ describe('branch reconciliation', () => {
     ).toBe(2)
   })
   it('never treats blank counts or unconfirmed activity as a completed check', () => {
-    expect(
-      countsSchema(closingFixture()).safeParse(emptyCounts()).success,
-    ).toBe(false)
-    expect(
+    expectIssue(
+      countsSchema(closingFixture()).safeParse(emptyCounts()),
+      'actualCash',
+      /BHD amount/i,
+    )
+    expectIssue(
       countsSchema(closingFixture()).safeParse({
         ...counts(),
         branchActivityConfirmed: false,
-      }).success,
-    ).toBe(false)
+      }),
+      'branchActivityConfirmed',
+      /confirm.*handled here/i,
+    )
   })
   it('retains one-fils differences and requires an explanation', () => {
     const report = closingFixture()
     const input = { ...counts(), actualCash: 71.999 }
     expect(compareCounts(report, input).lines[0].difference).toBe(-0.001)
-    expect(countsSchema(report).safeParse(input).success).toBe(false)
+    expectIssue(
+      countsSchema(report).safeParse(input),
+      'notes',
+      /explain differences/i,
+    )
     expect(
       countsSchema(report).safeParse({ ...input, notes: 'One fils short.' })
         .success,
     ).toBe(true)
-    expect(
-      countsSchema(report).safeParse({ ...counts(), actualCash: 72.0001 })
-        .success,
-    ).toBe(false)
+    expectIssue(
+      countsSchema(report).safeParse({ ...counts(), actualCash: 72.0001 }),
+      'actualCash',
+      /three decimal places/i,
+    )
   })
   it('keeps unresolved methods and unassigned activity out of a matched status', () => {
     const report = closingFixture()
     report.summary.unrecordedMethodCount = 2
     expect(compareCounts(report, counts()).matched).toBe(false)
+    expectIssue(
+      countsSchema(report).safeParse(counts()),
+      'notes',
+      /explain differences/i,
+    )
     report.summary.unrecordedMethodCount = 0
     report.unassignedActivityCount = 1
     expect(compareCounts(report, counts()).matched).toBe(false)
@@ -88,11 +121,17 @@ describe('branch reconciliation', () => {
     expect(compared.lines[0].expected).toBe(66.995)
     expect(compared.lines[2].expected).toBe(0)
     expect(compared.matched).toBe(true)
-    expect(
-      countsSchema(report).safeParse({ ...input, openingCash: 30 }).success,
-    ).toBe(false)
+    expectIssue(
+      countsSchema(report).safeParse({ ...input, openingCash: 30 }),
+      'openingCash',
+      /separately saved opening/i,
+    )
     report.opening = null
     expect(compareCounts(report, input).matched).toBe(false)
-    expect(countsSchema(report).safeParse(input).success).toBe(false)
+    expectIssue(
+      countsSchema(report).safeParse(input),
+      'openingCash',
+      /separately saved opening/i,
+    )
   })
 })

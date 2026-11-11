@@ -84,6 +84,11 @@ function invoiceTotals(values: InvoiceFormValues) {
     discount: values.discount === '' ? 0 : values.discount,
     discountUnit: values.discountUnit,
     urgentCharge: computeUrgentCharges(values.customers),
+    deliveryCharge:
+      values.collectionMethod === 'delivery' &&
+      typeof values.deliveryCharge === 'number'
+        ? values.deliveryCharge
+        : 0,
     redeemed: values.redemptions.reduce(
       (sum, line) => sum + computeRedemptionTotal(line),
       0,
@@ -261,48 +266,62 @@ export function InvoiceSummary({
             vat={totals.vat}
             vatRate={values.expectedVatRate as number}
           >
-            <div className="flex justify-between gap-3 border-t pt-4 text-sm">
-              <span className="text-muted-foreground">
-                Subtotal (incl. VAT)
-              </span>
-              <span className="shrink-0 tabular-nums">
-                {subtotal == null ? '—' : `${CURRENCY} ${subtotal.toFixed(2)}`}
-              </span>
-            </div>
-            {totals.discountAmount > 0 && (
+            <dl className="space-y-2">
               <div className="flex justify-between gap-3 text-sm">
-                <span className="text-muted-foreground">Discount applied</span>
-                <span className="shrink-0 tabular-nums">
-                  −{CURRENCY} {totals.discountAmount.toFixed(2)}
-                </span>
+                <dt className="text-muted-foreground">Subtotal (incl. VAT)</dt>
+                <dd className="shrink-0 tabular-nums">
+                  {subtotal == null
+                    ? '—'
+                    : `${CURRENCY} ${subtotal.toFixed(2)}`}
+                </dd>
               </div>
-            )}
-            {urgentCharge > 0 && (
-              <div className="flex justify-between gap-3 text-sm">
-                <span className="text-muted-foreground">
-                  Urgent charges (incl. VAT)
-                </span>
-                <span className="shrink-0 tabular-nums">
-                  {CURRENCY} {urgentCharge.toFixed(2)}
-                </span>
-              </div>
-            )}
-            {values.giftCards.map((line, index) => (
-              <div
-                key={line.key}
-                className="flex justify-between gap-3 text-sm text-muted-foreground"
-              >
-                <span className="min-w-0 break-words">
-                  {line.code
-                    ? `Gift card ${line.code}`
-                    : `Gift card ${index + 1}`}{' '}
-                  (incl. VAT)
-                </span>
-                <span className="shrink-0 tabular-nums">
-                  {CURRENCY} {computeGiftCardLineTotal(line).toFixed(2)}
-                </span>
-              </div>
-            ))}
+              {totals.discountAmount > 0 && (
+                <div className="flex justify-between gap-3 text-sm">
+                  <dt className="text-muted-foreground">Discount applied</dt>
+                  <dd className="shrink-0 tabular-nums">
+                    −{CURRENCY} {totals.discountAmount.toFixed(2)}
+                  </dd>
+                </div>
+              )}
+              {values.collectionMethod === 'delivery' &&
+                typeof values.deliveryCharge === 'number' &&
+                values.deliveryCharge > 0 && (
+                  <div className="flex justify-between gap-3 text-sm">
+                    <dt className="text-muted-foreground">
+                      Delivery charge (incl. VAT)
+                    </dt>
+                    <dd className="shrink-0 tabular-nums">
+                      {CURRENCY} {values.deliveryCharge.toFixed(2)}
+                    </dd>
+                  </div>
+                )}
+              {urgentCharge > 0 && (
+                <div className="flex justify-between gap-3 text-sm">
+                  <dt className="text-muted-foreground">
+                    Urgent charges (incl. VAT)
+                  </dt>
+                  <dd className="shrink-0 tabular-nums">
+                    {CURRENCY} {urgentCharge.toFixed(2)}
+                  </dd>
+                </div>
+              )}
+              {values.giftCards.map((line, index) => (
+                <div
+                  key={line.key}
+                  className="flex justify-between gap-3 text-sm text-muted-foreground"
+                >
+                  <dt className="min-w-0 break-words">
+                    {line.code
+                      ? `Gift card ${line.code}`
+                      : `Gift card ${index + 1}`}{' '}
+                    (incl. VAT)
+                  </dt>
+                  <dd className="shrink-0 tabular-nums">
+                    {CURRENCY} {computeGiftCardLineTotal(line).toFixed(2)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
           </InvoicePriceSummary>
         ) : (
           <p className="text-sm text-muted-foreground">
@@ -361,6 +380,13 @@ export function InvoiceSummary({
               </Field>
             )}
           </form.Field>
+          {values.collectionMethod === 'delivery' &&
+            values.deliveryCharge === '' && (
+              <p role="alert" className="text-sm text-destructive">
+                Delivery pricing is unavailable. Configure the delivery charge
+                before saving.
+              </p>
+            )}
           {values.collectionMethod === 'pickup' ? (
             <form.Field name={'receivingBranch' as never}>
               {(field: any) => (

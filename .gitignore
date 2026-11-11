@@ -1,2 +1,8 @@
 .env
 .env.production
+
+# Local customer identity review data (copy securely to production).
+/scripts/customer-decisions.json
+
+# Local ingestion diagnostics contain customer details and source cell values.
+/scripts/parsing-issues.csv

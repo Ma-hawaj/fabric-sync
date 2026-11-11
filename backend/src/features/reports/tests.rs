@@ -146,16 +146,17 @@ async fn closing_uses_event_days_without_multiplying_ledgers(pool: PgPool) {
 }
 
 fn matching_counts(cash: f64) -> ClosingCounts {
-    ClosingCounts {
-        branch_activity_confirmed: true,
-        opening_cash: 5.0,
-        cash_added: 0.0,
-        cash_removed: 0.0,
-        actual_cash: cash + 5.0,
-        actual_benefit: 0.0,
-        actual_card: 0.0,
-        notes: String::new(),
-    }
+    serde_json::from_value::<ClosingCounts>(serde_json::json!({
+        "branchActivityConfirmed": true,
+        "openingCash": 5.0,
+        "cashAdded": 0.0,
+        "cashRemoved": 0.0,
+        "actualCash": cash + 5.0,
+        "actualBenefit": 0.0,
+        "actualCard": 0.0,
+        "notes": "",
+    }))
+    .unwrap()
 }
 
 #[test]
@@ -198,7 +199,7 @@ fn physical_counts_keep_fils_and_never_match_unknown_methods() {
 }
 
 #[sqlx::test]
-async fn branch_checks_are_isolated_idempotent_and_detect_later_activity(pool: PgPool) {
+async fn final_closings_are_isolated_idempotent_and_freeze_the_recorded_activity(pool: PgPool) {
     let day = chrono::Utc::now()
         .with_timezone(&chrono_tz::Asia::Bahrain)
         .date_naive();
@@ -219,13 +220,14 @@ async fn branch_checks_are_isolated_idempotent_and_detect_later_activity(pool: P
     let state = crate::test_support::state_without_openings(pool.clone(), None, None).await;
     super::till_service::save_opening(
         &state,
-        SaveOpeningInput {
-            request_id: Uuid::new_v4(),
-            branch_id: branch,
-            date: day,
-            amount: 5.0,
-            notes: String::new(),
-        },
+        serde_json::from_value::<SaveOpeningInput>(serde_json::json!({
+            "requestId": Uuid::new_v4(),
+            "branchId": branch,
+            "date": day,
+            "amount": 5.0,
+            "notes": "",
+        }))
+        .unwrap(),
         None,
         "opening-staff",
     )
@@ -238,24 +240,28 @@ async fn branch_checks_are_isolated_idempotent_and_detect_later_activity(pool: P
     assert_eq!(report.summary.invoice_total, 100.0);
     assert_eq!(report.summary.invoice_payments, 10.0);
     assert!(report.last_check.is_none());
-    let input = SaveClosingInput {
-        request_id: Uuid::new_v4(),
-        branch_id: branch,
-        date: report.date,
-        fingerprint: report.fingerprint.clone(),
-        counts: matching_counts(10.0),
-    };
-    let saved = service::save_check(&state, input.clone(), "staff-one")
+    let input = serde_json::from_value::<CloseDayInput>(serde_json::json!({
+        "requestId": Uuid::new_v4(),
+        "branchId": branch,
+        "date": report.date,
+        "fingerprint": report.fingerprint.clone(),
+        "counts": matching_counts(10.0),
+    }))
+    .unwrap();
+    let saved = super::day_service::close_day(&state, input.clone(), "staff-one")
         .await
         .unwrap();
-    assert!(saved.comparison.matched);
-    let replay = service::save_check(&state, input.clone(), "staff-one")
+    assert!(saved.last_check.as_ref().unwrap().comparison.matched);
+    let replay = super::day_service::close_day(&state, input.clone(), "staff-one")
         .await
         .unwrap();
-    assert_eq!(replay.id, saved.id);
+    assert_eq!(
+        replay.closure.unwrap().id,
+        saved.closure.as_ref().unwrap().id
+    );
     let stored_actor: String =
         sqlx::query_scalar("SELECT checked_by FROM branch_closing_checks WHERE id=$1")
-            .bind(saved.id)
+            .bind(saved.last_check.as_ref().unwrap().id)
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -264,7 +270,7 @@ async fn branch_checks_are_isolated_idempotent_and_detect_later_activity(pool: P
     changed.counts.actual_cash = 14.0;
     changed.counts.notes = "Short by one".into();
     assert!(matches!(
-        service::save_check(&state, changed, "staff-one").await,
+        super::day_service::close_day(&state, changed, "staff-one").await,
         Err(crate::error::AppError::Conflict(_))
     ));
     sqlx::query("INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,1,'cash')")
@@ -275,28 +281,23 @@ async fn branch_checks_are_isolated_idempotent_and_detect_later_activity(pool: P
     let after = service::sales_closing(&state, Some(report.date), branch)
         .await
         .unwrap();
-    assert_ne!(after.fingerprint, saved.fingerprint);
-    assert_eq!(after.last_check.as_ref().unwrap().id, saved.id);
+    assert_eq!(after.fingerprint, saved.fingerprint);
+    assert_eq!(
+        after.last_check.as_ref().unwrap().id,
+        saved.last_check.as_ref().unwrap().id
+    );
     let mut stale = input.clone();
     stale.request_id = Uuid::new_v4();
     assert!(matches!(
-        service::save_check(&state, stale, "staff-two").await,
+        super::day_service::close_day(&state, stale, "staff-two").await,
         Err(crate::error::AppError::Conflict(_))
     ));
-    let mut recheck = input;
-    recheck.request_id = Uuid::new_v4();
-    recheck.fingerprint = after.fingerprint;
-    recheck.counts = matching_counts(11.0);
-    let second = service::save_check(&state, recheck, "staff-two")
-        .await
-        .unwrap();
-    assert_ne!(second.id, saved.id);
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM branch_closing_checks")
             .fetch_one(&pool)
             .await
             .unwrap(),
-        2
+        1
     );
     let other_report = service::sales_closing(&state, Some(report.date), other)
         .await
@@ -311,14 +312,10 @@ async fn branch_checks_are_isolated_idempotent_and_detect_later_activity(pool: P
     .execute(&pool)
     .await
     .unwrap();
-    let with_unassigned = service::sales_closing(&state, Some(report.date), branch)
+    let with_unassigned = service::sales_closing(&state, Some(report.date), other)
         .await
         .unwrap();
     assert_eq!(with_unassigned.unassigned_activity_count, 1);
-    assert_eq!(with_unassigned.summary.invoice_payments, 11.0);
-    assert!(
-        !reconciliation::compare(&with_unassigned, &matching_counts(11.0))
-            .unwrap()
-            .matched
-    );
+    assert_eq!(with_unassigned.summary.invoice_payments, 0.0);
+    assert!(with_unassigned.last_check.is_none());
 }

@@ -65,6 +65,61 @@ async fn imported_production_does_not_imply_a_stock_allocation_or_restore_stock(
 }
 
 #[sqlx::test]
+async fn unknown_material_edits_preserve_prices_and_stock_and_reject_repricing(db: PgPool) {
+    let (invoice, orders, workshop, _) = test_support::invoice(&db, 1, false).await;
+    sqlx::query("UPDATE orders SET material_source='unknown',customer_material_description=NULL WHERE id=$1")
+        .bind(orders[0]).execute(&db).await.unwrap();
+    let material: Uuid = sqlx::query_scalar("INSERT INTO materials(name,junior_price,normal_price,large_price) VALUES('Untouched fabric',10,20,30) RETURNING id").fetch_one(&db).await.unwrap();
+    sqlx::query("INSERT INTO material_stock(material_id,branch_id,quantity) VALUES($1,$2,10)")
+        .bind(material)
+        .bind(workshop)
+        .execute(&db)
+        .await
+        .unwrap();
+    let state = test_support::state(db.clone(), None, None).await;
+    let edit = service::get_invoice_for_edit(&state, invoice)
+        .await
+        .unwrap();
+    let mut payload = json!({"expectedVatRate":0.1,"discountUnit":"amount","targetDate":"2026-12-01","customers":[{
+        "existingCustomerId":edit.customers[0].existing_customer_id,
+        "measurement":{"date":"2026-11-07","type":"body","fit":"medium"},
+        "orders":[{"originalOrderId":orders[0],"materialSource":"unknown","materialAmount":3,
+            "productionLocationId":workshop,"moreDetails":"Updated notes"}]
+    }]});
+    let updated = service::update_invoice(
+        &state,
+        invoice,
+        serde_json::from_value(payload.clone()).unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(updated.total_price, 100.0);
+    assert_eq!(quantity(&db, material, workshop).await, 10.0);
+    let edit = service::get_invoice_for_edit(&state, invoice)
+        .await
+        .unwrap();
+    let saved = &edit.customers[0].orders[0];
+    assert_eq!(saved.material_source, "unknown");
+    assert!(saved.material_id.is_none());
+    assert!(saved.material_location_id.is_none());
+    assert_eq!(saved.price, 100.0);
+    assert_eq!(saved.base_price, 0.0);
+    assert_eq!(saved.more_details.as_deref(), Some("Updated notes"));
+    payload["customers"][0]["orders"][0]["originalOrderId"] = json!(saved.original_order_id);
+    payload["customers"][0]["orders"][0]["materialAmount"] = json!(4);
+    assert!(matches!(
+        service::update_invoice(&state, invoice, serde_json::from_value(payload).unwrap()).await,
+        Err(AppError::BadRequest(message)) if message.contains("choose the actual material")
+    ));
+    let edit = service::get_invoice_for_edit(&state, invoice)
+        .await
+        .unwrap();
+    assert_eq!(edit.customers[0].orders[0].material_amount, 3.0);
+    assert_eq!(edit.customers[0].orders[0].price, 100.0);
+    assert_eq!(quantity(&db, material, workshop).await, 10.0);
+}
+
+#[sqlx::test]
 async fn warehouse_stock_and_production_only_workshop_stay_independent_through_edits(db: PgPool) {
     let warehouse: Uuid = sqlx::query_scalar("INSERT INTO branch(name,receives_orders,holds_stock,produces_orders) VALUES('Warehouse',false,true,false) RETURNING id").fetch_one(&db).await.unwrap();
     let workshop: Uuid = sqlx::query_scalar("INSERT INTO branch(name,receives_orders,holds_stock,produces_orders) VALUES('Workshop',false,false,true) RETURNING id").fetch_one(&db).await.unwrap();

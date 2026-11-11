@@ -16,32 +16,35 @@ fn today() -> NaiveDate {
         .date_naive()
 }
 fn setup(branch: Uuid, starts_on: NaiveDate) -> ConfigureClosingInput {
-    ConfigureClosingInput {
-        request_id: Uuid::new_v4(),
-        branch_id: branch,
-        starts_on,
-    }
+    serde_json::from_value::<ConfigureClosingInput>(serde_json::json!({
+        "requestId": Uuid::new_v4(),
+        "branchId": branch,
+        "startsOn": starts_on,
+    }))
+    .unwrap()
 }
 fn opening(branch: Uuid, date: NaiveDate) -> SaveOpeningInput {
-    SaveOpeningInput {
-        request_id: Uuid::new_v4(),
-        branch_id: branch,
-        date,
-        amount: 50.0,
-        notes: String::new(),
-    }
+    serde_json::from_value::<SaveOpeningInput>(serde_json::json!({
+        "requestId": Uuid::new_v4(),
+        "branchId": branch,
+        "date": date,
+        "amount": 50.0,
+        "notes": "",
+    }))
+    .unwrap()
 }
 fn counts() -> ClosingCounts {
-    ClosingCounts {
-        branch_activity_confirmed: true,
-        opening_cash: 50.0,
-        cash_added: 0.0,
-        cash_removed: 0.0,
-        actual_cash: 45.0,
-        actual_benefit: 0.0,
-        actual_card: 0.0,
-        notes: String::new(),
-    }
+    serde_json::from_value::<ClosingCounts>(serde_json::json!({
+        "branchActivityConfirmed": true,
+        "openingCash": 50.0,
+        "cashAdded": 0.0,
+        "cashRemoved": 0.0,
+        "actualCash": 45.0,
+        "actualBenefit": 0.0,
+        "actualCard": 0.0,
+        "notes": "",
+    }))
+    .unwrap()
 }
 
 #[sqlx::test]
@@ -176,15 +179,16 @@ async fn every_past_write_is_rejected_and_manager_resolutions_cannot_change_figu
     let report = service::sales_closing(&state, Some(old), branch)
         .await
         .unwrap();
-    let input = SaveClosingInput {
-        request_id: Uuid::new_v4(),
-        branch_id: branch,
-        date: old,
-        fingerprint: report.fingerprint.clone(),
-        counts: counts(),
-    };
+    let input = serde_json::from_value::<CloseDayInput>(serde_json::json!({
+        "requestId": Uuid::new_v4(),
+        "branchId": branch,
+        "date": old,
+        "fingerprint": report.fingerprint.clone(),
+        "counts": counts(),
+    }))
+    .unwrap();
     assert!(matches!(
-        service::save_check(&state, input.clone(), "staff").await,
+        day_service::close_day(&state, input.clone(), "staff").await,
         Err(AppError::Conflict(_))
     ));
     let mut correction = opening(branch, old);
@@ -196,16 +200,17 @@ async fn every_past_write_is_rejected_and_manager_resolutions_cannot_change_figu
     assert!(matches!(
         till_service::record_expense(
             &state,
-            RecordExpenseInput {
-                request_id: Uuid::new_v4(),
-                branch_id: branch,
-                date: old,
-                amount: 1.0,
-                payment_type: PaymentType::Cash,
-                reason: "Late fee".into(),
-                paid_to: String::new(),
-                reference: String::new()
-            },
+            serde_json::from_value::<RecordExpenseInput>(serde_json::json!({
+                "requestId": Uuid::new_v4(),
+                "branchId": branch,
+                "date": old,
+                "amount": 1.0,
+                "paymentType": PaymentType::Cash,
+                "reason": "Late fee",
+                "paidTo": "",
+                "reference": "",
+            }))
+            .unwrap(),
             "staff"
         )
         .await,
@@ -215,36 +220,23 @@ async fn every_past_write_is_rejected_and_manager_resolutions_cannot_change_figu
         till_service::void_expense(
             &state,
             expense_id,
-            VoidExpenseInput {
-                request_id: Uuid::new_v4(),
-                reason: "Attempted void".into()
-            },
+            serde_json::from_value::<VoidExpenseInput>(serde_json::json!({
+                "requestId": Uuid::new_v4(),
+                "reason": "Attempted void",
+            }))
+            .unwrap(),
             "manager"
         )
         .await,
         Err(AppError::Conflict(_))
     ));
-    assert!(matches!(
-        day_service::close_day(
-            &state,
-            CloseDayInput {
-                request_id: Uuid::new_v4(),
-                branch_id: branch,
-                date: old,
-                check_id: Uuid::new_v4(),
-                fingerprint: report.fingerprint.clone()
-            },
-            "manager"
-        )
-        .await,
-        Err(AppError::Conflict(_))
-    ));
-    let resolution = ResolveMissedClosingInput {
-        request_id: Uuid::new_v4(),
-        branch_id: branch,
-        date: old,
-        reason: "Closing was missed; physical counts are unavailable.".into(),
-    };
+    let resolution = serde_json::from_value::<ResolveMissedClosingInput>(serde_json::json!({
+        "requestId": Uuid::new_v4(),
+        "branchId": branch,
+        "date": old,
+        "reason": "Closing was missed; physical counts are unavailable.",
+    }))
+    .unwrap();
     let (a, b) = tokio::join!(
         rollout_service::resolve_missed(&state, resolution.clone(), "manager"),
         rollout_service::resolve_missed(&state, resolution, "manager")
@@ -259,7 +251,7 @@ async fn every_past_write_is_rejected_and_manager_resolutions_cannot_change_figu
     assert_eq!(frozen.expenses[0].amount, 5.0);
     assert!(frozen.last_check.is_none() && frozen.closure.is_none());
     assert!(matches!(
-        service::save_check(&state, input, "manager").await,
+        day_service::close_day(&state, input, "manager").await,
         Err(AppError::Conflict(_))
     ));
 }
@@ -286,50 +278,41 @@ async fn an_existing_closed_historical_day_has_no_manager_reopen_path(pool: PgPo
         .unwrap();
     let mut counts = counts();
     counts.actual_cash = 50.0;
-    let input = SaveClosingInput {
-        request_id: Uuid::new_v4(),
-        branch_id: branch,
-        date: old,
-        fingerprint: report.fingerprint.clone(),
-        counts,
-    };
+    let input = serde_json::from_value::<CloseDayInput>(serde_json::json!({
+        "requestId": Uuid::new_v4(),
+        "branchId": branch,
+        "date": old,
+        "fingerprint": report.fingerprint.clone(),
+        "counts": counts,
+    }))
+    .unwrap();
     let comparison = reconciliation::compare(&report, &input.counts).unwrap();
     // This fixture represents a report finalized on time before today's date.
     let mut tx = pool.begin().await.unwrap();
     let saved = repository::save_check(&mut tx, &input, &[0; 32], &comparison, &report, "fixture")
         .await
         .unwrap();
-    day_repository::insert_closure(
-        &mut tx,
-        &CloseDayInput {
-            request_id: Uuid::new_v4(),
-            branch_id: branch,
-            date: old,
-            check_id: saved.id,
-            fingerprint: report.fingerprint.clone(),
-        },
-        &[0; 32],
-        "fixture",
-    )
-    .await
-    .unwrap();
+    day_repository::insert_closure(&mut tx, &input, saved.id, &[0; 32], "fixture")
+        .await
+        .unwrap();
     tx.commit().await.unwrap();
     assert!(matches!(
         rollout_service::resolve_missed(
             &state,
-            ResolveMissedClosingInput {
-                request_id: Uuid::new_v4(),
-                branch_id: branch,
-                date: old,
-                reason: "Try reopening".into()
-            },
+            serde_json::from_value::<ResolveMissedClosingInput>(serde_json::json!({
+                "requestId": Uuid::new_v4(),
+                "branchId": branch,
+                "date": old,
+                "reason": "Try reopening",
+            }))
+            .unwrap(),
             "manager"
         )
         .await,
         Err(AppError::Conflict(_))
     ));
     assert!(matches!(
-        service::save_check(&state, input, "manager").await,
+        day_service::close_day(&state, input, "manager").await,
         Err(AppError::Conflict(_))
     ));
     let frozen = service::sales_closing(&state, Some(old), branch)

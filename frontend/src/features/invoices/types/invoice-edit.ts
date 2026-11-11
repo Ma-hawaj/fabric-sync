@@ -38,7 +38,7 @@ export interface InvoiceEditMeasurement {
 export interface InvoiceEditOrder {
   originalOrderId: string
   isUrgent: boolean
-  materialSource: 'shop' | 'customer'
+  materialSource: 'shop' | 'customer' | 'unknown'
   customerMaterialDescription: string | null
   materialId: string | null
   materialName: string
@@ -119,6 +119,7 @@ export interface InvoiceEdit {
   issuingBranchName?: string | null
   vatRate: number
   urgentCharge: number
+  deliveryCharge?: number
   collectionMethod: 'delivery' | 'pickup'
   id: string
   invoiceNumber: number

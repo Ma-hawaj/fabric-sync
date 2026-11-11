@@ -47,6 +47,7 @@ function clientForForm(dayOverrides: Partial<BranchDayStatus> = {}) {
   })
   client.setQueryData(['pricing'], {
     vatRate: 0.1,
+    deliveryCharge: 3,
     urgentCharge: { amount: 5, unit: 'amount' },
     customerMaterialBasePrice: 20,
   })
@@ -56,6 +57,7 @@ function clientForForm(dayOverrides: Partial<BranchDayStatus> = {}) {
     openingRecorded: true,
     closed: false,
     previousUnclosedDate: null,
+    canTrade: true,
     canCreateOrders: true,
     ...dayOverrides,
   }
@@ -383,6 +385,7 @@ describe('Invoice workspace', () => {
     async (overrides, message) => {
       const save = renderInvoice(validInvoice(), clientForForm(), {
         ...overrides,
+        canTrade: false,
         canCreateOrders: false,
       })
       expect(await screen.findByText(message)).toBeTruthy()

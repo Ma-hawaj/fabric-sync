@@ -73,7 +73,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
         gift_card_sales,
         invoice.discount,
         discount_unit,
-        invoice.urgent_charge,
+        invoice.urgent_charge + invoice.delivery_charge,
         invoice.vat_rate,
         accounting.prepaid_amount,
     );
@@ -107,6 +107,7 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
             prepaid_amount: accounting.prepaid_amount,
             sales_amount: accounting.sales_amount,
             urgent_charge: invoice.urgent_charge,
+            delivery_charge: invoice.delivery_charge,
             subtotal: totals.subtotal,
             discount: invoice.discount,
             discount_unit: invoice.discount_unit,
@@ -389,7 +390,7 @@ fn breakdown(
     gift_card_sales: f64,
     discount: f64,
     discount_unit: DiscountUnit,
-    urgent_charge: f64,
+    service_charges: f64,
     vat_rate: f64,
     prepaid_amount: f64,
 ) -> Breakdown {
@@ -402,8 +403,8 @@ fn breakdown(
     // A discount bigger than the sale doesn't turn into a refund.
     .min(subtotal);
 
-    // Urgency is an extra VAT-inclusive service charge, added after discounts.
-    let gross = round2(subtotal - discount_amount + round2(urgent_charge));
+    // VAT-inclusive service charges are added after merchandise discounts.
+    let gross = round2(subtotal - discount_amount + round2(service_charges));
     let gift_card_sales = round2(gift_card_sales);
     let total = round2(gross + gift_card_sales);
     let new_taxable_gross = round2((total - prepaid_amount).max(0.0));
@@ -432,8 +433,31 @@ struct InvoiceTotals {
     urgent_charge: f64,
 }
 
-/// Price all lines with the applicable rate and server-resolved prepaid amount.
-/// Total card tender settles the balance independently of the new VAT calculation.
+/// Resolve delivery once per invoice; unchanged delivery invoices retain their snapshot.
+fn resolve_delivery_charge(
+    input: &mut CreateInvoiceInput,
+    configured: Option<f64>,
+    saved: Option<&repository::LockedInvoice>,
+) -> Result<(), AppError> {
+    input.delivery_charge = if input.collection_method.as_str() == "pickup" {
+        0.0
+    } else if let Some(saved) = saved.filter(|saved| saved.collection_method == "delivery") {
+        saved.delivery_charge
+    } else {
+        configured
+            .ok_or_else(|| AppError::BadRequest("delivery pricing is not configured".into()))?
+    };
+    if input.collection_method.as_str() == "delivery"
+        && input.expected_delivery_charge != Some(input.delivery_charge)
+    {
+        return Err(AppError::Conflict(
+            "delivery pricing changed; reload pricing and review the total".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Price lines and service charges using the applicable VAT rate and prepaid amount.
 fn compute_totals(input: &CreateInvoiceInput, vat_rate: f64, prepaid_amount: f64) -> InvoiceTotals {
     let urgent_charge = round2(
         input
@@ -464,7 +488,7 @@ fn compute_totals(input: &CreateInvoiceInput, vat_rate: f64, prepaid_amount: f64
         gift_card_sales,
         input.discount,
         input.discount_unit,
-        urgent_charge,
+        urgent_charge + input.delivery_charge,
         vat_rate,
         prepaid_amount,
     );
@@ -551,6 +575,7 @@ fn validate_original_ids(
     Ok(())
 }
 
+/// Price new or changed orders from the catalog; unknown fabric must retain saved pricing.
 fn price_order(
     order: &mut CreateOrderInput,
     materials: &HashMap<Uuid, Option<(f64, f64, f64)>>,
@@ -575,6 +600,11 @@ fn price_order(
         MaterialSource::Customer => customer_material_base_price.ok_or_else(|| {
             AppError::BadRequest("customer-material tailoring price is not configured".into())
         })?,
+        MaterialSource::Unknown => {
+            return Err(AppError::BadRequest(
+                "choose the actual material before changing an unknown-material order's fabric or pricing".into(),
+            ));
+        }
     };
     validate_amount(base)?;
     let mut surcharge = 0.0;
@@ -697,6 +727,7 @@ async fn resolve_order_prices(
     Ok(())
 }
 
+/// Validate quantities and mutually exclusive details for each material source.
 fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
     if order.material_amount < 0.01
         || crate::features::pricing::service::validate_amount(order.material_amount).is_err()
@@ -725,8 +756,14 @@ fn validate_order(order: &CreateOrderInput) -> Result<(), AppError> {
         {
             Ok(())
         }
+        MaterialSource::Unknown
+            if order.original_order_id.is_some() && order.material_id.is_none()
+                && order.material_location_id.is_none() && order.customer_material_description.is_none() =>
+        {
+            Ok(())
+        }
         _ => Err(AppError::BadRequest(
-            "shop material needs a materialId and materialLocationId; customer material needs only a fabric description"
+            "shop material needs a materialId and materialLocationId; customer material needs only a fabric description; unknown material is only retained on an unchanged existing order"
                 .into(),
         )),
     }
@@ -1139,6 +1176,35 @@ mod tests {
     }
 
     #[test]
+    fn unknown_material_can_only_retain_an_existing_orders_saved_price() {
+        let mut raw = order(100.0);
+        raw["materialSource"] = serde_json::json!("unknown");
+        raw["materialId"] = serde_json::Value::Null;
+        raw["materialLocationId"] = serde_json::Value::Null;
+        let parse = |value| serde_json::from_value::<CreateOrderInput>(value).unwrap();
+        assert!(validate_order(&parse(raw.clone())).is_err());
+        raw["originalOrderId"] = serde_json::json!(Uuid::new_v4());
+        assert!(validate_order(&parse(raw.clone())).is_ok());
+        let mut unknown = parse(raw.clone());
+        assert!(matches!(
+            price_order(&mut unknown, &HashMap::new(), &HashMap::new(), None),
+            Err(AppError::BadRequest(message)) if message.contains("choose the actual material")
+        ));
+        for (field, value) in [
+            ("materialId", serde_json::json!(Uuid::new_v4())),
+            ("materialLocationId", serde_json::json!(Uuid::new_v4())),
+            (
+                "customerMaterialDescription",
+                serde_json::json!("White linen"),
+            ),
+        ] {
+            let mut contradictory = raw.clone();
+            contradictory[field] = value;
+            assert!(validate_order(&parse(contradictory)).is_err());
+        }
+    }
+
+    #[test]
     fn order_quantity_cannot_increase_stock_through_a_negative_decrement() {
         for quantity in [-2.0, 0.0, 0.001, 2.999, f64::INFINITY, f64::NAN] {
             let mut input: CreateOrderInput = serde_json::from_value(order(100.0)).unwrap();
@@ -1547,6 +1613,38 @@ mod tests {
 
         invoice.target_date = target_date;
         assert!(validate(&invoice).is_ok());
+    }
+
+    #[test]
+    fn delivery_charge_is_server_resolved_once_and_preserved_on_edits() {
+        let mut invoice = input(
+            serde_json::json!({"expectedVatRate": 0.1, "discountUnit":"percent", "discount":10, "collectionMethod":"delivery", "expectedDeliveryCharge":3, "products":[{"productId":Uuid::new_v4(), "branchId":Uuid::new_v4(), "quantity":2, "unitPrice":50}]}),
+        );
+        resolve_delivery_charge(&mut invoice, Some(3.0), None).unwrap();
+        let totals = compute_totals(&invoice, 0.1, 0.0);
+        assert_eq!(totals.total, 93.0);
+        assert_eq!(totals.taxable, 84.55);
+        assert_eq!(totals.vat, 8.45);
+        let saved = repository::LockedInvoice {
+            issuing_branch_id: None,
+            branch_id: None,
+            delivery_charge: 3.0,
+            collection_method: "delivery".into(),
+            vat_rate: 0.1,
+            invoice_date: chrono::Utc::now(),
+        };
+        resolve_delivery_charge(&mut invoice, Some(7.0), Some(&saved)).unwrap();
+        assert_eq!(invoice.delivery_charge, 3.0);
+        resolve_delivery_charge(&mut invoice, None, Some(&saved)).unwrap();
+        assert!(resolve_delivery_charge(&mut invoice, None, None).is_err());
+        assert!(matches!(
+            resolve_delivery_charge(&mut invoice, Some(7.0), None),
+            Err(AppError::Conflict(_))
+        ));
+        invoice.collection_method = super::super::types::CollectionMethod::Pickup;
+        resolve_delivery_charge(&mut invoice, None, Some(&saved)).unwrap();
+        assert_eq!(invoice.delivery_charge, 0.0);
+        assert_eq!(compute_totals(&invoice, 0.1, 0.0).total, 90.0);
     }
 
     #[test]
@@ -2287,6 +2385,7 @@ pub async fn create_invoice(
         &HashMap::new(),
     )
     .await?;
+    resolve_delivery_charge(&mut input, state.delivery_charge()?, None)?;
     validate(&input)?;
 
     let totals = compute_totals(&input, vat_rate, 0.0);
@@ -2458,6 +2557,7 @@ pub async fn update_invoice(
         &saved,
     )
     .await?;
+    resolve_delivery_charge(&mut input, state.delivery_charge()?, Some(&locked))?;
     validate(&input)?;
 
     let totals = compute_totals(&input, locked.vat_rate, 0.0);

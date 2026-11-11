@@ -28,10 +28,13 @@ export function useSetOrderStage() {
 
   return useMutation({
     mutationFn: setOrderStage,
-    onSuccess: () => {
-      // One stage change moves the derived current stage, so the whole row is
-      // refetched rather than patched.
-      void queryClient.invalidateQueries({ queryKey: ['orders'] })
+    onSuccess: async () => {
+      // Progress changes the current stage and can revoke invoice readiness.
+      // Refresh both tables, including the order detail open above them.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+      ])
     },
   })
 }

@@ -74,7 +74,6 @@ pub struct CheckRow {
     pub id: Uuid,
     pub checked_at: DateTime<Utc>,
     pub report_fingerprint: String,
-    pub request_hash: Vec<u8>,
     pub counts: sqlx::types::Json<ClosingCounts>,
     pub comparison: sqlx::types::Json<Comparison>,
 }
@@ -99,7 +98,7 @@ pub async fn latest_check(
     Ok(sqlx::query_as!(
         CheckRow,
         r#"
-        SELECT id, checked_at, report_fingerprint, request_hash,
+        SELECT id, checked_at, report_fingerprint,
                counts AS "counts!: sqlx::types::Json<ClosingCounts>",
                comparison AS "comparison!: sqlx::types::Json<Comparison>"
         FROM branch_closing_checks WHERE branch_id = $1 AND report_date = $2
@@ -113,24 +112,9 @@ pub async fn latest_check(
     .map(CheckRow::into_check))
 }
 
-pub async fn replay(db: &mut PgConnection, request: Uuid) -> Result<Option<CheckRow>, sqlx::Error> {
-    sqlx::query_as!(
-        CheckRow,
-        r#"
-        SELECT id, checked_at, report_fingerprint, request_hash,
-               counts AS "counts!: sqlx::types::Json<ClosingCounts>",
-               comparison AS "comparison!: sqlx::types::Json<Comparison>"
-        FROM branch_closing_checks WHERE request_id = $1
-    "#,
-        request
-    )
-    .fetch_optional(db)
-    .await
-}
-
 pub async fn save_check(
     db: &mut PgConnection,
-    input: &SaveClosingInput,
+    input: &CloseDayInput,
     hash: &[u8],
     comparison: &Comparison,
     report: &SalesClosing,
@@ -140,9 +124,9 @@ pub async fn save_check(
     let compared = sqlx::types::Json(comparison);
     let snapshot = sqlx::types::Json(report);
     let row = sqlx::query_as!(CheckRow, r#"
-        INSERT INTO branch_closing_checks(branch_id, report_date, request_id, request_hash, report_fingerprint, counts, comparison, report_snapshot, checked_by)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-        RETURNING id, checked_at, report_fingerprint, request_hash,
+        INSERT INTO branch_closing_checks(branch_id, report_date, request_id, request_hash, report_fingerprint, counts, comparison, report_snapshot, checked_by, checked_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,clock_timestamp())
+        RETURNING id, checked_at, report_fingerprint,
                   counts AS "counts!: sqlx::types::Json<ClosingCounts>",
                   comparison AS "comparison!: sqlx::types::Json<Comparison>"
     "#, input.branch_id, input.date, input.request_id, hash, input.fingerprint, counts as _, compared as _, snapshot as _, actor)

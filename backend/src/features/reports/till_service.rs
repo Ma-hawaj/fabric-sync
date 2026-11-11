@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
@@ -8,14 +8,6 @@ use crate::{
     idempotency::{request_hash, verify_request_hash},
     state::AppState,
 };
-
-pub async fn lock_day(
-    db: &mut PgConnection,
-    branch: Uuid,
-    _date: NaiveDate,
-) -> Result<(), sqlx::Error> {
-    super::day_service::lock_branch(db, branch).await
-}
 
 fn reason(value: &str, maximum: usize) -> Result<(), AppError> {
     if value.trim().is_empty() || value.chars().count() > maximum {
@@ -32,11 +24,6 @@ async fn validate_day(
     branch: Uuid,
     date: NaiveDate,
 ) -> Result<(), AppError> {
-    if date > Utc::now().with_timezone(&state.timezone()?).date_naive() {
-        return Err(AppError::BadRequest(
-            "Opening cash and paid expenses cannot be recorded for a future day.".into(),
-        ));
-    }
     repository::branch_name(db, branch)
         .await?
         .ok_or_else(|| AppError::NotFound("Branch not found.".into()))?;
@@ -65,7 +52,7 @@ pub async fn save_opening(
         &input,
     );
     let mut tx = state.db().begin().await?;
-    lock_day(&mut tx, input.branch_id, input.date).await?;
+    super::day_service::lock_branch(&mut tx, input.branch_id).await?;
     if let Some(replay) =
         storage::opening(&mut tx, input.branch_id, input.date, Some(input.request_id)).await?
     {
@@ -128,7 +115,7 @@ pub async fn record_expense(
     }
     let hash = request_hash("branch.expense.v1", input.branch_id, &input);
     let mut tx = state.db().begin().await?;
-    lock_day(&mut tx, input.branch_id, input.date).await?;
+    super::day_service::lock_branch(&mut tx, input.branch_id).await?;
     if let Some(replay) = storage::expenses(&mut tx, None, None, Some(input.request_id), None)
         .await?
         .pop()
@@ -137,20 +124,7 @@ pub async fn record_expense(
         return Ok(replay.into_expense());
     }
     validate_day(state, &mut tx, input.branch_id, input.date).await?;
-    if input.date != super::day_service::business_date(state, &mut tx).await? {
-        return Err(AppError::Conflict(
-            "Older days' expenses are read-only. Record today's expenses on today's report.".into(),
-        ));
-    }
     super::day_service::require_trading(state, &mut tx, Some(input.branch_id)).await?;
-    if storage::opening(&mut tx, input.branch_id, input.date, None)
-        .await?
-        .is_none()
-    {
-        return Err(AppError::BadRequest(
-            "Save opening cash before recording expenses for this branch day.".into(),
-        ));
-    }
     let id = storage::insert_expense(&mut tx, &input, &hash, actor).await?;
     let expense = storage::expenses(&mut tx, None, None, None, Some(id))
         .await?
@@ -174,7 +148,7 @@ pub async fn void_expense(
         .await?
         .pop()
         .ok_or_else(|| AppError::NotFound("Expense not found.".into()))?;
-    lock_day(&mut tx, expense.branch_id, expense.business_date).await?;
+    super::day_service::lock_branch(&mut tx, expense.branch_id).await?;
     let expense = storage::expenses(&mut tx, None, None, None, Some(id))
         .await?
         .pop()
@@ -190,11 +164,6 @@ pub async fn void_expense(
         return Err(AppError::Conflict("This expense is already voided.".into()));
     }
     validate_day(state, &mut tx, expense.branch_id, expense.business_date).await?;
-    if expense.business_date != super::day_service::business_date(state, &mut tx).await? {
-        return Err(AppError::Conflict(
-            "Older days' expenses are read-only.".into(),
-        ));
-    }
     super::day_service::require_trading(state, &mut tx, Some(expense.branch_id)).await?;
     storage::insert_void(&mut tx, id, &input, &hash, actor).await?;
     let expense = storage::expenses(&mut tx, None, None, None, Some(id))

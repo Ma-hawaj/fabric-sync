@@ -72,6 +72,7 @@ beforeEach(() => {
           openingRecorded: true,
           closed: false,
           previousUnclosedDate: null,
+          canTrade: true,
           canCreateOrders: true,
         },
       })
@@ -138,6 +139,7 @@ function renderForm({
     openingRecorded: true,
     closed: false,
     previousUnclosedDate: null,
+    canTrade: true,
     canCreateOrders: true,
   })
   render(

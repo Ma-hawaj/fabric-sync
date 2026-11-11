@@ -17,20 +17,13 @@ pub async fn sales_closing(
     ))
 }
 
-pub async fn save_check(
-    State(state): State<AppState>,
-    Extension(user): Extension<crate::auth::AuthenticatedUser>,
-    Json(input): Json<SaveClosingInput>,
-) -> Result<Json<ClosingCheck>, AppError> {
-    let actor = actor(&user)?;
-    Ok(Json(service::save_check(&state, input, actor).await?))
-}
-
 fn actor(user: &crate::auth::AuthenticatedUser) -> Result<&str, AppError> {
     user.subject()
         .filter(|subject| !subject.trim().is_empty())
         .ok_or_else(|| {
-            AppError::Forbidden("A staff identity is required to save a closing check.".into())
+            AppError::Forbidden(
+                "A staff identity is required to record branch cash activity.".into(),
+            )
         })
 }
 
