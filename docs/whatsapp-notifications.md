@@ -222,9 +222,20 @@ and pickup messages, independently of pagination or table filters. The page
 refreshes every 30 seconds and has a manual Refresh action.
 
 Every row has an explicit **Notification type**: **Invoice send**, **Ready**,
-or **Gift card**. The type filter also includes **Repair ready**; selecting it
-explains that repair-ready sending is not implemented and has no notification
-history yet. Completed repairs are not treated as sent messages.
+**Repair ready**, or **Gift card**. Repair notices use the repair-ready preview
+flow from PR #108, carrying the repair ID through preparation, refreshing, and
+resending. A preview for a different repair cannot be sent. Until that workflow
+is available, the server rejects repair requests instead of preparing an ordinary
+pickup notice under the wrong context.
+
+Completed repairs awaiting a notice appear separately, including repairs of
+already-collected orders. Each repair has its own latest send and completion
+cycle; one repair's message cannot overwrite another repair or the original
+invoice pickup status. Reopening, receiving, opting out, and order closure remove
+obsolete repair work from attention. Repair records link to their order and
+show the repair reason. Invoice history and resend validation use the same
+separation. Readiness generation is stored as queue metadata in snapshot JSON,
+without adding a required field to the repair workflow's snapshot constructors.
 
 Gift cards use their own card code as the reference and open the existing
 gift-card preview. The queue includes cards without a linked invoice and
@@ -247,7 +258,7 @@ do not create outstanding work, while their recorded outcomes remain in History.
 - **Waiting too long** identifies messages still queued/submitting 30 minutes
   after approval. They may be waiting for automatic retries; this view offers
   review rather than a new send.
-- **History** shows the latest invoice/pickup outcomes that do not currently
+- **History** shows the latest invoice, pickup, repair, and gift-card outcomes that do not currently
   require action, including queued and provider-accepted messages. Accepted is
   distinct from delivered. Per-version/send history remains on the invoice.
 

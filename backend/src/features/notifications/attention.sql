@@ -15,18 +15,20 @@ WITH customers_by_invoice AS (
     ) customers
     GROUP BY invoice_id
 ), latest AS (
-    SELECT DISTINCT ON (invoice_id, (kind = 'invoice_ready'))
-           id, invoice_id, kind, approved_at, snapshot, event_key, source_hash
+    SELECT DISTINCT ON (invoice_id, (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''))
+           id, invoice_id, kind, approved_at, snapshot, event_key, source_hash,
+           snapshot->>'repairId' AS repair_id
     FROM notifications
     WHERE approved_at IS NOT NULL
-    ORDER BY invoice_id, (kind = 'invoice_ready'), approved_at DESC, id DESC
+    ORDER BY invoice_id, (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), approved_at DESC, id DESC
 ), context AS (
     SELECT i.id AS invoice_id, i.invoice_number, i.created_at,
            i.readiness_generation, i.collection_method, b.name AS branch_name,
            c.customers, c.customer_name, c.customer_mobile, coalesce(c.enabled, false) AS enabled,
            readiness.readiness_status,
            ready.waiting_since AS ready_since,
-           kind.kind
+           kind.kind, i.id AS entity_id, 'INV-' || i.invoice_number::text AS reference,
+           NULL::uuid AS repair_id, NULL::uuid AS order_id, NULL::text AS repair_reason
     FROM invoices i
     JOIN invoice_readiness readiness ON readiness.invoice_id = i.id
     LEFT JOIN branch b ON b.id = i.branch_id
@@ -37,13 +39,39 @@ WITH customers_by_invoice AS (
           AND NOT EXISTS (SELECT 1 FROM invoice_return_lines l WHERE l.order_id = o.id)
     ) ready ON true
     CROSS JOIN (VALUES ('invoice'), ('invoice_ready')) kind(kind)
+), repair_context AS (
+    SELECT i.id AS invoice_id, i.invoice_number, i.created_at,
+           i.readiness_generation, i.collection_method, b.name AS branch_name,
+           jsonb_build_array(jsonb_build_object('id', c.id, 'name', c.name, 'mobileNo', c.mobile_no)) AS customers,
+           c.name AS customer_name, c.mobile_no AS customer_mobile,
+           c.whatsapp_notifications_enabled AND oc.outcome = 'active' AS enabled,
+           CASE WHEN r.status = 'completed' THEN 'ready' ELSE r.status END AS readiness_status,
+           r.completed_at AS ready_since, 'repair_ready' AS kind,
+           r.id AS entity_id, 'ORD-' || o.order_number::text || ' repair' AS reference,
+           r.id AS repair_id, o.id AS order_id, r.reason AS repair_reason
+    FROM order_repairs r
+    JOIN orders o ON o.id = r.order_id
+    JOIN order_outcomes oc ON oc.order_id = o.id
+    JOIN invoices i ON i.id = o.invoice_id
+    JOIN measurements m ON m.id = o.measurement_id
+    JOIN customers c ON c.id = m.customer_id
+    LEFT JOIN branch b ON b.id = i.branch_id
+    WHERE r.status = 'completed' OR EXISTS (
+        SELECT 1 FROM latest n WHERE n.invoice_id = i.id AND n.repair_id = r.id::text
+    )
+), contexts AS (
+    SELECT * FROM context
+    UNION ALL
+    SELECT * FROM repair_context
 ), outcomes AS (
-    SELECT c.invoice_id, c.invoice_number, c.branch_name, c.customer_name, c.customer_mobile,
+    SELECT c.entity_id, c.reference, c.repair_id, c.order_id, c.repair_reason,
+           c.invoice_id, c.invoice_number, c.branch_name, c.customer_name, c.customer_mobile,
            coalesce(c.customers, '[]'::jsonb) AS customers, c.kind,
            n.id AS notification_id, n.approved_at AS last_attempt_at,
            (c.enabled AND (c.kind = 'invoice' OR
-             (c.collection_method = 'pickup' AND c.readiness_status = 'ready'))) AS eligible,
-           CASE WHEN c.kind = 'invoice_ready' THEN coalesce(c.ready_since, n.approved_at, c.created_at)
+             (c.kind = 'repair_ready' AND c.readiness_status = 'ready' AND c.ready_since IS NOT NULL AND c.branch_name IS NOT NULL) OR
+             (c.kind = 'invoice_ready' AND c.collection_method = 'pickup' AND c.readiness_status = 'ready'))) AS eligible,
+           CASE WHEN c.kind IN ('invoice_ready', 'repair_ready') THEN coalesce(c.ready_since, n.approved_at, c.created_at)
                 ELSE coalesce(r.awaiting_since, n.approved_at, c.created_at) END AS waiting_since,
            coalesce(r.recipient_count, 0) AS recipient_count,
            coalesce(r.queued_count, 0) AS queued_count,
@@ -65,13 +93,16 @@ WITH customers_by_invoice AS (
              WHEN coalesce(r.delivered_count, 0) > 0 THEN 'delivered'
              ELSE 'not_sent'
            END AS status
-    FROM context c
-    LEFT JOIN latest n ON n.invoice_id = c.invoice_id AND (n.kind = 'invoice_ready') = (c.kind = 'invoice_ready')
+    FROM contexts c
+    LEFT JOIN latest n ON n.invoice_id = c.invoice_id
+        AND (n.kind = 'invoice_ready') = (c.kind IN ('invoice_ready', 'repair_ready'))
+        AND n.repair_id IS NOT DISTINCT FROM c.repair_id::text
     CROSS JOIN LATERAL (
-        SELECT c.kind <> 'invoice_ready' OR c.readiness_status <> 'ready' OR coalesce(
+        SELECT CASE WHEN c.kind = 'repair_ready' THEN coalesce(n.approved_at >= c.ready_since, false)
+        ELSE c.kind <> 'invoice_ready' OR c.readiness_status <> 'ready' OR coalesce(
             (n.snapshot->>'readinessGeneration')::bigint = c.readiness_generation,
             n.event_key = 'ready:' || c.readiness_generation::text
-                OR n.approved_at >= c.ready_since, false) AS current_generation
+                OR n.approved_at >= c.ready_since, false) END AS current_generation
     ) cycle
     LEFT JOIN LATERAL (
         SELECT count(*) AS recipient_count,
@@ -96,14 +127,17 @@ WITH customers_by_invoice AS (
             FROM notifications sends
             JOIN notification_recipients r ON r.notification_id = sends.id AND r.selected
             WHERE sends.invoice_id = c.invoice_id AND sends.approved_at IS NOT NULL
-              AND (sends.kind = 'invoice_ready') = (c.kind = 'invoice_ready')
+              AND (sends.kind = 'invoice_ready') = (c.kind IN ('invoice_ready', 'repair_ready'))
+              AND sends.snapshot->>'repairId' IS NOT DISTINCT FROM c.repair_id::text
               AND sends.source_hash = n.source_hash
               AND cycle.current_generation
             ORDER BY r.normalized_mobile, sends.approved_at DESC, sends.id DESC
         ) destinations
     ) r ON true
     WHERE n.id IS NOT NULL OR (c.enabled AND
-        (c.kind = 'invoice' OR (c.collection_method = 'pickup' AND c.readiness_status = 'ready')))
+        (c.kind = 'invoice' OR
+         (c.kind = 'repair_ready' AND c.readiness_status = 'ready' AND c.ready_since IS NOT NULL AND c.branch_name IS NOT NULL) OR
+         (c.kind = 'invoice_ready' AND c.collection_method = 'pickup' AND c.readiness_status = 'ready')))
 ), gift_card_context AS (
     SELECT g.id AS entity_id, sale.id AS invoice_id, sale.invoice_number,
            sale.branch_name, g.code AS reference, g.id AS gift_card_id,
@@ -136,16 +170,17 @@ WITH customers_by_invoice AS (
         ORDER BY item.id LIMIT 1
     ) sale ON true
 ), all_notifications AS (
-    SELECT invoice_id AS entity_id, invoice_id, invoice_number, branch_name,
-           'INV-' || invoice_number::text AS reference, NULL::uuid AS gift_card_id,
-           NULL::text AS gift_card_code, customer_name, customer_mobile, customers,
+    SELECT entity_id, invoice_id, invoice_number, branch_name,
+           reference, NULL::uuid AS gift_card_id,
+           NULL::text AS gift_card_code, repair_id, order_id, repair_reason, customer_name, customer_mobile, customers,
            kind, notification_id, last_attempt_at, eligible, waiting_since,
            recipient_count, queued_count, accepted_count, delivered_count,
            failed_count, uncertain_count, cancelled_count, recipients, error_message, status
     FROM outcomes
     UNION ALL
     SELECT entity_id, invoice_id, invoice_number, branch_name, reference, gift_card_id,
-           gift_card_code, customer_name, customer_mobile, customers,
+           gift_card_code, NULL::uuid AS repair_id, NULL::uuid AS order_id, NULL::text AS repair_reason,
+           customer_name, customer_mobile, customers,
            'gift_card' AS kind, notification_id, last_attempt_at, eligible, waiting_since,
            CASE WHEN notification_id IS NULL THEN 0 ELSE 1 END::bigint AS recipient_count,
            CASE WHEN delivery_state IN ('queued', 'sending') THEN 1 ELSE 0 END::bigint AS queued_count,

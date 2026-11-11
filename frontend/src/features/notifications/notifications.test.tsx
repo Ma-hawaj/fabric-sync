@@ -38,16 +38,18 @@ vi.mock('./notification-dialog', () => ({
     invoiceId,
     kind,
     resendOf,
+    repairId,
     onClose,
   }: {
     invoiceId: string | null
     kind: NotificationKind
     resendOf?: string
+    repairId?: string
     onClose: () => void
   }) =>
     invoiceId ? (
       <div role="dialog" aria-label="Notification preview">
-        {invoiceId} · {kind} · {resendOf}
+        {invoiceId} · {kind} · {resendOf} · {repairId}
         <button onClick={onClose}>Close preview</button>
       </div>
     ) : null,
@@ -64,6 +66,9 @@ function row(
     invoiceNumber: 42,
     giftCardId: null,
     giftCardCode: null,
+    repairId: null,
+    orderId: null,
+    repairReason: null,
     branchName: 'Manama',
     customers: [{ id: 'ahmed', name: 'Ahmed', mobileNo: '33112233' }],
     kind: 'invoice',
@@ -299,15 +304,37 @@ describe('notification attention queue', () => {
     expect(apiClient.get).not.toHaveBeenCalled()
   })
 
-  it('explains the repair-ready type without inventing notification history', () => {
+  it('explains that repair-ready notifications have their own context', () => {
     mount([], { kind: 'repair_ready' })
     expect(
       screen.getByText(
-        'Repair-ready sending is not implemented yet. This type has no notification history.',
+        'Repair-ready notices are tracked separately for each repair, including repairs of collected orders.',
       ),
     ).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Preview & send' })).toBeNull()
     expect(apiClient.get).not.toHaveBeenCalled()
+  })
+
+  it('passes a specific repair into the pickup preview and links to its order', () => {
+    mount([
+      row('repair-1', {
+        kind: 'repair_ready',
+        reference: 'ORD-101 repair',
+        invoiceId: 'invoice-42',
+        repairId: 'repair-1',
+        orderId: 'order-101',
+        repairReason: 'Shorten sleeve',
+      }),
+    ])
+    expect(
+      screen.getByRole('link', { name: 'ORD-101 repair' }).getAttribute('href'),
+    ).toBe('/orders/order-101')
+    expect(screen.getByRole('cell', { name: 'Repair ready' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Preview & send' }))
+    expect(screen.getByRole('dialog').textContent).toContain(
+      'invoice-42 · invoice_ready ·  · repair-1',
+    )
+    expect(apiClient.post).not.toHaveBeenCalled()
   })
 
   it('shows partial recipient failures and opens a linked resend for review', () => {

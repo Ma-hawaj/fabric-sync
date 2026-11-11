@@ -30,9 +30,21 @@ pub async fn prepare(
     Path(invoice_id): Path<Uuid>,
     Json(input): Json<PrepareInput>,
 ) -> Result<Json<Notification>, AppError> {
-    Ok(Json(
-        service::prepare(&state, invoice_id, input, user.subject().unwrap_or("staff")).await?,
-    ))
+    let repair_id = match input.resend_of {
+        Some(id) => input
+            .repair_id
+            .or(repository::get(state.db(), id).await?.snapshot.repair_id),
+        None => input.repair_id,
+    };
+    let notification =
+        service::prepare(&state, invoice_id, input, user.subject().unwrap_or("staff")).await?;
+    if repair_id.is_some() && notification.snapshot.repair_id != repair_id {
+        service::discard_preview(&state, notification.id).await?;
+        return Err(AppError::Unavailable(
+            "Repair-ready sending is not available on this server.".into(),
+        ));
+    }
+    Ok(Json(notification))
 }
 pub async fn get(
     State(state): State<AppState>,
@@ -91,15 +103,21 @@ pub async fn resend(
     Path(id): Path<Uuid>,
     Json(input): Json<ResendInput>,
 ) -> Result<Json<Notification>, AppError> {
-    Ok(Json(
-        service::resend(
-            &state,
-            id,
-            input.request_id,
-            user.subject().unwrap_or("staff"),
-        )
-        .await?,
-    ))
+    let repair_id = repository::get(state.db(), id).await?.snapshot.repair_id;
+    let notification = service::resend(
+        &state,
+        id,
+        input.request_id,
+        user.subject().unwrap_or("staff"),
+    )
+    .await?;
+    if notification.snapshot.repair_id != repair_id {
+        service::discard_preview(&state, notification.id).await?;
+        return Err(AppError::Unavailable(
+            "Repair-ready sending is not available on this server.".into(),
+        ));
+    }
+    Ok(Json(notification))
 }
 
 pub async fn document(

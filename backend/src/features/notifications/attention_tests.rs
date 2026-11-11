@@ -314,3 +314,142 @@ async fn attention_filters_notification_types_while_summary_includes_all_types(p
     assert_eq!(result.data[0].kind, "gift_card");
     assert_eq!(attention::summary(&pool).await.unwrap().total, 2);
 }
+
+async fn repair(pool: &PgPool, order: Uuid) -> Uuid {
+    sqlx::query_scalar("INSERT INTO order_repairs(order_id,reason,status,completed_at) VALUES($1,'Shorten sleeve','completed',now()-interval '15 minutes') RETURNING id")
+        .bind(order).fetch_one(pool).await.unwrap()
+}
+
+async fn repair_notice(pool: &PgPool, invoice: Uuid, repair: Uuid, status: &str) -> Uuid {
+    let id = approved(pool, invoice, "invoice_ready", 0).await;
+    sqlx::query("UPDATE notifications SET snapshot=jsonb_build_object('repairId',$2::uuid::text) WHERE id=$1")
+        .bind(id).bind(repair).execute(pool).await.unwrap();
+    recipient(pool, id, "+97333112233", status).await;
+    id
+}
+
+#[sqlx::test]
+async fn attention_separates_repairs_from_invoice_pickup_notices(pool: PgPool) {
+    let (invoice, orders, _, pickup) = test_support::invoice(&pool, 1, false).await;
+    test_support::finish_stages(&pool, orders[0], pickup).await;
+    readiness::confirm(&pool, invoice, None, "staff", true)
+        .await
+        .unwrap();
+    let normal = approved(&pool, invoice, "invoice_ready", 1).await;
+    recipient(&pool, normal, "+97333112233", "delivered").await;
+    let first = repair(&pool, orders[0]).await;
+    let second = repair(&pool, orders[0]).await;
+    let first_send = repair_notice(&pool, invoice, first, "failed").await;
+    let second_send = repair_notice(&pool, invoice, second, "accepted").await;
+    let result = rows(&pool).await;
+    let pickup = result
+        .iter()
+        .find(|row| row.kind == "invoice_ready")
+        .unwrap();
+    assert_eq!(pickup.notification_id, Some(normal));
+    assert_eq!(pickup.status, "delivered");
+    let first_row = result
+        .iter()
+        .find(|row| row.repair_id == Some(first))
+        .unwrap();
+    assert_eq!(first_row.entity_id, first);
+    assert_eq!(first_row.kind, "repair_ready");
+    assert_eq!(first_row.status, "failed");
+    assert!(first_row.needs_attention);
+    let second_row = result
+        .iter()
+        .find(|row| row.repair_id == Some(second))
+        .unwrap();
+    assert_eq!(second_row.status, "accepted");
+    assert!(!second_row.needs_attention);
+    let mut conn = pool.acquire().await.unwrap();
+    assert_eq!(
+        super::repository::latest_approved(&mut conn, invoice, true, first_send)
+            .await
+            .unwrap(),
+        Some(first_send)
+    );
+    assert_eq!(
+        super::repository::latest_approved(&mut conn, invoice, true, normal)
+            .await
+            .unwrap(),
+        Some(normal)
+    );
+    assert_eq!(
+        super::repository::latest_approved(&mut conn, invoice, true, second_send)
+            .await
+            .unwrap(),
+        Some(second_send)
+    );
+    drop(conn);
+    let history = super::repository::history(&pool, invoice).await.unwrap();
+    assert_eq!(history.len(), 3);
+    assert_eq!(
+        history.iter().filter(|row| row.repair_id.is_some()).count(),
+        2
+    );
+}
+
+#[sqlx::test]
+async fn attention_shows_unsent_repairs_of_collected_orders_and_clears_received_repairs(
+    pool: PgPool,
+) {
+    let (invoice, orders, _, _) = test_support::invoice(&pool, 1, false).await;
+    sqlx::query("UPDATE orders SET status='collected' WHERE id=$1")
+        .bind(orders[0])
+        .execute(&pool)
+        .await
+        .unwrap();
+    let repair_id = repair(&pool, orders[0]).await;
+    let result = rows(&pool).await;
+    let row = result
+        .iter()
+        .find(|row| row.repair_id == Some(repair_id))
+        .unwrap();
+    assert_eq!(row.status, "not_sent");
+    assert!(row.needs_attention);
+    assert_eq!(row.order_id, Some(orders[0]));
+    assert_eq!(row.invoice_id, Some(invoice));
+    sqlx::query("UPDATE order_repairs SET status='received', received_at=now() WHERE id=$1")
+        .bind(repair_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(!rows(&pool)
+        .await
+        .iter()
+        .any(|row| row.repair_id == Some(repair_id) && row.needs_attention));
+}
+
+#[sqlx::test]
+async fn attention_requires_a_fresh_notice_when_a_repair_is_completed_again(pool: PgPool) {
+    let (invoice, orders, _, _) = test_support::invoice(&pool, 1, false).await;
+    let repair_id = repair(&pool, orders[0]).await;
+    repair_notice(&pool, invoice, repair_id, "delivered").await;
+    sqlx::query("UPDATE order_repairs SET status='open',completed_at=NULL WHERE id=$1")
+        .bind(repair_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        !rows(&pool)
+            .await
+            .iter()
+            .find(|row| row.repair_id == Some(repair_id))
+            .unwrap()
+            .needs_attention
+    );
+    sqlx::query("UPDATE order_repairs SET status='completed',completed_at=now() WHERE id=$1")
+        .bind(repair_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let result = rows(&pool).await;
+    let row = result
+        .iter()
+        .find(|row| row.repair_id == Some(repair_id))
+        .unwrap();
+    assert_eq!(row.status, "not_sent");
+    assert!(row.needs_attention);
+    assert_eq!(row.delivered_count, 0);
+}

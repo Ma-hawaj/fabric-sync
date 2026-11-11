@@ -105,10 +105,10 @@ pub(crate) async fn source(
     }
     Ok(Source {
         snapshot: Snapshot {
+            repair_id: None,
             invoice_number: detail.invoice_number,
             source_hash,
             revision,
-            readiness_generation: Some(generation),
             body,
             template_name: template_name.clone(),
             language: config.language.clone(),
@@ -382,7 +382,7 @@ async fn validate_resend(
             "Choose an approved notification from this invoice to resend.".into(),
         ));
     }
-    if repository::latest_approved(conn, invoice_id, kind == "invoice_ready").await?
+    if repository::latest_approved(conn, invoice_id, kind == "invoice_ready", original).await?
         != Some(original)
     {
         return Err(AppError::Conflict(
@@ -441,6 +441,7 @@ pub async fn resend(
         state,
         previous.invoice_id,
         PrepareInput {
+            repair_id: previous.snapshot.repair_id,
             kind: kind.into(),
             request_id,
             resend_of: Some(id),

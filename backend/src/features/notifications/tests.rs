@@ -71,6 +71,7 @@ async fn mock_server() -> (String, Mock) {
 }
 fn prepare(kind: &str) -> PrepareInput {
     PrepareInput {
+        repair_id: None,
         kind: kind.into(),
         request_id: Uuid::new_v4(),
         resend_of: None,
@@ -263,6 +264,7 @@ async fn explicit_resends_have_new_identities_and_do_not_reuse_old_invoice_conte
         &state,
         invoice,
         PrepareInput {
+            repair_id: None,
             kind: "manual_resend".into(),
             request_id: request,
             resend_of: Some(draft.id),
@@ -275,6 +277,7 @@ async fn explicit_resends_have_new_identities_and_do_not_reuse_old_invoice_conte
         &state,
         invoice,
         PrepareInput {
+            repair_id: None,
             kind: "manual_resend".into(),
             request_id: request,
             resend_of: Some(draft.id),
@@ -734,6 +737,7 @@ async fn previews_are_disposable_and_only_send_creates_history(pool: PgPool) {
         &state,
         invoice,
         PrepareInput {
+            repair_id: None,
             kind: "manual_resend".into(),
             request_id,
             resend_of: None,

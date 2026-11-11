@@ -49,13 +49,22 @@ function fixture(): NotificationDraft {
     ],
   }
 }
-function mount(kind: NotificationKind = 'manual_resend', onClose = vi.fn()) {
+function mount(
+  kind: NotificationKind = 'manual_resend',
+  onClose = vi.fn(),
+  repairId?: string,
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   const view = render(
     <QueryClientProvider client={client}>
-      <NotificationDialog invoiceId="invoice-1" kind={kind} onClose={onClose} />
+      <NotificationDialog
+        invoiceId="invoice-1"
+        kind={kind}
+        onClose={onClose}
+        repairId={repairId}
+      />
     </QueryClientProvider>,
   )
   return { onClose, ...view }
@@ -224,5 +233,40 @@ describe('notification preview and approval', () => {
       }).disabled,
     ).toBe(true)
     expect(screen.getByRole('button', { name: 'Refresh preview' })).toBeTruthy()
+  })
+  it('passes repair identity through preparation and refresh', async () => {
+    draft.artifactId = null
+    draft.snapshot.repairId = 'repair-1'
+    mount('invoice_ready', vi.fn(), 'repair-1')
+    await screen.findByRole('heading', {
+      name: 'Repair ready for pickup — notify customer',
+    })
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/invoices/invoice-1/notifications',
+      expect.objectContaining({ kind: 'invoice_ready', repairId: 'repair-1' }),
+    )
+    expect(
+      screen
+        .getByRole('button', { name: 'Send via WhatsApp' })
+        .hasAttribute('disabled'),
+    ).toBe(false)
+  })
+
+  it('blocks sending an invoice preview returned for a requested repair', async () => {
+    draft.artifactId = null
+    mount('invoice_ready', vi.fn(), 'repair-1')
+    await screen.findByText(
+      'This preview does not match the selected repair. Refresh it before sending.',
+    )
+    expect(
+      screen
+        .getByRole('button', { name: 'Send via WhatsApp' })
+        .hasAttribute('disabled'),
+    ).toBe(true)
+    expect(
+      vi
+        .mocked(apiClient.post)
+        .mock.calls.some(([path]) => String(path).endsWith('/send')),
+    ).toBe(false)
   })
 })

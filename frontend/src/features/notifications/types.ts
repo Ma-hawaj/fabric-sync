@@ -28,6 +28,7 @@ export interface NotificationDraft {
   artifactId: string | null
   canSend: boolean
   snapshot: {
+    repairId?: string | null
     invoiceNumber: number
     body: string
     language: string
@@ -41,6 +42,7 @@ export interface NotificationDraft {
 }
 export interface NotificationHistoryRow {
   id: string
+  repairId?: string | null
   kind: NotificationKind
   state: string
   createdAt: string
@@ -70,6 +72,9 @@ export interface NotificationAttentionRow {
   invoiceNumber: number | null
   giftCardId: string | null
   giftCardCode: string | null
+  repairId: string | null
+  orderId: string | null
+  repairReason: string | null
   branchName: string | null
   customers: { id: string; name: string; mobileNo: string }[]
   kind: 'invoice' | 'invoice_ready' | 'repair_ready' | 'gift_card'

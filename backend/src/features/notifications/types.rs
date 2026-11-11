@@ -24,11 +24,11 @@ pub struct Destination {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
+    #[serde(default)]
+    pub repair_id: Option<Uuid>,
     pub invoice_number: i64,
     pub source_hash: String,
     pub revision: i64,
-    #[serde(default)]
-    pub readiness_generation: Option<i64>,
     pub body: String,
     pub template_name: String,
     pub language: String,
@@ -39,6 +39,7 @@ pub struct Snapshot {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrepareInput {
+    pub repair_id: Option<Uuid>,
     pub kind: String,
     pub request_id: Uuid,
     pub resend_of: Option<Uuid>,
@@ -104,6 +105,7 @@ pub struct Notification {
 #[serde(rename_all = "camelCase")]
 pub struct History {
     pub id: Uuid,
+    pub repair_id: Option<Uuid>,
     pub kind: String,
     pub state: String,
     pub created_at: DateTime<Utc>,
@@ -126,6 +128,9 @@ pub struct AttentionRow {
     pub invoice_number: Option<i64>,
     pub gift_card_id: Option<Uuid>,
     pub gift_card_code: Option<String>,
+    pub repair_id: Option<Uuid>,
+    pub order_id: Option<Uuid>,
+    pub repair_reason: Option<String>,
     pub branch_name: Option<String>,
     #[sqlx(json)]
     pub customers: Value,

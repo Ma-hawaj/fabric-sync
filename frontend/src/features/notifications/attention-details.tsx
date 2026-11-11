@@ -29,10 +29,7 @@ export function AttentionDetails({
 }) {
   const [checkedDelivery, setCheckedDelivery] = useState(false)
   const canPreview =
-    row.kind !== 'repair_ready' &&
-    row.eligible &&
-    row.status !== 'queued' &&
-    row.status !== 'delayed'
+    row.eligible && row.status !== 'queued' && row.status !== 'delayed'
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="sm:max-w-lg">
@@ -93,6 +90,12 @@ export function AttentionDetails({
               {row.errorMessage}
             </p>
           )}
+          {row.repairReason && (
+            <p>
+              <span className="font-medium">Repair: </span>
+              {row.repairReason}
+            </p>
+          )}
           {row.recipients.length > 0 && (
             <div className="space-y-3">
               <h3 className="font-medium">Latest result per recipient</h3>
@@ -139,7 +142,17 @@ export function AttentionDetails({
               {row.notificationId ? 'Preview resend' : 'Preview & send'}
             </Button>
           )}
-          {row.kind === 'gift_card' && row.giftCardCode ? (
+          {row.kind === 'repair_ready' && row.orderId ? (
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={
+                <Link to="/orders/$orderId" params={{ orderId: row.orderId }} />
+              }
+            >
+              Open order repairs
+            </Button>
+          ) : row.kind === 'gift_card' && row.giftCardCode ? (
             <Button
               variant="outline"
               nativeButton={false}

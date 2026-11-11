@@ -79,21 +79,23 @@ pub async fn history(db: &PgPool, invoice_id: Uuid) -> Result<Vec<History>, AppE
     Ok(sqlx::query_as(
         r#"
         WITH versions AS (
-            SELECT DISTINCT ON ((kind = 'invoice_ready'), source_hash) id, kind, approved_at,
-                   count(*) OVER (PARTITION BY (kind = 'invoice_ready'), source_hash) AS send_count,
-                   first_value(kind) OVER (PARTITION BY (kind = 'invoice_ready'), source_hash ORDER BY approved_at, id) AS original_kind
+            SELECT DISTINCT ON ((kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), source_hash) id, kind, approved_at,
+                   snapshot->>'repairId' AS repair_id,
+                   count(*) OVER (PARTITION BY (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), source_hash) AS send_count,
+                   first_value(kind) OVER (PARTITION BY (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), source_hash ORDER BY approved_at, id) AS original_kind
               FROM notifications
              WHERE invoice_id = $1 AND approved_at IS NOT NULL
-             ORDER BY (kind = 'invoice_ready'), source_hash, approved_at DESC, id DESC
+             ORDER BY (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), source_hash, approved_at DESC, id DESC
         ), recent AS (
             SELECT id FROM versions
              ORDER BY approved_at DESC, id DESC
              LIMIT 100
         ), latest AS (
-            SELECT DISTINCT ON (kind = 'invoice_ready') id FROM versions
-             ORDER BY (kind = 'invoice_ready'), approved_at DESC, id DESC
+            SELECT DISTINCT ON ((kind = 'invoice_ready'), coalesce(repair_id, '')) id FROM versions
+             ORDER BY (kind = 'invoice_ready'), coalesce(repair_id, ''), approved_at DESC, id DESC
         )
         SELECT n.id,
+               (n.snapshot->>'repairId')::uuid AS repair_id,
                v.original_kind AS kind,
                n.state,
                n.approved_at AS created_at,
@@ -269,18 +271,23 @@ pub async fn latest_approved(
     conn: &mut PgConnection,
     invoice: Uuid,
     ready: bool,
+    original: Uuid,
 ) -> Result<Option<Uuid>, AppError> {
     Ok(sqlx::query_scalar(
         r#"
         SELECT id FROM notifications
          WHERE invoice_id = $1 AND approved_at IS NOT NULL
            AND (kind = 'invoice_ready') = $2
+           AND snapshot->>'repairId' IS NOT DISTINCT FROM (
+               SELECT snapshot->>'repairId' FROM notifications WHERE id = $3
+           )
          ORDER BY approved_at DESC, id DESC
          LIMIT 1
         "#,
     )
     .bind(invoice)
     .bind(ready)
+    .bind(original)
     .fetch_optional(conn)
     .await?)
 }
@@ -376,6 +383,18 @@ pub async fn insert_notification(
     artifact: Option<Uuid>,
     actor: &str,
 ) -> Result<Uuid, AppError> {
+    // Queue metadata belongs in stored JSON, keeping new Snapshot sources
+    // independent of the invoice pickup generation.
+    let mut stored_snapshot =
+        serde_json::to_value(snapshot).map_err(|error| AppError::Config(error.to_string()))?;
+    if input.kind == "invoice_ready" && snapshot.repair_id.is_none() {
+        let generation: i64 =
+            sqlx::query_scalar("SELECT readiness_generation FROM invoices WHERE id=$1")
+                .bind(invoice)
+                .fetch_one(&mut *conn)
+                .await?;
+        stored_snapshot["readinessGeneration"] = serde_json::json!(generation);
+    }
     Ok(sqlx::query_scalar(
         r#"
         INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,snapshot,artifact_id,created_by,resend_of)
@@ -387,7 +406,7 @@ pub async fn insert_notification(
         .bind(key)
         .bind(&snapshot.source_hash)
         .bind(Uuid::new_v4())
-        .bind(sqlx::types::Json(snapshot))
+        .bind(sqlx::types::Json(stored_snapshot))
         .bind(artifact)
         .bind(actor)
         .bind(input.resend_of)
@@ -835,7 +854,8 @@ pub async fn cleanup(db: &PgPool, config: &super::Config) -> Result<(), AppError
 pub async fn sends(db: &PgPool, id: Uuid) -> Result<Vec<History>, AppError> {
     Ok(sqlx::query_as(
         r#"
-        SELECT n.id, n.kind, n.state, n.approved_at AS created_at,
+        SELECT n.id, (n.snapshot->>'repairId')::uuid AS repair_id,
+               n.kind, n.state, n.approved_at AS created_at,
                1::BIGINT AS send_count,
                count(r.id) FILTER (WHERE r.selected) AS recipient_count,
                count(r.id) FILTER (WHERE r.status IN ('queued','submitting')) AS queued_count,
@@ -850,6 +870,7 @@ pub async fn sends(db: &PgPool, id: Uuid) -> Result<Vec<History>, AppError> {
                    SELECT invoice_id, source_hash FROM notifications WHERE id = $1
                )
            AND (n.kind = 'invoice_ready') = (SELECT kind = 'invoice_ready' FROM notifications WHERE id = $1)
+           AND n.snapshot->>'repairId' IS NOT DISTINCT FROM (SELECT snapshot->>'repairId' FROM notifications WHERE id = $1)
            AND n.approved_at IS NOT NULL
          GROUP BY n.id
          ORDER BY n.approved_at DESC, n.id DESC

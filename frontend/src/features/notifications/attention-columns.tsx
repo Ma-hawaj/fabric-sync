@@ -17,7 +17,15 @@ function NotificationReference({ item }: { item: NotificationAttentionRow }) {
   const linkClass = 'font-mono font-medium text-info hover:underline'
   return (
     <div className="space-y-1">
-      {item.kind === 'gift_card' && item.giftCardCode ? (
+      {item.kind === 'repair_ready' && item.orderId ? (
+        <Link
+          className={linkClass}
+          to="/orders/$orderId"
+          params={{ orderId: item.orderId }}
+        >
+          {item.reference}
+        </Link>
+      ) : item.kind === 'gift_card' && item.giftCardCode ? (
         <Link
           className={linkClass}
           to="/gift-cards/$code"

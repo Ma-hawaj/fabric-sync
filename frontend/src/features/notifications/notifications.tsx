@@ -35,12 +35,7 @@ export function NotificationsPage() {
   const columns = useMemo(
     () =>
       getAttentionColumns((row) => {
-        if (
-          row.status === 'not_sent' &&
-          row.eligible &&
-          row.kind !== 'repair_ready'
-        )
-          setPreview(row)
+        if (row.status === 'not_sent' && row.eligible) setPreview(row)
         else setReview(row)
       }),
     [],
@@ -175,8 +170,8 @@ export function NotificationsPage() {
         )}
         {repairReadyOnly && (
           <p role="status" className="text-sm text-muted-foreground">
-            Repair-ready sending is not implemented yet. This type has no
-            notification history.
+            Repair-ready notices are tracked separately for each repair,
+            including repairs of collected orders.
           </p>
         )}
       </div>
@@ -228,18 +223,17 @@ export function NotificationsPage() {
       )}
       <NotificationDialog
         invoiceId={
-          preview?.kind === 'gift_card' || preview?.kind === 'repair_ready'
-            ? null
-            : (preview?.invoiceId ?? null)
+          preview?.kind === 'gift_card' ? null : (preview?.invoiceId ?? null)
         }
         kind={
-          preview?.kind === 'invoice_ready'
+          preview?.kind === 'invoice_ready' || preview?.kind === 'repair_ready'
             ? 'invoice_ready'
             : preview?.notificationId
               ? 'manual_resend'
               : 'invoice_created'
         }
         resendOf={preview?.notificationId ?? undefined}
+        repairId={preview?.repairId ?? undefined}
         onClose={() => setPreview(null)}
       />
       {preview?.kind === 'gift_card' &&
