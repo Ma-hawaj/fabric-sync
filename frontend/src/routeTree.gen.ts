@@ -21,6 +21,7 @@ import { Route as AuthenticatedInventoryRouteRouteImport } from './routes/_authe
 import { Route as AuthenticatedGiftCardsRouteRouteImport } from './routes/_authenticated/gift-cards/route'
 import { Route as AuthenticatedDesignOptionsRouteRouteImport } from './routes/_authenticated/design-options/route'
 import { Route as AuthenticatedCustomersRouteRouteImport } from './routes/_authenticated/customers/route'
+import { Route as AuthenticatedCampaignsRouteRouteImport } from './routes/_authenticated/campaigns/route'
 import { Route as AuthenticatedRepairsIndexRouteImport } from './routes/_authenticated/repairs/index'
 import { Route as AuthenticatedProductsIndexRouteImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedOrdersIndexRouteImport } from './routes/_authenticated/orders/index'
@@ -31,6 +32,8 @@ import { Route as AuthenticatedInventoryIndexRouteImport } from './routes/_authe
 import { Route as AuthenticatedGiftCardsIndexRouteImport } from './routes/_authenticated/gift-cards/index'
 import { Route as AuthenticatedDesignOptionsIndexRouteImport } from './routes/_authenticated/design-options/index'
 import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers/index'
+import { Route as AuthenticatedCampaignsIndexRouteImport } from './routes/_authenticated/campaigns/index'
+import { Route as AuthenticatedCampaignTemplatesIndexRouteImport } from './routes/_authenticated/campaign-templates/index'
 import { Route as AuthenticatedProductsNewRouteImport } from './routes/_authenticated/products/new'
 import { Route as AuthenticatedOrdersOrderIdRouteImport } from './routes/_authenticated/orders/$orderId'
 import { Route as AuthenticatedOrderStagesNewRouteImport } from './routes/_authenticated/order-stages/new'
@@ -41,6 +44,8 @@ import { Route as AuthenticatedGiftCardsNewRouteImport } from './routes/_authent
 import { Route as AuthenticatedGiftCardsCodeRouteImport } from './routes/_authenticated/gift-cards/$code'
 import { Route as AuthenticatedDesignOptionsNewRouteImport } from './routes/_authenticated/design-options/new'
 import { Route as AuthenticatedCustomersNewRouteImport } from './routes/_authenticated/customers/new'
+import { Route as AuthenticatedCampaignsNewRouteImport } from './routes/_authenticated/campaigns/new'
+import { Route as AuthenticatedCampaignsCampaignIdRouteImport } from './routes/_authenticated/campaigns/$campaignId'
 import { Route as AuthenticatedInvoicesInvoiceIdRouteRouteImport } from './routes/_authenticated/invoices/$invoiceId/route'
 import { Route as AuthenticatedInvoicesInvoiceIdIndexRouteImport } from './routes/_authenticated/invoices/$invoiceId/index'
 import { Route as AuthenticatedProductsProductIdEditRouteImport } from './routes/_authenticated/products/$productId/edit'
@@ -118,6 +123,12 @@ const AuthenticatedCustomersRouteRoute =
     path: '/customers',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedCampaignsRouteRoute =
+  AuthenticatedCampaignsRouteRouteImport.update({
+    id: '/campaigns',
+    path: '/campaigns',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedRepairsIndexRoute =
   AuthenticatedRepairsIndexRouteImport.update({
     id: '/repairs/',
@@ -177,6 +188,18 @@ const AuthenticatedCustomersIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedCustomersRouteRoute,
+  } as any)
+const AuthenticatedCampaignsIndexRoute =
+  AuthenticatedCampaignsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedCampaignsRouteRoute,
+  } as any)
+const AuthenticatedCampaignTemplatesIndexRoute =
+  AuthenticatedCampaignTemplatesIndexRouteImport.update({
+    id: '/campaign-templates/',
+    path: '/campaign-templates/',
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedProductsNewRoute =
   AuthenticatedProductsNewRouteImport.update({
@@ -238,6 +261,18 @@ const AuthenticatedCustomersNewRoute =
     path: '/new',
     getParentRoute: () => AuthenticatedCustomersRouteRoute,
   } as any)
+const AuthenticatedCampaignsNewRoute =
+  AuthenticatedCampaignsNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedCampaignsRouteRoute,
+  } as any)
+const AuthenticatedCampaignsCampaignIdRoute =
+  AuthenticatedCampaignsCampaignIdRouteImport.update({
+    id: '/$campaignId',
+    path: '/$campaignId',
+    getParentRoute: () => AuthenticatedCampaignsRouteRoute,
+  } as any)
 const AuthenticatedInvoicesInvoiceIdRouteRoute =
   AuthenticatedInvoicesInvoiceIdRouteRouteImport.update({
     id: '/$invoiceId',
@@ -289,6 +324,7 @@ const AuthenticatedCustomersCustomerIdEditRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/campaigns': typeof AuthenticatedCampaignsRouteRouteWithChildren
   '/customers': typeof AuthenticatedCustomersRouteRouteWithChildren
   '/design-options': typeof AuthenticatedDesignOptionsRouteRouteWithChildren
   '/gift-cards': typeof AuthenticatedGiftCardsRouteRouteWithChildren
@@ -300,6 +336,8 @@ export interface FileRoutesByFullPath {
   '/products': typeof AuthenticatedProductsRouteRouteWithChildren
   '/users': typeof AuthenticatedUsersRoute
   '/invoices/$invoiceId': typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
+  '/campaigns/$campaignId': typeof AuthenticatedCampaignsCampaignIdRoute
+  '/campaigns/new': typeof AuthenticatedCampaignsNewRoute
   '/customers/new': typeof AuthenticatedCustomersNewRoute
   '/design-options/new': typeof AuthenticatedDesignOptionsNewRoute
   '/gift-cards/$code': typeof AuthenticatedGiftCardsCodeRoute
@@ -310,6 +348,8 @@ export interface FileRoutesByFullPath {
   '/order-stages/new': typeof AuthenticatedOrderStagesNewRoute
   '/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/products/new': typeof AuthenticatedProductsNewRoute
+  '/campaign-templates/': typeof AuthenticatedCampaignTemplatesIndexRoute
+  '/campaigns/': typeof AuthenticatedCampaignsIndexRoute
   '/customers/': typeof AuthenticatedCustomersIndexRoute
   '/design-options/': typeof AuthenticatedDesignOptionsIndexRoute
   '/gift-cards/': typeof AuthenticatedGiftCardsIndexRoute
@@ -331,6 +371,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/users': typeof AuthenticatedUsersRoute
+  '/campaigns/$campaignId': typeof AuthenticatedCampaignsCampaignIdRoute
+  '/campaigns/new': typeof AuthenticatedCampaignsNewRoute
   '/customers/new': typeof AuthenticatedCustomersNewRoute
   '/design-options/new': typeof AuthenticatedDesignOptionsNewRoute
   '/gift-cards/$code': typeof AuthenticatedGiftCardsCodeRoute
@@ -341,6 +383,8 @@ export interface FileRoutesByTo {
   '/order-stages/new': typeof AuthenticatedOrderStagesNewRoute
   '/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/products/new': typeof AuthenticatedProductsNewRoute
+  '/campaign-templates': typeof AuthenticatedCampaignTemplatesIndexRoute
+  '/campaigns': typeof AuthenticatedCampaignsIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
   '/design-options': typeof AuthenticatedDesignOptionsIndexRoute
   '/gift-cards': typeof AuthenticatedGiftCardsIndexRoute
@@ -363,6 +407,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/_authenticated/campaigns': typeof AuthenticatedCampaignsRouteRouteWithChildren
   '/_authenticated/customers': typeof AuthenticatedCustomersRouteRouteWithChildren
   '/_authenticated/design-options': typeof AuthenticatedDesignOptionsRouteRouteWithChildren
   '/_authenticated/gift-cards': typeof AuthenticatedGiftCardsRouteRouteWithChildren
@@ -374,6 +419,8 @@ export interface FileRoutesById {
   '/_authenticated/products': typeof AuthenticatedProductsRouteRouteWithChildren
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/invoices/$invoiceId': typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
+  '/_authenticated/campaigns/$campaignId': typeof AuthenticatedCampaignsCampaignIdRoute
+  '/_authenticated/campaigns/new': typeof AuthenticatedCampaignsNewRoute
   '/_authenticated/customers/new': typeof AuthenticatedCustomersNewRoute
   '/_authenticated/design-options/new': typeof AuthenticatedDesignOptionsNewRoute
   '/_authenticated/gift-cards/$code': typeof AuthenticatedGiftCardsCodeRoute
@@ -384,6 +431,8 @@ export interface FileRoutesById {
   '/_authenticated/order-stages/new': typeof AuthenticatedOrderStagesNewRoute
   '/_authenticated/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/_authenticated/products/new': typeof AuthenticatedProductsNewRoute
+  '/_authenticated/campaign-templates/': typeof AuthenticatedCampaignTemplatesIndexRoute
+  '/_authenticated/campaigns/': typeof AuthenticatedCampaignsIndexRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
   '/_authenticated/design-options/': typeof AuthenticatedDesignOptionsIndexRoute
   '/_authenticated/gift-cards/': typeof AuthenticatedGiftCardsIndexRoute
@@ -406,6 +455,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/campaigns'
     | '/customers'
     | '/design-options'
     | '/gift-cards'
@@ -417,6 +467,8 @@ export interface FileRouteTypes {
     | '/products'
     | '/users'
     | '/invoices/$invoiceId'
+    | '/campaigns/$campaignId'
+    | '/campaigns/new'
     | '/customers/new'
     | '/design-options/new'
     | '/gift-cards/$code'
@@ -427,6 +479,8 @@ export interface FileRouteTypes {
     | '/order-stages/new'
     | '/orders/$orderId'
     | '/products/new'
+    | '/campaign-templates/'
+    | '/campaigns/'
     | '/customers/'
     | '/design-options/'
     | '/gift-cards/'
@@ -448,6 +502,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/users'
+    | '/campaigns/$campaignId'
+    | '/campaigns/new'
     | '/customers/new'
     | '/design-options/new'
     | '/gift-cards/$code'
@@ -458,6 +514,8 @@ export interface FileRouteTypes {
     | '/order-stages/new'
     | '/orders/$orderId'
     | '/products/new'
+    | '/campaign-templates'
+    | '/campaigns'
     | '/customers'
     | '/design-options'
     | '/gift-cards'
@@ -479,6 +537,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/_authenticated/campaigns'
     | '/_authenticated/customers'
     | '/_authenticated/design-options'
     | '/_authenticated/gift-cards'
@@ -490,6 +549,8 @@ export interface FileRouteTypes {
     | '/_authenticated/products'
     | '/_authenticated/users'
     | '/_authenticated/invoices/$invoiceId'
+    | '/_authenticated/campaigns/$campaignId'
+    | '/_authenticated/campaigns/new'
     | '/_authenticated/customers/new'
     | '/_authenticated/design-options/new'
     | '/_authenticated/gift-cards/$code'
@@ -500,6 +561,8 @@ export interface FileRouteTypes {
     | '/_authenticated/order-stages/new'
     | '/_authenticated/orders/$orderId'
     | '/_authenticated/products/new'
+    | '/_authenticated/campaign-templates/'
+    | '/_authenticated/campaigns/'
     | '/_authenticated/customers/'
     | '/_authenticated/design-options/'
     | '/_authenticated/gift-cards/'
@@ -610,6 +673,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCustomersRouteRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/campaigns': {
+      id: '/_authenticated/campaigns'
+      path: '/campaigns'
+      fullPath: '/campaigns'
+      preLoaderRoute: typeof AuthenticatedCampaignsRouteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/repairs/': {
       id: '/_authenticated/repairs/'
       path: '/repairs'
@@ -679,6 +749,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/customers/'
       preLoaderRoute: typeof AuthenticatedCustomersIndexRouteImport
       parentRoute: typeof AuthenticatedCustomersRouteRoute
+    }
+    '/_authenticated/campaigns/': {
+      id: '/_authenticated/campaigns/'
+      path: '/'
+      fullPath: '/campaigns/'
+      preLoaderRoute: typeof AuthenticatedCampaignsIndexRouteImport
+      parentRoute: typeof AuthenticatedCampaignsRouteRoute
+    }
+    '/_authenticated/campaign-templates/': {
+      id: '/_authenticated/campaign-templates/'
+      path: '/campaign-templates'
+      fullPath: '/campaign-templates/'
+      preLoaderRoute: typeof AuthenticatedCampaignTemplatesIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/products/new': {
       id: '/_authenticated/products/new'
@@ -750,6 +834,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCustomersNewRouteImport
       parentRoute: typeof AuthenticatedCustomersRouteRoute
     }
+    '/_authenticated/campaigns/new': {
+      id: '/_authenticated/campaigns/new'
+      path: '/new'
+      fullPath: '/campaigns/new'
+      preLoaderRoute: typeof AuthenticatedCampaignsNewRouteImport
+      parentRoute: typeof AuthenticatedCampaignsRouteRoute
+    }
+    '/_authenticated/campaigns/$campaignId': {
+      id: '/_authenticated/campaigns/$campaignId'
+      path: '/$campaignId'
+      fullPath: '/campaigns/$campaignId'
+      preLoaderRoute: typeof AuthenticatedCampaignsCampaignIdRouteImport
+      parentRoute: typeof AuthenticatedCampaignsRouteRoute
+    }
     '/_authenticated/invoices/$invoiceId': {
       id: '/_authenticated/invoices/$invoiceId'
       path: '/$invoiceId'
@@ -808,6 +906,25 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AuthenticatedCampaignsRouteRouteChildren {
+  AuthenticatedCampaignsCampaignIdRoute: typeof AuthenticatedCampaignsCampaignIdRoute
+  AuthenticatedCampaignsNewRoute: typeof AuthenticatedCampaignsNewRoute
+  AuthenticatedCampaignsIndexRoute: typeof AuthenticatedCampaignsIndexRoute
+}
+
+const AuthenticatedCampaignsRouteRouteChildren: AuthenticatedCampaignsRouteRouteChildren =
+  {
+    AuthenticatedCampaignsCampaignIdRoute:
+      AuthenticatedCampaignsCampaignIdRoute,
+    AuthenticatedCampaignsNewRoute: AuthenticatedCampaignsNewRoute,
+    AuthenticatedCampaignsIndexRoute: AuthenticatedCampaignsIndexRoute,
+  }
+
+const AuthenticatedCampaignsRouteRouteWithChildren =
+  AuthenticatedCampaignsRouteRoute._addFileChildren(
+    AuthenticatedCampaignsRouteRouteChildren,
+  )
 
 interface AuthenticatedCustomersRouteRouteChildren {
   AuthenticatedCustomersNewRoute: typeof AuthenticatedCustomersNewRoute
@@ -992,6 +1109,7 @@ const AuthenticatedProductsRouteRouteWithChildren =
   )
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedCampaignsRouteRoute: typeof AuthenticatedCampaignsRouteRouteWithChildren
   AuthenticatedCustomersRouteRoute: typeof AuthenticatedCustomersRouteRouteWithChildren
   AuthenticatedDesignOptionsRouteRoute: typeof AuthenticatedDesignOptionsRouteRouteWithChildren
   AuthenticatedGiftCardsRouteRoute: typeof AuthenticatedGiftCardsRouteRouteWithChildren
@@ -1002,10 +1120,13 @@ interface AuthenticatedRouteChildren {
   AuthenticatedOrdersRouteRoute: typeof AuthenticatedOrdersRouteRouteWithChildren
   AuthenticatedProductsRouteRoute: typeof AuthenticatedProductsRouteRouteWithChildren
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
+  AuthenticatedCampaignTemplatesIndexRoute: typeof AuthenticatedCampaignTemplatesIndexRoute
   AuthenticatedRepairsIndexRoute: typeof AuthenticatedRepairsIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedCampaignsRouteRoute:
+    AuthenticatedCampaignsRouteRouteWithChildren,
   AuthenticatedCustomersRouteRoute:
     AuthenticatedCustomersRouteRouteWithChildren,
   AuthenticatedDesignOptionsRouteRoute:
@@ -1022,6 +1143,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedOrdersRouteRoute: AuthenticatedOrdersRouteRouteWithChildren,
   AuthenticatedProductsRouteRoute: AuthenticatedProductsRouteRouteWithChildren,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
+  AuthenticatedCampaignTemplatesIndexRoute:
+    AuthenticatedCampaignTemplatesIndexRoute,
   AuthenticatedRepairsIndexRoute: AuthenticatedRepairsIndexRoute,
 }
 

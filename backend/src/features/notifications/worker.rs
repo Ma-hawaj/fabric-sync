@@ -293,7 +293,7 @@ pub(crate) async fn send_image_template(
         })
 }
 
-async fn graph_response(
+pub(crate) async fn graph_response(
     response: reqwest::Response,
     message_request: bool,
 ) -> Result<Value, Failure> {
@@ -394,10 +394,14 @@ async fn process_webhooks(db: &PgPool) -> Result<(), AppError> {
                                 .await?;
                         }
                     } else {
-                        if !crate::features::gift_cards::delivery::webhook(
+                        if !crate::features::campaigns::service::delivery_event(
                             &mut tx, message_id, incoming, status,
                         )
                         .await?
+                            && !crate::features::gift_cards::delivery::webhook(
+                                &mut tx, message_id, incoming, status,
+                            )
+                            .await?
                         {
                             matched = false;
                         }
@@ -406,6 +410,7 @@ async fn process_webhooks(db: &PgPool) -> Result<(), AppError> {
                 }
             }
         }
+        crate::features::campaigns::service::webhook(db, &payload).await?;
         repository::webhook_checked(db, id, matched).await?;
     }
     Ok(())

@@ -18,6 +18,9 @@ pub async fn state(db: PgPool, renderer: Option<String>, provider: Option<String
     config.zitadel_users_client_id = Some("test".into());
     config.zitadel_users_client_secret = Some("test".into());
     config.notifications.enabled = true;
+    config.notifications.marketing_enabled = provider.is_some();
+    config.notifications.waba_id = Some("test-waba".into());
+    config.notifications.meta_app_id = Some("test-app".into());
     config.notifications.renderer_url = renderer;
     config.notifications.phone_number_id = Some("test-phone".into());
     config.notifications.access_token = Some("test-token".into());

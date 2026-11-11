@@ -1,3 +1,4 @@
+import { MarketingConsentPanel } from '@/features/campaigns/marketing-consent'
 import { useForm } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -192,6 +193,7 @@ function CustomerForm({ existing }: { existing?: Customer }) {
           </Button>
         </div>
       </form>
+      {existing && <MarketingConsentPanel customerId={existing.id} />}
     </div>
   )
 }
