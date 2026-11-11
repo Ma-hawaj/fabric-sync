@@ -6,6 +6,15 @@ invoice detail/list actions offer **Resend invoice via WhatsApp**. Marking the
 last uncollected order ready offers the pickup preview. Closing or skipping a
 preview does not undo the saved invoice or readiness.
 
+Marking a repair **Ready** offers the same pickup notification preview. It uses
+the existing ready template, identifies the invoice and repaired order, shows
+the repair's own outstanding charge, and selects only that order's customer.
+It works after the original order has been collected, without marking other
+orders ready. **Notify ready for pickup** on a ready repair reopens the preview.
+Closing it leaves the repair ready; Send queues delivery through the existing
+worker. Reopening, cancelling, collecting, or changing the repair or recipient
+invalidates an unsent preview. Customer notification preferences still apply.
+
 ## Production and pickup locations
 
 The production branch is the physical location where a garment is made. It is
