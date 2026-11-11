@@ -79,18 +79,10 @@ pub async fn save_opening(
                 "Opening cash changed. Refresh before correcting it.".into(),
             ));
         }
-    } else {
-        if current.is_some() {
-            return Err(AppError::Conflict(
-                "Opening cash is already saved. A manager must record any correction.".into(),
-            ));
-        }
-        if repository::latest_check(&mut tx, input.branch_id, input.date)
-            .await?
-            .is_some()
-        {
-            return Err(AppError::Conflict("This day already has a closing check. Its opening cash cannot be entered afterward.".into()));
-        }
+    } else if current.is_some() {
+        return Err(AppError::Conflict(
+            "Opening cash is already saved. A manager must record any correction.".into(),
+        ));
     }
     let opening = storage::insert_opening(&mut tx, &input, &hash, actor, previous).await?;
     tx.commit().await?;

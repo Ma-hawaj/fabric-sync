@@ -32,22 +32,19 @@ SQLx applies the files in version order:
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
    return-line lookups and the unique index allowing one closure per garment.
 
-5. `0005_branch_closing_checks.sql` adds branch/day reconciliation snapshots,
-   counted amounts, notes and authenticated staff attribution. The API saves
-   counts and the final lock atomically; prior historical checks remain readable.
+5. `0005_branch_closing.sql` adds the six tables for branch cash openings and
+   their corrections, paid expenses, expense voids, fixed go-live policies,
+   final closings and separate missed-closing resolutions. A final closing is
+   one record containing actual counts, comparisons, frozen report and staff/time
+   attribution. Openings and expenses retain three decimal places for Bahraini
+   fils. The API requires daily opening cash and closure/resolution of earlier
+   active days after go-live; quiet days are skipped. Earlier history stays
+   read-only without becoming a backlog. Setup, openings and closings are never
+   fabricated by the migration.
 
-6. `0006_branch_openings_and_expenses.sql` adds separately recorded opening
-   cash, append-only opening corrections, paid branch expenses and auditable
-   expense voids. Amounts retain three decimal places for Bahraini fils.
-
-7. `0007_branch_day_closures.sql` retains final branch/day closures pointing to
-   checked report snapshots. The API requires daily opening cash and closure of
-   every earlier active day before new financial activity; quiet days are skipped.
-
-8. `0008_closing_rollout_and_missed_days.sql` adds immutable per-branch go-live
-   dates and separate manager resolutions for missed closings. Earlier history
-   remains read-only without becoming a backlog. Existing opening records seed
-   a branch's original start date, preserving controls already in use.
+The closing migration consolidates the unmerged feature's development migrations.
+Recreate disposable development databases that applied those intermediate versions;
+the consolidated file upgrades the baseline, not that unreleased intermediate schema.
 
 The core schema defines readable customer IDs (`C-6216`) and permanent
 per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.

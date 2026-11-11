@@ -91,7 +91,6 @@ pub struct SalesClosing {
     pub branch_id: Uuid,
     pub branch_name: String,
     pub fingerprint: String,
-    pub last_check: Option<ClosingCheck>,
     pub date: NaiveDate,
     pub timezone: String,
     pub generated_at: DateTime<Utc>,
@@ -129,16 +128,6 @@ pub struct Comparison {
     pub matched: bool,
     pub unresolved_methods: usize,
     pub lines: Vec<ComparisonLine>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ClosingCheck {
-    pub id: Uuid,
-    pub checked_at: DateTime<Utc>,
-    pub fingerprint: String,
-    pub counts: ClosingCounts,
-    pub comparison: Comparison,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -215,9 +204,10 @@ pub struct VoidExpenseInput {
 #[serde(rename_all = "camelCase")]
 pub struct DayClosure {
     pub id: Uuid,
-    pub check_id: Uuid,
     pub closed_at: DateTime<Utc>,
     pub closed_by: String,
+    pub counts: ClosingCounts,
+    pub comparison: Comparison,
 }
 
 #[derive(Serialize)]

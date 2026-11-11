@@ -119,10 +119,10 @@ async fn opening_is_required_and_explained_final_close_locks_every_financial_ent
         .unwrap();
     assert_eq!(report.closure.as_ref().unwrap().closed_by, "closer");
     assert_eq!(
-        report.last_check.as_ref().unwrap().comparison.lines[0].difference,
+        report.closure.as_ref().unwrap().comparison.lines[0].difference,
         -2.0
     );
-    assert!(!report.last_check.as_ref().unwrap().comparison.matched);
+    assert!(!report.closure.as_ref().unwrap().comparison.matched);
     assert_eq!(
         day_service::close_day(&state, close.clone(), "closer")
             .await
@@ -213,7 +213,7 @@ async fn opening_is_required_and_explained_final_close_locks_every_financial_ent
         .await
         .unwrap();
     assert_eq!(frozen.summary.invoice_total, 100.0);
-    assert_eq!(frozen.last_check.unwrap().counts.actual_cash, 48.0);
+    assert_eq!(frozen.closure.unwrap().counts.actual_cash, 48.0);
 }
 
 #[sqlx::test]
@@ -270,7 +270,7 @@ async fn missed_days_stay_read_only_and_separate_resolutions_unblock_only_their_
     let resolved = super::rollout_service::resolve_missed(&state, resolution.clone(), "manager")
         .await
         .unwrap();
-    assert!(resolved.read_only && resolved.closure.is_none() && resolved.last_check.is_none());
+    assert!(resolved.read_only && resolved.closure.is_none());
     assert_eq!(resolved.fingerprint, before.fingerprint);
     assert_eq!(
         resolved.missed_closing.as_ref().unwrap().resolved_by,
@@ -380,7 +380,7 @@ async fn unresolved_activity_requires_an_explanation_to_finalize(pool: PgPool) {
     let closed = day_service::close_day(&state, close, "staff")
         .await
         .unwrap();
-    assert!(!closed.last_check.as_ref().unwrap().comparison.matched);
+    assert!(!closed.closure.as_ref().unwrap().comparison.matched);
     assert_eq!(closed.summary.unrecorded_method_count, 1);
 }
 

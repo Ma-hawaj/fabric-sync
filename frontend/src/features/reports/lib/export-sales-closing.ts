@@ -54,16 +54,14 @@ export function salesClosingCsv(report: SalesClosing): string {
           ['Opening notes', report.opening.notes],
         ]
       : []),
-    ...(report.lastCheck
+    ...(report.closure
       ? [
-          ['Check ID', report.lastCheck.id],
-          ['Checked at', report.lastCheck.checkedAt],
-          ['Opening cash', report.lastCheck.counts.openingCash],
-          ['Other cash added', report.lastCheck.counts.cashAdded],
-          ['Cash removed / banked', report.lastCheck.counts.cashRemoved],
-          ['Closing notes', report.lastCheck.counts.notes],
+          ['Opening cash', report.closure.counts.openingCash],
+          ['Other cash added', report.closure.counts.cashAdded],
+          ['Cash removed / banked', report.closure.counts.cashRemoved],
+          ['Closing notes', report.closure.counts.notes],
           comparisonHeaders,
-          ...comparisonRows(report.lastCheck.comparison).map((row) =>
+          ...comparisonRows(report.closure.comparison).map((row) =>
             row.map((value) => value ?? ''),
           ),
         ]
@@ -159,12 +157,12 @@ export function salesClosingHtml(report: SalesClosing): string {
     <p>${escapeHtml(closingDayStatus(report))}${report.closure ? ` · ${escapeHtml(report.closure.closedAt)} · By ${escapeHtml(report.closure.closedBy)} · Reference ${escapeHtml(report.closure.id)}` : ''}</p>
     ${report.policy ? `<p>Closing controls start: ${escapeHtml(report.policy.startsOn)}</p>` : ''}
     ${report.missedClosing ? `<p>Missed closing resolved separately — unreconciled. Figures unchanged.<br>Reason: ${escapeHtml(report.missedClosing.reason)}<br>Resolved ${escapeHtml(report.missedClosing.resolvedAt)} · By ${escapeHtml(report.missedClosing.resolvedBy)} · Reference ${escapeHtml(report.missedClosing.id)}</p>` : ''}
-    <p>Check status: ${escapeHtml(comparisonStatus(report))}. Unassigned activities excluded: ${report.unassignedActivityCount}.</p>
+    <p>Closing count status: ${escapeHtml(comparisonStatus(report))}. Unassigned activities excluded: ${report.unassignedActivityCount}.</p>
     ${report.opening ? `<p>Saved opening cash: ${formatBhd(report.opening.amount)} BHD · Recorded ${escapeHtml(new Date(report.opening.recordedAt).toLocaleString('en-GB', { timeZone: report.timezone }))}${report.opening.supersedesId ? ' · Corrected opening' : ''}<br>Opening notes: ${escapeHtml(report.opening.notes)}</p>` : ''}
     ${
-      report.lastCheck
-        ? `<h2>Recorded vs actual — saved closing count</h2><p>Checked ${escapeHtml(report.lastCheck.checkedAt)} · Reference ${escapeHtml(report.lastCheck.id)}</p><table><thead><tr>${comparisonHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${comparisonRows(
-            report.lastCheck.comparison,
+      report.closure
+        ? `<h2>Recorded vs actual — saved closing count</h2><table><thead><tr>${comparisonHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${comparisonRows(
+            report.closure.comparison,
           )
             .map(([method, ...amounts]) =>
               cells([
@@ -176,7 +174,7 @@ export function salesClosingHtml(report: SalesClosing): string {
             )
             .join(
               '',
-            )}</tbody></table><p>Opening cash: ${formatBhd(report.lastCheck.counts.openingCash)} · Other cash added: ${formatBhd(report.lastCheck.counts.cashAdded)} · Cash removed / banked: ${formatBhd(report.lastCheck.counts.cashRemoved)}</p><p>Notes: ${escapeHtml(report.lastCheck.counts.notes)}</p>`
+            )}</tbody></table><p>Opening cash: ${formatBhd(report.closure.counts.openingCash)} · Other cash added: ${formatBhd(report.closure.counts.cashAdded)} · Cash removed / banked: ${formatBhd(report.closure.counts.cashRemoved)}</p><p>Notes: ${escapeHtml(report.closure.counts.notes)}</p>`
         : ''
     }
     <h2>Daily summary</h2><table><tbody>${summaryRows(report)

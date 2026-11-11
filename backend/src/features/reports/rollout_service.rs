@@ -45,7 +45,7 @@ pub async fn configure(
         if !report.activity.is_empty()
             || report.opening.is_some()
             || !report.expenses.is_empty()
-            || repository::latest_check(&mut tx, input.branch_id, today)
+            || day_repository::closure(&mut tx, input.branch_id, today)
                 .await?
                 .is_some()
         {
@@ -119,7 +119,6 @@ pub async fn resolve_missed(
         input.branch_id,
     )
     .await?;
-    report.last_check = repository::latest_check(&mut tx, input.branch_id, input.date).await?;
     report.policy = Some(policy.into_policy());
     report.business_date = Some(today);
     report.read_only = true;

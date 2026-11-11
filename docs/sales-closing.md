@@ -20,7 +20,7 @@ Retired branches remain available for history. Dates use backend `TIMEZONE`
    handled at this branch and is complete, then **Review and close day**.
 
 Closing saves the counts, comparisons, notes, recorded report snapshot, staff
-identity and final branch/day lock in one transaction. There is no separate draft
+identity and final branch/day lock in one record. There is no separate draft
 save. Counts and notes stay in the form when activity refreshes; confirmation is
 cleared so staff review the updated comparison. Navigating away loses an unclosed
 form. Once closed, the report is permanently read-only and available for CSV or
@@ -82,8 +82,8 @@ scheduled date, existing trading continues normally. From go-live, opening and
 daily closure rules apply. Restarts cannot shift the cutoff.
 
 History before go-live remains viewable, exportable and read-only without a
-closing backlog or fake counts. Migration 0008 preserves the earliest existing
-opening as the start date for branches already using controls.
+closing backlog or fake counts. The migration does not create go-live dates,
+opening balances or closing reports; managers configure the start date explicitly.
 
 If staff miss a closing after go-live, a manager can resolve the earliest
 outstanding active day with a separate explanation. This records a frozen snapshot,
@@ -132,7 +132,15 @@ All endpoints are under `/api/sales-closing` and require authentication:
 requires an active branch. The frontend uses the former for editing an existing
 invoice and the latter for creating a new one; server checks remain authoritative.
 
-Apply migrations 0005–0008. Existing snapshot and closure tables are retained;
-new closing counts and their final-close reference are inserted together.
-Previously saved historical checks remain readable, with no draft-write endpoint.
+Apply `0005_branch_closing.sql` after the existing baseline migrations. It adds
+six tables: cash openings, expenses, expense voids, closing policies, day closures
+and missed-closing resolutions. The one day-closure record contains counts,
+comparison, frozen report, staff/time and retry identity. There is no check table,
+check ID or draft-write endpoint. API responses expose these values together
+under `closure`; open and missed days have no closing count.
+
+This migration consolidates the feature's unmerged development migrations.
+Disposable development databases that already applied those earlier versions
+must be recreated; this is not an upgrade script for that intermediate schema.
+Existing data on the baseline is preserved when applying the new migration.
 CSV formula escaping and HTML escaping protect exported staff-entered text.

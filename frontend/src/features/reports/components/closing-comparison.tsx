@@ -47,8 +47,8 @@ export function CountsComparison({
 }
 
 export function ClosedDayCounts({ report }: { report: SalesClosing }) {
-  const check = report.lastCheck
-  if (!check)
+  const closing = report.closure
+  if (!closing)
     return (
       <p className="rounded-xl border bg-card p-5 text-sm">
         No actual closing count was recorded. Recorded transactions remain
@@ -57,24 +57,14 @@ export function ClosedDayCounts({ report }: { report: SalesClosing }) {
     )
   return (
     <section className="space-y-4 rounded-xl border bg-card p-5">
-      <h2 className="text-lg font-semibold">
-        {report.closure
-          ? 'Final closing count'
-          : 'Last saved count · Read-only'}
-      </h2>
-      {check.fingerprint !== report.fingerprint && (
-        <p className="text-sm">
-          Activity changed after this saved count. These comparison values are
-          from the saved check; this day is unreconciled.
-        </p>
-      )}
-      <CountsComparison comparison={check.comparison} />
+      <h2 className="text-lg font-semibold">Final closing count</h2>
+      <CountsComparison comparison={closing.comparison} />
       <p className="text-sm">
-        Other cash added: BHD {formatBhd(check.counts.cashAdded)} · Cash banked
-        / transferred out: BHD {formatBhd(check.counts.cashRemoved)}
+        Other cash added: BHD {formatBhd(closing.counts.cashAdded)} · Cash
+        banked / transferred out: BHD {formatBhd(closing.counts.cashRemoved)}
       </p>
-      {check.counts.notes && (
-        <p className="whitespace-pre-wrap text-sm">{check.counts.notes}</p>
+      {closing.counts.notes && (
+        <p className="whitespace-pre-wrap text-sm">{closing.counts.notes}</p>
       )}
     </section>
   )

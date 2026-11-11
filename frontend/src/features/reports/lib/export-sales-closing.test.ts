@@ -2,8 +2,37 @@ import { describe, expect, it } from 'vitest'
 import { closingFixture } from '../test-fixtures'
 import { salesClosingCsv, salesClosingHtml } from './export-sales-closing'
 import { isReportDate } from './sales-closing'
+import { compareCounts } from './closing-counts'
 
 describe('sales closing exports', () => {
+  it('exports counts and comparisons from the single final closing record', () => {
+    const report = closingFixture()
+    const counts = {
+      branchActivityConfirmed: true,
+      openingCash: 20,
+      cashAdded: 0,
+      cashRemoved: 0,
+      actualCash: 70,
+      actualBenefit: 0,
+      actualCard: 0,
+      notes: '<Recounted> BHD 2 short.',
+    }
+    report.readOnly = true
+    report.closure = {
+      id: 'closing-1',
+      closedAt: '2026-11-02T18:00:00Z',
+      closedBy: 'cashier',
+      counts,
+      comparison: compareCounts(report, counts),
+    }
+    const csv = salesClosingCsv(report)
+    const html = salesClosingHtml(report)
+    expect(csv).toContain('"Closure ID","closing-1"')
+    expect(csv).toContain('"Cash",52.000,72.000,70.000,-2.000')
+    expect(html).toContain('Closed · Read-only')
+    expect(html).toContain('&lt;Recounted&gt; BHD 2 short.')
+    expect(html).toContain('-2.000')
+  })
   it('exports a missed closing as unreconciled without inventing an actual count', () => {
     const report = closingFixture()
     report.readOnly = true

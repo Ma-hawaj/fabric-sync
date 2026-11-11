@@ -51,7 +51,6 @@ pub async fn previous_unclosed(
 
 pub struct ClosureRow {
     pub id: Uuid,
-    pub check_id: Uuid,
     pub closed_at: DateTime<Utc>,
     pub closed_by: String,
     pub request_id: Uuid,
@@ -59,23 +58,16 @@ pub struct ClosureRow {
     pub snapshot: sqlx::types::Json<SalesClosing>,
     pub counts: sqlx::types::Json<ClosingCounts>,
     pub comparison: sqlx::types::Json<Comparison>,
-    pub checked_at: DateTime<Utc>,
 }
 impl ClosureRow {
     pub fn into_report(self) -> SalesClosing {
         let mut report = self.snapshot.0;
-        report.last_check = Some(ClosingCheck {
-            id: self.check_id,
-            checked_at: self.checked_at,
-            fingerprint: report.fingerprint.clone(),
-            counts: self.counts.0,
-            comparison: self.comparison.0,
-        });
         report.closure = Some(DayClosure {
             id: self.id,
-            check_id: self.check_id,
             closed_at: self.closed_at,
             closed_by: self.closed_by,
+            counts: self.counts.0,
+            comparison: self.comparison.0,
         });
         report.read_only = true;
         report
@@ -89,11 +81,11 @@ pub async fn closure(
     sqlx::query_as!(
         ClosureRow,
         r#"
-        SELECT c.id, c.check_id, c.closed_at, c.closed_by, c.request_id, c.request_hash,
-          k.report_snapshot AS "snapshot!: sqlx::types::Json<SalesClosing>",
-          k.counts AS "counts!: sqlx::types::Json<ClosingCounts>",
-          k.comparison AS "comparison!: sqlx::types::Json<Comparison>", k.checked_at
-        FROM branch_day_closures c JOIN branch_closing_checks k ON k.id = c.check_id
+        SELECT c.id, c.closed_at, c.closed_by, c.request_id, c.request_hash,
+          c.report_snapshot AS "snapshot!: sqlx::types::Json<SalesClosing>",
+          c.counts AS "counts!: sqlx::types::Json<ClosingCounts>",
+          c.comparison AS "comparison!: sqlx::types::Json<Comparison>"
+        FROM branch_day_closures c
         WHERE c.branch_id = $1 AND c.business_date = $2
     "#,
         branch,
@@ -105,12 +97,16 @@ pub async fn closure(
 pub async fn insert_closure(
     db: &mut PgConnection,
     input: &CloseDayInput,
-    check_id: Uuid,
+    comparison: &Comparison,
+    report: &SalesClosing,
     hash: &[u8],
     actor: &str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query!(r#"INSERT INTO branch_day_closures(branch_id,business_date,check_id,request_id,request_hash,closed_by)
-        VALUES ($1,$2,$3,$4,$5,$6)"#, input.branch_id,input.date,check_id,input.request_id,hash,actor)
+    let counts = sqlx::types::Json(&input.counts);
+    let comparison = sqlx::types::Json(comparison);
+    let snapshot = sqlx::types::Json(report);
+    sqlx::query!(r#"INSERT INTO branch_day_closures(branch_id,business_date,counts,comparison,report_snapshot,request_id,request_hash,closed_by)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)"#, input.branch_id,input.date,counts as _,comparison as _,snapshot as _,input.request_id,hash,actor)
         .execute(db).await?;
     Ok(())
 }

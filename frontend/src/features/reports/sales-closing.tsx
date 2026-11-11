@@ -231,7 +231,6 @@ function ReportContent({
   queryDate: string
   refreshing: boolean
 }) {
-  const check = report.lastCheck
   const readOnly = isClosingReadOnly(report)
   const ready = readOnly && !refreshing
   const status = closingDayStatus(report)
@@ -279,7 +278,7 @@ function ReportContent({
             timeZone: report.timezone,
           })}
           . This saved report is read-only and remains available for export.
-          {check && !check.comparison.matched
+          {!report.closure.comparison.matched
             ? ' Differences or unresolved activity remain recorded below.'
             : ''}
         </p>

@@ -24,10 +24,8 @@ export function closingDayStatus(report: SalesClosing): string {
 }
 
 export function comparisonStatus(report: SalesClosing): string {
-  if (!report.lastCheck) return 'No closing count recorded'
-  if (report.lastCheck.fingerprint !== report.fingerprint)
-    return 'Recorded activity changed'
-  return report.lastCheck.comparison.matched
+  if (!report.closure) return 'No closing count recorded'
+  return report.closure.comparison.matched
     ? 'Matched'
     : 'Differences / review required'
 }

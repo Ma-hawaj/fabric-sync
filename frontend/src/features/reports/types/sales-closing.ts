@@ -23,12 +23,7 @@ export interface SalesClosing {
     resolvedBy: string
   } | null
   readOnly: boolean
-  closure?: {
-    id: string
-    checkId: string
-    closedAt: string
-    closedBy: string
-  } | null
+  closure: DayClosure | null
   businessDate?: string | null
   previousUnclosedDate?: string | null
   opening: CashOpening | null
@@ -37,7 +32,6 @@ export interface SalesClosing {
   branchId: string
   branchName: string
   fingerprint: string
-  lastCheck: ClosingCheck | null
   date: string
   timezone: string
   generatedAt: string
@@ -133,10 +127,10 @@ export interface ClosingComparison {
   }[]
 }
 
-export interface ClosingCheck {
+export interface DayClosure {
   id: string
-  checkedAt: string
-  fingerprint: string
+  closedAt: string
+  closedBy: string
   counts: ClosingCounts
   comparison: ClosingComparison
 }

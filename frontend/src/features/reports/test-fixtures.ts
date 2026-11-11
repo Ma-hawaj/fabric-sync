@@ -21,7 +21,7 @@ export function closingFixture(date = '2026-11-02'): SalesClosing {
     branchId: '00000000-0000-4000-8000-000000000001',
     branchName: 'Main Branch',
     fingerprint: 'test-fingerprint',
-    lastCheck: null,
+    closure: null,
     unassignedActivityCount: 0,
     date,
     timezone: 'Asia/Bahrain',

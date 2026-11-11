@@ -44,9 +44,7 @@ pub async fn sales_closing(
     {
         missed.into_report()
     } else {
-        let mut report = load(&mut tx, date, zone, now, branch_id).await?;
-        report.last_check = repository::latest_check(&mut tx, branch_id, date).await?;
-        report
+        load(&mut tx, date, zone, now, branch_id).await?
     };
     report.business_date = Some(now.with_timezone(&zone).date_naive());
     report.policy = super::rollout_repository::policy(&mut tx, branch_id)
@@ -188,7 +186,6 @@ pub(super) fn assemble(
         branch_id,
         branch_name,
         fingerprint: String::new(),
-        last_check: None,
         unassigned_activity_count,
         date,
         timezone: zone.name().into(),

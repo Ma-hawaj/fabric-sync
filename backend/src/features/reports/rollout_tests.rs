@@ -88,7 +88,6 @@ async fn first_rollout_ignores_legacy_history_without_fabricating_a_closing(pool
     assert!(
         legacy.read_only
             && legacy.opening.is_none()
-            && legacy.last_check.is_none()
             && legacy.closure.is_none()
             && legacy.missed_closing.is_none()
     );
@@ -249,7 +248,7 @@ async fn every_past_write_is_rejected_and_manager_resolutions_cannot_change_figu
     assert_eq!(frozen.fingerprint, report.fingerprint);
     assert_eq!(frozen.opening.unwrap().amount, 50.0);
     assert_eq!(frozen.expenses[0].amount, 5.0);
-    assert!(frozen.last_check.is_none() && frozen.closure.is_none());
+    assert!(frozen.closure.is_none());
     assert!(matches!(
         day_service::close_day(&state, input, "manager").await,
         Err(AppError::Conflict(_))
@@ -258,7 +257,7 @@ async fn every_past_write_is_rejected_and_manager_resolutions_cannot_change_figu
 
 #[sqlx::test]
 async fn an_existing_closed_historical_day_has_no_manager_reopen_path(pool: PgPool) {
-    use super::{day_repository, reconciliation, repository};
+    use super::{day_repository, reconciliation};
     let (invoice, _, _, branch) = test_support::invoice(&pool, 1, false).await;
     let old = today().pred_opt().unwrap();
     let timestamp = service::day_bounds(old, chrono_tz::Asia::Bahrain)
@@ -289,10 +288,7 @@ async fn an_existing_closed_historical_day_has_no_manager_reopen_path(pool: PgPo
     let comparison = reconciliation::compare(&report, &input.counts).unwrap();
     // This fixture represents a report finalized on time before today's date.
     let mut tx = pool.begin().await.unwrap();
-    let saved = repository::save_check(&mut tx, &input, &[0; 32], &comparison, &report, "fixture")
-        .await
-        .unwrap();
-    day_repository::insert_closure(&mut tx, &input, saved.id, &[0; 32], "fixture")
+    day_repository::insert_closure(&mut tx, &input, &comparison, &report, &[0; 32], "fixture")
         .await
         .unwrap();
     tx.commit().await.unwrap();

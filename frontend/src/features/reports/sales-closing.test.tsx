@@ -74,18 +74,12 @@ function enterCounts(cash = '72') {
 }
 
 function finalize(report: SalesClosing, counts: ClosingCounts) {
-  report.lastCheck = {
-    id: 'final-check',
-    checkedAt: '2026-11-02T18:00:00Z',
-    fingerprint: report.fingerprint,
-    counts,
-    comparison: compareCounts(report, counts),
-  }
   report.closure = {
     id: 'closure-1',
-    checkId: 'final-check',
     closedAt: '2026-11-02T18:30:00Z',
     closedBy: 'test-closer',
+    counts,
+    comparison: compareCounts(report, counts),
   }
   report.readOnly = true
   return { data: structuredClone(report) }

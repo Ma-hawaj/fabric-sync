@@ -13,7 +13,6 @@ WITH events AS (
     FROM events e JOIN invoices i ON i.id = e.invoice_id WHERE COALESCE(i.issuing_branch_id, i.branch_id) = $1
     UNION SELECT business_date FROM branch_cash_openings WHERE branch_id = $1
     UNION SELECT business_date FROM branch_expenses WHERE branch_id = $1
-    UNION SELECT report_date FROM branch_closing_checks WHERE branch_id = $1
 )
 SELECT MIN(day) AS "day?" FROM days d
 WHERE d.day < $3

@@ -239,7 +239,7 @@ async fn final_closings_are_isolated_idempotent_and_freeze_the_recorded_activity
     assert_eq!(report.summary.invoice_count, 1);
     assert_eq!(report.summary.invoice_total, 100.0);
     assert_eq!(report.summary.invoice_payments, 10.0);
-    assert!(report.last_check.is_none());
+    assert!(report.closure.is_none());
     let input = serde_json::from_value::<CloseDayInput>(serde_json::json!({
         "requestId": Uuid::new_v4(),
         "branchId": branch,
@@ -251,7 +251,7 @@ async fn final_closings_are_isolated_idempotent_and_freeze_the_recorded_activity
     let saved = super::day_service::close_day(&state, input.clone(), "staff-one")
         .await
         .unwrap();
-    assert!(saved.last_check.as_ref().unwrap().comparison.matched);
+    assert!(saved.closure.as_ref().unwrap().comparison.matched);
     let replay = super::day_service::close_day(&state, input.clone(), "staff-one")
         .await
         .unwrap();
@@ -260,8 +260,8 @@ async fn final_closings_are_isolated_idempotent_and_freeze_the_recorded_activity
         saved.closure.as_ref().unwrap().id
     );
     let stored_actor: String =
-        sqlx::query_scalar("SELECT checked_by FROM branch_closing_checks WHERE id=$1")
-            .bind(saved.last_check.as_ref().unwrap().id)
+        sqlx::query_scalar("SELECT closed_by FROM branch_day_closures WHERE id=$1")
+            .bind(saved.closure.as_ref().unwrap().id)
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -283,8 +283,8 @@ async fn final_closings_are_isolated_idempotent_and_freeze_the_recorded_activity
         .unwrap();
     assert_eq!(after.fingerprint, saved.fingerprint);
     assert_eq!(
-        after.last_check.as_ref().unwrap().id,
-        saved.last_check.as_ref().unwrap().id
+        after.closure.as_ref().unwrap().id,
+        saved.closure.as_ref().unwrap().id
     );
     let mut stale = input.clone();
     stale.request_id = Uuid::new_v4();
@@ -293,7 +293,7 @@ async fn final_closings_are_isolated_idempotent_and_freeze_the_recorded_activity
         Err(crate::error::AppError::Conflict(_))
     ));
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM branch_closing_checks")
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM branch_day_closures")
             .fetch_one(&pool)
             .await
             .unwrap(),
@@ -303,7 +303,7 @@ async fn final_closings_are_isolated_idempotent_and_freeze_the_recorded_activity
         .await
         .unwrap();
     assert_eq!(other_report.summary.invoice_total, 50.0);
-    assert!(other_report.last_check.is_none());
+    assert!(other_report.closure.is_none());
     let unassigned: Uuid = sqlx::query_scalar("INSERT INTO invoices(total_price,vat_rate,taxable_amount,vat_amount) VALUES(20,.1,18.18,1.82) RETURNING id").fetch_one(&pool).await.unwrap();
     sqlx::query(
         "INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,20,'cash')",
@@ -317,5 +317,5 @@ async fn final_closings_are_isolated_idempotent_and_freeze_the_recorded_activity
         .unwrap();
     assert_eq!(with_unassigned.unassigned_activity_count, 1);
     assert_eq!(with_unassigned.summary.invoice_payments, 0.0);
-    assert!(with_unassigned.last_check.is_none());
+    assert!(with_unassigned.closure.is_none());
 }

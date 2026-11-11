@@ -23,13 +23,10 @@ export function ClosingCountsForm({
   const [requestId] = useState(() => crypto.randomUUID())
   const mutation = useCloseDay(queryDate, report.branchId)
   const form = useForm({
-    defaultValues: report.lastCheck
-      ? {
-          ...report.lastCheck.counts,
-          openingCash: report.opening?.amount ?? '',
-          branchActivityConfirmed: false,
-        }
-      : { ...emptyCounts(), openingCash: report.opening?.amount ?? '' },
+    defaultValues: {
+      ...emptyCounts(),
+      openingCash: report.opening?.amount ?? '',
+    },
     validators: { onSubmit: countsSchema(report) },
     onSubmit: async ({ value }) => {
       const pending = mutation.mutateAsync({

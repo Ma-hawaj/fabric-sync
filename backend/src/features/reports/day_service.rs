@@ -214,9 +214,8 @@ pub async fn close_day(
             "Explain the difference or unresolved activity before closing.".into(),
         ));
     }
-    // Counts and the final lock commit together; no draft can be selected by mistake.
-    let check = repository::save_check(&mut tx, &input, &hash, &comparison, &report, actor).await?;
-    storage::insert_closure(&mut tx, &input, check.id, &hash, actor).await?;
+    // The one closing record contains the counts, comparison and frozen report.
+    storage::insert_closure(&mut tx, &input, &comparison, &report, &hash, actor).await?;
     let result = storage::closure(&mut tx, input.branch_id, input.date)
         .await?
         .expect("new closure exists")
