@@ -3,6 +3,47 @@ use crate::error::AppError;
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
+#[derive(serde::Serialize, sqlx::FromRow)]
+pub struct RepairReadyContext {
+    pub order_number: i64,
+    pub invoice_number: i64,
+    pub status: String,
+    pub outcome: String,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub balance: f64,
+    pub branch_name: Option<String>,
+    pub customer_id: Uuid,
+    pub name: String,
+    pub mobile_no: String,
+    pub enabled: bool,
+}
+
+pub async fn repair_ready_context(
+    db: &PgPool,
+    invoice: Uuid,
+    repair: Uuid,
+) -> Result<RepairReadyContext, AppError> {
+    sqlx::query_as(
+        "SELECT o.order_number, i.invoice_number, r.status, oc.outcome, r.completed_at,
+                GREATEST(r.charge - r.received_amount, 0)::float8 AS balance,
+                b.name AS branch_name, c.id AS customer_id, c.name, c.mobile_no,
+                c.whatsapp_notifications_enabled AS enabled
+         FROM order_repairs r
+         JOIN orders o ON o.id = r.order_id
+         JOIN order_outcomes oc ON oc.order_id = o.id
+         JOIN invoices i ON i.id = o.invoice_id
+         JOIN measurements m ON m.id = o.measurement_id
+         JOIN customers c ON c.id = m.customer_id
+         LEFT JOIN branch b ON b.id = i.branch_id
+         WHERE r.id = $1 AND i.id = $2",
+    )
+    .bind(repair)
+    .bind(invoice)
+    .fetch_optional(db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Repair not found on this invoice.".into()))
+}
+
 pub async fn customers(db: &PgPool, invoice_id: Uuid) -> Result<Vec<Customer>, AppError> {
     Ok(sqlx::query_as(
         r#"

@@ -27,9 +27,18 @@ import type { OrderDetail } from '../types/orders'
 interface LogRepairDialogProps {
   order: OrderDetail | null
   onOpenChange: (open: boolean) => void
+  open?: boolean
+  orderPicker?: React.ReactNode
+  actionLabel?: string
 }
 
-export function LogRepairDialog({ order, onOpenChange }: LogRepairDialogProps) {
+export function LogRepairDialog({
+  order,
+  onOpenChange,
+  open = order !== null,
+  orderPicker,
+  actionLabel = 'Log Repair',
+}: LogRepairDialogProps) {
   const createRepair = useCreateRepair()
   const [reason, setReason] = useState('')
   const [charge, setCharge] = useState('')
@@ -55,7 +64,7 @@ export function LogRepairDialog({ order, onOpenChange }: LogRepairDialogProps) {
   }, [order?.id, resetMeasurement])
 
   const handleConfirm = async () => {
-    if (!order || !reason.trim()) return
+    if (!order || !reason.trim() || createRepair.isPending) return
 
     const measurement = form.state.values.measurement
     if (
@@ -94,22 +103,30 @@ export function LogRepairDialog({ order, onOpenChange }: LogRepairDialogProps) {
 
   return (
     <Dialog
-      open={order !== null}
-      onOpenChange={(open) => !open && onOpenChange(false)}
+      open={open}
+      onOpenChange={(nextOpen) =>
+        !nextOpen && !createRepair.isPending && onOpenChange(false)
+      }
     >
       <DialogContent
         className={`flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden ${updateMeasurement ? 'sm:max-w-6xl' : 'sm:max-w-xl'}`}
       >
-        {order && (
-          <>
-            <DialogHeader className="shrink-0">
-              <DialogTitle>Log Repair</DialogTitle>
-              <DialogDescription>
-                {order.customerName} — {order.material}
-              </DialogDescription>
-            </DialogHeader>
+        <DialogHeader className="shrink-0">
+          <DialogTitle>{actionLabel}</DialogTitle>
+          <DialogDescription>
+            {order
+              ? `ORD-${order.orderNumber} · ${order.customerName} — ${order.material}`
+              : 'Select the garment that needs repair.'}
+          </DialogDescription>
+        </DialogHeader>
 
-            <div className="min-h-0 space-y-4 overflow-y-auto px-1">
+        <fieldset
+          disabled={createRepair.isPending}
+          className="min-h-0 min-w-0 space-y-4 overflow-y-auto px-1"
+        >
+          {orderPicker}
+          {order && (
+            <>
               <p className="text-sm text-muted-foreground">
                 The repair is tracked by its own record and status, so earlier
                 repairs on this order stay on record.
@@ -185,24 +202,24 @@ export function LogRepairDialog({ order, onOpenChange }: LogRepairDialogProps) {
                   </>
                 )}
               </div>
-            </div>
-            <DialogFooter className="shrink-0">
-              <Button
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={createRepair.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleConfirm}
-                disabled={!reason.trim() || createRepair.isPending}
-              >
-                Log Repair
-              </Button>
-            </DialogFooter>
-          </>
-        )}
+            </>
+          )}
+        </fieldset>
+        <DialogFooter className="shrink-0">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={createRepair.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={!order || !reason.trim() || createRepair.isPending}
+          >
+            {actionLabel}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
