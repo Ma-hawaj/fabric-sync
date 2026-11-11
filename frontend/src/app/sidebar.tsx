@@ -30,6 +30,7 @@ import { accountSettingsUrl } from '@/lib/account-settings'
 import { usePreferences } from '@/features/locations/hooks/use-default-location'
 import { DefaultLocationMenu } from '@/features/locations/components/default-location-menu'
 import {
+  MegaphoneIcon,
   UsersIcon,
   ShoppingCart,
   ReceiptText,
@@ -49,6 +50,12 @@ import {
 } from 'lucide-react'
 
 const navItems = [
+  { to: '/campaigns', label: 'Campaigns', icon: MegaphoneIcon },
+  {
+    to: '/campaign-templates',
+    label: 'Marketing Templates',
+    icon: MegaphoneIcon,
+  },
   { to: '/invoices', label: 'Invoices', icon: ReceiptText },
   { to: '/orders', label: 'Orders', icon: ShoppingCart },
   { to: '/repairs', label: 'Repairs', icon: WrenchIcon },
@@ -191,7 +198,14 @@ export function AppSidebar() {
         {[
           {
             label: 'Workspace',
-            paths: ['/invoices', '/orders', '/repairs', '/customers'],
+            paths: [
+              '/invoices',
+              '/orders',
+              '/repairs',
+              '/customers',
+              '/campaigns',
+              '/campaign-templates',
+            ],
           },
           {
             label: 'Catalog',

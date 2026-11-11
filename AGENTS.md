@@ -81,6 +81,8 @@ local HTTP mocks and Chromium verification uses a dedicated test database.
 - **Postgres error codes map to HTTP automatically** in `From<sqlx::Error>`: SQLSTATE `23505` (unique_violation) becomes a 409 `Conflict`, `23503` (foreign_key_violation) becomes a 400 `BadRequest`. Leaning on a database constraint therefore gives you the right status for free — `branch.name`'s `UNIQUE` is what makes a duplicate location name a 409 rather than a 500, with no handler code involved.
 - Config (`config.rs`) is read once from env vars at startup into a plain struct (`Config::from_env()`); there's no config file or hot-reload — add new settings as additional env-var-backed fields.
 
+Marketing campaigns live in `features/campaigns` with phone-scoped consent, immutable approved snapshots, a separate durable queue and a shared dispatch clock. Operational setup is in `docs/promotional-campaigns.md`. Promotions require both delivery flags and separate marketing consent; never infer it from invoice-update preferences.
+
 ## Frontend architecture
 
 - **Feature-module layout** mirrors the backend: `src/features/<name>/` contains `<name>.tsx` (list page), `components/`, `hooks/`, `types/`, and — where the feature needs them — `lib/` (zod schemas, pricing helpers) and `data/` (static option lists). Form pages sit at the feature root next to the list page (`customer-form.tsx`, `invoice-form.tsx`, `inventory-form.tsx`, `location-form.tsx`). Routes in `src/routes` are thin — they wire a route path to a feature page component.

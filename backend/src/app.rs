@@ -7,7 +7,7 @@ use tower_http::{
 use crate::{
     auth,
     features::{
-        customers, design_options, gift_cards, health, invoices, locations, materials,
+        campaigns, customers, design_options, gift_cards, health, invoices, locations, materials,
         notifications, order_stages, orders, preferences, pricing, products, returns, users,
     },
     request_log,
@@ -111,6 +111,12 @@ pub fn router(state: AppState) -> Router {
         )
         .merge(
             notifications::router().route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth::require_auth,
+            )),
+        )
+        .merge(
+            campaigns::router().route_layer(middleware::from_fn_with_state(
                 state.clone(),
                 auth::require_auth,
             )),

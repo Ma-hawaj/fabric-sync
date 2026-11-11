@@ -293,3 +293,10 @@ Role-based access is enforced by the API and frontend guards. Configure the five
 Zitadel project roles and matching project/organization IDs before running the
 application; see [roles and access](docs/roles.md) for setup, permissions, and form
 lookup dependencies.
+
+## Promotional WhatsApp campaigns
+
+Campaigns provide purchase-based audiences, audited marketing consent, Meta
+template management, manager approval, scheduling and delivery reporting.
+See [promotional campaign setup and workflow](docs/promotional-campaigns.md).
+Marketing delivery defaults off independently of invoice notifications.

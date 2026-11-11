@@ -83,6 +83,7 @@ async fn run() -> Result<(), error::AppError> {
         .map_err(error::AppError::Auth)?;
     let state = AppState::new(config, db, token_introspection, zitadel_users);
     features::notifications::start(state.clone());
+    features::campaigns::worker::start(state.clone());
     let app = app::router(state);
 
     tracing::info!("Listening on: {}", address);

@@ -398,5 +398,105 @@
     "method": "GET",
     "path": "/users",
     "roles": ["sales", "production"]
+  },
+  {
+    "method": "GET",
+    "path": "/campaigns",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/campaigns",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/campaigns/capabilities",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/campaigns/:id",
+    "roles": ["sales"]
+  },
+  {
+    "method": "PATCH",
+    "path": "/campaigns/:id",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/campaigns/:id/preview",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/campaigns/:id/approve",
+    "roles": ["manager"]
+  },
+  {
+    "method": "POST",
+    "path": "/campaigns/:id/cancel",
+    "roles": ["manager"]
+  },
+  {
+    "method": "GET",
+    "path": "/campaigns/:id/recipients",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/campaign-templates",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/campaign-templates",
+    "roles": ["sales"]
+  },
+  {
+    "method": "PATCH",
+    "path": "/campaign-templates/:id",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/campaign-templates/:id/submit",
+    "roles": ["manager"]
+  },
+  {
+    "method": "POST",
+    "path": "/campaign-templates/sync",
+    "roles": ["manager"]
+  },
+  {
+    "method": "POST",
+    "path": "/campaign-templates/:id/archive",
+    "roles": ["manager"]
+  },
+  {
+    "method": "POST",
+    "path": "/campaign-assets",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/campaign-assets/:id",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/customers/:id/marketing-consent",
+    "roles": ["sales"]
+  },
+  {
+    "method": "PUT",
+    "path": "/customers/:id/marketing-consent",
+    "roles": ["sales"]
+  },
+  {
+    "method": "POST",
+    "path": "/campaigns/audience-count",
+    "roles": ["sales"]
   }
 ]
