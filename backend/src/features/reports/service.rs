@@ -50,18 +50,21 @@ pub async fn sales_closing(
         || report.missed_closing.is_some()
         || date != report.business_date.unwrap()
         || report.tracking_start_date.is_some_and(|start| date < start);
+    let days = super::day_repository::active_days(
+        &mut tx,
+        branch_id,
+        zone.name(),
+        now.with_timezone(&zone).date_naive(),
+    )
+    .await?;
+    report.late_closing_date =
+        super::day_service::late_closing_date(&mut tx, branch_id, &days).await?;
     report.previous_unclosed_date =
         if super::day_repository::daily_check_settings(&mut tx, branch_id)
             .await?
             .required
         {
-            super::day_repository::previous_unclosed(
-                &mut tx,
-                branch_id,
-                zone.name(),
-                now.with_timezone(&zone).date_naive(),
-            )
-            .await?
+            days.previous_unclosed_date
         } else {
             None
         };
@@ -180,6 +183,7 @@ pub(super) fn assemble(
         });
     }
     let mut report = SalesClosing {
+        late_closing_date: None,
         tracking_start_date: None,
         missed_closing: None,
         read_only: false,

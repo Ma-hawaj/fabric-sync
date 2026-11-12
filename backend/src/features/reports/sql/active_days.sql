@@ -14,12 +14,12 @@ WITH events AS (
     UNION SELECT business_date FROM branch_cash_openings WHERE branch_id = $1
     UNION SELECT business_date FROM branch_expenses WHERE branch_id = $1
 )
-SELECT MIN(day) AS "day?" FROM days d
-WHERE d.day < $3
+SELECT
+    MIN(d.day) FILTER (WHERE d.day < $3 AND c.id IS NULL AND m.id IS NULL) AS "previous_unclosed_date?",
+    MAX(d.day) FILTER (WHERE d.day < $3) AS "previous_active_date?",
+    COALESCE(BOOL_OR(d.day = $3), false) AS "has_activity_today!"
+FROM days d
+LEFT JOIN branch_day_closures c ON c.branch_id = $1 AND c.business_date = d.day
+LEFT JOIN branch_missed_closings m ON m.branch_id = $1 AND m.business_date = d.day
+WHERE d.day <= $3
 AND d.day >= (SELECT MIN(business_date) FROM branch_cash_openings WHERE branch_id=$1 AND supersedes_id IS NULL)
-AND NOT EXISTS (
-    SELECT 1 FROM branch_day_closures c WHERE c.branch_id = $1 AND c.business_date = d.day
-)
-AND NOT EXISTS (
-    SELECT 1 FROM branch_missed_closings m WHERE m.branch_id=$1 AND m.business_date=d.day
-)

@@ -15,6 +15,7 @@ export interface ClosingActivity {
 }
 
 export interface SalesClosing {
+  lateClosingDate?: string | null
   trackingStartDate: string | null
   missedClosing?: {
     id: string
@@ -64,6 +65,7 @@ export interface SalesClosing {
 }
 
 export interface BranchDayStatus {
+  lateClosingDate?: string | null
   dailyCheckRequired: boolean
   dailyCheckChangedAt?: string | null
   dailyCheckChangedBy?: string | null
@@ -124,6 +126,7 @@ export interface ClosingComparison {
 }
 
 export interface DayClosure {
+  late?: boolean
   id: string
   closedAt: string
   closedBy: string

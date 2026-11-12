@@ -34,6 +34,24 @@ function expectIssue(
 }
 
 describe('branch reconciliation', () => {
+  it('requires a late-closing explanation even when all amounts match', () => {
+    const report = closingFixture()
+    report.readOnly = true
+    report.businessDate = '2026-11-03'
+    report.lateClosingDate = report.date
+    expectIssue(
+      countsSchema(report).safeParse(counts()),
+      'notes',
+      /closed late/i,
+    )
+    expect(
+      countsSchema(report).safeParse({
+        ...counts(),
+        notes:
+          'Counted before the next opening after missing the evening close.',
+      }).success,
+    ).toBe(true)
+  })
   it('accounts for the float and cash movements and compares methods independently', () => {
     const report = closingFixture()
     const input = {

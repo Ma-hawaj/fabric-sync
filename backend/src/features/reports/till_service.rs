@@ -46,14 +46,21 @@ pub async fn save_opening(
     }
     super::day_service::editable(state, &mut tx, input.branch_id, input.date).await?;
     let current = storage::opening(&mut tx, input.branch_id, input.date, None).await?;
-    if let Some(day) = super::day_repository::previous_unclosed(
+    let days = super::day_repository::active_days(
         &mut tx,
         input.branch_id,
         state.timezone()?.name(),
         input.date,
     )
-    .await?
-    {
+    .await?;
+    if let Some(day) = days.previous_unclosed_date {
+        if super::day_service::late_closing_date(&mut tx, input.branch_id, &days).await?
+            == Some(day)
+        {
+            return Err(AppError::Conflict(format!(
+                "Close the previous active day {day} before saving today's opening. A saved opening requires closing even when there were no sales."
+            )));
+        }
         return Err(AppError::Conflict(format!(
             "A manager must resolve the missed closing for {day} before opening today."
         )));

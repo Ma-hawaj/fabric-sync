@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH events AS (\n    SELECT id AS invoice_id, invoice_date AS occurred_at FROM invoices\n    UNION ALL SELECT invoice_id, paid_at FROM invoice_payments\n    UNION ALL SELECT invoice_id, created_at FROM invoice_returns\n    UNION ALL SELECT invoice_id, created_at FROM invoice_refunds\n    UNION ALL SELECT invoice_id, redeemed_at FROM gift_card_redemptions\n    UNION ALL\n    SELECT o.invoice_id, r.received_at FROM order_repairs r\n    JOIN orders o ON o.id = r.order_id\n    WHERE r.received_amount > 0 AND r.received_at IS NOT NULL\n), days AS (\n    SELECT (e.occurred_at AT TIME ZONE $2)::date AS day\n    FROM events e JOIN invoices i ON i.id = e.invoice_id WHERE COALESCE(i.issuing_branch_id, i.branch_id) = $1\n    UNION SELECT business_date FROM branch_cash_openings WHERE branch_id = $1\n    UNION SELECT business_date FROM branch_expenses WHERE branch_id = $1\n)\nSELECT\n    MIN(d.day) FILTER (WHERE d.day < $3 AND c.id IS NULL AND m.id IS NULL) AS \"previous_unclosed_date?\",\n    MAX(d.day) FILTER (WHERE d.day < $3) AS \"previous_active_date?\",\n    COALESCE(BOOL_OR(d.day = $3), false) AS \"has_activity_today!\"\nFROM days d\nLEFT JOIN branch_day_closures c ON c.branch_id = $1 AND c.business_date = d.day\nLEFT JOIN branch_missed_closings m ON m.branch_id = $1 AND m.business_date = d.day\nWHERE d.day <= $3\nAND d.day >= (SELECT MIN(business_date) FROM branch_cash_openings WHERE branch_id=$1 AND supersedes_id IS NULL)\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "previous_unclosed_date?",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 1,
+        "name": "previous_active_date?",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 2,
+        "name": "has_activity_today!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Date"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "d84c91beb165fa98101bb218d80fd9d1e550c4cab20deabd86a5f8b62dbe2463"
+}

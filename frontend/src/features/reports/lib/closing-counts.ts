@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { canCloseLate } from './sales-closing'
 import type {
   ClosingComparison,
   ClosingCounts,
@@ -121,6 +122,14 @@ export function countsSchema(report: SalesClosing) {
         return
       const counts = value as ClosingCounts
       const compared = compareCounts(report, counts)
+      if (canCloseLate(report) && !counts.notes.trim()) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['notes'],
+          message:
+            'Explain why this day is being closed late in the closing notes.',
+        })
+      }
       if (
         (compared.lines.some((line) => line.difference !== 0) ||
           report.summary.unrecordedMethodCount > 0 ||

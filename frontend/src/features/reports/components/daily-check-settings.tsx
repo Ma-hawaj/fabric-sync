@@ -50,7 +50,8 @@ export function DailyCheckSettings({
         <p role="status" className="rounded-xl border p-4 text-sm">
           Daily trading check is off for this branch. Opening cash and closing
           are optional for trading. Past active days are automatically skipped
-          and remain unreconciled. Closed and historical reports stay locked.
+          and remain unreconciled. Closed reports and historical entries stay
+          locked.
         </p>
       )}
       <PermissionGuard method="PATCH" path="/sales-closing/settings">

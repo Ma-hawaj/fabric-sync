@@ -32,6 +32,11 @@ describe('sales closing exports', () => {
     expect(html).toContain('Closed · Read-only')
     expect(html).toContain('&lt;Recounted&gt; BHD 2 short.')
     expect(html).toContain('-2.000')
+    report.closure.late = true
+    report.closure.closedAt = '2026-11-03T05:00:00Z'
+    expect(salesClosingCsv(report)).toContain('Closed late · Read-only')
+    expect(salesClosingHtml(report)).toContain('Closed late · Read-only')
+    expect(salesClosingCsv(report)).toContain('2026-11-03T05:00:00Z')
   })
   it('exports a missed closing as unreconciled without inventing an actual count', () => {
     const report = closingFixture()

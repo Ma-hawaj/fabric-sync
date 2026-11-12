@@ -57,9 +57,10 @@ export function SkipMissedDay({
     <section className="space-y-4 rounded-xl border border-destructive/40 p-5">
       <h2 className="text-lg font-semibold">Skip missed day · {date}</h2>
       <p className="text-sm">
-        This past report is read-only. A manager must skip it before new orders
-        can continue. Skipping preserves the figures and leaves the day
-        unreconciled.
+        {report.lateClosingDate === date
+          ? 'This day can still be closed before the next opening. Skip only if its closing counts cannot be recovered.'
+          : 'This past report is read-only. A manager must skip it before new orders can continue.'}{' '}
+        Skipping preserves the figures and leaves the day unreconciled.
       </p>
       <a
         className="text-sm underline"

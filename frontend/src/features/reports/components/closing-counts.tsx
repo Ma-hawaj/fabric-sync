@@ -7,7 +7,7 @@ import { NumberField, TextareaField } from '@/components/form/fields'
 import { Field, FieldError } from '@/components/ui/field'
 import { compareCounts, countsSchema, emptyCounts } from '../lib/closing-counts'
 import { CountsComparison } from './closing-comparison'
-import { formatBhd } from '../lib/sales-closing'
+import { canCloseLate, formatBhd } from '../lib/sales-closing'
 import { useCloseDay } from '../hooks/use-sales-closing'
 import type { ClosingCounts, SalesClosing } from '../types/sales-closing'
 
@@ -20,6 +20,7 @@ export function ClosingCountsForm({
   queryDate: string
   disabled: boolean
 }) {
+  const late = canCloseLate(report)
   const [requestId] = useState(() => crypto.randomUUID())
   const mutation = useCloseDay(queryDate, report.branchId)
   const form = useForm({
@@ -38,7 +39,9 @@ export function ClosingCountsForm({
       })
       toast.promise(pending, {
         loading: 'Closing branch day...',
-        success: 'Branch day closed. The saved report is read-only.',
+        success: late
+          ? "Previous day closed late. Record today's opening to continue."
+          : 'Branch day closed. The saved report is read-only.',
         error: (error) =>
           error instanceof ApiError
             ? error.message
@@ -83,6 +86,13 @@ export function ClosingCountsForm({
           Count the cash drawer and enter the confirmed net Benefit and Card
           totals after refunds. Enter zero explicitly when there is none.
         </p>
+        {late && (
+          <p className="mt-2 text-sm">
+            Closing {report.date} late, before the next opening. Explain the
+            delay in the closing notes. Existing transactions, opening cash and
+            expenses remain read-only.
+          </p>
+        )}
       </div>
       <form
         onSubmit={(event) => {
@@ -170,8 +180,9 @@ export function ClosingCountsForm({
                     className="mt-1"
                   />
                   I verified the listed payments and refunds were handled at{' '}
-                  {report.branchName}, have finished recording today’s activity,
-                  and understand that closing permanently locks this report.
+                  {report.branchName}, have finished recording this day’s
+                  activity, and understand that closing permanently locks this
+                  report.
                 </label>
                 <FieldError errors={field.state.meta.errors} />
               </Field>
@@ -179,12 +190,16 @@ export function ClosingCountsForm({
           </form.Field>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
-              Closing saves these counts and notes, locks opening cash and
-              expenses, and blocks new orders and payments until the next
-              business day.
+              {late
+                ? "Closing permanently saves this previous day's counts and notes. Record today's opening next."
+                : 'Closing saves these counts and notes, locks opening cash and expenses, and blocks new orders and payments until the next business day.'}
             </p>
             <Button type="submit">
-              {mutation.isPending ? 'Closing…' : 'Review and close day'}
+              {mutation.isPending
+                ? 'Closing…'
+                : late
+                  ? 'Review and close previous day'
+                  : 'Review and close day'}
             </Button>
           </div>
         </fieldset>

@@ -72,6 +72,8 @@ pub struct TenderSummary {
 #[serde(rename_all = "camelCase")]
 pub struct SalesClosing {
     #[serde(default)]
+    pub late_closing_date: Option<NaiveDate>,
+    #[serde(default)]
     pub tracking_start_date: Option<NaiveDate>,
     #[serde(default)]
     pub missed_closing: Option<MissedClosing>,
@@ -203,6 +205,8 @@ pub struct VoidExpenseInput {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DayClosure {
+    #[serde(default)]
+    pub late: bool,
     pub id: Uuid,
     pub closed_at: DateTime<Utc>,
     pub closed_by: String,
@@ -213,6 +217,7 @@ pub struct DayClosure {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BranchDayStatus {
+    pub late_closing_date: Option<NaiveDate>,
     pub daily_check_required: bool,
     pub daily_check_changed_at: Option<DateTime<Utc>>,
     pub daily_check_changed_by: Option<String>,

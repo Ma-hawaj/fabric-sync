@@ -221,7 +221,9 @@ async fn simultaneous_first_openings_establish_only_one_baseline(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn every_past_write_is_rejected_and_manager_resolutions_cannot_change_figures(pool: PgPool) {
+async fn past_financial_writes_are_rejected_and_manager_resolutions_cannot_change_figures(
+    pool: PgPool,
+) {
     let (invoice, _, _, branch) = test_support::invoice(&pool, 1, false).await;
     let old = today().pred_opt().unwrap();
     let timestamp = service::day_bounds(old, chrono_tz::Asia::Bahrain)
@@ -239,6 +241,8 @@ async fn every_past_write_is_rejected_and_manager_resolutions_cannot_change_figu
     let report = service::sales_closing(&state, Some(old), branch)
         .await
         .unwrap();
+    assert!(report.read_only);
+    assert_eq!(report.late_closing_date, Some(old));
     let input = serde_json::from_value::<CloseDayInput>(serde_json::json!({
         "requestId": Uuid::new_v4(),
         "branchId": branch,
@@ -249,7 +253,7 @@ async fn every_past_write_is_rejected_and_manager_resolutions_cannot_change_figu
     .unwrap();
     assert!(matches!(
         day_service::close_day(&state, input.clone(), "staff").await,
-        Err(AppError::Conflict(_))
+        Err(AppError::BadRequest(message)) if message.contains("closed late")
     ));
     let mut correction = opening(branch, old);
     correction.notes = "Attempted correction".into();

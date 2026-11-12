@@ -28,6 +28,7 @@ import {
   summaryRows,
   closingDayStatus,
   isClosingReadOnly,
+  canCloseLate,
 } from './lib/sales-closing'
 import {
   downloadSalesClosing,
@@ -258,6 +259,11 @@ function ReportContent({
   dailyCheckRequired: boolean
 }) {
   const readOnly = isClosingReadOnly(report)
+  const late = canCloseLate(report)
+  const previousCanClose = Boolean(
+    report.previousUnclosedDate &&
+    report.previousUnclosedDate === report.lateClosingDate,
+  )
   const ready = readOnly && !refreshing
   const status = closingDayStatus(report)
   return (
@@ -299,7 +305,7 @@ function ReportContent({
       </div>
       {report.closure ? (
         <p role="status" className="rounded-xl border bg-muted/40 p-4 text-sm">
-          Closed{' '}
+          {report.closure.late ? 'Closed late' : 'Closed'}{' '}
           {new Date(report.closure.closedAt).toLocaleString('en-GB', {
             timeZone: report.timezone,
           })}
@@ -323,6 +329,12 @@ function ReportContent({
             · {report.missedClosing.resolvedBy}
           </p>
         </div>
+      ) : late ? (
+        <p role="status" className="rounded-xl border p-4 text-sm">
+          This previous active day can be closed once before today's opening or
+          trading. Enter its closing counts and an explanation below. Its
+          recorded figures remain read-only.
+        </p>
       ) : readOnly ? (
         <p className="rounded-xl border p-4 text-sm">
           This report is read-only. Opening cash, actual counts, expenses and
@@ -330,6 +342,24 @@ function ReportContent({
           before tracking started.
         </p>
       ) : null}
+      {previousCanClose &&
+        !late &&
+        !report.closure &&
+        !report.missedClosing && (
+          <p role="alert" className="space-y-2 rounded-xl border p-4 text-sm">
+            <span className="block">
+              Close the previous active day {report.lateClosingDate} before
+              saving today's opening. A saved opening requires closing even when
+              there were no sales.
+            </span>
+            <a
+              className="underline"
+              href={`/sales-closing?branchId=${report.branchId}&date=${report.lateClosingDate}`}
+            >
+              Close previous day
+            </a>
+          </p>
+        )}
       {dailyCheckRequired &&
         report.previousUnclosedDate &&
         !report.closure &&
@@ -337,10 +367,12 @@ function ReportContent({
           <RoleGuard
             role="manager"
             fallback={
-              <p role="alert" className="text-sm">
-                A manager must skip the missed day {report.previousUnclosedDate}{' '}
-                before trading can continue.
-              </p>
+              previousCanClose ? null : (
+                <p role="alert" className="text-sm">
+                  A manager must skip the missed day{' '}
+                  {report.previousUnclosedDate} before trading can continue.
+                </p>
+              )
             }
           >
             <details
@@ -360,9 +392,9 @@ function ReportContent({
             </details>
           </RoleGuard>
         )}
-      {!readOnly && (
+      {(!readOnly || late) && (
         <p className="text-xs text-muted-foreground">
-          Close the day to save actual counts and enable report exports.
+          Close the day to save actual counts.
         </p>
       )}
       {(report.summary.unrecordedMethodCount > 0 ||
@@ -407,13 +439,13 @@ function ReportContent({
       </div>
       <OpeningCashSection report={report} disabled={refreshing} />
       <BranchExpenses report={report} disabled={refreshing} />
-      {readOnly ? (
+      {readOnly && !late ? (
         <ClosedDayCounts report={report} />
       ) : report.opening ? (
         <ClosingCountsForm
           report={report}
           queryDate={queryDate}
-          disabled={refreshing || Boolean(report.previousUnclosedDate)}
+          disabled={refreshing || Boolean(report.previousUnclosedDate && !late)}
         />
       ) : (
         <p className="rounded-xl border p-5 text-sm text-muted-foreground">

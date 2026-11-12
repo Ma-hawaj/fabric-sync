@@ -11,6 +11,9 @@ Retired branches remain available for history. Dates use backend `TIMEZONE`
 1. Count the drawer and **Save opening cash** before the first sale or payment.
    Enter zero explicitly when there is no float. The opening cannot be overwritten;
    managers can append a correction with a reason on the current, unclosed day.
+   With daily checks enabled, an earlier opening must be closed or resolved before
+   the next opening, even when that day had no sales. Follow **Close previous day**
+   to finish an eligible late close first.
 2. Use **Add paid expense** for delivery fees and other payments. Supply an amount,
    payment method and reason; payee and receipt reference are optional. Managers
    can void mistakes with a reason. Original entries and their attribution remain.
@@ -47,12 +50,13 @@ change invoice balances, sales or saved VAT figures.
 
 ## Permanent locks and branch controls
 
-Every past report is read-only, including unfinished days. Staff cannot add old
-openings or physical counts, correct old openings, add or void old expenses, or
-perform an ordinary close for an old day. Future days are also read-only. Closed
-days cannot be reopened or changed, including their notes and opening/expense
-records. The final report uses its frozen snapshot even if data is changed outside
-the application later.
+Past transactions, openings and expenses are always read-only. Staff cannot add
+or correct old openings or add/void old expenses. A previous active day may have
+its final closing recorded once in the late-closing window below; all other past
+counts remain read-only. Future days are also read-only. Closed and skipped days
+cannot be reopened or changed, including their notes and opening/expense records.
+The final report uses its frozen snapshot even if data is changed outside the
+application later.
 
 While the daily trading check is enabled, new invoices and financial activity require today's saved opening
 and no unresolved earlier active day. Activity includes an invoice, payment,
@@ -87,7 +91,30 @@ so current drawer cash is not counted again alongside those receipts. Existing
 unpaid invoices do not prevent opening. Opening corrections still require a
 manager and a reason, and are allowed only for today's unclosed day.
 
-If staff miss a closing after tracking starts, a manager can **Skip missed day**
+### Late closing before the next opening
+
+If the evening closing was missed, staff can close the previous active day before
+the branch starts today. That day must have a saved opening and be neither closed
+nor skipped. Today must have no opening or trading activity, including an unpaid
+new invoice, receipt, refund, redemption, paid repair receipt or expense. These
+conditions apply even when the daily trading check is disabled. Quiet intervening
+days do not prevent closing the last active day, but older unresolved active days
+must be resolved first.
+
+Only closing counts, cash-movement counts and an explanation can be entered;
+the previous day's transactions, opening and expenses stay read-only. An explanation
+is mandatory even when all amounts match. Saving marks the report **Closed late**
+with its original business date, actual submission timestamp, staff and reason.
+The report then locks permanently. The branch can save today's opening and trade;
+closing yesterday does not close today or automatically supply today's float.
+
+Branch locks serialize late closing with the next opening, trading and skipped-day
+resolution. If today starts first, the late close is rejected without saving any
+counts. Previously saved request IDs still return their original result on retry.
+
+### Unrecoverable missed closings
+
+If late closing is no longer possible or counts cannot be recovered, a manager can **Skip missed day**
 for the earliest outstanding active day. This records a frozen snapshot, reason,
 actor and time; it accepts no amount/count fields and changes no historical
 figures. The report is labelled **Skipped · Unreconciled · Read-only**. The skip
@@ -102,7 +129,8 @@ activity without an opening amount or resolution of missed days. It does not
 create an opening or move the tracking start date. Saved and historical reports
 stay locked; a branch already closed today cannot accept further financial
 activity even while the check is off. Final closing still requires actual counts,
-a saved opening and the normal closing validations.
+a saved opening and the normal closing validations. Disabling never reopens a
+closed or skipped report or extends the late-closing window.
 
 Disabling automatically skips outstanding past active days since the first
 opening. Each skip saves a frozen snapshot with an automatic reason and the
@@ -155,7 +183,7 @@ All endpoints are under `/api/sales-closing` and require authentication:
 | `POST /openings/:id/corrections` | Opening input plus required notes; appends a revision |
 | `POST /expenses` | `requestId`, `branchId`, `date`, `amount`, `paymentType`, `reason`, optional `paidTo`/`reference` |
 | `POST /expenses/:id/void` | `requestId`, `reason`; retains original expense |
-| `POST /close` | `requestId`, `branchId`, `date`, `fingerprint`, `counts`; atomically saves and locks today |
+| `POST /close` | `requestId`, `branchId`, `date`, `fingerprint`, `counts`; atomically closes today or the eligible previous active day |
 | `POST /missed` | `requestId`, `branchId`, `date`, `reason`; permanent, unreconciled resolution |
 
 `counts` contains `openingCash`, `cashAdded`, `cashRemoved`, `actualCash`,
@@ -163,7 +191,12 @@ All endpoints are under `/api/sales-closing` and require authentication:
 `canTrade` permits current-day financial operations; `canCreateOrders` additionally
 requires an active branch. The frontend uses the former for editing an existing
 invoice and the latter for creating a new one; server checks remain authoritative. Status also returns `trackingStartDate`,
-`dailyCheckRequired`, `dailyCheckChangedAt` and `dailyCheckChangedBy`.
+`dailyCheckRequired`, `dailyCheckChangedAt`, `dailyCheckChangedBy` and
+`lateClosingDate`. Reports also return the live `lateClosingDate`; when it matches
+the selected date, closing counts may be submitted while `readOnly` continues to
+protect recorded transactions, opening and expenses. Saved closures expose
+`closure.late`, derived from their captured submission business date. Saved
+financial fingerprints exclude these live eligibility fields.
 
 Apply `0005_branch_closing.sql` after the existing baseline migrations. It adds
 five tables: cash openings, expenses, expense voids, day closures and missed-closing

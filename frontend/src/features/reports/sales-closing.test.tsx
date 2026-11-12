@@ -126,6 +126,83 @@ beforeEach(() => {
 })
 
 describe('branch closing workflow', () => {
+  it('closes a previous day once with a reason while its opening and expenses remain read-only', async () => {
+    const report = closingFixture()
+    report.readOnly = true
+    report.businessDate = '2026-11-03'
+    report.previousUnclosedDate = report.date
+    report.lateClosingDate = report.date
+    vi.mocked(apiClient.get).mockImplementation(async () => ({
+      data: structuredClone(report),
+    }))
+    vi.mocked(apiClient.post).mockImplementation(async (_path, body) => {
+      finalize(report, (body as { counts: ClosingCounts }).counts)
+      report.closure!.late = true
+      report.closure!.closedAt = '2026-11-03T05:00:00Z'
+      report.lateClosingDate = null
+      report.previousUnclosedDate = null
+      return { data: structuredClone(report) }
+    })
+    const client = setup(`?branchId=${branch}&date=2026-11-02`)
+    const close = await screen.findByRole('button', {
+      name: 'Review and close previous day',
+    })
+    expect(screen.queryByText('Correct opening cash (manager)')).toBeNull()
+    expect(screen.queryByText('Add paid expense')).toBeNull()
+    expect(screen.queryByLabelText('Opening cash counted (BHD)')).toBeNull()
+    enterCounts()
+    fireEvent.click(close)
+    await screen.findByText(/Explain why this day is being closed late/)
+    expect(apiClient.post).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Closing notes'), {
+      target: {
+        value: 'Missed the evening close; counted before opening today.',
+      },
+    })
+    fireEvent.click(close)
+    await screen.findByText('Closed late · Read-only')
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/sales-closing/close',
+      expect.objectContaining({
+        branchId: branch,
+        date: '2026-11-02',
+        counts: expect.objectContaining({
+          notes: 'Missed the evening close; counted before opening today.',
+        }),
+      }),
+    )
+    expect(screen.queryByLabelText('Cash physically counted (BHD)')).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Review and close previous day' }),
+    ).toBeNull()
+    client.clear()
+  })
+
+  it('blocks the next opening and links to the previous opened day even without sales', async () => {
+    const report = closingFixture('2026-11-03')
+    report.opening = null
+    report.activity = []
+    report.previousUnclosedDate = '2026-11-02'
+    report.lateClosingDate = '2026-11-02'
+    vi.mocked(apiClient.get).mockResolvedValue({ data: report })
+    const client = setup(`?branchId=${branch}&date=2026-11-03`)
+    const save = await screen.findByRole<HTMLButtonElement>('button', {
+      name: 'Save opening cash',
+    })
+    expect(save.matches(':disabled')).toBe(true)
+    expect(
+      screen.getByText(
+        /A saved opening requires closing even when there were no sales/,
+      ),
+    ).toBeTruthy()
+    expect(
+      screen
+        .getByRole('link', { name: 'Close previous day' })
+        .getAttribute('href'),
+    ).toBe(`/sales-closing?branchId=${branch}&date=2026-11-02`)
+    expect(apiClient.post).not.toHaveBeenCalled()
+    client.clear()
+  })
   it('lets a manager disable the daily trading check while a historical report stays locked', async () => {
     let report = closingFixture()
     report.readOnly = true

@@ -86,6 +86,24 @@ pub async fn status(state: &AppState, branch: Uuid) -> Result<BranchDayStatus, A
     Ok(result)
 }
 
+// A late close only adds counts to the last active day's existing records.
+// Financial writes and openings still use `editable`, which is today-only.
+pub(super) async fn late_closing_date(
+    db: &mut PgConnection,
+    branch: Uuid,
+    days: &storage::ActiveDays,
+) -> Result<Option<NaiveDate>, AppError> {
+    let Some(previous) = days.previous_unclosed_date else {
+        return Ok(None);
+    };
+    if days.has_activity_today || days.previous_active_date != Some(previous) {
+        return Ok(None);
+    }
+    Ok(till_repository::opening(db, branch, previous, None)
+        .await?
+        .map(|_| previous))
+}
+
 async fn load_status(
     state: &AppState,
     db: &mut PgConnection,
@@ -95,7 +113,9 @@ async fn load_status(
     repository::branch_name(db, branch)
         .await?
         .ok_or_else(|| AppError::NotFound("Branch not found.".into()))?;
-    let previous = storage::previous_unclosed(db, branch, state.timezone()?.name(), today).await?;
+    let days = storage::active_days(db, branch, state.timezone()?.name(), today).await?;
+    let previous = days.previous_unclosed_date;
+    let late_closing_date = late_closing_date(db, branch, &days).await?;
     let opening = till_repository::opening(db, branch, today, None)
         .await?
         .is_some();
@@ -104,6 +124,7 @@ async fn load_status(
     let settings = storage::daily_check_settings(db, branch).await?;
     let can_trade = !closed && (!settings.required || (opening && previous.is_none()));
     Ok(BranchDayStatus {
+        late_closing_date,
         daily_check_required: settings.required,
         daily_check_changed_at: settings.changed_at,
         daily_check_changed_by: settings.changed_by,
@@ -145,6 +166,9 @@ pub(crate) async fn require_trading(
         return Ok(today);
     }
     if let Some(previous) = status.previous_unclosed_date {
+        if status.late_closing_date == Some(previous) {
+            return Err(AppError::Conflict(format!("Close this branch's previous active day {previous}, then save today's opening before new orders or financial activity.")));
+        }
         return Err(AppError::Conflict(format!("A manager must resolve this branch's missed closing for {previous} before new orders or financial activity.")));
     }
     if !status.opening_recorded {
@@ -218,7 +242,21 @@ pub async fn close_day(
         crate::idempotency::verify_request_hash(&saved.request_hash, &hash)?;
         return Ok(saved.into_report());
     }
-    editable(state, &mut tx, input.branch_id, input.date).await?;
+    let today = business_date(state, &mut tx).await?;
+    if input.date < today {
+        let days =
+            storage::active_days(&mut tx, input.branch_id, state.timezone()?.name(), today).await?;
+        if late_closing_date(&mut tx, input.branch_id, &days).await? != Some(input.date) {
+            return Err(AppError::Conflict("Only the previous active day with a saved opening can be closed late, before today's opening or trading. Closed and skipped days stay locked.".into()));
+        }
+        if input.counts.notes.trim().is_empty() {
+            return Err(AppError::BadRequest(
+                "Explain why this day is being closed late in the closing notes.".into(),
+            ));
+        }
+    } else {
+        editable(state, &mut tx, input.branch_id, input.date).await?;
+    }
     if let Some(previous) = storage::previous_unclosed(
         &mut tx,
         input.branch_id,
@@ -231,7 +269,7 @@ pub async fn close_day(
             "Close the earlier active day {previous} first."
         )));
     }
-    let report = service::load(
+    let mut report = service::load(
         &mut tx,
         input.date,
         state.timezone()?,
@@ -239,6 +277,9 @@ pub async fn close_day(
         input.branch_id,
     )
     .await?;
+    // Preserve the submission's business date to distinguish a late close even
+    // after live report metadata advances on later reads.
+    report.business_date = Some(today);
     if report.fingerprint != input.fingerprint {
         return Err(AppError::Conflict(
             "Recorded transactions changed. Refresh and review the totals before closing.".into(),

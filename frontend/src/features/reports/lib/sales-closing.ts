@@ -9,13 +9,25 @@ export function isClosingReadOnly(report: SalesClosing): boolean {
   return report.readOnly
 }
 
+export function canCloseLate(report: SalesClosing): boolean {
+  return (
+    !report.closure &&
+    !report.missedClosing &&
+    report.lateClosingDate === report.date
+  )
+}
+
 export function closingDayStatus(report: SalesClosing): string {
-  if (report.closure) return 'Closed · Read-only'
+  if (report.closure)
+    return report.closure.late
+      ? 'Closed late · Read-only'
+      : 'Closed · Read-only'
   if (report.missedClosing) return 'Skipped · Unreconciled · Read-only'
   if (report.trackingStartDate && report.date < report.trackingStartDate)
     return 'Before tracking · Read-only'
   if (report.businessDate && report.date > report.businessDate)
     return 'Future report · Read-only'
+  if (canCloseLate(report)) return 'Late closing available · Figures read-only'
   if (isClosingReadOnly(report)) return 'Historical report · Read-only'
   if (!report.opening) return 'Opening cash required'
   return 'Open · Closing count not finalized'
@@ -65,7 +77,7 @@ export const reportNotes = [
   'Invoice totals include VAT and gift card sales, after discounts. Credits reduce invoiced activity; refunds reduce receipts. Gift card tender is separate from external receipts.',
   'Taxable amount and VAT are the saved figures on invoices issued that day, before credits. This is an operational report, not a VAT return.',
   'Closing saves the counted amounts and recorded figures together, then locks the branch day. Refresh and review any new activity before closing.',
-  'Past reports and closed days are read-only. The first opening starts tracking. Later missed closings block new financial activity until a manager skips the missed day with an explanation. Skipping freezes its figures and leaves it unreconciled.',
+  'Past recorded figures and closed days are read-only. The previous active day may be closed once before the next opening or trading, using its saved opening and an explanation. Other missed days require a manager skip, which freezes their figures and leaves them unreconciled.',
   'Opening cash is saved separately and read-only at closing. Cash expenses reduce expected drawer cash; do not also include them as cash banked or transferred out. Benefit/Card expenses do not reduce merchant receipt totals.',
 ]
 

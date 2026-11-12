@@ -59,13 +59,20 @@ pub async fn invoice_branch(
     .await
 }
 
-pub async fn previous_unclosed(
+pub struct ActiveDays {
+    pub previous_unclosed_date: Option<NaiveDate>,
+    pub previous_active_date: Option<NaiveDate>,
+    pub has_activity_today: bool,
+}
+
+pub async fn active_days(
     db: &mut PgConnection,
     branch: Uuid,
     zone: &str,
     before: NaiveDate,
-) -> Result<Option<NaiveDate>, sqlx::Error> {
-    sqlx::query_file_scalar!(
+) -> Result<ActiveDays, sqlx::Error> {
+    sqlx::query_file_as!(
+        ActiveDays,
         "src/features/reports/sql/active_days.sql",
         branch,
         zone,
@@ -73,6 +80,17 @@ pub async fn previous_unclosed(
     )
     .fetch_one(db)
     .await
+}
+
+pub async fn previous_unclosed(
+    db: &mut PgConnection,
+    branch: Uuid,
+    zone: &str,
+    before: NaiveDate,
+) -> Result<Option<NaiveDate>, sqlx::Error> {
+    Ok(active_days(db, branch, zone, before)
+        .await?
+        .previous_unclosed_date)
 }
 
 pub struct ClosureRow {
@@ -89,6 +107,7 @@ impl ClosureRow {
     pub fn into_report(self) -> SalesClosing {
         let mut report = self.snapshot.0;
         report.closure = Some(DayClosure {
+            late: report.business_date.is_some_and(|day| day > report.date),
             id: self.id,
             closed_at: self.closed_at,
             closed_by: self.closed_by,
