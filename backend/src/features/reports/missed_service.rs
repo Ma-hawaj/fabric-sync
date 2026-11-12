@@ -1,4 +1,6 @@
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
+use sqlx::PgConnection;
+use uuid::Uuid;
 
 use super::{
     day_repository, day_service, missed_repository as storage, service, till_repository, types::*,
@@ -8,6 +10,33 @@ use crate::{
     idempotency::{request_hash, verify_request_hash},
     state::AppState,
 };
+
+/// Called under the branch lock. Skipping supplies no physical counts and never
+/// replaces an existing closing or missed-day snapshot.
+pub(super) async fn auto_skip(
+    state: &AppState,
+    db: &mut PgConnection,
+    branch: Uuid,
+    today: NaiveDate,
+    actor: &str,
+) -> Result<(), AppError> {
+    let zone = state.timezone()?;
+    while let Some(date) = day_repository::previous_unclosed(db, branch, zone.name(), today).await?
+    {
+        let input = ResolveMissedClosingInput {
+            request_id: Uuid::new_v4(),
+            branch_id: branch,
+            date,
+            reason: "Automatically skipped because the daily trading check was disabled. Physical counts were not recorded.".into(),
+        };
+        let hash = request_hash("branch.closing.missed.v1", branch, &input);
+        let mut report = service::load(db, date, zone, Utc::now(), branch).await?;
+        report.business_date = Some(today);
+        report.read_only = true;
+        storage::insert_missed(db, &input, &hash, actor, &report).await?;
+    }
+    Ok(())
+}
 
 pub async fn resolve_missed(
     state: &AppState,

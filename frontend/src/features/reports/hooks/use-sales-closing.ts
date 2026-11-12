@@ -91,8 +91,9 @@ export function useSetDailyCheck(branchId: string) {
       )
       return data
     },
-    onSuccess: (status) => {
+    onSuccess: async (status) => {
       client.setQueryData(['branch-day-status', branchId], status)
+      await client.invalidateQueries({ queryKey: ['sales-closing'] })
     },
   })
 }

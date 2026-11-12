@@ -2,7 +2,9 @@ use chrono::{NaiveDate, Utc};
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use super::{day_repository as storage, repository, service, till_repository, types::*};
+use super::{
+    day_repository as storage, missed_service, repository, service, till_repository, types::*,
+};
 use crate::{error::AppError, state::AppState};
 
 // Every operation that changes a branch's financial report takes this lock.
@@ -51,10 +53,24 @@ pub(super) async fn editable(
     if date < today {
         return Err(AppError::Conflict("Past reports are read-only. A manager may separately resolve a missed closing without changing its figures.".into()));
     }
+    repository::branch_name(db, branch)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Branch not found.".into()))?;
     if storage::closure(db, branch, date).await?.is_some() {
         return Err(AppError::Conflict(
             "This branch day is closed. Its report is read-only.".into(),
         ));
+    }
+    let settings = storage::daily_check_settings(db, branch).await?;
+    if !settings.required {
+        missed_service::auto_skip(
+            state,
+            db,
+            branch,
+            today,
+            settings.changed_by.as_deref().unwrap_or("system"),
+        )
+        .await?;
     }
     Ok(today)
 }
@@ -96,7 +112,7 @@ async fn load_status(
         date: today,
         opening_recorded: opening,
         closed,
-        previous_unclosed_date: previous,
+        previous_unclosed_date: if settings.required { previous } else { None },
         can_trade,
         can_create_orders: can_trade && storage::active_branch(db, branch).await?,
     })
@@ -118,6 +134,14 @@ pub(crate) async fn require_trading(
         return Err(AppError::Conflict("This branch is closed for today. New orders and financial activity are blocked until the next business day.".into()));
     }
     if !status.daily_check_required {
+        missed_service::auto_skip(
+            state,
+            db,
+            branch,
+            today,
+            status.daily_check_changed_by.as_deref().unwrap_or("system"),
+        )
+        .await?;
         return Ok(today);
     }
     if let Some(previous) = status.previous_unclosed_date {
@@ -136,8 +160,20 @@ pub async fn set_daily_check(
 ) -> Result<BranchDayStatus, AppError> {
     let mut tx = state.db().begin().await?;
     lock_branch(&mut tx, input.branch_id).await?;
-    storage::update_daily_check(&mut tx, input.branch_id, input.required, actor).await?;
     let today = business_date(state, &mut tx).await?;
+    repository::branch_name(&mut tx, input.branch_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Branch not found.".into()))?;
+    let previous = storage::daily_check_settings(&mut tx, input.branch_id).await?;
+    if !previous.required || !input.required {
+        let disabled_by = if previous.required {
+            actor
+        } else {
+            previous.changed_by.as_deref().unwrap_or("system")
+        };
+        missed_service::auto_skip(state, &mut tx, input.branch_id, today, disabled_by).await?;
+    }
+    storage::update_daily_check(&mut tx, input.branch_id, input.required, actor).await?;
     let result = load_status(state, &mut tx, input.branch_id, today).await?;
     tx.commit().await?;
     Ok(result)

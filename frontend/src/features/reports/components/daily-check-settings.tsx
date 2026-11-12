@@ -32,7 +32,7 @@ export function DailyCheckSettings({
       loading: 'Saving daily check setting...',
       success: !required
         ? 'Daily trading check enabled.'
-        : 'Daily trading check disabled. Saved reports stay locked.',
+        : 'Daily trading check disabled. Past active days are skipped; saved reports stay locked.',
       error: (error) =>
         error instanceof ApiError
           ? error.message
@@ -48,9 +48,9 @@ export function DailyCheckSettings({
     <div className="space-y-3">
       {!required && (
         <p role="status" className="rounded-xl border p-4 text-sm">
-          Daily trading check is off for this branch. Opening cash and
-          missed-day resolution are optional for trading. Closed and historical
-          reports stay locked.
+          Daily trading check is off for this branch. Opening cash and closing
+          are optional for trading. Past active days are automatically skipped
+          and remain unreconciled. Closed and historical reports stay locked.
         </p>
       )}
       <PermissionGuard method="PATCH" path="/sales-closing/settings">
@@ -62,9 +62,10 @@ export function DailyCheckSettings({
           <div className="mt-4 space-y-3">
             <p className="text-sm text-muted-foreground">
               Require an opening cash amount and resolution of earlier missed
-              days before new orders or payments. Re-enabling restores these
-              requirements for unresolved days. This setting never unlocks
-              closed reports.
+              days before new orders or payments. Disabling automatically skips
+              outstanding past active days. Re-enabling skips days accumulated
+              while off, then requires today's opening. Skipped days remain
+              unreconciled. Closed reports stay locked.
             </p>
             <Button
               variant="outline"

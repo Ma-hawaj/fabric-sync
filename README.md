@@ -207,7 +207,10 @@ are logged and cash expenses reduce expected drawer cash. Final closing locks
 the saved report. Each branch's first saved opening starts tracking automatically;
 earlier history stays read-only without a closing backlog. New sales require
 opening cash and closure or manager skipping of earlier active days; quiet days
-are skipped automatically. Managers can disable this trading check per branch.
+are skipped automatically. Managers can disable this trading check per branch;
+outstanding past active days and days accumulated while it is off are automatically
+skipped with an audit record and remain unreconciled. Re-enabling requires today's
+opening without a backlog from the disabled period.
 Closed and historical reports always stay locked, and explained differences are
 retained. Review and close saves counts and notes in one permanent record;
 export it as CSV or print/save PDF. See [branch reconciliation](docs/sales-closing.md)

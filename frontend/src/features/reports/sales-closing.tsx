@@ -317,18 +317,17 @@ function ReportContent({
           before tracking started.
         </p>
       ) : null}
-      {report.previousUnclosedDate &&
+      {dailyCheckRequired &&
+        report.previousUnclosedDate &&
         !report.closure &&
         !report.missedClosing && (
           <RoleGuard
             role="manager"
             fallback={
-              dailyCheckRequired ? (
-                <p role="alert" className="text-sm">
-                  A manager must skip the missed day{' '}
-                  {report.previousUnclosedDate} before trading can continue.
-                </p>
-              ) : null
+              <p role="alert" className="text-sm">
+                A manager must skip the missed day {report.previousUnclosedDate}{' '}
+                before trading can continue.
+              </p>
             }
           >
             <details
@@ -343,7 +342,6 @@ function ReportContent({
                   key={report.previousUnclosedDate}
                   report={report}
                   disabled={refreshing}
-                  required={dailyCheckRequired}
                 />
               </div>
             </details>

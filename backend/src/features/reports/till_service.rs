@@ -1,8 +1,6 @@
-use chrono::NaiveDate;
-use sqlx::PgConnection;
 use uuid::Uuid;
 
-use super::{reconciliation::fils, repository, till_repository as storage, types::*};
+use super::{reconciliation::fils, till_repository as storage, types::*};
 use crate::{
     error::AppError,
     idempotency::{request_hash, verify_request_hash},
@@ -15,19 +13,6 @@ fn reason(value: &str, maximum: usize) -> Result<(), AppError> {
             "Enter a reason with 1–{maximum} characters."
         )));
     }
-    Ok(())
-}
-
-async fn validate_day(
-    state: &AppState,
-    db: &mut PgConnection,
-    branch: Uuid,
-    date: NaiveDate,
-) -> Result<(), AppError> {
-    repository::branch_name(db, branch)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Branch not found.".into()))?;
-    super::day_service::editable(state, db, branch, date).await?;
     Ok(())
 }
 
@@ -59,7 +44,7 @@ pub async fn save_opening(
         verify_request_hash(&replay.request_hash, &hash)?;
         return Ok(replay.into_opening());
     }
-    validate_day(state, &mut tx, input.branch_id, input.date).await?;
+    super::day_service::editable(state, &mut tx, input.branch_id, input.date).await?;
     let current = storage::opening(&mut tx, input.branch_id, input.date, None).await?;
     if let Some(day) = super::day_repository::previous_unclosed(
         &mut tx,
@@ -133,7 +118,7 @@ pub async fn record_expense(
         verify_request_hash(&replay.request_hash, &hash)?;
         return Ok(replay.into_expense());
     }
-    validate_day(state, &mut tx, input.branch_id, input.date).await?;
+    super::day_service::editable(state, &mut tx, input.branch_id, input.date).await?;
     super::day_service::require_trading(state, &mut tx, Some(input.branch_id)).await?;
     let id = storage::insert_expense(&mut tx, &input, &hash, actor).await?;
     let expense = storage::expenses(&mut tx, None, None, None, Some(id))
@@ -173,7 +158,7 @@ pub async fn void_expense(
         }
         return Err(AppError::Conflict("This expense is already voided.".into()));
     }
-    validate_day(state, &mut tx, expense.branch_id, expense.business_date).await?;
+    super::day_service::editable(state, &mut tx, expense.branch_id, expense.business_date).await?;
     super::day_service::require_trading(state, &mut tx, Some(expense.branch_id)).await?;
     storage::insert_void(&mut tx, id, &input, &hash, actor).await?;
     let expense = storage::expenses(&mut tx, None, None, None, Some(id))

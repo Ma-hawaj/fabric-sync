@@ -104,13 +104,26 @@ stay locked; a branch already closed today cannot accept further financial
 activity even while the check is off. Final closing still requires actual counts,
 a saved opening and the normal closing validations.
 
-Re-enabling restores both requirements, including previously unresolved active
-days since the original first opening. Enable before the day's first receipt if
-there is no opening yet; after receipts have been recorded, a new opening must
-wait until the next business day. The setting's latest change stores the manager
-and timestamp on the branch. Retrying the same value does not overwrite that
-attribution. The setting is separate from saved reports and cannot change their
-counts or financial snapshots.
+Disabling automatically skips outstanding past active days since the first
+opening. Each skip saves a frozen snapshot with an automatic reason and the
+manager who disabled the check; no counts or balances are invented. It stays
+**Skipped · Unreconciled · Read-only** and cannot be replaced later. Existing
+closings and manual skips are preserved, and quiet days need no record.
+
+While the check stays off, days that have since ended are automatically skipped
+with the next successful financial write, opening or closing. Re-enabling also
+skips any remaining past active days before restoring the requirements, so the
+disabled period creates no closing backlog. This runs under the same branch lock
+and transaction as the action, without a scheduled job. The current day is never
+automatically skipped. Days missed after re-enabling still require manager
+resolution as usual.
+
+Enable before the day's first receipt if there is no opening yet; after receipts
+have been recorded, a new opening must wait until the next business day. The
+setting's latest change stores the manager and timestamp on the branch. Retrying
+the same value does not overwrite that attribution or existing skip records.
+The setting is separate from saved reports and cannot change their counts or
+financial snapshots.
 
 ## Financial ownership and access
 
@@ -126,7 +139,7 @@ A separate audited recovery design is needed for their outstanding balances.
 Invoice taxable/VAT values use saved snapshots, including current gift-card
 accounting. This operational report is not a VAT return. Sales, manager and admin
 roles can view reports, open, record expenses and close; manager/admin roles own
-setup, opening corrections, expense voids and missed-closing resolutions. Access
+daily-check settings, opening corrections, expense voids and missed-closing resolutions. Access
 uses the existing application role policy, without branch-specific staff scoping.
 
 ## API and storage

@@ -19,11 +19,9 @@ function failure(error: unknown) {
 export function SkipMissedDay({
   report,
   disabled,
-  required = true,
 }: {
   report: SalesClosing
   disabled: boolean
-  required?: boolean
 }) {
   const date = report.previousUnclosedDate
   const [requestId] = useState(() => crypto.randomUUID())
@@ -59,11 +57,9 @@ export function SkipMissedDay({
     <section className="space-y-4 rounded-xl border border-destructive/40 p-5">
       <h2 className="text-lg font-semibold">Skip missed day · {date}</h2>
       <p className="text-sm">
-        This past report is read-only.{' '}
-        {required
-          ? 'A manager must skip it before new orders can continue.'
-          : 'Trading can continue while the daily check is off; this missed day still needs review.'}{' '}
-        Skipping preserves the figures and leaves the day unreconciled.
+        This past report is read-only. A manager must skip it before new orders
+        can continue. Skipping preserves the figures and leaves the day
+        unreconciled.
       </p>
       <a
         className="text-sm underline"

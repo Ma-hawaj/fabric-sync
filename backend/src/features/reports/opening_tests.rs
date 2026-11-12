@@ -447,7 +447,10 @@ async fn disabling_the_check_is_branch_scoped_and_does_not_reset_history(pool: P
     let after = service::sales_closing(&state, Some(old), branch)
         .await
         .unwrap();
-    assert!(after.read_only && after.closure.is_none() && after.missed_closing.is_none());
+    assert!(after.read_only && after.closure.is_none());
+    let skipped = after.missed_closing.as_ref().unwrap();
+    assert!(skipped.reason.contains("Automatically skipped"));
+    assert_eq!(skipped.resolved_by, "manager-one");
     assert_eq!(after.fingerprint, before.fingerprint);
     assert!(matches!(invoices::update_invoice(&state,invoice,serde_json::from_value(json!({"issuingBranchId":branch,"expectedVatRate":0.1,"discountUnit":"amount","giftCards":[{"amount":10,"recipientPhone":"33112233"}]})).unwrap()).await,Err(AppError::Conflict(_))));
     let restored = day_service::set_daily_check(
@@ -458,9 +461,9 @@ async fn disabling_the_check_is_branch_scoped_and_does_not_reset_history(pool: P
     .await
     .unwrap();
     assert!(restored.daily_check_required && !restored.can_trade);
-    assert_eq!(restored.previous_unclosed_date, Some(old));
+    assert_eq!(restored.previous_unclosed_date, None);
     assert_eq!(restored.tracking_start_date, Some(old));
-    missed_service::resolve_missed(&state,serde_json::from_value(json!({"requestId":Uuid::new_v4(),"branchId":branch,"date":old,"reason":"The count was missed; no historical amount is being supplied."})).unwrap(),"manager").await.unwrap();
+    assert!(matches!(missed_service::resolve_missed(&state,serde_json::from_value(json!({"requestId":Uuid::new_v4(),"branchId":branch,"date":old,"reason":"Try replacing the automatic skip."})).unwrap(),"manager").await,Err(AppError::Conflict(_))));
     assert!(
         matches!(till_service::save_opening(&state,opening(branch,today()),None,"staff").await,Err(AppError::Conflict(message)) if message.contains("counted twice"))
     );

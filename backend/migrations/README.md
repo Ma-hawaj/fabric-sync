@@ -41,6 +41,8 @@ SQLx applies the files in version order:
    frozen report and staff/time. Opening/expense amounts retain three decimals.
    Closed and historical reports remain read-only even when the trading check
    is disabled. The migration fabricates no opening or closing balances.
+   Automatic skips while checks are disabled reuse the immutable missed-closing
+   records, retaining their frozen figures and the disabling manager's identity.
 
 The closing migration consolidates the unmerged feature's development migrations.
 Recreate disposable development databases that applied those intermediate versions;

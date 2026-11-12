@@ -127,23 +127,35 @@ beforeEach(() => {
 
 describe('branch closing workflow', () => {
   it('lets a manager disable the daily trading check while a historical report stays locked', async () => {
-    const report = closingFixture()
+    let report = closingFixture()
     report.readOnly = true
     report.businessDate = '2026-11-03'
-    vi.mocked(apiClient.get).mockResolvedValue({ data: report })
-    vi.mocked(apiClient.patch).mockImplementation(async (_path, body) => ({
-      data: {
-        branchId: branch,
-        date: '2026-11-03',
-        trackingStartDate: '2026-11-02',
-        dailyCheckRequired: (body as { required: boolean }).required,
-        openingRecorded: false,
-        closed: false,
-        previousUnclosedDate: '2026-11-02',
-        canTrade: true,
-        canCreateOrders: true,
-      },
-    }))
+    vi.mocked(apiClient.get).mockImplementation(async () => ({ data: report }))
+    vi.mocked(apiClient.patch).mockImplementation(async (_path, body) => {
+      report = {
+        ...report,
+        missedClosing: {
+          id: 'automatic-skip',
+          reason:
+            'Automatically skipped because the daily trading check was disabled.',
+          resolvedAt: '2026-11-03T06:00:00Z',
+          resolvedBy: 'manager',
+        },
+      }
+      return {
+        data: {
+          branchId: branch,
+          date: '2026-11-03',
+          trackingStartDate: '2026-11-02',
+          dailyCheckRequired: (body as { required: boolean }).required,
+          openingRecorded: false,
+          closed: false,
+          previousUnclosedDate: null,
+          canTrade: true,
+          canCreateOrders: true,
+        },
+      }
+    })
     const client = setup(`?branchId=${branch}&date=2026-11-02`)
     await screen.findByText(/Branch controls · Daily trading check required/)
     fireEvent.click(
@@ -153,6 +165,9 @@ describe('branch closing workflow', () => {
       screen.getByRole('button', { name: 'Disable daily trading check' }),
     )
     await screen.findByText(/Daily trading check is off for this branch/)
+    await screen.findByText(
+      /Automatically skipped because the daily trading check was disabled\./,
+    )
     expect(apiClient.patch).toHaveBeenCalledWith('/sales-closing/settings', {
       branchId: branch,
       required: false,

@@ -50,13 +50,21 @@ pub async fn sales_closing(
         || report.missed_closing.is_some()
         || date != report.business_date.unwrap()
         || report.tracking_start_date.is_some_and(|start| date < start);
-    report.previous_unclosed_date = super::day_repository::previous_unclosed(
-        &mut tx,
-        branch_id,
-        zone.name(),
-        now.with_timezone(&zone).date_naive(),
-    )
-    .await?;
+    report.previous_unclosed_date =
+        if super::day_repository::daily_check_settings(&mut tx, branch_id)
+            .await?
+            .required
+        {
+            super::day_repository::previous_unclosed(
+                &mut tx,
+                branch_id,
+                zone.name(),
+                now.with_timezone(&zone).date_naive(),
+            )
+            .await?
+        } else {
+            None
+        };
     tx.commit().await?;
     Ok(report)
 }
