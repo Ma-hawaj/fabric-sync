@@ -387,9 +387,11 @@ describe('branch closing workflow', () => {
     expect(apiClient.get).toHaveBeenCalledWith('/sales-closing', {
       params: { branchId: branch },
     })
-    fireEvent.change(screen.getByLabelText('Report date'), {
-      target: { value: '2026-10-31' },
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Report date' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: /previous month/i }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: /October 31.*2026/ }))
     await screen.findByText('Main Branch · 2026-10-31')
     expect(screen.getByText('No activity for this day.')).toBeTruthy()
     fireEvent.click(screen.getByRole('combobox', { name: 'Branch' }))
@@ -401,6 +403,11 @@ describe('branch closing workflow', () => {
     await screen.findByText('Second Branch · 2026-10-31')
     expect(apiClient.get).toHaveBeenCalledWith('/sales-closing', {
       params: { branchId: secondBranch, date: '2026-10-31' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Report date' }))
+    await screen.findByText('Second Branch · 2026-11-02')
+    expect(apiClient.get).toHaveBeenCalledWith('/sales-closing', {
+      params: { branchId: secondBranch },
     })
     client.clear()
   })

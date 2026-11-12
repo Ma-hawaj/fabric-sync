@@ -6,7 +6,7 @@ import { DownloadIcon, PrinterIcon, RefreshCwIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { DatePicker } from '@/components/form/date-picker'
 import {
   Select,
   SelectContent,
@@ -177,14 +177,12 @@ export function SalesClosingPage() {
           <label htmlFor="report-date" className="block text-sm font-medium">
             Report date
           </label>
-          <Input
+          <DatePicker
             id="report-date"
-            className="w-44"
-            type="date"
+            label="Report date"
+            className="w-52"
             value={date || report?.date || ''}
-            onChange={(event) =>
-              void setFilters({ date: event.target.value, page: 1 })
-            }
+            onValueChange={(value) => void setFilters({ date: value, page: 1 })}
           />
         </div>
         <Button
