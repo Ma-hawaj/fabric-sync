@@ -4,11 +4,7 @@ export function closingFixture(date = '2026-11-02'): SalesClosing {
   return {
     businessDate: date,
     readOnly: false,
-    policy: {
-      startsOn: date,
-      configuredAt: `${date}T00:00:00Z`,
-      configuredBy: 'test-manager',
-    },
+    trackingStartDate: date,
     opening: {
       id: 'opening-1',
       amount: 20,

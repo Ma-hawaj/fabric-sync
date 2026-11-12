@@ -32,15 +32,15 @@ SQLx applies the files in version order:
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
    return-line lookups and the unique index allowing one closure per garment.
 
-5. `0005_branch_closing.sql` adds the six tables for branch cash openings and
-   their corrections, paid expenses, expense voids, fixed go-live policies,
-   final closings and separate missed-closing resolutions. A final closing is
-   one record containing actual counts, comparisons, frozen report and staff/time
-   attribution. Openings and expenses retain three decimal places for Bahraini
-   fils. The API requires daily opening cash and closure/resolution of earlier
-   active days after go-live; quiet days are skipped. Earlier history stays
-   read-only without becoming a backlog. Setup, openings and closings are never
-   fabricated by the migration.
+5. `0005_branch_closing.sql` adds five tables for branch cash openings and
+   corrections, paid expenses, expense voids, final closings and permanent
+   missed-day skips. The earliest original opening establishes the tracking
+   start date; there is no go-live policy table or setup operation. The branch
+   stores the manager-controlled daily-check flag (enabled by default) and its
+   latest actor/time. One closing record contains actual counts, comparisons,
+   frozen report and staff/time. Opening/expense amounts retain three decimals.
+   Closed and historical reports remain read-only even when the trading check
+   is disabled. The migration fabricates no opening or closing balances.
 
 The closing migration consolidates the unmerged feature's development migrations.
 Recreate disposable development databases that applied those intermediate versions;

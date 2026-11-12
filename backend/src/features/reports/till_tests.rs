@@ -50,7 +50,6 @@ fn counts(cash: f64) -> ClosingCounts {
 #[sqlx::test]
 async fn delivery_expenses_reduce_drawer_cash_once_and_preserve_an_audit_trail(pool: PgPool) {
     let (invoice, _, _, branch) = crate::test_support::invoice(&pool, 1, false).await;
-    sqlx::query("INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,80,'cash'),($1,20,'benefit')").bind(invoice).execute(&pool).await.unwrap();
     let state = crate::test_support::state_without_openings(pool.clone(), None, None).await;
     let before = service::sales_closing(&state, Some(day()), branch)
         .await
@@ -88,6 +87,7 @@ async fn delivery_expenses_reduce_drawer_cash_once_and_preserve_an_audit_trail(p
         Err(AppError::Conflict(_))
     ));
 
+    sqlx::query("INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,80,'cash'),($1,20,'benefit')").bind(invoice).execute(&pool).await.unwrap();
     let delivery = expense(branch, 5.005, PaymentType::Cash);
     let paid = till_service::record_expense(&state, delivery.clone(), "expense-staff")
         .await

@@ -57,6 +57,8 @@ function clientForForm(dayOverrides: Partial<BranchDayStatus> = {}) {
     openingRecorded: true,
     closed: false,
     previousUnclosedDate: null,
+    trackingStartDate: '2026-07-19',
+    dailyCheckRequired: true,
     canTrade: true,
     canCreateOrders: true,
     ...dayOverrides,
@@ -377,7 +379,7 @@ describe('Invoice workspace', () => {
     [{ openingRecorded: false }, /Record today’s opening cash/],
     [
       { previousUnclosedDate: '2026-11-06' },
-      /A manager must resolve the missed closing for 2026-11-06/,
+      /A manager must skip the missed day 2026-11-06/,
     ],
     [{ closed: true }, /This branch is closed for today/],
   ] as const)(

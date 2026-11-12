@@ -1,5 +1,5 @@
 use axum::{
-    routing::{get, post},
+    routing::{get, patch, post},
     Router,
 };
 
@@ -10,8 +10,8 @@ pub fn router() -> Router<AppState> {
         .route("/sales-closing", get(super::handlers::sales_closing))
         .route("/sales-closing/status", get(super::handlers::day_status))
         .route(
-            "/sales-closing/setup",
-            post(super::handlers::configure_closing),
+            "/sales-closing/settings",
+            patch(super::handlers::set_daily_check),
         )
         .route(
             "/sales-closing/missed",

@@ -40,20 +40,16 @@ pub async fn sales_closing(
         super::day_repository::closure(&mut tx, branch_id, date).await?
     {
         closed.into_report()
-    } else if let Some(missed) = super::rollout_repository::missed(&mut tx, branch_id, date).await?
-    {
+    } else if let Some(missed) = super::missed_repository::missed(&mut tx, branch_id, date).await? {
         missed.into_report()
     } else {
         load(&mut tx, date, zone, now, branch_id).await?
     };
     report.business_date = Some(now.with_timezone(&zone).date_naive());
-    report.policy = super::rollout_repository::policy(&mut tx, branch_id)
-        .await?
-        .map(|p| p.into_policy());
     report.read_only = report.closure.is_some()
         || report.missed_closing.is_some()
         || date != report.business_date.unwrap()
-        || report.policy.as_ref().is_none_or(|p| date < p.starts_on);
+        || report.tracking_start_date.is_some_and(|start| date < start);
     report.previous_unclosed_date = super::day_repository::previous_unclosed(
         &mut tx,
         branch_id,
@@ -78,6 +74,7 @@ pub(super) async fn load(
     let (start, end) = day_bounds(date, zone)?;
     let rows = repository::activity(db, start, end, branch_id).await?;
     let mut report = assemble(date, zone, now, branch_id, name, rows);
+    report.tracking_start_date = till_repository::tracking_start(db, branch_id).await?;
     report.opening = till_repository::opening(db, branch_id, date, None)
         .await?
         .map(till_repository::OpeningRow::into_opening);
@@ -175,7 +172,7 @@ pub(super) fn assemble(
         });
     }
     let mut report = SalesClosing {
-        policy: None,
+        tracking_start_date: None,
         missed_closing: None,
         read_only: false,
         closure: None,

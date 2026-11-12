@@ -4,6 +4,32 @@ use uuid::Uuid;
 
 use super::types::*;
 
+pub struct DailyCheckSettings {
+    pub required: bool,
+    pub changed_at: Option<DateTime<Utc>>,
+    pub changed_by: Option<String>,
+}
+
+pub async fn daily_check_settings(
+    db: &mut PgConnection,
+    branch: Uuid,
+) -> Result<DailyCheckSettings, sqlx::Error> {
+    sqlx::query_as!(DailyCheckSettings,
+        "SELECT daily_check_required AS required, daily_check_changed_at AS changed_at, daily_check_changed_by AS changed_by FROM branch WHERE id=$1", branch)
+        .fetch_one(db).await
+}
+
+pub async fn update_daily_check(
+    db: &mut PgConnection,
+    branch: Uuid,
+    required: bool,
+    actor: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!("UPDATE branch SET daily_check_required=$2, daily_check_changed_at=clock_timestamp(), daily_check_changed_by=$3 WHERE id=$1 AND daily_check_required IS DISTINCT FROM $2",branch,required,actor)
+        .execute(db).await?;
+    Ok(())
+}
+
 pub async fn transaction_times(
     db: &mut PgConnection,
 ) -> Result<(DateTime<Utc>, DateTime<Utc>), sqlx::Error> {

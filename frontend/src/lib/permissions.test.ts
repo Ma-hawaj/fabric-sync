@@ -286,8 +286,25 @@ describe('role policy', () => {
   })
 })
 
-describe('branch rollout and missed closings', () => {
-  for (const path of ['/sales-closing/setup', '/sales-closing/missed']) {
+describe('skipping missed closings', () => {
+  it('reserves the daily check switch for managers', () => {
+    expect(
+      canAccess(principal('sales'), 'PATCH', '/sales-closing/settings'),
+    ).toBe(false)
+    expect(
+      canAccess(principal('manager'), 'PATCH', '/sales-closing/settings'),
+    ).toBe(true)
+    expect(
+      canAccess(principal('admin'), 'PATCH', '/sales-closing/settings'),
+    ).toBe(true)
+  })
+
+  it('exposes no setup operation', () => {
+    expect(canAccess(principal('admin'), 'POST', '/sales-closing/setup')).toBe(
+      false,
+    )
+  })
+  for (const path of ['/sales-closing/missed']) {
     it(`requires a manager for ${path}`, () => {
       expect(canAccess(principal('sales'), 'POST', path)).toBe(false)
       expect(canAccess(principal('manager'), 'POST', path)).toBe(true)

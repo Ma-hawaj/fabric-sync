@@ -80,3 +80,19 @@ export function useCloseDay(date: string, branchId: string) {
     },
   })
 }
+
+export function useSetDailyCheck(branchId: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: async (required: boolean) => {
+      const { data } = await apiClient.patch<BranchDayStatus>(
+        '/sales-closing/settings',
+        { branchId, required },
+      )
+      return data
+    },
+    onSuccess: (status) => {
+      client.setQueryData(['branch-day-status', branchId], status)
+    },
+  })
+}

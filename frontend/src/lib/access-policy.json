@@ -1,5 +1,9 @@
 [
-  { "method": "POST", "path": "/sales-closing/setup", "roles": ["manager"] },
+  {
+    "method": "PATCH",
+    "path": "/sales-closing/settings",
+    "roles": ["manager"]
+  },
   { "method": "POST", "path": "/sales-closing/missed", "roles": ["manager"] },
   { "method": "GET", "path": "/sales-closing/status", "roles": ["sales"] },
   { "method": "POST", "path": "/sales-closing/close", "roles": ["sales"] },

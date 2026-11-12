@@ -36,13 +36,13 @@ pub async fn day_status(
     ))
 }
 
-pub async fn configure_closing(
+pub async fn set_daily_check(
     State(state): State<AppState>,
     Extension(user): Extension<crate::auth::AuthenticatedUser>,
-    Json(input): Json<ConfigureClosingInput>,
-) -> Result<Json<ClosingPolicy>, AppError> {
+    Json(input): Json<UpdateDailyCheckInput>,
+) -> Result<Json<BranchDayStatus>, AppError> {
     Ok(Json(
-        super::rollout_service::configure(&state, input, actor(&user)?).await?,
+        super::day_service::set_daily_check(&state, input, actor(&user)?).await?,
     ))
 }
 
@@ -52,7 +52,7 @@ pub async fn resolve_missed(
     Json(input): Json<ResolveMissedClosingInput>,
 ) -> Result<Json<SalesClosing>, AppError> {
     Ok(Json(
-        super::rollout_service::resolve_missed(&state, input, actor(&user)?).await?,
+        super::missed_service::resolve_missed(&state, input, actor(&user)?).await?,
     ))
 }
 

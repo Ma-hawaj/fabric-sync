@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DataTable } from '@/components/data-table/data-table'
 import { useDataTable } from '@/hooks/use-data-table'
-import { useSalesClosing } from './hooks/use-sales-closing'
+import { useBranchDayStatus, useSalesClosing } from './hooks/use-sales-closing'
+import { DailyCheckSettings } from './components/daily-check-settings'
 import {
   activityLabels,
   activityTime,
@@ -29,7 +30,7 @@ import { ClosingCountsForm } from './components/closing-counts'
 import { OpeningCashSection } from './components/till-forms'
 import { BranchExpenses } from './components/branch-expenses'
 import { ClosedDayCounts } from './components/closing-comparison'
-import { RolloutSetup, MissedClosingResolution } from './components/rollout'
+import { SkipMissedDay } from './components/missed-closing'
 import { useAllLocations } from '@/features/locations/hooks/use-locations'
 import { usePreferences } from '@/features/locations/hooks/use-default-location'
 import { closingBranches } from '@/features/locations/lib/location-filters'
@@ -122,6 +123,7 @@ export function SalesClosingPage() {
         selectedBranch,
       ))
   const query = useSalesClosing(date, valid ? selectedBranch : '')
+  const dayStatus = useBranchDayStatus(valid ? selectedBranch : '')
   const report = query.data
   return (
     <div className="space-y-6">
@@ -191,6 +193,14 @@ export function SalesClosingPage() {
           {report ? `${report.timezone} · BHD` : 'BHD'}
         </p>
       </div>
+      {valid && selectedBranch && (
+        <DailyCheckSettings
+          branchId={selectedBranch}
+          status={dayStatus.data}
+          loading={dayStatus.isPending}
+          failed={dayStatus.isError}
+        />
+      )}
       {locations.isError && (
         <p role="alert">
           Could not load branches. Refresh the page to try again.
@@ -216,6 +226,7 @@ export function SalesClosingPage() {
           report={report}
           queryDate={date}
           refreshing={query.isFetching}
+          dailyCheckRequired={dayStatus.data?.dailyCheckRequired ?? true}
         />
       )}
     </div>
@@ -226,10 +237,12 @@ function ReportContent({
   report,
   queryDate,
   refreshing,
+  dailyCheckRequired,
 }: {
   report: SalesClosing
   queryDate: string
   refreshing: boolean
+  dailyCheckRequired: boolean
 }) {
   const readOnly = isClosingReadOnly(report)
   const ready = readOnly && !refreshing
@@ -285,8 +298,8 @@ function ReportContent({
       ) : report.missedClosing ? (
         <div role="status" className="space-y-2 rounded-xl border p-4 text-sm">
           <p>
-            Missed closing resolved separately. This day remains unreconciled;
-            its saved figures cannot be changed.
+            This day was skipped. It remains unreconciled; its saved figures
+            cannot be changed.
           </p>
           <p className="whitespace-pre-wrap">{report.missedClosing.reason}</p>
           <p className="text-xs text-muted-foreground">
@@ -301,22 +314,21 @@ function ReportContent({
         <p className="rounded-xl border p-4 text-sm">
           This report is read-only. Opening cash, actual counts, expenses and
           closing details cannot be added or changed for past days or history
-          before go-live.
+          before tracking started.
         </p>
       ) : null}
-      {(!report.policy || report.previousUnclosedDate) &&
+      {report.previousUnclosedDate &&
         !report.closure &&
         !report.missedClosing && (
           <RoleGuard
             role="manager"
             fallback={
-              <p role="alert" className="text-sm">
-                A manager must{' '}
-                {report.policy
-                  ? `resolve the missed closing for ${report.previousUnclosedDate}`
-                  : 'set this branch’s go-live date'}{' '}
-                before trading.
-              </p>
+              dailyCheckRequired ? (
+                <p role="alert" className="text-sm">
+                  A manager must skip the missed day{' '}
+                  {report.previousUnclosedDate} before trading can continue.
+                </p>
+              ) : null
             }
           >
             <details
@@ -324,21 +336,14 @@ function ReportContent({
               id="manager-actions"
             >
               <summary className="cursor-pointer font-semibold">
-                Manager actions ·{' '}
-                {report.policy
-                  ? 'Missed closing needs resolution'
-                  : 'Branch setup required'}
+                Manager actions · Skip missed day
               </summary>
-              <div className="mt-4 space-y-4">
-                <RolloutSetup
-                  key={report.branchId}
-                  report={report}
-                  disabled={refreshing}
-                />
-                <MissedClosingResolution
+              <div className="mt-4">
+                <SkipMissedDay
                   key={report.previousUnclosedDate}
                   report={report}
                   disabled={refreshing}
+                  required={dailyCheckRequired}
                 />
               </div>
             </details>

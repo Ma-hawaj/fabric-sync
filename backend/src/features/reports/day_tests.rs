@@ -132,6 +132,14 @@ async fn opening_is_required_and_explained_final_close_locks_every_financial_ent
             .id,
         report.closure.unwrap().id
     );
+    let disabled = day_service::set_daily_check(
+        &state,
+        serde_json::from_value(json!({"branchId":branch,"required":false})).unwrap(),
+        "manager",
+    )
+    .await
+    .unwrap();
+    assert!(!disabled.daily_check_required && disabled.closed && !disabled.can_trade);
     assert!(
         !day_service::status(&state, branch)
             .await
@@ -232,7 +240,7 @@ async fn missed_days_stay_read_only_and_separate_resolutions_unblock_only_their_
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO branch_closing_policies(branch_id,starts_on,configured_by,request_id,request_hash) VALUES($1,$2,'fixture',uuidv7(),decode(repeat('00',32),'hex'))").bind(branch).bind(earlier).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO branch_cash_openings(branch_id,business_date,amount,recorded_by,request_id,request_hash) VALUES($1,$2,50,'fixture',uuidv7(),decode(repeat('00',32),'hex'))").bind(branch).bind(earlier).execute(&pool).await.unwrap();
     let state = crate::test_support::state_without_openings(pool.clone(), None, None).await;
     assert_eq!(
         day_service::status(&state, branch)
@@ -267,7 +275,7 @@ async fn missed_days_stay_read_only_and_separate_resolutions_unblock_only_their_
         "reason": "Staff missed the count. No historical physical balance is being supplied.",
     }))
     .unwrap();
-    let resolved = super::rollout_service::resolve_missed(&state, resolution.clone(), "manager")
+    let resolved = super::missed_service::resolve_missed(&state, resolution.clone(), "manager")
         .await
         .unwrap();
     assert!(resolved.read_only && resolved.closure.is_none());
@@ -277,7 +285,7 @@ async fn missed_days_stay_read_only_and_separate_resolutions_unblock_only_their_
         "manager"
     );
     assert_eq!(
-        super::rollout_service::resolve_missed(&state, resolution.clone(), "manager")
+        super::missed_service::resolve_missed(&state, resolution.clone(), "manager")
             .await
             .unwrap()
             .missed_closing
@@ -289,7 +297,7 @@ async fn missed_days_stay_read_only_and_separate_resolutions_unblock_only_their_
     changed.request_id = Uuid::new_v4();
     changed.reason = "Try to replace the explanation".into();
     assert!(matches!(
-        super::rollout_service::resolve_missed(&state, changed, "manager").await,
+        super::missed_service::resolve_missed(&state, changed, "manager").await,
         Err(AppError::Conflict(_))
     ));
     till_service::save_opening(&state, opening(branch, today()), None, "staff")

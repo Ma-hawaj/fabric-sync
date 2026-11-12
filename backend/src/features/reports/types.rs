@@ -72,7 +72,7 @@ pub struct TenderSummary {
 #[serde(rename_all = "camelCase")]
 pub struct SalesClosing {
     #[serde(default)]
-    pub policy: Option<ClosingPolicy>,
+    pub tracking_start_date: Option<NaiveDate>,
     #[serde(default)]
     pub missed_closing: Option<MissedClosing>,
     #[serde(default)]
@@ -213,8 +213,10 @@ pub struct DayClosure {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BranchDayStatus {
-    pub controls_start_date: Option<NaiveDate>,
-    pub setup_required: bool,
+    pub daily_check_required: bool,
+    pub daily_check_changed_at: Option<DateTime<Utc>>,
+    pub daily_check_changed_by: Option<String>,
+    pub tracking_start_date: Option<NaiveDate>,
     pub branch_id: Uuid,
     pub date: NaiveDate,
     pub opening_recorded: bool,
@@ -224,20 +226,11 @@ pub struct BranchDayStatus {
     pub can_create_orders: bool,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ClosingPolicy {
-    pub starts_on: NaiveDate,
-    pub configured_at: DateTime<Utc>,
-    pub configured_by: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ConfigureClosingInput {
-    pub request_id: Uuid,
+pub struct UpdateDailyCheckInput {
     pub branch_id: Uuid,
-    pub starts_on: NaiveDate,
+    pub required: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

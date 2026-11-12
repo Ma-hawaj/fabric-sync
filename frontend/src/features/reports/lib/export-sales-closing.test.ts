@@ -44,7 +44,7 @@ describe('sales closing exports', () => {
     }
     const csv = salesClosingCsv(report)
     const html = salesClosingHtml(report)
-    expect(csv).toContain('Missed closing resolved · Unreconciled · Read-only')
+    expect(csv).toContain('Skipped · Unreconciled · Read-only')
     expect(csv).toContain('Unreconciled — past figures unchanged')
     expect(csv).not.toContain('"Cash physically counted"')
     expect(html).toContain('Figures unchanged.')

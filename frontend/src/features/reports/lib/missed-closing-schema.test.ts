@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  missedClosingSchema,
-  nextBusinessDate,
-  rolloutSchema,
-} from './rollout-schema'
+import { missedClosingSchema } from './missed-closing-schema'
 
 function expectIssue(
   result: {
@@ -24,20 +20,8 @@ function expectIssue(
   )
 }
 
-describe('rollout and immutable missed closings', () => {
-  it('defaults to the next calendar day across month and year boundaries', () => {
-    expect(nextBusinessDate('2026-12-31')).toBe('2027-01-01')
-    expect(nextBusinessDate('2028-02-28')).toBe('2028-02-29')
-  })
-  it('rejects backdating rollout and unexplained resolutions', () => {
-    expectIssue(
-      rolloutSchema('2026-11-10').safeParse({ startsOn: '2026-11-09' }),
-      'startsOn',
-      /today or a future date/i,
-    )
-    expect(
-      rolloutSchema('2026-11-10').safeParse({ startsOn: '2026-11-11' }).success,
-    ).toBe(true)
+describe('immutable skipped days', () => {
+  it('requires a reason and acknowledgement when skipping a missed closing', () => {
     expectIssue(
       missedClosingSchema.safeParse({ reason: ' ', acknowledged: true }),
       'reason',

@@ -28,13 +28,15 @@ export function salesClosingCsv(report: SalesClosing): string {
     ['Generated at', report.generatedAt],
     ['Currency', 'BHD'],
     ['Day status', closingDayStatus(report)],
-    ...(report.policy ? [['Controls start date', report.policy.startsOn]] : []),
+    ...(report.trackingStartDate
+      ? [['Tracking start date', report.trackingStartDate]]
+      : []),
     ...(report.missedClosing
       ? [
-          ['Missed closing resolution ID', report.missedClosing.id],
-          ['Resolution reason', report.missedClosing.reason],
-          ['Resolved at', report.missedClosing.resolvedAt],
-          ['Resolved by', report.missedClosing.resolvedBy],
+          ['Skipped day ID', report.missedClosing.id],
+          ['Skip reason', report.missedClosing.reason],
+          ['Skipped at', report.missedClosing.resolvedAt],
+          ['Skipped by', report.missedClosing.resolvedBy],
           ['Reconciliation status', 'Unreconciled — past figures unchanged'],
         ]
       : []),
@@ -155,8 +157,8 @@ export function salesClosingHtml(report: SalesClosing): string {
     <style>@page{size:A4;margin:15mm}body{font:12px system-ui,sans-serif;color:#172b25}h1{font-size:24px}h2{font-size:16px;margin-top:24px}table{border-collapse:collapse;width:100%;margin:12px 0}th,td{padding:7px;border-bottom:1px solid #ddd;text-align:left}th{background:#f1f4f2}td:last-child{text-align:right;font-variant-numeric:tabular-nums}tr{break-inside:avoid}thead{display:table-header-group}p,li{line-height:1.5}.notes{font-size:10px;color:#555}</style></head><body>
     <h1>Branch closing report</h1><p>${escapeHtml(report.branchName)} · ${escapeHtml(report.date)} · ${escapeHtml(report.timezone)} · BHD<br>Generated ${escapeHtml(new Date(report.generatedAt).toLocaleString('en-GB', { timeZone: report.timezone }))}</p>
     <p>${escapeHtml(closingDayStatus(report))}${report.closure ? ` · ${escapeHtml(report.closure.closedAt)} · By ${escapeHtml(report.closure.closedBy)} · Reference ${escapeHtml(report.closure.id)}` : ''}</p>
-    ${report.policy ? `<p>Closing controls start: ${escapeHtml(report.policy.startsOn)}</p>` : ''}
-    ${report.missedClosing ? `<p>Missed closing resolved separately — unreconciled. Figures unchanged.<br>Reason: ${escapeHtml(report.missedClosing.reason)}<br>Resolved ${escapeHtml(report.missedClosing.resolvedAt)} · By ${escapeHtml(report.missedClosing.resolvedBy)} · Reference ${escapeHtml(report.missedClosing.id)}</p>` : ''}
+    ${report.trackingStartDate ? `<p>Tracking started: ${escapeHtml(report.trackingStartDate)}</p>` : ''}
+    ${report.missedClosing ? `<p>Day skipped — unreconciled. Figures unchanged.<br>Reason: ${escapeHtml(report.missedClosing.reason)}<br>Skipped ${escapeHtml(report.missedClosing.resolvedAt)} · By ${escapeHtml(report.missedClosing.resolvedBy)} · Reference ${escapeHtml(report.missedClosing.id)}</p>` : ''}
     <p>Closing count status: ${escapeHtml(comparisonStatus(report))}. Unassigned activities excluded: ${report.unassignedActivityCount}.</p>
     ${report.opening ? `<p>Saved opening cash: ${formatBhd(report.opening.amount)} BHD · Recorded ${escapeHtml(new Date(report.opening.recordedAt).toLocaleString('en-GB', { timeZone: report.timezone }))}${report.opening.supersedesId ? ' · Corrected opening' : ''}<br>Opening notes: ${escapeHtml(report.opening.notes)}</p>` : ''}
     ${

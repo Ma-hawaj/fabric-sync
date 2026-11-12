@@ -1,10 +1,10 @@
 mod day_repository;
 pub(crate) mod day_service;
 mod handlers;
+mod missed_repository;
+mod missed_service;
 mod reconciliation;
 mod repository;
-mod rollout_repository;
-mod rollout_service;
 mod routes;
 mod service;
 mod till_repository;
@@ -16,7 +16,7 @@ pub use routes::router;
 #[cfg(test)]
 mod day_tests;
 #[cfg(test)]
-mod rollout_tests;
+mod opening_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

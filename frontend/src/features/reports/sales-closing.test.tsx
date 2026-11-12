@@ -7,10 +7,14 @@ import { apiClient } from '@/lib/api'
 import { SalesClosingPage } from './sales-closing'
 import { closingFixture } from './test-fixtures'
 import { compareCounts } from './lib/closing-counts'
-import type { ClosingCounts, SalesClosing } from './types/sales-closing'
+import type {
+  BranchDayStatus,
+  ClosingCounts,
+  SalesClosing,
+} from './types/sales-closing'
 
 vi.mock('@/lib/api', () => ({
-  apiClient: { get: vi.fn(), post: vi.fn() },
+  apiClient: { get: vi.fn(), post: vi.fn(), patch: vi.fn() },
   ApiError: class ApiError extends Error {},
 }))
 vi.mock('@tanstack/react-router', () => ({
@@ -19,7 +23,29 @@ vi.mock('@tanstack/react-router', () => ({
 const branch = closingFixture().branchId
 const secondBranch = '00000000-0000-4000-8000-000000000002'
 
-function setup(searchParams = '') {
+function setup(
+  searchParams = '',
+  dailyOverrides: Partial<BranchDayStatus> = {},
+) {
+  const reportGet = vi.mocked(apiClient.get).getMockImplementation()!
+  vi.mocked(apiClient.get).mockImplementation(async (url, options) => {
+    if (url === '/sales-closing/status')
+      return {
+        data: {
+          branchId: branch,
+          date: '2026-11-02',
+          trackingStartDate: '2026-11-02',
+          dailyCheckRequired: true,
+          openingRecorded: true,
+          closed: false,
+          previousUnclosedDate: null,
+          canTrade: true,
+          canCreateOrders: true,
+          ...dailyOverrides,
+        },
+      }
+    return reportGet(url, options)
+  })
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -88,6 +114,7 @@ function finalize(report: SalesClosing, counts: ClosingCounts) {
 beforeEach(() => {
   vi.mocked(apiClient.get).mockReset()
   vi.mocked(apiClient.post).mockReset()
+  vi.mocked(apiClient.patch).mockReset()
   vi.mocked(apiClient.get).mockImplementation(async (_url, options) => {
     const params = options?.params as { date?: string; branchId: string }
     const report = closingFixture(params.date)
@@ -99,42 +126,96 @@ beforeEach(() => {
 })
 
 describe('branch closing workflow', () => {
-  it('sets a fixed go-live date without adding counts to earlier history', async () => {
+  it('lets a manager disable the daily trading check while a historical report stays locked', async () => {
     const report = closingFixture()
-    report.policy = null
     report.readOnly = true
-    vi.mocked(apiClient.get).mockImplementation(async () => ({
-      data: { ...report },
+    report.businessDate = '2026-11-03'
+    vi.mocked(apiClient.get).mockResolvedValue({ data: report })
+    vi.mocked(apiClient.patch).mockImplementation(async (_path, body) => ({
+      data: {
+        branchId: branch,
+        date: '2026-11-03',
+        trackingStartDate: '2026-11-02',
+        dailyCheckRequired: (body as { required: boolean }).required,
+        openingRecorded: false,
+        closed: false,
+        previousUnclosedDate: '2026-11-02',
+        canTrade: true,
+        canCreateOrders: true,
+      },
     }))
-    vi.mocked(apiClient.post).mockImplementation(async (path, body) => {
-      expect(path).toBe('/sales-closing/setup')
-      const input = body as { startsOn: string }
-      report.policy = {
-        startsOn: input.startsOn,
-        configuredAt: '2026-11-02T10:00:00Z',
-        configuredBy: 'manager',
-      }
-      return { data: report.policy }
-    })
     const client = setup(`?branchId=${branch}&date=2026-11-02`)
-    await screen.findByText(/Manager actions/)
-    fireEvent.click(screen.getByText(/Manager actions/))
-    const date = await screen.findByLabelText<HTMLInputElement>('Go-live date')
-    expect(date.value).toBe('2026-11-03')
+    await screen.findByText(/Branch controls · Daily trading check required/)
+    fireEvent.click(
+      screen.getByText(/Branch controls · Daily trading check required/),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Disable daily trading check' }),
+    )
+    await screen.findByText(/Daily trading check is off for this branch/)
+    expect(apiClient.patch).toHaveBeenCalledWith('/sales-closing/settings', {
+      branchId: branch,
+      required: false,
+    })
     expect(screen.queryByLabelText('Cash physically counted (BHD)')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Set go-live date' }))
-    await waitFor(() =>
-      expect(
-        screen.queryByRole('button', { name: 'Set go-live date' }),
-      ).toBeNull(),
-    )
-    expect(apiClient.post).toHaveBeenCalledWith(
-      '/sales-closing/setup',
-      expect.objectContaining({ branchId: branch, startsOn: '2026-11-03' }),
-    )
     expect(
       screen.queryByRole('button', { name: 'Review and close day' }),
     ).toBeNull()
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Export CSV' })
+        .disabled,
+    ).toBe(false)
+    client.clear()
+  })
+
+  it('starts tracking with the first opening and requires no go-live setup', async () => {
+    const report = closingFixture()
+    report.trackingStartDate = null
+    report.opening = null
+    report.activity = []
+    report.summary = {
+      ...report.summary,
+      invoicePayments: 0,
+      repairPayments: 0,
+      externalRefunds: 0,
+      netExternalReceipts: 0,
+    }
+    report.tenders = []
+    vi.mocked(apiClient.get).mockImplementation(async () => ({
+      data: structuredClone(report),
+    }))
+    vi.mocked(apiClient.post).mockImplementation(async (path, body) => {
+      expect(path).toBe('/sales-closing/openings')
+      const input = body as { amount: number; date: string }
+      report.opening = {
+        id: 'first-opening',
+        amount: input.amount,
+        recordedAt: '2026-11-02T05:00:00Z',
+        recordedBy: 'staff',
+        notes: '',
+        supersedesId: null,
+      }
+      report.trackingStartDate = input.date
+      report.fingerprint = 'started-tracking'
+      return { data: report.opening }
+    })
+    const client = setup(`?branchId=${branch}&date=2026-11-02`)
+    const amount = await screen.findByLabelText('Opening cash counted (BHD)')
+    expect(screen.getByText(/Your first opening starts tracking/)).toBeTruthy()
+    expect(screen.queryByLabelText('Go-live date')).toBeNull()
+    expect(screen.queryByText(/Manager actions/)).toBeNull()
+    fireEvent.change(amount, { target: { value: '20' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save opening cash' }))
+    await screen.findByLabelText('Cash physically counted (BHD)')
+    expect(screen.queryByText(/Your first opening starts tracking/)).toBeNull()
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/sales-closing/openings',
+      expect.objectContaining({
+        branchId: branch,
+        date: '2026-11-02',
+        amount: 20,
+      }),
+    )
     client.clear()
   })
 
@@ -162,9 +243,7 @@ describe('branch closing workflow', () => {
     const client = setup(`?branchId=${branch}&date=2026-11-02`)
     await screen.findByText(/Manager actions/)
     fireEvent.click(screen.getByText(/Manager actions/))
-    const reason = await screen.findByLabelText(
-      'Manager explanation for the missed closing',
-    )
+    const reason = await screen.findByLabelText('Reason for skipping this day')
     fireEvent.change(reason, {
       target: {
         value:
@@ -176,15 +255,9 @@ describe('branch closing workflow', () => {
         name: /I understand that this does not reconcile/,
       }),
     )
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Resolve missed closing' }),
-    )
-    await screen.findByText(
-      'Missed closing resolved · Unreconciled · Read-only',
-    )
-    expect(
-      screen.queryByRole('button', { name: 'Resolve missed closing' }),
-    ).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Skip missed day' }))
+    await screen.findByText('Skipped · Unreconciled · Read-only')
+    expect(screen.queryByRole('button', { name: 'Skip missed day' })).toBeNull()
     expect(
       screen.queryByRole('button', { name: 'Review and close day' }),
     ).toBeNull()
@@ -281,9 +354,7 @@ describe('branch closing workflow', () => {
     expect(
       screen.queryByRole('button', { name: 'Review and close day' }),
     ).toBeNull()
-    expect(
-      screen.getByRole('button', { name: 'Resolve missed closing' }),
-    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Skip missed day' })).toBeTruthy()
     client.clear()
   })
 
@@ -307,7 +378,7 @@ describe('branch closing workflow', () => {
       target: { value: secondBranch },
     })
     await screen.findByText('Second Branch · 2026-10-31')
-    expect(apiClient.get).toHaveBeenLastCalledWith('/sales-closing', {
+    expect(apiClient.get).toHaveBeenCalledWith('/sales-closing', {
       params: { branchId: secondBranch, date: '2026-10-31' },
     })
     client.clear()

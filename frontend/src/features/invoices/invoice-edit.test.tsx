@@ -28,6 +28,8 @@ vi.mock('@/features/reports/hooks/use-sales-closing', () => ({
       openingRecorded: true,
       closed: false,
       previousUnclosedDate: null,
+      trackingStartDate: '2026-07-19',
+      dailyCheckRequired: true,
       ...eligibility,
     },
     isPending: false,

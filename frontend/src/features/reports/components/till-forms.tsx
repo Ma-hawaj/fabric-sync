@@ -80,6 +80,12 @@ export function OpeningCashSection({
             Count and save the cash in the drawer when this branch starts the
             day. Closing will use this saved amount.
           </p>
+          {!report.trackingStartDate && (
+            <p className="text-sm text-muted-foreground">
+              Your first opening starts tracking for this branch automatically.
+              Earlier history stays read-only and requires no closing.
+            </p>
+          )}
           <OpeningForm
             report={report}
             disabled={

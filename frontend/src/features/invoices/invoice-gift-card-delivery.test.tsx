@@ -72,6 +72,8 @@ beforeEach(() => {
           openingRecorded: true,
           closed: false,
           previousUnclosedDate: null,
+          trackingStartDate: '2026-07-19',
+          dailyCheckRequired: true,
           canTrade: true,
           canCreateOrders: true,
         },
@@ -139,6 +141,8 @@ function renderForm({
     openingRecorded: true,
     closed: false,
     previousUnclosedDate: null,
+    trackingStartDate: '2026-07-19',
+    dailyCheckRequired: true,
     canTrade: true,
     canCreateOrders: true,
   })

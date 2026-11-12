@@ -16,8 +16,6 @@ pub async fn state(db: PgPool, renderer: Option<String>, provider: Option<String
 }
 
 pub async fn open_branch(db: &PgPool, branch: Uuid) {
-    sqlx::query("INSERT INTO branch_closing_policies(branch_id,starts_on,configured_by,request_id,request_hash) VALUES($1,(now() AT TIME ZONE 'Asia/Bahrain')::date,'fixture',uuidv7(),decode(repeat('00',32),'hex')) ON CONFLICT DO NOTHING")
-        .bind(branch).execute(db).await.unwrap();
     let day = chrono::Utc::now()
         .with_timezone(&chrono_tz::Asia::Bahrain)
         .date_naive();
@@ -36,19 +34,6 @@ pub async fn trading_branch(db: &PgPool) -> Uuid {
 }
 
 pub async fn state_without_openings(
-    db: PgPool,
-    renderer: Option<String>,
-    provider: Option<String>,
-) -> AppState {
-    let day = chrono::Utc::now()
-        .with_timezone(&chrono_tz::Asia::Bahrain)
-        .date_naive();
-    sqlx::query("INSERT INTO branch_closing_policies(branch_id,starts_on,configured_by,request_id,request_hash) SELECT id,$1,'fixture',uuidv7(),decode(repeat('00',32),'hex') FROM branch ON CONFLICT DO NOTHING")
-        .bind(day).execute(&db).await.unwrap();
-    state_without_closing_setup(db, renderer, provider).await
-}
-
-pub async fn state_without_closing_setup(
     db: PgPool,
     renderer: Option<String>,
     provider: Option<String>,

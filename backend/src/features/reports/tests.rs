@@ -204,13 +204,6 @@ async fn final_closings_are_isolated_idempotent_and_freeze_the_recorded_activity
         .with_timezone(&chrono_tz::Asia::Bahrain)
         .date_naive();
     let (invoice, _, _, branch) = crate::test_support::invoice(&pool, 1, false).await;
-    sqlx::query(
-        "INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,10,'cash')",
-    )
-    .bind(invoice)
-    .execute(&pool)
-    .await
-    .unwrap();
     let other: Uuid =
         sqlx::query_scalar("INSERT INTO branch(name) VALUES('Other report branch') RETURNING id")
             .fetch_one(&pool)
@@ -231,6 +224,13 @@ async fn final_closings_are_isolated_idempotent_and_freeze_the_recorded_activity
         None,
         "opening-staff",
     )
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,10,'cash')",
+    )
+    .bind(invoice)
+    .execute(&pool)
     .await
     .unwrap();
     let report = service::sales_closing(&state, Some(day), branch)

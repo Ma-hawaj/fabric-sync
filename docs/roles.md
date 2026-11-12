@@ -97,7 +97,7 @@ all protected routes have exactly one policy entry per method.
 | Design options and order stages lookup | sales, production |
 | Invoice create/edit/read, pricing, payments and collection | sales |
 | Branch closing, opening cash, paid expenses, final close and exports | sales |
-| Opening corrections, expense voids, rollout setup and missed-closing resolutions | manager |
+| Opening corrections, expense voids, daily-check setting and missed-day skips | manager |
 | Orders, repair lookup and slips | sales, production |
 | Production location | sales, production (the order PATCH accepts only this field) |
 | Stage progress | production |

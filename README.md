@@ -204,15 +204,14 @@ Use **Branch Closing** to choose a branch and day, count the cash drawer,
 confirm Benefit/Card totals, and see any over/short amounts. Opening float is
 saved separately before closing. Delivery fees and other paid branch expenses
 are logged and cash expenses reduce expected drawer cash. Final closing locks
-the saved report. A manager sets a fixed go-live date per branch; earlier
-history stays read-only and does not block trading. From go-live, new sales
-require opening cash and closure or manager resolution of earlier active days;
-quiet days are skipped. All past reports are read-only. Explained differences are retained
-at closing.
-Review and close saves counts, cash movements and notes together and permanently locks
-the day. Export the saved report as CSV or print/save PDF. Setup and missed-closing
-resolution sit under Manager actions. See [branch reconciliation](docs/sales-closing.md)
-for financial ownership, immutable history and closing behavior.
+the saved report. Each branch's first saved opening starts tracking automatically;
+earlier history stays read-only without a closing backlog. New sales require
+opening cash and closure or manager skipping of earlier active days; quiet days
+are skipped automatically. Managers can disable this trading check per branch.
+Closed and historical reports always stay locked, and explained differences are
+retained. Review and close saves counts and notes in one permanent record;
+export it as CSV or print/save PDF. See [branch reconciliation](docs/sales-closing.md)
+for first opening, optional daily checks, financial ownership and immutable history.
 
 ## Direct material sales
 

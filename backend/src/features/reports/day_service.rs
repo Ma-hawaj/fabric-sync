@@ -51,17 +51,6 @@ pub(super) async fn editable(
     if date < today {
         return Err(AppError::Conflict("Past reports are read-only. A manager may separately resolve a missed closing without changing its figures.".into()));
     }
-    let policy = super::rollout_repository::policy(db, branch)
-        .await?
-        .ok_or_else(|| {
-            AppError::Conflict("A manager must set this branch's go-live date first.".into())
-        })?;
-    if date < policy.starts_on {
-        return Err(AppError::Conflict(format!(
-            "Closing controls start on {}. Earlier history is read-only.",
-            policy.starts_on
-        )));
-    }
     if storage::closure(db, branch, date).await?.is_some() {
         return Err(AppError::Conflict(
             "This branch day is closed. Its report is read-only.".into(),
@@ -95,14 +84,14 @@ async fn load_status(
         .await?
         .is_some();
     let closed = storage::closure(db, branch, today).await?.is_some();
-    let starts = super::rollout_repository::policy(db, branch)
-        .await?
-        .map(|p| p.starts_on);
-    let can_trade =
-        !closed && starts.is_some_and(|start| today < start || (opening && previous.is_none()));
+    let starts = till_repository::tracking_start(db, branch).await?;
+    let settings = storage::daily_check_settings(db, branch).await?;
+    let can_trade = !closed && (!settings.required || (opening && previous.is_none()));
     Ok(BranchDayStatus {
-        controls_start_date: starts,
-        setup_required: starts.is_none(),
+        daily_check_required: settings.required,
+        daily_check_changed_at: settings.changed_at,
+        daily_check_changed_by: settings.changed_by,
+        tracking_start_date: starts,
         branch_id: branch,
         date: today,
         opening_recorded: opening,
@@ -128,10 +117,7 @@ pub(crate) async fn require_trading(
     if status.closed {
         return Err(AppError::Conflict("This branch is closed for today. New orders and financial activity are blocked until the next business day.".into()));
     }
-    let starts = status.controls_start_date.ok_or_else(|| {
-        AppError::Conflict("A manager must set this branch's go-live date before trading.".into())
-    })?;
-    if today < starts {
+    if !status.daily_check_required {
         return Ok(today);
     }
     if let Some(previous) = status.previous_unclosed_date {
@@ -141,6 +127,20 @@ pub(crate) async fn require_trading(
         return Err(AppError::Conflict("Record today's opening cash for this branch before recording new orders or financial activity.".into()));
     }
     Ok(today)
+}
+
+pub async fn set_daily_check(
+    state: &AppState,
+    input: UpdateDailyCheckInput,
+    actor: &str,
+) -> Result<BranchDayStatus, AppError> {
+    let mut tx = state.db().begin().await?;
+    lock_branch(&mut tx, input.branch_id).await?;
+    storage::update_daily_check(&mut tx, input.branch_id, input.required, actor).await?;
+    let today = business_date(state, &mut tx).await?;
+    let result = load_status(state, &mut tx, input.branch_id, today).await?;
+    tx.commit().await?;
+    Ok(result)
 }
 
 pub(crate) async fn require_new_orders(

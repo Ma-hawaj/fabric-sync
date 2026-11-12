@@ -84,6 +84,24 @@ pub async fn save_opening(
             "Opening cash is already saved. A manager must record any correction.".into(),
         ));
     }
+    if current.is_none() {
+        let report = super::service::load(
+            &mut tx,
+            input.date,
+            state.timezone()?,
+            chrono::Utc::now(),
+            input.branch_id,
+        )
+        .await?;
+        if report
+            .activity
+            .iter()
+            .any(|event| matches!(event.kind.as_str(), "payment" | "refund" | "repair_payment"))
+            || !report.expenses.is_empty()
+        {
+            return Err(AppError::Conflict("Receipts or payouts were already recorded today before opening cash. Start with the next business day's opening so that money is not counted twice.".into()));
+        }
+    }
     let opening = storage::insert_opening(&mut tx, &input, &hash, actor, previous).await?;
     tx.commit().await?;
     Ok(opening)

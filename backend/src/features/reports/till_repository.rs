@@ -4,6 +4,16 @@ use uuid::Uuid;
 
 use super::types::*;
 
+// Original openings are append-only, so the first date cannot move when
+// staff correct an opening or open a later day.
+pub async fn tracking_start(
+    db: &mut PgConnection,
+    branch: Uuid,
+) -> Result<Option<NaiveDate>, sqlx::Error> {
+    sqlx::query_scalar!("SELECT MIN(business_date) FROM branch_cash_openings WHERE branch_id=$1 AND supersedes_id IS NULL", branch)
+        .fetch_one(db).await
+}
+
 pub struct OpeningRow {
     pub id: Uuid,
     pub amount: f64,

@@ -54,7 +54,7 @@ days cannot be reopened or changed, including their notes and opening/expense
 records. The final report uses its frozen snapshot even if data is changed outside
 the application later.
 
-After go-live, new invoices and financial activity require today's saved opening
+While the daily trading check is enabled, new invoices and financial activity require today's saved opening
 and no unresolved earlier active day. Activity includes an invoice, payment,
 return/refund, redemption, paid repair receipt, opening or expense; quiet days are
 skipped. A final close blocks further financial activity until the next business
@@ -72,26 +72,45 @@ Unchanged retries use the original request ID and return their saved result;
 changed requests with that ID conflict. After an uncertain response, refresh:
 a committed close appears read-only; otherwise review and retry the same values.
 
-## First rollout and missed closings
+## First opening and missed days
 
-**Manager actions** contains setup and missed-closing forms, outside the daily
-workflow. A manager sets one immutable go-live date per branch. Until setup, new
-financial activity is blocked. If trading has started today, choose a future
-date so the first controlled opening can be counted before trading. Before that
-scheduled date, existing trading continues normally. From go-live, opening and
-daily closure rules apply. Restarts cannot shift the cutoff.
+There is no go-live screen or setup endpoint. The first saved opening cash entry
+starts tracking for that branch. Its original business date is the permanent
+cutoff, derived from the earliest original opening. Corrections, later openings,
+application restarts and skipped days cannot move it. Earlier history stays
+viewable, exportable and read-only without a closing backlog or fake balances.
 
-History before go-live remains viewable, exportable and read-only without a
-closing backlog or fake counts. The migration does not create go-live dates,
-opening balances or closing reports; managers configure the start date explicitly.
+With the daily check enabled (the default), staff must save an opening before
+orders or payments. Deploy before trading begins. A new opening is rejected if
+receipts, refunds, repair receipts or expenses are already recorded that day,
+so current drawer cash is not counted again alongside those receipts. Existing
+unpaid invoices do not prevent opening. Opening corrections still require a
+manager and a reason, and are allowed only for today's unclosed day.
 
-If staff miss a closing after go-live, a manager can resolve the earliest
-outstanding active day with a separate explanation. This records a frozen snapshot,
-reason, actor and time; it accepts no amount/count fields and changes no historical
-figures. The day is labelled **Missed closing resolved — unreconciled**, never
-matched or normally closed. The resolution is permanent and cannot be edited.
-Already-closed days cannot be resolved or reopened. Resolve missed days in order,
-then record today's opening to resume trading.
+If staff miss a closing after tracking starts, a manager can **Skip missed day**
+for the earliest outstanding active day. This records a frozen snapshot, reason,
+actor and time; it accepts no amount/count fields and changes no historical
+figures. The report is labelled **Skipped · Unreconciled · Read-only**. The skip
+cannot be edited, and closed days cannot be skipped or reopened. Skip missed
+days in order, then record today's opening to resume normal controlled trading.
+
+## Optional daily trading check
+
+Managers can enable or disable the daily check per branch under **Branch
+controls**. It defaults to enabled. Disabling it permits new orders and financial
+activity without an opening amount or resolution of missed days. It does not
+create an opening or move the tracking start date. Saved and historical reports
+stay locked; a branch already closed today cannot accept further financial
+activity even while the check is off. Final closing still requires actual counts,
+a saved opening and the normal closing validations.
+
+Re-enabling restores both requirements, including previously unresolved active
+days since the original first opening. Enable before the day's first receipt if
+there is no opening yet; after receipts have been recorded, a new opening must
+wait until the next business day. The setting's latest change stores the manager
+and timestamp on the branch. Retrying the same value does not overwrite that
+attribution. The setting is separate from saved reports and cannot change their
+counts or financial snapshots.
 
 ## Financial ownership and access
 
@@ -118,7 +137,7 @@ All endpoints are under `/api/sales-closing` and require authentication:
 | --- | --- |
 | `GET /` | `branchId`, optional `date`; returns live or frozen report and read-only status |
 | `GET /status` | `branchId`; trading eligibility, new-order eligibility and blocking day |
-| `POST /setup` | `requestId`, `branchId`, `startsOn`; immutable go-live date |
+| `PATCH /settings` | `branchId`, `required`; manager-only daily trading check switch |
 | `POST /openings` | `requestId`, `branchId`, `date`, `amount`, optional `notes` |
 | `POST /openings/:id/corrections` | Opening input plus required notes; appends a revision |
 | `POST /expenses` | `requestId`, `branchId`, `date`, `amount`, `paymentType`, `reason`, optional `paidTo`/`reference` |
@@ -130,11 +149,12 @@ All endpoints are under `/api/sales-closing` and require authentication:
 `actualBenefit`, `actualCard`, `notes` and `branchActivityConfirmed`.
 `canTrade` permits current-day financial operations; `canCreateOrders` additionally
 requires an active branch. The frontend uses the former for editing an existing
-invoice and the latter for creating a new one; server checks remain authoritative.
+invoice and the latter for creating a new one; server checks remain authoritative. Status also returns `trackingStartDate`,
+`dailyCheckRequired`, `dailyCheckChangedAt` and `dailyCheckChangedBy`.
 
 Apply `0005_branch_closing.sql` after the existing baseline migrations. It adds
-six tables: cash openings, expenses, expense voids, closing policies, day closures
-and missed-closing resolutions. The one day-closure record contains counts,
+five tables: cash openings, expenses, expense voids, day closures and missed-closing
+resolutions. The branch stores the daily-check switch and its latest actor/time. The one day-closure record contains counts,
 comparison, frozen report, staff/time and retry identity. There is no check table,
 check ID or draft-write endpoint. API responses expose these values together
 under `closure`; open and missed days have no closing count.
