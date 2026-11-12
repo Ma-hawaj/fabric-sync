@@ -7,6 +7,13 @@ import { toast } from 'sonner'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { DataTable } from '@/components/data-table/data-table'
 import { useDataTable } from '@/hooks/use-data-table'
 import { useBranchDayStatus, useSalesClosing } from './hooks/use-sales-closing'
@@ -113,7 +120,13 @@ export function SalesClosingPage() {
   const locations = useAllLocations()
   const preferences = usePreferences()
   const defaultBranch = preferences.data?.defaultLocation
-  const branches = closingBranches(locations.data)
+  const branchOptions = [
+    { value: '', label: 'Choose a branch' },
+    ...closingBranches(locations.data).map((branch) => ({
+      value: branch.id,
+      label: `${branch.name}${branch.isActive ? '' : ' (inactive)'}`,
+    })),
+  ]
   const selectedBranch =
     branchId || (defaultBranch?.isActive ? defaultBranch.id : '')
   const valid =
@@ -141,22 +154,24 @@ export function SalesClosingPage() {
           <label htmlFor="closing-branch" className="block text-sm font-medium">
             Branch
           </label>
-          <select
-            id="closing-branch"
+          <Select
+            items={branchOptions}
             value={selectedBranch}
-            onChange={(event) =>
-              void setFilters({ branchId: event.target.value, page: 1 })
+            onValueChange={(value) =>
+              void setFilters({ branchId: value ?? '', page: 1 })
             }
-            className="h-9 min-w-52 rounded-md border bg-background px-3 text-sm"
           >
-            <option value="">Choose a branch</option>
-            {branches.map((branch) => (
-              <option key={branch.id} value={branch.id}>
-                {branch.name}
-                {branch.isActive ? '' : ' (inactive)'}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="closing-branch" className="min-w-52">
+              <SelectValue placeholder="Choose a branch" />
+            </SelectTrigger>
+            <SelectContent>
+              {branchOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-1.5">
           <label htmlFor="report-date" className="block text-sm font-medium">

@@ -377,9 +377,12 @@ describe('branch closing workflow', () => {
     const client = setup()
     expect(screen.getByText('Choose the branch you are closing.')).toBeTruthy()
     expect(apiClient.get).not.toHaveBeenCalled()
-    fireEvent.change(screen.getByLabelText('Branch'), {
-      target: { value: branch },
+    fireEvent.click(screen.getByRole('combobox', { name: 'Branch' }))
+    const mainOption = await screen.findByRole('option', {
+      name: 'Main Branch',
     })
+    fireEvent.pointerDown(mainOption, { pointerType: 'mouse' })
+    fireEvent.click(mainOption)
     await screen.findByText('Main Branch · 2026-11-02')
     expect(apiClient.get).toHaveBeenCalledWith('/sales-closing', {
       params: { branchId: branch },
@@ -389,9 +392,12 @@ describe('branch closing workflow', () => {
     })
     await screen.findByText('Main Branch · 2026-10-31')
     expect(screen.getByText('No activity for this day.')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Branch'), {
-      target: { value: secondBranch },
+    fireEvent.click(screen.getByRole('combobox', { name: 'Branch' }))
+    const inactiveOption = await screen.findByRole('option', {
+      name: 'Second Branch (inactive)',
     })
+    fireEvent.pointerDown(inactiveOption, { pointerType: 'mouse' })
+    fireEvent.click(inactiveOption)
     await screen.findByText('Second Branch · 2026-10-31')
     expect(apiClient.get).toHaveBeenCalledWith('/sales-closing', {
       params: { branchId: secondBranch, date: '2026-10-31' },
