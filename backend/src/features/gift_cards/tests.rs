@@ -35,7 +35,11 @@ async fn mock_server() -> (String, Mock) {
         (StatusCode::OK, Json(json!({"id":"gift-media-test"})))
     }
     async fn send(State(mock): State<Mock>, Json(value): Json<Value>) -> (StatusCode, Json<Value>) {
-        mock.messages.lock().unwrap().push(value);
+        let count = {
+            let mut messages = mock.messages.lock().unwrap();
+            messages.push(value);
+            messages.len()
+        };
         match mock.response.load(Ordering::SeqCst) {
             1 => (
                 StatusCode::TOO_MANY_REQUESTS,
@@ -44,7 +48,9 @@ async fn mock_server() -> (String, Mock) {
             2 => (StatusCode::OK, Json(json!({"messages":[]}))),
             _ => (
                 StatusCode::OK,
-                Json(json!({"messages":[{"id":"wamid.gift-test"}]})),
+                Json(
+                    json!({"messages":[{"id":if count == 1 { "wamid.gift-test".to_string() } else { format!("wamid.gift-test.{count}") }}]}),
+                ),
             ),
         }
     }
@@ -52,6 +58,15 @@ async fn mock_server() -> (String, Mock) {
     let app = Router::new()
         .route("/messages", post(send))
         .route("/media", post(upload))
+        .route(
+            "/forms/chromium/convert/html",
+            post(|| async {
+                (
+                    [("content-type", "application/pdf")],
+                    b"%PDF-1.4\nmock invoice\n%%EOF".as_slice(),
+                )
+            }),
+        )
         .with_state(mock.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
@@ -98,10 +113,10 @@ async fn legacy_gift_card_preview_creates_a_manual_parent_only_on_approval(pool:
     .await
     .unwrap()
     .unwrap();
-    let stored: (Uuid, String) = sqlx::query_as("SELECT d.notification_request_id,r.origin FROM gift_card_deliveries d JOIN notification_requests r ON r.id=d.notification_request_id WHERE d.request_id=$1")
+    let stored: (Uuid, String) = sqlx::query_as("SELECT d.notification_request_id,r.origin FROM notifications d JOIN notification_requests r ON r.id=d.notification_request_id WHERE d.command_id=$1")
         .bind(command).fetch_one(&pool).await.unwrap();
     assert_eq!(stored, (parent, "manual".into()));
-    sqlx::query("UPDATE gift_card_deliveries SET state='failed' WHERE request_id=$1")
+    sqlx::query("UPDATE notification_recipients SET status='failed' WHERE notification_id=(SELECT id FROM notifications WHERE command_id=$1)")
         .bind(command)
         .execute(&pool)
         .await
@@ -110,7 +125,7 @@ async fn legacy_gift_card_preview_creates_a_manual_parent_only_on_approval(pool:
         .await
         .unwrap();
     let parents: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT notification_request_id FROM gift_card_deliveries WHERE gift_card_id=$1",
+        "SELECT notification_request_id FROM notifications WHERE gift_card_id=$1",
     )
     .bind(card.id)
     .fetch_all(&pool)
@@ -132,9 +147,9 @@ async fn legacy_gift_card_preview_creates_a_manual_parent_only_on_approval(pool:
     .unwrap()
     .unwrap();
     assert_ne!(parent, newer);
-    delivery::tick(&state).await.unwrap();
+    worker::tick(&state).await.unwrap();
     let cancelled: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM gift_card_deliveries WHERE gift_card_id=$1 AND state='cancelled'",
+        "SELECT count(*) FROM notifications n JOIN notification_recipients r ON r.notification_id=n.id WHERE n.gift_card_id=$1 AND r.status='cancelled'",
     )
     .bind(card.id)
     .fetch_one(&pool)
@@ -358,20 +373,19 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
         .image_data_url
         .starts_with("data:image/png;base64,iVBOR"));
     let preview_png = preview.image.png.clone();
-    delivery::tick(&state).await.unwrap();
+    worker::tick(&state).await.unwrap();
     assert!(mock.messages.lock().unwrap().is_empty());
     assert!(mock.uploads.lock().unwrap().is_empty());
     let request = Uuid::new_v4();
     delivery::approve(&state, card.id, send(&preview, request), "test-staff")
         .await
         .unwrap();
-    let linked: Uuid = sqlx::query_scalar(
-        "SELECT notification_request_id FROM gift_card_deliveries WHERE request_id=$1",
-    )
-    .bind(request)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let linked: Uuid =
+        sqlx::query_scalar("SELECT notification_request_id FROM notifications WHERE command_id=$1")
+            .bind(request)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(linked, parent);
     delivery::approve(&state, card.id, send(&preview, request), "test-staff")
         .await
@@ -380,7 +394,11 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
         delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff").await,
         Err(AppError::Conflict(_))
     ));
-    let (a, b) = tokio::join!(delivery::tick(&state), delivery::tick(&state));
+    let early = json!({"entry":[{"changes":[{"value":{"statuses":[{"id":"wamid.gift-test","status":"delivered"}]}}]}]}).to_string();
+    worker::receive_webhook(&pool, early.as_bytes())
+        .await
+        .unwrap();
+    let (a, b) = tokio::join!(worker::tick(&state), worker::tick(&state));
     a.unwrap();
     b.unwrap();
     let messages = mock.messages.lock().unwrap().clone();
@@ -402,7 +420,7 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
         .any(|bytes| bytes == preview_png));
     assert!(String::from_utf8_lossy(&uploads[0]).contains("image/png"));
     let stored: Vec<u8> =
-        sqlx::query_scalar("SELECT image_png FROM gift_card_deliveries WHERE gift_card_id=$1")
+        sqlx::query_scalar("SELECT content FROM document_artifacts WHERE gift_card_id=$1")
             .bind(card.id)
             .fetch_one(&pool)
             .await
@@ -415,7 +433,7 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
             .unwrap()
             .delivery_status
             .as_deref(),
-        Some("accepted")
+        Some("delivered")
     );
     for status in ["read", "delivered", "sent", "failed"] {
         let body=json!({"entry":[{"changes":[{"value":{"statuses":[{"id":"wamid.gift-test","status":status}]}}]}]}).to_string();
@@ -437,6 +455,146 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
 #[sqlx::test]
 async fn invalid_queued_phone_does_not_block_later_deliveries(pool: PgPool) {
     assert_invalid_preview_does_not_block_queue(pool, true).await;
+}
+
+#[sqlx::test]
+async fn gift_cards_and_invoice_documents_share_one_worker_with_one_connection(db: PgPool) {
+    use crate::features::notifications;
+    let (invoice, _, _, _) = test_support::invoice(&db, 1, false).await;
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .acquire_timeout(std::time::Duration::from_secs(2))
+        .connect_with((*db.connect_options()).clone())
+        .await
+        .unwrap();
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), Some(url.clone()), Some(url)).await;
+    let card = service::create_gift_card(&state, input(), "staff")
+        .await
+        .unwrap();
+    let invoice_preview = notifications::service::prepare(
+        &state,
+        invoice,
+        serde_json::from_value(json!({
+            "kind":"invoice_created", "requestId":Uuid::new_v4()
+        }))
+        .unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
+    notifications::service::approve(
+        &state,
+        invoice_preview.id,
+        notifications::types::SendInput {
+            preview_version: invoice_preview.preview_version,
+            selected_mobiles: invoice_preview
+                .recipients
+                .iter()
+                .map(|r| r.normalized_mobile.clone())
+                .collect(),
+        },
+        "staff",
+        true,
+    )
+    .await
+    .unwrap();
+    let preview = delivery::preview(&state, card.id).await.unwrap();
+    let command = Uuid::new_v4();
+    delivery::approve(&state, card.id, send(&preview, command), "staff")
+        .await
+        .unwrap();
+    worker::tick(&state).await.unwrap();
+    worker::tick(&state).await.unwrap();
+    assert_eq!(mock.messages.lock().unwrap().len(), 2);
+    assert_eq!(mock.uploads.lock().unwrap().len(), 2);
+    let messages = mock.messages.lock().unwrap().clone();
+    assert_eq!(
+        messages[0]["template"]["components"][0]["parameters"][0]["type"],
+        "document"
+    );
+    assert_eq!(
+        messages[1]["template"]["components"][0]["parameters"][0]["type"],
+        "image"
+    );
+    assert_eq!(
+        notifications::service::get(&state, invoice_preview.id)
+            .await
+            .unwrap()
+            .recipients[0]
+            .status,
+        "accepted"
+    );
+    assert_eq!(
+        repository::get_gift_card(&state, card.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .delivery_status
+            .as_deref(),
+        Some("accepted")
+    );
+    let attempts: i64 = sqlx::query_scalar("SELECT count(*) FROM notification_attempts WHERE finished_at IS NOT NULL AND outcome='accepted'")
+        .fetch_one(&pool).await.unwrap();
+    assert_eq!(attempts, 2);
+    let other = service::create_gift_card(&state, input(), "staff")
+        .await
+        .unwrap();
+    let other_preview = delivery::preview(&state, other.id).await.unwrap();
+    assert!(matches!(
+        delivery::approve(&state, other.id, send(&other_preview, command), "staff").await,
+        Err(AppError::Conflict(_))
+    ));
+    pool.close().await;
+}
+
+#[sqlx::test]
+async fn expired_gift_card_claims_finish_the_shared_audit_without_replaying(pool: PgPool) {
+    use crate::features::notifications::repository as queue;
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), None, Some(url)).await;
+    let card = service::create_gift_card(&state, input(), "staff")
+        .await
+        .unwrap();
+    let preview = delivery::preview(&state, card.id).await.unwrap();
+    delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff")
+        .await
+        .unwrap();
+    let (recipient, request) = queue::next_job(&pool).await.unwrap().unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    queue::lock_target(&mut tx, request).await.unwrap();
+    let mut job = queue::lock_job(&mut tx, recipient).await.unwrap().unwrap();
+    job.attempt_count += 1;
+    queue::start_attempt(&mut tx, &job).await.unwrap();
+    tx.commit().await.unwrap();
+    sqlx::query(
+        "UPDATE notification_recipients SET claimed_at=now()-interval '4 minutes' WHERE id=$1",
+    )
+    .bind(recipient)
+    .execute(&pool)
+    .await
+    .unwrap();
+    worker::tick(&state).await.unwrap();
+    worker::tick(&state).await.unwrap();
+    assert!(mock.messages.lock().unwrap().is_empty());
+    assert!(mock.uploads.lock().unwrap().is_empty());
+    assert_eq!(
+        repository::get_gift_card(&state, card.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .delivery_status
+            .as_deref(),
+        Some("uncertain")
+    );
+    let audit: (String, bool) = sqlx::query_as(
+        "SELECT outcome,finished_at IS NOT NULL FROM notification_attempts WHERE recipient_id=$1",
+    )
+    .bind(recipient)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audit, ("uncertain".into(), true));
 }
 
 #[sqlx::test]
@@ -478,10 +636,10 @@ async fn assert_invalid_preview_does_not_block_queue(pool: PgPool, invalid_phone
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("UPDATE gift_card_deliveries SET available_at=now()-interval '1 minute' WHERE gift_card_id=$1")
+    sqlx::query("UPDATE notification_recipients SET next_attempt_at=now()-interval '1 minute' WHERE notification_id IN (SELECT id FROM notifications WHERE gift_card_id=$1)")
         .bind(invalid.id).execute(&pool).await.unwrap();
 
-    delivery::tick(&state).await.unwrap();
+    worker::tick(&state).await.unwrap();
     let failed = repository::get_gift_card(&state, invalid.id)
         .await
         .unwrap()
@@ -491,7 +649,7 @@ async fn assert_invalid_preview_does_not_block_queue(pool: PgPool, invalid_phone
     assert!(mock.uploads.lock().unwrap().is_empty());
     assert!(mock.messages.lock().unwrap().is_empty());
 
-    delivery::tick(&state).await.unwrap();
+    worker::tick(&state).await.unwrap();
     let delivered = repository::get_gift_card(&state, valid.id)
         .await
         .unwrap()
@@ -532,7 +690,7 @@ async fn changed_recipient_invalidates_preview_and_cancels_queued_delivery(pool:
     )
     .await
     .unwrap();
-    delivery::tick(&state).await.unwrap();
+    worker::tick(&state).await.unwrap();
     assert!(mock.messages.lock().unwrap().is_empty());
     assert_eq!(
         repository::get_gift_card(&state, card.id)
@@ -558,7 +716,7 @@ async fn retries_known_failures_but_never_replays_an_unknown_submission(pool: Pg
         .await
         .unwrap();
     mock.response.store(1, Ordering::SeqCst);
-    delivery::tick(&state).await.unwrap();
+    worker::tick(&state).await.unwrap();
     assert_eq!(
         repository::get_gift_card(&state, card.id)
             .await
@@ -568,14 +726,21 @@ async fn retries_known_failures_but_never_replays_an_unknown_submission(pool: Pg
             .as_deref(),
         Some("queued")
     );
-    sqlx::query("UPDATE gift_card_deliveries SET available_at=now()")
+    sqlx::query("UPDATE notification_recipients SET next_attempt_at=now()")
         .execute(&pool)
         .await
         .unwrap();
     mock.response.store(2, Ordering::SeqCst);
-    delivery::tick(&state).await.unwrap();
-    delivery::tick(&state).await.unwrap();
+    worker::tick(&state).await.unwrap();
+    worker::tick(&state).await.unwrap();
     assert_eq!(mock.messages.lock().unwrap().len(), 2);
+    let outcomes: Vec<String> = sqlx::query_scalar(
+        "SELECT outcome FROM notification_attempts ORDER BY started_at, attempt_number",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(outcomes, ["retry_scheduled", "uncertain"]);
     for upload in mock.uploads.lock().unwrap().iter() {
         assert!(upload
             .windows(preview.image.png.len())
@@ -604,7 +769,7 @@ async fn image_upload_failure_retries_without_submitting_a_message(pool: PgPool)
         .await
         .unwrap();
     mock.response.store(3, Ordering::SeqCst);
-    delivery::tick(&state).await.unwrap();
+    worker::tick(&state).await.unwrap();
     assert!(mock.messages.lock().unwrap().is_empty());
     assert_eq!(mock.uploads.lock().unwrap().len(), 1);
     let card = repository::get_gift_card(&state, card.id)
@@ -626,14 +791,12 @@ async fn damaged_approved_image_is_never_uploaded(pool: PgPool) {
     delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff")
         .await
         .unwrap();
-    sqlx::query(
-        "UPDATE gift_card_deliveries SET image_png=decode('00','hex') WHERE gift_card_id=$1",
-    )
-    .bind(card.id)
-    .execute(&pool)
-    .await
-    .unwrap();
-    delivery::tick(&state).await.unwrap();
+    sqlx::query("UPDATE document_artifacts SET content=decode('00','hex') WHERE gift_card_id=$1")
+        .bind(card.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    worker::tick(&state).await.unwrap();
     assert!(mock.messages.lock().unwrap().is_empty());
     assert!(mock.uploads.lock().unwrap().is_empty());
     assert_eq!(
@@ -644,6 +807,29 @@ async fn damaged_approved_image_is_never_uploaded(pool: PgPool) {
             .delivery_status
             .as_deref(),
         Some("failed")
+    );
+    // An explicit new approval may generate a fresh image without rewriting
+    // the earlier attachment or replaying its failed attempt.
+    delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff")
+        .await
+        .unwrap();
+    worker::tick(&state).await.unwrap();
+    assert_eq!(mock.messages.lock().unwrap().len(), 1);
+    let artifacts: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM document_artifacts WHERE gift_card_id=$1")
+            .bind(card.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(artifacts, 2);
+    assert_eq!(
+        repository::get_gift_card(&state, card.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .delivery_status
+            .as_deref(),
+        Some("accepted")
     );
 }
 
@@ -656,7 +842,7 @@ async fn image_download_works_without_whatsapp_setup(pool: PgPool) {
     let image = image::get(&state, card.id).await.unwrap();
     assert!(image.png.starts_with(b"\x89PNG\r\n\x1a\n"));
     assert_eq!(image.filename, format!("gift-card-{}.png", card.id));
-    let sends: i64 = sqlx::query_scalar("SELECT count(*) FROM gift_card_deliveries")
+    let sends: i64 = sqlx::query_scalar("SELECT count(*) FROM notifications")
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -711,7 +897,7 @@ async fn invoice_creation_returns_cards_ready_for_individual_delivery(pool: PgPo
         assert_eq!(preview.mobile, phone);
         assert!(preview.body.contains(&card.code));
     }
-    delivery::tick(&state).await.unwrap();
+    worker::tick(&state).await.unwrap();
     assert!(mock.messages.lock().unwrap().is_empty());
     assert!(mock.uploads.lock().unwrap().is_empty());
 
@@ -723,7 +909,7 @@ async fn invoice_creation_returns_cards_ready_for_individual_delivery(pool: PgPo
             .await
             .unwrap();
     }
-    delivery::tick(&state).await.unwrap();
+    worker::tick(&state).await.unwrap();
     let messages = mock.messages.lock().unwrap();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0]["to"], "97333112233");
@@ -747,7 +933,7 @@ async fn invalid_invoice_recipient_rolls_back_all_cards_without_delivery(pool: P
         .await,
         Err(AppError::BadRequest(_))
     ));
-    for table in ["invoices", "gift_cards", "gift_card_deliveries"] {
+    for table in ["invoices", "gift_cards", "notifications"] {
         let count: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {table}"))
             .fetch_one(&pool)
             .await

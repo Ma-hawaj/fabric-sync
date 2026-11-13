@@ -74,6 +74,10 @@ pub async fn customers(db: &PgPool, invoice_id: Uuid) -> Result<Vec<Customer>, A
 }
 
 pub async fn get(db: &PgPool, id: Uuid) -> Result<NotificationRow, AppError> {
+    get_in(&mut *db.acquire().await?, id).await
+}
+
+pub async fn get_in(conn: &mut PgConnection, id: Uuid) -> Result<NotificationRow, AppError> {
     sqlx::query_as(
         r#"
         SELECT id,
@@ -92,7 +96,7 @@ pub async fn get(db: &PgPool, id: Uuid) -> Result<NotificationRow, AppError> {
         "#,
     )
     .bind(id)
-    .fetch_optional(db)
+    .fetch_optional(conn)
     .await?
     .ok_or_else(|| AppError::NotFound("Notification not found.".into()))
 }
@@ -308,7 +312,7 @@ pub async fn artifact_content(db: &PgPool, id: Uuid) -> Result<(String, Vec<u8>)
         SELECT filename,
                content
           FROM document_artifacts
-         WHERE id = $1
+         WHERE id = $1 AND invoice_id IS NOT NULL
         "#,
     )
     .bind(id)
@@ -328,7 +332,7 @@ pub async fn artifact_metadata(db: &PgPool, id: Uuid) -> Result<DocumentMetadata
                byte_length,
                created_at
           FROM document_artifacts
-         WHERE id = $1
+         WHERE id = $1 AND invoice_id IS NOT NULL
         "#,
     )
     .bind(id)
@@ -512,9 +516,30 @@ pub async fn request_has_approval(
         .bind(request).fetch_one(conn).await?)
 }
 
+pub struct NewSend<'a> {
+    pub request: Uuid,
+    pub kind: &'a str,
+    pub event_key: &'a str,
+    pub command: Option<Uuid>,
+    pub snapshot: &'a Snapshot,
+    pub artifact: Option<Uuid>,
+    pub actor: &'a str,
+    pub resend_of: Option<Uuid>,
+}
+
+pub async fn insert_send(conn: &mut PgConnection, send: NewSend<'_>) -> Result<Uuid, AppError> {
+    Ok(sqlx::query_scalar(
+        "INSERT INTO notifications(invoice_id,gift_card_id,kind,event_key,command_id,source_hash,preview_version,snapshot,artifact_id,created_by,resend_of,notification_request_id)
+         SELECT invoice_id,gift_card_id,$2,$3,$4,$5,$6,$7,$8,$9,$10,id FROM notification_requests WHERE id=$1 RETURNING id"
+    )
+        .bind(send.request).bind(send.kind).bind(send.event_key).bind(send.command)
+        .bind(&send.snapshot.source_hash).bind(Uuid::new_v4()).bind(sqlx::types::Json(send.snapshot))
+        .bind(send.artifact).bind(send.actor).bind(send.resend_of)
+        .fetch_one(conn).await?)
+}
+
 pub async fn insert_notification(
     conn: &mut PgConnection,
-    invoice: Uuid,
     input: &PrepareInput,
     request: Uuid,
     key: &str,
@@ -522,23 +547,100 @@ pub async fn insert_notification(
     artifact: Option<Uuid>,
     actor: &str,
 ) -> Result<Uuid, AppError> {
-    Ok(sqlx::query_scalar(
-        r#"
-        INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,snapshot,artifact_id,created_by,resend_of,notification_request_id)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id
-        "#
+    insert_send(
+        conn,
+        NewSend {
+            request,
+            kind: &input.kind,
+            event_key: key,
+            command: None,
+            snapshot,
+            artifact,
+            actor,
+            resend_of: input.resend_of,
+        },
     )
-        .bind(invoice)
-        .bind(&input.kind)
-        .bind(key)
-        .bind(&snapshot.source_hash)
-        .bind(Uuid::new_v4())
-        .bind(sqlx::types::Json(snapshot))
-        .bind(artifact)
-        .bind(actor)
-        .bind(input.resend_of)
-        .bind(request)
-        .fetch_one(conn).await?)
+    .await
+}
+
+pub async fn lock_gift_card(conn: &mut PgConnection, id: Uuid) -> Result<(), AppError> {
+    sqlx::query_scalar::<_, Uuid>("SELECT id FROM gift_cards WHERE id=$1 FOR UPDATE")
+        .bind(id)
+        .fetch_optional(conn)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Gift card not found.".into()))?;
+    Ok(())
+}
+
+pub async fn gift_card_send_by_command(
+    conn: &mut PgConnection,
+    command: Uuid,
+) -> Result<Option<(Uuid, String)>, AppError> {
+    Ok(sqlx::query_as("SELECT n.gift_card_id, CASE WHEN r.status='submitting' THEN 'sending' ELSE r.status END FROM notifications n JOIN notification_recipients r ON r.notification_id=n.id WHERE n.command_id=$1")
+        .bind(command).fetch_optional(conn).await?)
+}
+
+pub async fn gift_card_pending(conn: &mut PgConnection, card: Uuid) -> Result<bool, AppError> {
+    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM notifications n JOIN notification_recipients r ON r.notification_id=n.id WHERE n.gift_card_id=$1 AND r.status IN ('queued','submitting'))")
+        .bind(card).fetch_one(conn).await?)
+}
+
+pub async fn store_image(
+    conn: &mut PgConnection,
+    card: Uuid,
+    source_hash: &str,
+    filename: &str,
+    sha256: &str,
+    content: &[u8],
+) -> Result<Uuid, AppError> {
+    // Each approval freezes its own image; retries reuse that attachment.
+    Ok(sqlx::query_scalar("INSERT INTO document_artifacts(gift_card_id,source_hash,filename,mime_type,sha256,byte_length,content) VALUES($1,$2,$3,'image/png',$4,$5,$6) RETURNING id")
+        .bind(card).bind(source_hash).bind(filename).bind(sha256).bind(content.len() as i64).bind(content).fetch_one(conn).await?)
+}
+
+#[derive(sqlx::FromRow)]
+pub struct Target {
+    pub invoice_id: Option<Uuid>,
+    pub gift_card_id: Option<Uuid>,
+}
+
+pub async fn lock_target(conn: &mut PgConnection, request: Uuid) -> Result<Target, AppError> {
+    let target: Target =
+        sqlx::query_as("SELECT invoice_id,gift_card_id FROM notification_requests WHERE id=$1")
+            .bind(request)
+            .fetch_one(&mut *conn)
+            .await?;
+    if let Some(invoice) = target.invoice_id {
+        lock_invoice(conn, invoice).await?;
+    } else if let Some(card) = target.gift_card_id {
+        lock_gift_card(conn, card).await?;
+    }
+    Ok(target)
+}
+
+pub async fn is_current_request(conn: &mut PgConnection, request: Uuid) -> Result<bool, AppError> {
+    Ok(sqlx::query_scalar("SELECT NOT EXISTS(SELECT 1 FROM notification_requests newer JOIN notification_requests current ON current.id=$1
+        WHERE newer.kind=current.kind AND newer.invoice_id IS NOT DISTINCT FROM current.invoice_id
+        AND newer.repair_id IS NOT DISTINCT FROM current.repair_id AND newer.gift_card_id IS NOT DISTINCT FROM current.gift_card_id
+        AND (newer.requested_at,newer.id)>(current.requested_at,current.id))")
+        .bind(request).fetch_one(conn).await?)
+}
+
+#[derive(sqlx::FromRow)]
+pub struct Attachment {
+    pub filename: String,
+    pub mime_type: String,
+    pub sha256: String,
+    pub content: Vec<u8>,
+}
+
+pub async fn attachment(db: &PgPool, id: Uuid) -> Result<Attachment, AppError> {
+    Ok(sqlx::query_as(
+        "SELECT filename,mime_type,sha256,content FROM document_artifacts WHERE id=$1",
+    )
+    .bind(id)
+    .fetch_one(db)
+    .await?)
 }
 
 pub async fn insert_recipient(
@@ -706,12 +808,18 @@ pub struct Job {
 pub async fn recover_leases(db: &PgPool) -> Result<(), AppError> {
     sqlx::query(
         r#"
-        UPDATE notification_recipients
+        WITH expired AS (UPDATE notification_recipients
            SET status = 'uncertain',
                error_message = 'The sender stopped before the result was recorded. Check delivery before explicitly resending.',
                updated_at = now()
          WHERE status = 'submitting'
            AND claimed_at < now() - interval '3 minutes'
+        RETURNING id, attempt_count, error_message)
+        UPDATE notification_attempts a
+           SET outcome = 'uncertain', finished_at = now(), error_message = expired.error_message
+          FROM expired
+         WHERE a.recipient_id = expired.id AND a.attempt_number = expired.attempt_count
+           AND a.finished_at IS NULL
         "#
     )
         .execute(db).await?;
@@ -722,7 +830,7 @@ pub async fn next_job(db: &PgPool) -> Result<Option<(Uuid, Uuid)>, AppError> {
     Ok(sqlx::query_as(
         r#"
         SELECT r.id,
-               n.invoice_id
+               n.notification_request_id
           FROM notification_recipients r
           JOIN notifications n
             ON n.id = r.notification_id

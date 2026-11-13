@@ -301,18 +301,17 @@ async fn database_request_links_are_required_and_cannot_cross_targets(pool: PgPo
             .unwrap()
             .unwrap();
     let delivery = gift_card_delivery(&pool, card, "delivered").await;
-    let missing =
-        sqlx::query("UPDATE gift_card_deliveries SET notification_request_id=NULL WHERE id=$1")
-            .bind(delivery)
-            .execute(&pool)
-            .await
-            .unwrap_err();
+    let missing = sqlx::query("UPDATE notifications SET notification_request_id=NULL WHERE id=$1")
+        .bind(delivery)
+        .execute(&pool)
+        .await
+        .unwrap_err();
     assert_eq!(
         missing.as_database_error().unwrap().code().as_deref(),
         Some("23502")
     );
     let error = sqlx::query(
-        "UPDATE gift_card_deliveries SET gift_card_id=$2,notification_request_id=$3 WHERE id=$1",
+        "UPDATE notifications SET gift_card_id=$2,notification_request_id=$3 WHERE id=$1",
     )
     .bind(delivery)
     .bind(other_card)
@@ -693,8 +692,11 @@ async fn gift_card_delivery(pool: &PgPool, card: Uuid, status: &str) -> Uuid {
         super::repository::ensure_gift_card_request(&mut *pool.acquire().await.unwrap(), card)
             .await
             .unwrap();
-    sqlx::query_scalar("INSERT INTO gift_card_deliveries(gift_card_id,request_id,approved_by,source_hash,normalized_mobile,body,parameters,template_name,language,image_png,image_filename,image_sha256,state,last_error,notification_request_id) VALUES($1,$2,'staff','test','+97333991122','Gift card','[]','gift_card_image_v1','en_US',decode('01','hex'),'card.png',repeat('a',64),$3,CASE WHEN $3='failed' THEN 'Invalid destination' END,$4) RETURNING id")
-        .bind(card).bind(Uuid::new_v4()).bind(status).bind(parent).fetch_one(pool).await.unwrap()
+    let id: Uuid = sqlx::query_scalar("INSERT INTO notifications(gift_card_id,kind,event_key,approved_by,approved_at,source_hash,preview_version,snapshot,created_by,state,notification_request_id) VALUES($1,'gift_card',$2,'staff',clock_timestamp(),'test',$3,'{}','staff','approved',$4) RETURNING id")
+        .bind(card).bind(Uuid::new_v4().to_string()).bind(Uuid::new_v4()).bind(parent).fetch_one(pool).await.unwrap();
+    sqlx::query("INSERT INTO notification_recipients(notification_id,normalized_mobile,customers,status,error_message) VALUES($1,'+97333991122','[]',$2,CASE WHEN $2='failed' THEN 'Invalid destination' END)")
+        .bind(id).bind(if status == "sending" { "submitting" } else { status }).execute(pool).await.unwrap();
+    id
 }
 
 #[sqlx::test]
@@ -744,7 +746,7 @@ async fn a_gift_card_resend_to_a_corrected_phone_resolves_the_single_recipient(p
         .await
         .unwrap();
     let corrected = gift_card_delivery(&pool, card, "read").await;
-    sqlx::query("UPDATE gift_card_deliveries SET normalized_mobile='+97333112233' WHERE id=$1")
+    sqlx::query("UPDATE notification_recipients SET normalized_mobile='+97333112233' WHERE notification_id=$1")
         .bind(corrected)
         .execute(&pool)
         .await
@@ -762,21 +764,19 @@ async fn attention_normalizes_gift_card_queue_states_and_excludes_retired_cards(
     let card = gift_card(&pool).await;
     let send = gift_card_delivery(&pool, card, "sending").await;
     assert_eq!(rows(&pool).await[0].status, "queued");
-    sqlx::query(
-        "UPDATE gift_card_deliveries SET created_at=now()-interval '31 minutes' WHERE id=$1",
-    )
-    .bind(send)
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE notifications SET approved_at=now()-interval '31 minutes' WHERE id=$1")
+        .bind(send)
+        .execute(&pool)
+        .await
+        .unwrap();
     assert_eq!(attention::summary(&pool).await.unwrap().delayed, 1);
-    sqlx::query("UPDATE gift_card_deliveries SET state='uncertain' WHERE id=$1")
+    sqlx::query("UPDATE notification_recipients SET status='uncertain' WHERE notification_id=$1")
         .bind(send)
         .execute(&pool)
         .await
         .unwrap();
     assert_eq!(attention::summary(&pool).await.unwrap().uncertain, 1);
-    sqlx::query("UPDATE gift_card_deliveries SET state='cancelled' WHERE id=$1")
+    sqlx::query("UPDATE notification_recipients SET status='cancelled' WHERE notification_id=$1")
         .bind(send)
         .execute(&pool)
         .await

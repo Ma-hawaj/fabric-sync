@@ -33,25 +33,36 @@ CREATE TRIGGER notification_request_immutable BEFORE UPDATE ON notification_requ
 
 CREATE TABLE document_artifacts (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
-    invoice_id UUID NOT NULL REFERENCES invoices(id),
+    invoice_id UUID REFERENCES invoices(id),
+    gift_card_id UUID REFERENCES gift_cards(id),
     source_hash TEXT NOT NULL,
     filename TEXT NOT NULL,
-    mime_type TEXT NOT NULL DEFAULT 'application/pdf',
+    mime_type TEXT NOT NULL DEFAULT 'application/pdf' CHECK (mime_type IN ('application/pdf', 'image/png')),
     sha256 TEXT NOT NULL,
     byte_length BIGINT NOT NULL CHECK (byte_length > 0),
     content BYTEA NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (num_nonnulls(invoice_id, gift_card_id) = 1),
+    CHECK ((invoice_id IS NOT NULL AND mime_type = 'application/pdf')
+        OR (gift_card_id IS NOT NULL AND mime_type = 'image/png')),
+    CHECK (mime_type <> 'image/png' OR byte_length <= 5242880),
+    CHECK (mime_type <> 'image/png' OR sha256 ~ '^[0-9a-f]{64}$'),
     UNIQUE (invoice_id, source_hash)
 );
 
 CREATE TABLE notifications (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
-    invoice_id UUID NOT NULL REFERENCES invoices(id),
+    invoice_id UUID REFERENCES invoices(id),
+    gift_card_id UUID REFERENCES gift_cards(id),
     kind TEXT NOT NULL CHECK (
-        kind IN ('invoice_created', 'invoice_updated', 'invoice_ready', 'manual_resend')
+        kind IN ('invoice_created', 'invoice_updated', 'invoice_ready', 'manual_resend', 'gift_card')
     ),
-    notification_request_id UUID NOT NULL,
+    notification_request_id UUID NOT NULL REFERENCES notification_requests(id),
     FOREIGN KEY (notification_request_id, invoice_id) REFERENCES notification_requests(id, invoice_id),
+    FOREIGN KEY (notification_request_id, gift_card_id) REFERENCES notification_requests(id, gift_card_id),
+    CHECK ((kind = 'gift_card' AND gift_card_id IS NOT NULL AND invoice_id IS NULL)
+        OR (kind <> 'gift_card' AND invoice_id IS NOT NULL AND gift_card_id IS NULL)),
+    command_id UUID UNIQUE,
     event_key TEXT NOT NULL,
     source_hash TEXT NOT NULL,
     preview_version UUID NOT NULL,
@@ -85,6 +96,8 @@ CREATE INDEX notifications_versions
     WHERE approved_at IS NOT NULL;
 CREATE INDEX notifications_request_history
     ON notifications(notification_request_id, approved_at DESC, id DESC);
+CREATE INDEX notifications_gift_card_history
+    ON notifications(gift_card_id, approved_at DESC, id DESC) WHERE gift_card_id IS NOT NULL;
 
 CREATE TABLE notification_recipients (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -137,40 +150,6 @@ CREATE INDEX whatsapp_webhook_pending
     ON whatsapp_webhook_events (id)
     WHERE NOT processed;
 
--- Approved gift card messages and their durable delivery queue.
-CREATE TABLE gift_card_deliveries (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    gift_card_id UUID NOT NULL REFERENCES gift_cards(id),
-    notification_request_id UUID NOT NULL,
-    FOREIGN KEY (notification_request_id, gift_card_id) REFERENCES notification_requests(id, gift_card_id),
-    request_id UUID NOT NULL UNIQUE,
-    approved_by TEXT NOT NULL,
-    source_hash TEXT NOT NULL,
-    normalized_mobile TEXT NOT NULL,
-    body TEXT NOT NULL,
-    parameters JSONB NOT NULL,
-    template_name TEXT NOT NULL,
-    language TEXT NOT NULL,
-    image_png BYTEA NOT NULL CHECK (octet_length(image_png) BETWEEN 1 AND 5242880),
-    image_filename TEXT NOT NULL,
-    image_sha256 TEXT NOT NULL CHECK (image_sha256 ~ '^[0-9a-f]{64}$'),
-    state TEXT NOT NULL DEFAULT 'queued' CHECK (state IN
-        ('queued', 'sending', 'accepted', 'delivered', 'read', 'failed', 'uncertain', 'cancelled')),
-    attempt_count INTEGER NOT NULL DEFAULT 0,
-    available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    lease_until TIMESTAMPTZ,
-    provider_message_id TEXT UNIQUE,
-    last_error TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE UNIQUE INDEX gift_card_delivery_pending ON gift_card_deliveries(gift_card_id)
-    WHERE state IN ('queued', 'sending');
-CREATE INDEX gift_card_delivery_history ON gift_card_deliveries(gift_card_id, created_at DESC, id DESC);
-CREATE INDEX gift_card_delivery_queue ON gift_card_deliveries(available_at) WHERE state = 'queued';
-CREATE INDEX gift_card_delivery_request_history
-    ON gift_card_deliveries(notification_request_id, created_at DESC, id DESC);
-
 -- An unapproved manual preview is not a reminder. Only actual notification
 -- requests participate, so imported business records cannot create a backlog.
 CREATE VIEW notification_current_requests AS
@@ -178,5 +157,4 @@ SELECT DISTINCT ON (r.kind, r.invoice_id, r.repair_id, r.gift_card_id) r.*
 FROM notification_requests r
 WHERE r.origin = 'business'
    OR EXISTS (SELECT 1 FROM notifications n WHERE n.notification_request_id = r.id AND n.approved_at IS NOT NULL)
-   OR EXISTS (SELECT 1 FROM gift_card_deliveries d WHERE d.notification_request_id = r.id)
 ORDER BY r.kind, r.invoice_id, r.repair_id, r.gift_card_id, r.requested_at DESC, r.id DESC;

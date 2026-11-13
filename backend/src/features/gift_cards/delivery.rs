@@ -1,13 +1,17 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use sqlx::PgTransaction;
 use uuid::Uuid;
 
-use super::{delivery_repository as store, image, repository, service, types::GiftCard};
+use super::{image, repository, service, types::GiftCard};
 use crate::{
     error::AppError,
-    features::notifications::{service::hash, worker},
+    features::notifications::{
+        repository as store,
+        service::hash,
+        types::{Customer, Destination, Snapshot},
+    },
     state::AppState,
 };
 
@@ -112,10 +116,8 @@ pub async fn approve(
     actor: &str,
 ) -> Result<DeliveryResult, AppError> {
     let mut tx = state.db().begin().await?;
-    if !store::lock_card(&mut tx, id).await? {
-        return Err(AppError::NotFound("Gift card not found.".into()));
-    }
-    let existing = store::by_request(&mut tx, input.request_id).await?;
+    store::lock_gift_card(&mut tx, id).await?;
+    let existing = store::gift_card_send_by_command(&mut tx, input.request_id).await?;
     if let Some((card_id, delivery_state)) = existing {
         if card_id != id {
             return Err(AppError::Conflict(
@@ -137,131 +139,83 @@ pub async fn approve(
     if let Some(reason) = current.unavailable_reason {
         return Err(AppError::Unavailable(reason));
     }
-    if store::pending(&mut tx, id).await? {
+    if store::gift_card_pending(&mut tx, id).await? {
         return Err(AppError::Conflict(
             "This gift card is already queued for delivery.".into(),
         ));
     }
     let notification_request =
         crate::features::notifications::repository::ensure_gift_card_request(&mut tx, id).await?;
-    store::insert(
+    let artifact = store::store_image(
         &mut tx,
         id,
-        input.request_id,
-        notification_request,
-        actor,
-        &current,
-        state.notifications(),
+        &current.source_hash,
+        &current.image.filename,
+        &current.image.sha256,
+        &current.image.png,
     )
     .await?;
+    let snapshot = Snapshot {
+        repair_id: None,
+        invoice_number: None,
+        source_hash: current.source_hash,
+        revision: 0,
+        body: current.body,
+        template_name: state.notifications().gift_card_template.clone(),
+        language: state.notifications().language.clone(),
+        parameters: current.parameters,
+        exclusions: vec![],
+    };
+    let notification = store::insert_send(
+        &mut tx,
+        store::NewSend {
+            request: notification_request,
+            kind: "gift_card",
+            event_key: &format!("gift:{}", input.request_id),
+            command: Some(input.request_id),
+            snapshot: &snapshot,
+            artifact: Some(artifact),
+            actor,
+            resend_of: None,
+        },
+    )
+    .await?;
+    store::insert_recipient(
+        &mut tx,
+        notification,
+        &Destination {
+            mobile: current.mobile.clone(),
+            customers: vec![Customer {
+                id,
+                name: current
+                    .bought_for
+                    .filter(|name| !name.trim().is_empty())
+                    .unwrap_or_else(|| "Gift card recipient".into()),
+                mobile_no: current.mobile.clone(),
+                enabled: true,
+            }],
+            excluded_reason: None,
+        },
+    )
+    .await?;
+    store::select_recipients(&mut tx, notification, &[current.mobile], true).await?;
+    store::approve(&mut tx, notification, actor).await?;
     tx.commit().await?;
     Ok(DeliveryResult {
         state: "queued".into(),
     })
 }
 
-pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
-    store::recover(state.db()).await?;
-    if !state.notifications().can_send() {
-        return Ok(());
-    }
-    let candidate = store::candidate(state.db()).await?;
-    let Some((id, card_id)) = candidate else {
-        return Ok(());
-    };
-    let mut tx = state.db().begin().await?;
-    store::lock_card(&mut tx, card_id).await?;
-    let job = store::lock_job(&mut tx, id).await?;
-    let Some(job) = job else {
-        return Ok(());
-    };
-    let card = repository::get_gift_card_in_tx(&mut tx, job.gift_card_id).await?;
-    let current = match preview_card(state, &card).await {
-        Ok(current) => current,
-        Err(AppError::Unavailable(reason)) | Err(AppError::BadRequest(reason)) => {
-            store::status(&mut tx, id, "failed", Some(&reason)).await?;
-            tx.commit().await?;
-            return Ok(());
-        }
-        Err(error) => return Err(error),
-    };
-    let current_request =
-        crate::features::notifications::repository::gift_card_request_id(&mut tx, card_id).await?
-            == Some(job.notification_request_id);
-    let valid = current_request && current.can_send && current.source_hash == job.source_hash;
-    if !valid {
-        store::cancel(&mut tx, id).await?;
-        tx.commit().await?;
-        return Ok(());
-    }
-    if hash(&job.image_png) != job.image_sha256 {
-        store::status(
-            &mut tx,
-            id,
-            "failed",
-            Some(
-                "The approved gift card image failed its integrity check. Preview and send again.",
-            ),
-        )
-        .await?;
-        tx.commit().await?;
-        return Ok(());
-    }
-    store::claim(&mut tx, id).await?;
-    tx.commit().await?;
-    let result = worker::send_image_template(
-        state,
-        &job.normalized_mobile,
-        &job.template_name,
-        &job.language,
-        &job.parameters,
-        &job.image_filename,
-        job.image_png,
-    )
-    .await;
-    let (status, message_id, error, delay) = match result {
-        Ok(id) => ("accepted", Some(id), None, 0),
-        Err(e) => {
-            let retry = e.retry && job.attempt_count + 1 < state.notifications().max_attempts;
-            (
-                if e.uncertain {
-                    "uncertain"
-                } else if retry {
-                    "queued"
-                } else {
-                    "failed"
-                },
-                None,
-                Some(e.message),
-                (30_i64 * 2_i64.pow((job.attempt_count + 1).min(5) as u32)).max(e.retry_after),
-            )
-        }
-    };
-    store::finish(
-        state.db(),
-        id,
-        status,
-        message_id.as_deref(),
-        error.as_deref(),
-        delay,
-    )
-    .await?;
-    Ok(())
-}
-
-pub(crate) async fn webhook(
+// Keep card-specific content and eligibility checks separate from delivery.
+// The shared worker holds the card lock through its claim, so edits/redemptions
+// cannot slip between this check and the cancellation cutoff.
+pub(crate) async fn validate(
+    state: &AppState,
     tx: &mut PgTransaction<'_>,
-    message_id: &str,
-    incoming: &str,
-    payload: &Value,
+    id: Uuid,
+    source_hash: &str,
 ) -> Result<bool, AppError> {
-    let existing = store::lock_provider(tx, message_id).await?;
-    let Some((id, current)) = existing else {
-        return Ok(false);
-    };
-    if let Some(next) = worker::next_status(&current, incoming) {
-        let error = (next == "failed").then(|| payload["errors"].to_string());
-        store::status(tx, id, next, error.as_deref()).await?;
-    }
-    Ok(true)
+    let card = repository::get_gift_card_in_tx(tx, id).await?;
+    let current = preview_card(state, &card).await?;
+    Ok(current.can_send && current.source_hash == source_hash)
 }

@@ -69,32 +69,18 @@ WITH current_requests AS (
     ) sale ON true
     WHERE request.kind = 'gift_card'
 ), latest_sends AS (
-    SELECT DISTINCT ON (request_id) request_id, id AS notification_id, approved_at
-    FROM (
-        SELECT notification_request_id AS request_id, id, approved_at FROM notifications WHERE approved_at IS NOT NULL
-        UNION ALL
-        SELECT notification_request_id, id, created_at FROM gift_card_deliveries
-    ) sends
+    SELECT DISTINCT ON (notification_request_id) notification_request_id AS request_id, id AS notification_id, approved_at
+    FROM notifications WHERE approved_at IS NOT NULL
     ORDER BY request_id, approved_at DESC, id DESC
 ), recipient_results AS (
     -- An invoice resend replaces only its selected destinations. Gift cards
     -- have a single recipient, so their latest send replaces the earlier one.
-    SELECT DISTINCT ON (n.notification_request_id, r.normalized_mobile)
+    SELECT DISTINCT ON (n.notification_request_id, (CASE WHEN n.kind = 'gift_card' THEN 'recipient' ELSE r.normalized_mobile END))
            n.notification_request_id AS request_id, r.id, r.normalized_mobile,
            r.customers, r.status, r.error_message, n.approved_at
     FROM notifications n JOIN notification_recipients r ON r.notification_id = n.id AND r.selected
     WHERE n.approved_at IS NOT NULL
-    ORDER BY n.notification_request_id, r.normalized_mobile, n.approved_at DESC, n.id DESC
-), gift_card_results AS (
-    SELECT DISTINCT ON (d.notification_request_id)
-           d.notification_request_id AS request_id, d.id, d.normalized_mobile,
-           jsonb_build_array(jsonb_build_object('id', g.id,
-               'name', coalesce(d.parameters->>0, nullif(btrim(g.bought_for), ''), 'Gift card recipient'),
-               'mobileNo', d.normalized_mobile, 'enabled', true)) AS customers,
-           CASE WHEN d.state = 'sending' THEN 'submitting' ELSE d.state END AS status,
-           d.last_error AS error_message, d.created_at AS approved_at
-    FROM gift_card_deliveries d JOIN gift_cards g ON g.id = d.gift_card_id
-    ORDER BY d.notification_request_id, d.created_at DESC, d.id DESC
+    ORDER BY n.notification_request_id, (CASE WHEN n.kind = 'gift_card' THEN 'recipient' ELSE r.normalized_mobile END), n.approved_at DESC, n.id DESC
 ), request_results AS (
     SELECT latest.request_id, latest.notification_id, latest.approved_at,
            count(r.id) AS recipient_count,
@@ -112,7 +98,7 @@ WITH current_requests AS (
            string_agg(DISTINCT r.error_message, ' · ') FILTER
                (WHERE r.status IN ('failed', 'uncertain', 'cancelled')) AS error_message
     FROM latest_sends latest
-    LEFT JOIN (SELECT * FROM recipient_results UNION ALL SELECT * FROM gift_card_results) r ON r.request_id = latest.request_id
+    LEFT JOIN recipient_results r ON r.request_id = latest.request_id
     GROUP BY latest.request_id, latest.notification_id, latest.approved_at
 ), outcomes AS (
     SELECT *, CASE

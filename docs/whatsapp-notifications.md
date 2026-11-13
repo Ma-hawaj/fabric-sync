@@ -141,8 +141,12 @@ approved template must have an **IMAGE** header; a text-only gift card template
 cannot receive the image. Set `WHATSAPP_GIFT_CARD_TEMPLATE` and
 `WHATSAPP_GIFT_CARD_BODY` to the approved gift card template and exact wording.
 Delivery uses the existing sender configuration and signed status webhook.
-Approval stores the exact PNG bytes, filename, and SHA-256 in the original
-notification schema. The preview version includes the image hash, and retries
+Approval stores the exact PNG bytes, filename, and SHA-256 in the shared
+`document_artifacts` table. Invoice PDFs and gift-card PNGs use the same
+`notifications`, `notification_recipients`, and `notification_attempts` records,
+worker, retry policy, lease recovery, and webhook status handling. The worker
+checks attachment integrity before upload. Each gift-card approval freezes a
+new PNG attachment. The preview version includes the image hash, and retries
 upload the same approved bytes. A failed image upload never submits a message.
 The gift card list refreshes delivery status every ten seconds while open.
 Accepted means the provider accepted the message; delivered/read require a
@@ -254,9 +258,8 @@ completion on an imported invoice creates only the relevant new reminder.
 Actual approved attempts, including failed historical sends, remain visible.
 Untracked gift cards also create no historical backlog.
 
-Both `notifications.notification_request_id` and
-`gift_card_deliveries.notification_request_id` are explicit foreign keys to the
-request. These links are mandatory. Composite foreign keys prevent a send from
+Every send uses the mandatory `notifications.notification_request_id` foreign
+key to its request. Composite foreign keys prevent a send from
 linking to a request for a different invoice or gift card. The request identity is separate from
 client retry/idempotency tokens and from the immutable content snapshot.
 
@@ -268,10 +271,10 @@ an earlier request's delivery result is shown separately as previous history.
 
 ```mermaid
 flowchart LR
-  Request[Notification request] --> Notification[Invoice or pickup send]
+  Request[Notification request] --> Notification[Approved send]
   Notification --> Recipient[Recipient delivery]
   Recipient --> Attempt[Provider attempts]
-  Request --> Gift[Gift card delivery]
+  Notification --> Attachment[Optional PDF or PNG]
 ```
 
 Manual sending on an untracked invoice creates a request for its preview. That

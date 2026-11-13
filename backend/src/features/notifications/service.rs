@@ -114,7 +114,7 @@ pub(crate) async fn source(
     Ok(Source {
         snapshot: Snapshot {
             repair_id: None,
-            invoice_number: detail.invoice_number,
+            invoice_number: Some(detail.invoice_number),
             source_hash,
             revision,
             body,
@@ -183,7 +183,7 @@ async fn repair_source(
     Ok(Source {
         snapshot: Snapshot {
             repair_id: Some(repair_id),
-            invoice_number: repair.invoice_number,
+            invoice_number: Some(repair.invoice_number),
             source_hash,
             revision,
             body,
@@ -266,7 +266,15 @@ pub(crate) async fn artifact(
         state.db(),
         invoice_id,
         &source.artifact_hash,
-        &format!("INV-{}.pdf", source.snapshot.invoice_number),
+        &format!(
+            "INV-{}.pdf",
+            source
+                .snapshot
+                .invoice_number
+                .ok_or_else(|| AppError::BadRequest(
+                    "Only invoice notifications have a PDF document.".into()
+                ))?
+        ),
         &hash(&bytes),
         &bytes,
     )
@@ -277,7 +285,7 @@ pub async fn get(state: &AppState, id: Uuid) -> Result<Notification, AppError> {
     let row = repository::get(state.db(), id).await?;
     Ok(Notification {
         id: row.id,
-        invoice_id: row.invoice_id,
+        invoice_id: row.invoice_id()?,
         kind: row.kind,
         state: row.state,
         preview_version: row.preview_version,
@@ -307,7 +315,7 @@ pub async fn prepare(
 ) -> Result<Notification, AppError> {
     let repair_id = if let Some(original) = input.resend_of {
         let previous = repository::get(state.db(), original).await?;
-        if previous.invoice_id != invoice_id
+        if previous.invoice_id()? != invoice_id
             || (input.repair_id.is_some() && input.repair_id != previous.snapshot.repair_id)
         {
             return Err(AppError::BadRequest(
@@ -379,7 +387,6 @@ pub async fn prepare(
     }
     let id = repository::insert_notification(
         &mut tx,
-        invoice_id,
         &input,
         request,
         &event_key,
@@ -408,14 +415,14 @@ pub async fn approve(
     }
     let source = source(
         state,
-        notification.invoice_id,
+        notification.invoice_id()?,
         &notification.kind,
         notification.snapshot.repair_id,
     )
     .await?;
     if source.snapshot.source_hash != notification.source_hash {
         let mut tx = state.db().begin().await?;
-        repository::lock_invoice(&mut tx, notification.invoice_id).await?;
+        repository::lock_invoice(&mut tx, notification.invoice_id()?).await?;
         repository::lock_notification(&mut tx, id).await?;
         repository::mark_stale(&mut tx, id).await?;
         tx.commit().await?;
@@ -430,7 +437,7 @@ pub async fn approve(
         ));
     }
     let mut tx = state.db().begin().await?;
-    let revision = repository::lock_invoice(&mut tx, notification.invoice_id).await?;
+    let revision = repository::lock_invoice(&mut tx, notification.invoice_id()?).await?;
     let (status, version) = repository::lock_notification(&mut tx, id).await?;
     if version != input.preview_version || revision != source.snapshot.revision {
         return Err(AppError::Conflict(
@@ -467,7 +474,7 @@ pub async fn approve(
     let parent = notification.notification_request_id;
     if repository::request_id(
         &mut tx,
-        notification.invoice_id,
+        notification.invoice_id()?,
         request_kind,
         notification.snapshot.repair_id,
     )
@@ -491,7 +498,7 @@ pub async fn approve(
     if let Some(original) = notification.resend_of {
         validate_resend(
             &mut tx,
-            notification.invoice_id,
+            notification.invoice_id()?,
             &notification.kind,
             original,
         )
@@ -532,7 +539,7 @@ async fn validate_resend(
 pub async fn cancel(state: &AppState, id: Uuid) -> Result<Notification, AppError> {
     let notification = repository::get(state.db(), id).await?;
     let mut tx = state.db().begin().await?;
-    repository::lock_invoice(&mut tx, notification.invoice_id).await?;
+    repository::lock_invoice(&mut tx, notification.invoice_id()?).await?;
     repository::lock_notification(&mut tx, id).await?;
     let started = repository::has_started(&mut tx, id).await?;
     if started {
@@ -576,7 +583,7 @@ pub async fn resend(
     };
     prepare(
         state,
-        previous.invoice_id,
+        previous.invoice_id()?,
         PrepareInput {
             repair_id: previous.snapshot.repair_id,
             kind: kind.into(),

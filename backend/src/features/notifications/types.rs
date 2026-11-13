@@ -26,7 +26,8 @@ pub struct Destination {
 pub struct Snapshot {
     #[serde(default)]
     pub repair_id: Option<Uuid>,
-    pub invoice_number: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invoice_number: Option<i64>,
     pub source_hash: String,
     pub revision: i64,
     pub body: String,
@@ -74,7 +75,7 @@ pub struct Recipient {
 #[derive(Clone, Debug, FromRow)]
 pub struct NotificationRow {
     pub id: Uuid,
-    pub invoice_id: Uuid,
+    pub invoice_id: Option<Uuid>,
     pub notification_request_id: Uuid,
     pub kind: String,
     pub state: String,
@@ -85,6 +86,16 @@ pub struct NotificationRow {
     pub artifact_id: Option<Uuid>,
     pub resend_of: Option<Uuid>,
     pub created_at: DateTime<Utc>,
+}
+
+impl NotificationRow {
+    pub fn invoice_id(&self) -> Result<Uuid, crate::error::AppError> {
+        self.invoice_id.ok_or_else(|| {
+            crate::error::AppError::BadRequest(
+                "Use the gift card preview and send endpoints for this notification.".into(),
+            )
+        })
+    }
 }
 
 #[derive(Debug, Serialize)]
