@@ -50,10 +50,10 @@ change invoice balances, sales or saved VAT figures.
 
 ## Permanent locks and branch controls
 
-Past transactions, openings and expenses are always read-only. Staff cannot add
+Past payments, openings, expenses and saved closing figures stay read-only. Staff cannot add
 or correct old openings or add/void old expenses. A previous active day may have
 its final closing recorded once in the late-closing window below; all other past
-counts remain read-only. Future days are also read-only. Closed and skipped days
+counts remain read-only. Future days are also read-only. Closed and skipped reports
 cannot be reopened or changed, including their notes and opening/expense records.
 The final report uses its frozen snapshot even if data is changed outside the
 application later.
@@ -63,9 +63,18 @@ and no unresolved earlier active day. Activity includes an invoice, payment,
 return/refund, redemption, paid repair receipt, opening or expense; quiet days are
 skipped. A final close blocks further financial activity until the next business
 day. Controls are independent per branch. Free collections and production tracking
-can continue. Existing invoice rebuilds are restricted to the current business
-day and cannot move the financial branch; later payments/adjustments belong to
-the current open day.
+can continue. Eligible draft invoices can be edited across business days while
+the branch meets today's trading requirements. Their original issue date,
+issuing branch and recorded payments stay unchanged. Collection, production,
+return/refund and balance restrictions still apply.
+
+Closed and skipped reports retain the figures captured at closing/resolution,
+even when an eligible draft invoice is edited later. Unfinalized reports continue
+to reflect the current invoice details and totals. Cross-day edits retain gift-card
+redemption rows, IDs, timestamps, amounts and tax provenance; they do not spend
+the same tender again today. Changing recorded gift-card tender on an older
+invoice is rejected. Additional cash/Benefit/Card payments use the payment or
+collection endpoints and belong to the current open day.
 
 Branch transaction locks serialize closing with invoices, payments, paid
 collections, repair receipts, returns, cancellations, refunds and expenses.

@@ -77,7 +77,7 @@ export const reportNotes = [
   'Invoice totals include VAT and gift card sales, after discounts. Credits reduce invoiced activity; refunds reduce receipts. Gift card tender is separate from external receipts.',
   'Taxable amount and VAT are the saved figures on invoices issued that day, before credits. This is an operational report, not a VAT return.',
   'Closing saves the counted amounts and recorded figures together, then locks the branch day. Refresh and review any new activity before closing.',
-  'Past recorded figures and closed days are read-only. The previous active day may be closed once before the next opening or trading, using its saved opening and an explanation. Other missed days require a manager skip, which freezes their figures and leaves them unreconciled.',
+  'Saved closing figures, payments, openings and expenses stay read-only. Eligible draft invoices may be edited across dates; unfinalized reports reflect current invoice details. The previous active day may be closed once before the next opening or trading, using its saved opening and an explanation. Other missed days require a manager skip, which freezes their figures and leaves them unreconciled.',
   'Opening cash is saved separately and read-only at closing. Cash expenses reduce expected drawer cash; do not also include them as cash banked or transferred out. Benefit/Card expenses do not reduce merchant receipt totals.',
 ]
 

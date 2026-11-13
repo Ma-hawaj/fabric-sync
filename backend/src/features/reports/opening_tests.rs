@@ -456,7 +456,12 @@ async fn disabling_the_check_is_branch_scoped_and_does_not_reset_history(pool: P
     assert!(skipped.reason.contains("Automatically skipped"));
     assert_eq!(skipped.resolved_by, "manager-one");
     assert_eq!(after.fingerprint, before.fingerprint);
-    assert!(matches!(invoices::update_invoice(&state,invoice,serde_json::from_value(json!({"issuingBranchId":branch,"expectedVatRate":0.1,"discountUnit":"amount","giftCards":[{"amount":10,"recipientPhone":"33112233"}]})).unwrap()).await,Err(AppError::Conflict(_))));
+    invoices::update_invoice(&state,invoice,serde_json::from_value(json!({"issuingBranchId":branch,"expectedVatRate":0.1,"discountUnit":"amount","giftCards":[{"amount":10,"recipientPhone":"33112233"}]})).unwrap()).await.unwrap();
+    let after_edit = service::sales_closing(&state, Some(old), branch)
+        .await
+        .unwrap();
+    assert_eq!(after_edit.fingerprint, before.fingerprint);
+    assert_eq!(after_edit.missed_closing.as_ref().unwrap().id, skipped.id);
     let restored = day_service::set_daily_check(
         &state,
         serde_json::from_value(json!({"branchId":branch,"required":true})).unwrap(),

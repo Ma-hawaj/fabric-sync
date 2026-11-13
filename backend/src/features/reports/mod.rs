@@ -18,6 +18,8 @@ mod auto_skip_tests;
 #[cfg(test)]
 mod day_tests;
 #[cfg(test)]
+mod invoice_edit_tests;
+#[cfg(test)]
 mod late_closing_tests;
 #[cfg(test)]
 mod opening_tests;

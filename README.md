@@ -214,10 +214,16 @@ skipped automatically. Managers can disable this trading check per branch;
 outstanding past active days and days accumulated while it is off are automatically
 skipped with an audit record and remain unreconciled. Re-enabling requires today's
 opening without a backlog from the disabled period.
-Closed reports and historical entries always stay locked, and explained differences are
+Closed reports and recorded payments always stay locked, and explained differences are
 retained. Review and close saves counts and notes in one permanent record;
 export it as CSV or print/save PDF. See [branch reconciliation](docs/sales-closing.md)
 for first opening, optional daily checks, financial ownership and immutable history.
+
+Eligible draft invoices can be edited across business days once the branch meets
+today's trading requirements. Original issue dates, issuing branches and recorded
+payments are retained. Closed and skipped reports keep their saved figures;
+unfinalized reports reflect current invoice details. Existing production,
+collection and balance restrictions continue to apply.
 
 ## Direct material sales
 

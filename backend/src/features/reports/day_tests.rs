@@ -225,7 +225,7 @@ async fn opening_is_required_and_explained_final_close_locks_every_financial_ent
 }
 
 #[sqlx::test]
-async fn missed_days_stay_read_only_and_separate_resolutions_unblock_only_their_branch(
+async fn missed_reports_stay_frozen_and_separate_resolutions_unblock_only_their_branch(
     pool: PgPool,
 ) {
     let (invoice, _, _, branch) = crate::test_support::invoice(&pool, 1, false).await;
@@ -309,10 +309,16 @@ async fn missed_days_stay_read_only_and_separate_resolutions_unblock_only_their_
             .unwrap()
             .can_create_orders
     );
-    assert!(matches!(
-        invoices::update_invoice(&state, invoice, sale(branch)).await,
-        Err(AppError::Conflict(_))
-    ));
+    invoices::update_invoice(&state, invoice, sale(branch))
+        .await
+        .unwrap();
+    assert_eq!(
+        service::sales_closing(&state, Some(earlier), branch)
+            .await
+            .unwrap()
+            .fingerprint,
+        before.fingerprint
+    );
     invoices::record_payment(&state, invoice, payment(), "staff")
         .await
         .unwrap();

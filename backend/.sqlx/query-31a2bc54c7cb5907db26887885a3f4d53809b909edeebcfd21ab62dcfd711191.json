@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT r.gift_card_id, g.code, r.amount::float8 AS \"amount!\"\n        FROM gift_card_redemptions r\n        JOIN gift_cards g ON g.id = r.gift_card_id\n        WHERE r.invoice_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "gift_card_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "amount!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "31a2bc54c7cb5907db26887885a3f4d53809b909edeebcfd21ab62dcfd711191"
+}

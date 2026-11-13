@@ -2496,6 +2496,8 @@ pub async fn get_invoice_for_edit(
 /// The ledger is left alone — an edit never touches money, so an invoice
 /// carrying an advance stays editable. What is checked instead is that the
 /// money already taken still fits the rebuilt total.
+/// Across business days, recorded gift-card tender is also retained verbatim,
+/// including its original IDs and timestamps; it is not spent again today.
 ///
 /// Refused once goods or work have moved past the draft stage — a collected
 /// order, or any recorded stage/assignee/repair — since there is no longer
@@ -2531,14 +2533,11 @@ pub async fn update_invoice(
     let today =
         crate::features::reports::day_service::require_trading(state, &mut tx, financial_branch)
             .await?;
-    if locked
+    let cross_day = locked
         .invoice_date
         .with_timezone(&state.timezone()?)
         .date_naive()
-        != today
-    {
-        return Err(AppError::Conflict("Invoices from older business days are read-only. Record a return or adjustment today instead.".into()));
-    }
+        != today;
     let saved: HashMap<_, _> = repository::saved_order_prices(&mut tx, invoice_id)
         .await?
         .into_iter()
@@ -2596,6 +2595,31 @@ pub async fn update_invoice(
     let material_lines = repository::old_material_lines(&mut tx, invoice_id).await?;
     let gift_sales = repository::old_gift_card_sales(&mut tx, invoice_id).await?;
     let redemptions = repository::old_redemptions(&mut tx, invoice_id).await?;
+    if cross_day {
+        // An older draft may change, but its recorded tender is not a new
+        // payment today. Compare as a multiset so input order is immaterial.
+        let mut saved: Vec<_> = redemptions
+            .iter()
+            .map(|r| (r.code.clone(), r.amount.to_bits()))
+            .collect();
+        let mut requested = input
+            .gift_card_redemptions
+            .iter()
+            .map(|r| {
+                Ok((
+                    gift_cards_service::normalize_code(&r.code)?,
+                    r.amount.to_bits(),
+                ))
+            })
+            .collect::<Result<Vec<_>, AppError>>()?;
+        saved.sort_unstable();
+        requested.sort_unstable();
+        if saved != requested {
+            return Err(AppError::Conflict(
+                "Recorded gift-card payments on older invoices must stay unchanged.".into(),
+            ));
+        }
+    }
     let measurement_refs = repository::old_measurement_refs(&mut tx, invoice_id).await?;
 
     // Gift cards first: lock every card this invoice touched so a till
@@ -2625,8 +2649,11 @@ pub async fn update_invoice(
             )));
         }
     }
-    for redemption in &redemptions {
-        repository::refund_gift_card(&mut tx, redemption.gift_card_id, redemption.amount).await?;
+    if !cross_day {
+        for redemption in &redemptions {
+            repository::refund_gift_card(&mut tx, redemption.gift_card_id, redemption.amount)
+                .await?;
+        }
     }
 
     // Hand back what the old lines consumed. The locations are nullable in the
@@ -2660,7 +2687,9 @@ pub async fn update_invoice(
 
     // Rebuild order and retail lines, retaining all measurement history.
     // Sold gift cards go once the spent-check above has cleared them.
-    repository::delete_redemptions(&mut tx, invoice_id).await?;
+    if !cross_day {
+        repository::delete_redemptions(&mut tx, invoice_id).await?;
+    }
     repository::delete_orders(&mut tx, invoice_id).await?;
     repository::delete_items(&mut tx, invoice_id).await?;
     let sold_ids: Vec<Uuid> = gift_sales.iter().map(|sale| sale.gift_card_id).collect();
@@ -2703,17 +2732,27 @@ pub async fn update_invoice(
     )
     .await?;
 
-    let prepaid_amount = write_redemptions(
-        &mut tx,
-        invoice_id,
-        locked.invoice_date.date_naive(),
-        &input.gift_card_redemptions,
-        &redemptions
-            .iter()
-            .map(|r| r.gift_card_id)
-            .collect::<Vec<_>>(),
-    )
-    .await?;
+    let prepaid_amount = if cross_day {
+        let mut prepaid = 0.0;
+        for redemption in &redemptions {
+            if repository::voucher_has_sale_invoice(&mut tx, redemption.gift_card_id).await? {
+                prepaid += redemption.amount;
+            }
+        }
+        round2(prepaid)
+    } else {
+        write_redemptions(
+            &mut tx,
+            invoice_id,
+            locked.invoice_date.date_naive(),
+            &input.gift_card_redemptions,
+            &redemptions
+                .iter()
+                .map(|r| r.gift_card_id)
+                .collect::<Vec<_>>(),
+        )
+        .await?
+    };
 
     let totals = compute_totals(&input, locked.vat_rate, prepaid_amount);
 

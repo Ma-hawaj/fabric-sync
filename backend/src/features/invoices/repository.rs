@@ -1006,6 +1006,7 @@ pub struct OldGiftCardSale {
 /// Gift card tender this invoice spent, for paying the balance back.
 pub struct OldRedemption {
     pub gift_card_id: Uuid,
+    pub code: String,
     pub amount: f64,
 }
 
@@ -1437,9 +1438,10 @@ pub async fn old_redemptions(
     sqlx::query_as!(
         OldRedemption,
         r#"
-        SELECT gift_card_id, amount::float8 AS "amount!"
-        FROM gift_card_redemptions
-        WHERE invoice_id = $1
+        SELECT r.gift_card_id, g.code, r.amount::float8 AS "amount!"
+        FROM gift_card_redemptions r
+        JOIN gift_cards g ON g.id = r.gift_card_id
+        WHERE r.invoice_id = $1
         "#,
         invoice_id,
     )
