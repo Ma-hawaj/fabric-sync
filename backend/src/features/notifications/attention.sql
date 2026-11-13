@@ -1,242 +1,164 @@
-WITH customers_by_invoice AS (
+WITH current_requests AS (
+    SELECT * FROM notification_current_requests
+), customers_by_invoice AS (
     SELECT invoice_id,
-           jsonb_agg(jsonb_build_object('id', id, 'name', name, 'mobileNo', mobile_no)
-                     ORDER BY name, id) AS customers,
+           jsonb_agg(jsonb_build_object('id', id, 'name', name, 'mobileNo', mobile_no) ORDER BY name, id) AS customers,
            string_agg(name, ', ' ORDER BY name, id) AS customer_name,
            string_agg(mobile_no, ', ' ORDER BY name, id) AS customer_mobile,
            bool_or(whatsapp_notifications_enabled) AS enabled
     FROM (
         SELECT i.id AS invoice_id, c.id, c.name, c.mobile_no, c.whatsapp_notifications_enabled
         FROM invoices i JOIN customers c ON c.id = i.customer_id
+        WHERE i.id IN (SELECT invoice_id FROM current_requests)
         UNION
         SELECT o.invoice_id, c.id, c.name, c.mobile_no, c.whatsapp_notifications_enabled
         FROM orders o JOIN measurements m ON m.id = o.measurement_id
         JOIN customers c ON c.id = m.customer_id
+        WHERE o.invoice_id IN (SELECT invoice_id FROM current_requests)
     ) customers
     GROUP BY invoice_id
-), latest AS (
-    SELECT DISTINCT ON (invoice_id, (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''))
-           id, invoice_id, kind, approved_at, snapshot, source_hash, notification_request_id,
-           snapshot->>'repairId' AS repair_id
-    FROM notifications
-    WHERE approved_at IS NOT NULL
-    ORDER BY invoice_id, (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), approved_at DESC, id DESC
-), context AS (
-    SELECT i.id AS invoice_id, i.invoice_number, i.created_at,
-           i.collection_method, b.name AS branch_name,
-           c.customers, c.customer_name, c.customer_mobile, coalesce(c.enabled, false) AS enabled,
-           readiness.readiness_status,
-           ready.waiting_since AS ready_since,
-           kind.kind, i.id AS entity_id, 'INV-' || i.invoice_number::text AS reference,
+), contexts AS (
+    SELECT request.id AS request_id, request.requested_at, request.kind,
+           i.id AS entity_id, i.id AS invoice_id, i.invoice_number,
+           'INV-' || i.invoice_number::text AS reference, b.name AS branch_name,
            NULL::uuid AS repair_id, NULL::uuid AS order_id, NULL::text AS repair_reason,
-           request.id AS request_id, request.requested_at
-    FROM invoices i
+           NULL::uuid AS gift_card_id, NULL::text AS gift_card_code,
+           coalesce(c.customers, '[]'::jsonb) AS customers, c.customer_name, c.customer_mobile,
+           coalesce(c.enabled, false) AND (request.kind = 'invoice' OR
+               (i.collection_method = 'pickup' AND readiness.readiness_status = 'ready')) AS eligible
+    FROM current_requests request
+    JOIN invoices i ON i.id = request.invoice_id
     JOIN invoice_readiness readiness ON readiness.invoice_id = i.id
     LEFT JOIN branch b ON b.id = i.branch_id
     LEFT JOIN customers_by_invoice c ON c.invoice_id = i.id
-    LEFT JOIN LATERAL (
-        SELECT max(o.ready_at) AS waiting_since
-        FROM orders o WHERE o.invoice_id = i.id AND o.status = 'ready'
-          AND NOT EXISTS (SELECT 1 FROM invoice_return_lines l WHERE l.order_id = o.id)
-    ) ready ON true
-    CROSS JOIN (VALUES ('invoice'), ('invoice_ready')) kind(kind)
-    LEFT JOIN notification_current_requests request ON request.invoice_id = i.id
-        AND request.kind = kind.kind AND request.repair_id IS NULL
-), repair_context AS (
-    SELECT i.id AS invoice_id, i.invoice_number, i.created_at,
-           i.collection_method, b.name AS branch_name,
-           jsonb_build_array(jsonb_build_object('id', c.id, 'name', c.name, 'mobileNo', c.mobile_no)) AS customers,
-           c.name AS customer_name, c.mobile_no AS customer_mobile,
-           c.whatsapp_notifications_enabled AND oc.outcome = 'active' AS enabled,
-           CASE WHEN r.status = 'completed' THEN 'ready' ELSE r.status END AS readiness_status,
-           r.completed_at AS ready_since, 'repair_ready' AS kind,
-           r.id AS entity_id, 'ORD-' || o.order_number::text || ' repair' AS reference,
-           r.id AS repair_id, o.id AS order_id, r.reason AS repair_reason,
-           request.id AS request_id, request.requested_at
-    FROM order_repairs r
+    WHERE request.kind IN ('invoice', 'invoice_ready')
+    UNION ALL
+    SELECT request.id, request.requested_at, request.kind,
+           r.id, i.id, i.invoice_number, 'ORD-' || o.order_number::text || ' repair', b.name,
+           r.id, o.id, r.reason, NULL::uuid, NULL::text,
+           jsonb_build_array(jsonb_build_object('id', c.id, 'name', c.name, 'mobileNo', c.mobile_no)),
+           c.name, c.mobile_no,
+           c.whatsapp_notifications_enabled AND oc.outcome = 'active'
+               AND r.status = 'completed' AND r.completed_at IS NOT NULL AND b.name IS NOT NULL
+    FROM current_requests request
+    JOIN order_repairs r ON r.id = request.repair_id
     JOIN orders o ON o.id = r.order_id
     JOIN order_outcomes oc ON oc.order_id = o.id
-    JOIN invoices i ON i.id = o.invoice_id
+    JOIN invoices i ON i.id = request.invoice_id AND i.id = o.invoice_id
     JOIN measurements m ON m.id = o.measurement_id
     JOIN customers c ON c.id = m.customer_id
     LEFT JOIN branch b ON b.id = i.branch_id
-    LEFT JOIN notification_current_requests request ON request.invoice_id = i.id
-        AND request.kind = 'repair_ready' AND request.repair_id = r.id
-    WHERE r.status = 'completed' OR EXISTS (
-        SELECT 1 FROM latest n WHERE n.invoice_id = i.id AND n.repair_id = r.id::text
-    )
-), contexts AS (
-    SELECT * FROM context
+    WHERE request.kind = 'repair_ready'
     UNION ALL
-    SELECT * FROM repair_context
-), version_results AS (
-    SELECT c.entity_id, c.reference, c.repair_id, c.order_id, c.repair_reason,
-           c.invoice_id, c.invoice_number, c.branch_name, c.customer_name, c.customer_mobile,
-           coalesce(c.customers, '[]'::jsonb) AS customers, c.kind,
-           n.id AS notification_id, n.approved_at AS last_attempt_at,
-           (c.request_id IS NULL OR n.notification_request_id = c.request_id) IS TRUE AS current_version,
-           (c.enabled AND (c.request_id IS NOT NULL OR n.id IS NOT NULL) AND (c.kind = 'invoice' OR
-             (c.kind = 'repair_ready' AND c.readiness_status = 'ready' AND c.ready_since IS NOT NULL AND c.branch_name IS NOT NULL) OR
-             (c.kind = 'invoice_ready' AND c.collection_method = 'pickup' AND c.readiness_status = 'ready'))) AS eligible,
-           CASE WHEN c.kind IN ('invoice_ready', 'repair_ready') THEN coalesce(c.ready_since, n.approved_at, c.created_at)
-                ELSE CASE WHEN c.request_id IS NOT NULL AND
-                    n.notification_request_id IS DISTINCT FROM c.request_id
-                    THEN c.requested_at
-                    ELSE coalesce(r.awaiting_since, n.approved_at, c.requested_at, c.created_at) END
-           END AS waiting_since,
-           coalesce(r.recipient_count, 0) AS recipient_count,
-           coalesce(r.queued_count, 0) AS queued_count,
-           coalesce(r.accepted_count, 0) AS accepted_count,
-           coalesce(r.delivered_count, 0) AS delivered_count,
-           coalesce(r.failed_count, 0) AS failed_count,
-           coalesce(r.uncertain_count, 0) AS uncertain_count,
-           coalesce(r.cancelled_count, 0) AS cancelled_count,
-           coalesce(r.recipients, '[]'::jsonb) AS recipients,
-           r.error_message,
-           CASE
-             WHEN coalesce(r.uncertain_count, 0) > 0 THEN 'uncertain'
-             WHEN coalesce(r.failed_count, 0) > 0 THEN 'failed'
-             WHEN coalesce(r.cancelled_count, 0) > 0 THEN 'not_sent'
-             WHEN coalesce(r.queued_count, 0) > 0 AND r.queued_since < now() - interval '30 minutes' THEN 'delayed'
-             WHEN coalesce(r.queued_count, 0) > 0 THEN 'queued'
-             WHEN coalesce(r.accepted_count, 0) > 0 THEN 'accepted'
-             WHEN coalesce(r.delivered_count, 0) > 0 THEN 'delivered'
-             ELSE 'not_sent'
-           END AS status
-    FROM contexts c
-    LEFT JOIN latest n ON n.invoice_id = c.invoice_id
-        AND (n.kind = 'invoice_ready') = (c.kind IN ('invoice_ready', 'repair_ready'))
-        AND n.repair_id IS NOT DISTINCT FROM c.repair_id::text
-    LEFT JOIN LATERAL (
-        SELECT count(*) AS recipient_count,
-               count(*) FILTER (WHERE status IN ('queued', 'submitting')) AS queued_count,
-               count(*) FILTER (WHERE status = 'accepted') AS accepted_count,
-               count(*) FILTER (WHERE status IN ('delivered', 'read')) AS delivered_count,
-               count(*) FILTER (WHERE status = 'failed') AS failed_count,
-               count(*) FILTER (WHERE status = 'uncertain') AS uncertain_count,
-               count(*) FILTER (WHERE status = 'cancelled') AS cancelled_count,
-               min(latest_approved_at) FILTER (WHERE status IN ('queued', 'submitting')) AS queued_since,
-               min(latest_approved_at) FILTER (WHERE status IN
-                   ('queued', 'submitting', 'failed', 'uncertain', 'cancelled')) AS awaiting_since,
-               jsonb_agg(jsonb_build_object('id', id, 'normalizedMobile', normalized_mobile,
-                   'customers', customers, 'selected', true, 'status', status,
-                   'errorMessage', error_message) ORDER BY normalized_mobile) AS recipients,
-               string_agg(DISTINCT error_message, ' · ') FILTER
-                 (WHERE status IN ('failed', 'uncertain', 'cancelled')) AS error_message
-        FROM (
-            -- A selective resend only supersedes the destinations selected in
-            -- that send. Keep unresolved results for every other destination.
-            SELECT DISTINCT ON (r.normalized_mobile) r.*, sends.approved_at AS latest_approved_at
-            FROM notifications sends
-            JOIN notification_recipients r ON r.notification_id = sends.id AND r.selected
-            WHERE sends.invoice_id = c.invoice_id AND sends.approved_at IS NOT NULL
-              AND (sends.kind = 'invoice_ready') = (c.kind IN ('invoice_ready', 'repair_ready'))
-              AND sends.snapshot->>'repairId' IS NOT DISTINCT FROM c.repair_id::text
-              AND CASE WHEN n.notification_request_id IS NOT NULL THEN
-                  sends.notification_request_id = n.notification_request_id
-                  ELSE sends.notification_request_id IS NULL AND sends.source_hash = n.source_hash END
-            ORDER BY r.normalized_mobile, sends.approved_at DESC, sends.id DESC
-        ) destinations
-    ) r ON true
-    WHERE n.id IS NOT NULL OR (c.request_id IS NOT NULL AND c.enabled AND
-        (c.kind = 'invoice' OR
-         (c.kind = 'repair_ready' AND c.readiness_status = 'ready' AND c.ready_since IS NOT NULL AND c.branch_name IS NOT NULL) OR
-         (c.kind = 'invoice_ready' AND c.collection_method = 'pickup' AND c.readiness_status = 'ready')))
-), outcomes AS (
-    SELECT entity_id, reference, repair_id, order_id, repair_reason,
-           invoice_id, invoice_number, branch_name, customer_name, customer_mobile,
-           customers, kind, notification_id, last_attempt_at, eligible, waiting_since,
-           CASE WHEN current_version THEN recipient_count ELSE 0 END AS recipient_count,
-           CASE WHEN current_version THEN queued_count ELSE 0 END AS queued_count,
-           CASE WHEN current_version THEN accepted_count ELSE 0 END AS accepted_count,
-           CASE WHEN current_version THEN delivered_count ELSE 0 END AS delivered_count,
-           CASE WHEN current_version THEN failed_count ELSE 0 END AS failed_count,
-           CASE WHEN current_version THEN uncertain_count ELSE 0 END AS uncertain_count,
-           CASE WHEN current_version THEN cancelled_count ELSE 0 END AS cancelled_count,
-           CASE WHEN current_version THEN recipients ELSE '[]'::jsonb END AS recipients,
-           CASE WHEN current_version THEN error_message END AS error_message,
-           CASE WHEN current_version THEN status ELSE 'not_sent' END AS status,
-           CASE WHEN NOT current_version AND notification_id IS NOT NULL THEN
-               jsonb_build_object('status', status, 'recipients', recipients,
-                   'errorMessage', error_message)
-               ELSE 'null'::jsonb END AS previous_version
-    FROM version_results
-), gift_card_context AS (
-    SELECT g.id AS entity_id, sale.id AS invoice_id, sale.invoice_number,
-           sale.branch_name, g.code AS reference, g.id AS gift_card_id,
-           g.code AS gift_card_code,
-           coalesce(nullif(btrim(g.bought_for), ''), 'Gift card recipient') AS customer_name,
-           coalesce(g.recipient_phone, '') AS customer_mobile,
+    SELECT request.id, request.requested_at, request.kind,
+           g.id, sale.id, sale.invoice_number, g.code, sale.branch_name,
+           NULL::uuid, NULL::uuid, NULL::text, g.id, g.code,
            jsonb_build_array(jsonb_build_object('id', g.id,
                'name', coalesce(nullif(btrim(g.bought_for), ''), 'Gift card recipient'),
-               'mobileNo', coalesce(g.recipient_phone, ''), 'enabled', true)) AS customers,
-           d.id AS notification_id, d.created_at AS last_attempt_at,
-           coalesce(request.requested_at, d.created_at, sale.created_at, uuid_extract_timestamp(g.id), now()) AS waiting_since,
-           g.is_active AND g.balance > 0 AND (g.expires_on IS NULL OR g.expires_on >= CURRENT_DATE) AS eligible,
-           d.state AS delivery_state, d.normalized_mobile, d.last_error AS error_message,
-           (request.id IS NULL OR d.notification_request_id = request.id) IS TRUE AS current_version,
-           CASE WHEN d.state IS NULL OR d.state = 'cancelled' THEN 'not_sent'
-                WHEN d.state IN ('queued', 'sending') AND d.created_at < now() - interval '30 minutes' THEN 'delayed'
-                WHEN d.state = 'sending' THEN 'queued'
-                WHEN d.state = 'read' THEN 'delivered'
-                ELSE d.state END AS status
-    FROM gift_cards g
-    LEFT JOIN notification_current_requests request ON request.gift_card_id = g.id AND request.kind = 'gift_card'
+               'mobileNo', coalesce(g.recipient_phone, ''))),
+           coalesce(nullif(btrim(g.bought_for), ''), 'Gift card recipient'), coalesce(g.recipient_phone, ''),
+           g.is_active AND g.balance > 0 AND (g.expires_on IS NULL OR g.expires_on >= CURRENT_DATE)
+    FROM current_requests request
+    JOIN gift_cards g ON g.id = request.gift_card_id
     LEFT JOIN LATERAL (
-        SELECT id, notification_request_id, state, created_at, normalized_mobile, last_error
-        FROM gift_card_deliveries WHERE gift_card_id = g.id
-        ORDER BY created_at DESC, id DESC LIMIT 1
-    ) d ON true
-    LEFT JOIN LATERAL (
-        SELECT i.id, i.invoice_number, i.created_at, b.name AS branch_name
+        SELECT i.id, i.invoice_number, b.name AS branch_name
         FROM invoice_items item JOIN invoices i ON i.id = item.invoice_id
         LEFT JOIN branch b ON b.id = i.branch_id
         WHERE item.gift_card_id = gift_card_original_id(g.id) AND item.kind = 'gift_card'
         ORDER BY item.id LIMIT 1
     ) sale ON true
-    WHERE request.id IS NOT NULL OR d.id IS NOT NULL
-), gift_card_outcomes AS (
-    SELECT entity_id, invoice_id, invoice_number, branch_name, reference, gift_card_id,
-           gift_card_code, customer_name, customer_mobile, customers, notification_id,
-           last_attempt_at, waiting_since, eligible,
-           CASE WHEN current_version THEN delivery_state END AS delivery_state,
-           normalized_mobile,
-           CASE WHEN current_version THEN error_message END AS error_message,
-           CASE WHEN current_version THEN status ELSE 'not_sent' END AS status,
-           CASE WHEN NOT current_version AND notification_id IS NOT NULL THEN
-               jsonb_build_object('status', status, 'errorMessage', error_message,
-                   'recipients', jsonb_build_array(jsonb_build_object('id',notification_id,
-                       'normalizedMobile',normalized_mobile,'customers',customers,'selected',true,
-                       'status',delivery_state,'errorMessage',error_message)))
+    WHERE request.kind = 'gift_card'
+), latest_sends AS (
+    SELECT DISTINCT ON (request_id) request_id, id AS notification_id, approved_at
+    FROM (
+        SELECT notification_request_id AS request_id, id, approved_at FROM notifications WHERE approved_at IS NOT NULL
+        UNION ALL
+        SELECT notification_request_id, id, created_at FROM gift_card_deliveries
+    ) sends
+    ORDER BY request_id, approved_at DESC, id DESC
+), recipient_results AS (
+    -- An invoice resend replaces only its selected destinations. Gift cards
+    -- have a single recipient, so their latest send replaces the earlier one.
+    SELECT DISTINCT ON (n.notification_request_id, r.normalized_mobile)
+           n.notification_request_id AS request_id, r.id, r.normalized_mobile,
+           r.customers, r.status, r.error_message, n.approved_at
+    FROM notifications n JOIN notification_recipients r ON r.notification_id = n.id AND r.selected
+    WHERE n.approved_at IS NOT NULL
+    ORDER BY n.notification_request_id, r.normalized_mobile, n.approved_at DESC, n.id DESC
+), gift_card_results AS (
+    SELECT DISTINCT ON (d.notification_request_id)
+           d.notification_request_id AS request_id, d.id, d.normalized_mobile,
+           jsonb_build_array(jsonb_build_object('id', g.id,
+               'name', coalesce(d.parameters->>0, nullif(btrim(g.bought_for), ''), 'Gift card recipient'),
+               'mobileNo', d.normalized_mobile, 'enabled', true)) AS customers,
+           CASE WHEN d.state = 'sending' THEN 'submitting' ELSE d.state END AS status,
+           d.last_error AS error_message, d.created_at AS approved_at
+    FROM gift_card_deliveries d JOIN gift_cards g ON g.id = d.gift_card_id
+    ORDER BY d.notification_request_id, d.created_at DESC, d.id DESC
+), request_results AS (
+    SELECT latest.request_id, latest.notification_id, latest.approved_at,
+           count(r.id) AS recipient_count,
+           count(r.id) FILTER (WHERE r.status IN ('queued', 'submitting')) AS queued_count,
+           count(r.id) FILTER (WHERE r.status = 'accepted') AS accepted_count,
+           count(r.id) FILTER (WHERE r.status IN ('delivered', 'read')) AS delivered_count,
+           count(r.id) FILTER (WHERE r.status = 'failed') AS failed_count,
+           count(r.id) FILTER (WHERE r.status = 'uncertain') AS uncertain_count,
+           count(r.id) FILTER (WHERE r.status = 'cancelled') AS cancelled_count,
+           min(r.approved_at) FILTER (WHERE r.status IN ('queued', 'submitting')) AS queued_since,
+           min(r.approved_at) FILTER (WHERE r.status IN ('queued', 'submitting', 'failed', 'uncertain', 'cancelled')) AS awaiting_since,
+           coalesce(jsonb_agg(jsonb_build_object('id', r.id, 'normalizedMobile', r.normalized_mobile,
+               'customers', r.customers, 'selected', true, 'status', r.status, 'errorMessage', r.error_message)
+               ORDER BY r.normalized_mobile) FILTER (WHERE r.id IS NOT NULL), '[]'::jsonb) AS recipients,
+           string_agg(DISTINCT r.error_message, ' · ') FILTER
+               (WHERE r.status IN ('failed', 'uncertain', 'cancelled')) AS error_message
+    FROM latest_sends latest
+    LEFT JOIN (SELECT * FROM recipient_results UNION ALL SELECT * FROM gift_card_results) r ON r.request_id = latest.request_id
+    GROUP BY latest.request_id, latest.notification_id, latest.approved_at
+), outcomes AS (
+    SELECT *, CASE
+        WHEN uncertain_count > 0 THEN 'uncertain'
+        WHEN failed_count > 0 THEN 'failed'
+        WHEN cancelled_count > 0 THEN 'not_sent'
+        WHEN queued_count > 0 AND queued_since < now() - interval '30 minutes' THEN 'delayed'
+        WHEN queued_count > 0 THEN 'queued'
+        WHEN accepted_count > 0 THEN 'accepted'
+        WHEN delivered_count > 0 THEN 'delivered'
+        ELSE 'not_sent' END AS status
+    FROM request_results
+), chosen_results AS (
+    SELECT current.id AS current_request_id, chosen.*
+    FROM current_requests current
+    LEFT JOIN LATERAL (
+        SELECT result.* FROM outcomes result
+        JOIN notification_requests earlier ON earlier.id = result.request_id
+        WHERE earlier.kind = current.kind
+          AND earlier.invoice_id IS NOT DISTINCT FROM current.invoice_id
+          AND earlier.repair_id IS NOT DISTINCT FROM current.repair_id
+          AND earlier.gift_card_id IS NOT DISTINCT FROM current.gift_card_id
+        ORDER BY (earlier.id = current.id) DESC, earlier.requested_at DESC, earlier.id DESC LIMIT 1
+    ) chosen ON true
+), attention AS (
+    SELECT c.entity_id, c.reference, c.invoice_id, c.invoice_number, c.branch_name,
+           c.gift_card_id, c.gift_card_code, c.repair_id, c.order_id, c.repair_reason,
+           c.customers, c.customer_name, c.customer_mobile, c.kind, c.eligible,
+           r.notification_id, r.approved_at AS last_attempt_at,
+           CASE WHEN r.request_id = c.request_id THEN coalesce(r.awaiting_since, r.approved_at, c.requested_at)
+               ELSE c.requested_at END AS waiting_since,
+           CASE WHEN r.request_id = c.request_id THEN r.status ELSE 'not_sent' END AS status,
+           CASE WHEN r.request_id = c.request_id THEN r.recipient_count ELSE 0 END AS recipient_count,
+           CASE WHEN r.request_id = c.request_id THEN r.queued_count ELSE 0 END AS queued_count,
+           CASE WHEN r.request_id = c.request_id THEN r.accepted_count ELSE 0 END AS accepted_count,
+           CASE WHEN r.request_id = c.request_id THEN r.delivered_count ELSE 0 END AS delivered_count,
+           CASE WHEN r.request_id = c.request_id THEN r.failed_count ELSE 0 END AS failed_count,
+           CASE WHEN r.request_id = c.request_id THEN r.uncertain_count ELSE 0 END AS uncertain_count,
+           CASE WHEN r.request_id = c.request_id THEN r.cancelled_count ELSE 0 END AS cancelled_count,
+           CASE WHEN r.request_id = c.request_id THEN r.recipients ELSE '[]'::jsonb END AS recipients,
+           CASE WHEN r.request_id = c.request_id THEN r.error_message END AS error_message,
+           CASE WHEN r.request_id <> c.request_id THEN jsonb_build_object('status', r.status,
+               'recipients', r.recipients, 'errorMessage', r.error_message)
                ELSE 'null'::jsonb END AS previous_version
-    FROM gift_card_context
-), all_notifications AS (
-    SELECT entity_id, invoice_id, invoice_number, branch_name,
-           reference, NULL::uuid AS gift_card_id,
-           NULL::text AS gift_card_code, repair_id, order_id, repair_reason, customer_name, customer_mobile, customers,
-           kind, notification_id, last_attempt_at, eligible, waiting_since,
-           recipient_count, queued_count, accepted_count, delivered_count,
-           failed_count, uncertain_count, cancelled_count, recipients, error_message, status, previous_version
-    FROM outcomes
-    UNION ALL
-    SELECT entity_id, invoice_id, invoice_number, branch_name, reference, gift_card_id,
-           gift_card_code, NULL::uuid AS repair_id, NULL::uuid AS order_id, NULL::text AS repair_reason,
-           customer_name, customer_mobile, customers,
-           'gift_card' AS kind, notification_id, last_attempt_at, eligible, waiting_since,
-           CASE WHEN delivery_state IS NULL THEN 0 ELSE 1 END::bigint AS recipient_count,
-           CASE WHEN delivery_state IN ('queued', 'sending') THEN 1 ELSE 0 END::bigint AS queued_count,
-           CASE WHEN delivery_state = 'accepted' THEN 1 ELSE 0 END::bigint AS accepted_count,
-           CASE WHEN delivery_state IN ('delivered', 'read') THEN 1 ELSE 0 END::bigint AS delivered_count,
-           CASE WHEN delivery_state = 'failed' THEN 1 ELSE 0 END::bigint AS failed_count,
-           CASE WHEN delivery_state = 'uncertain' THEN 1 ELSE 0 END::bigint AS uncertain_count,
-           CASE WHEN delivery_state = 'cancelled' THEN 1 ELSE 0 END::bigint AS cancelled_count,
-           CASE WHEN delivery_state IS NULL THEN '[]'::jsonb ELSE
-               jsonb_build_array(jsonb_build_object('id', notification_id,
-                   'normalizedMobile', normalized_mobile, 'customers', customers,
-                   'selected', true, 'status', CASE WHEN delivery_state = 'sending' THEN 'submitting' ELSE delivery_state END,
-                   'errorMessage', error_message)) END AS recipients,
-           error_message, status, previous_version
-    FROM gift_card_outcomes WHERE eligible OR notification_id IS NOT NULL
+    FROM contexts c LEFT JOIN chosen_results r ON r.current_request_id = c.request_id
+    WHERE c.eligible OR r.notification_id IS NOT NULL
 )
 SELECT *, eligible AND status IN ('not_sent', 'failed', 'uncertain', 'delayed') AS needs_attention
-FROM all_notifications
+FROM attention

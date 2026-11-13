@@ -256,10 +256,15 @@ Untracked gift cards also create no historical backlog.
 
 Both `notifications.notification_request_id` and
 `gift_card_deliveries.notification_request_id` are explicit foreign keys to the
-request. Composite foreign keys prevent a send from linking to a request for a
-different invoice or gift card. Every new application send has a parent;
-historical sends may retain a null link. The request identity is separate from
+request. These links are mandatory. Composite foreign keys prevent a send from
+linking to a request for a different invoice or gift card. The request identity is separate from
 client retry/idempotency tokens and from the immutable content snapshot.
+
+The attention queue starts from `notification_current_requests`, joins the
+relevant business record for eligibility and display, and aggregates only linked
+sends. It does not infer notification work from invoices, repairs, or gift cards
+that happen to exist. A current request without a send remains outstanding;
+an earlier request's delivery result is shown separately as previous history.
 
 ```mermaid
 flowchart LR

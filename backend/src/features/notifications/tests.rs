@@ -105,8 +105,7 @@ async fn manual_previews_get_a_parent_without_creating_an_unsent_backlog(pool: P
     let parent = repository::get(&pool, draft.id)
         .await
         .unwrap()
-        .notification_request_id
-        .unwrap();
+        .notification_request_id;
     assert_eq!(super::attention::summary(&pool).await.unwrap().total, 0);
     service::discard_preview(&state, draft.id).await.unwrap();
     assert_eq!(super::attention::summary(&pool).await.unwrap().total, 0);
@@ -118,7 +117,7 @@ async fn manual_previews_get_a_parent_without_creating_an_unsent_backlog(pool: P
             .await
             .unwrap()
             .notification_request_id,
-        Some(parent)
+        parent
     );
     service::approve(&state, next.id, send(&next), "staff", true)
         .await
@@ -137,7 +136,7 @@ async fn manual_previews_get_a_parent_without_creating_an_unsent_backlog(pool: P
             .await
             .unwrap()
             .notification_request_id,
-        Some(parent)
+        parent
     );
     assert!(mock.messages.lock().unwrap().is_empty());
 }
@@ -155,8 +154,7 @@ async fn a_new_request_supersedes_previews_and_queued_sends_even_with_unchanged_
     let parent = repository::get(&pool, draft.id)
         .await
         .unwrap()
-        .notification_request_id
-        .unwrap();
+        .notification_request_id;
     repository::request_notification(
         &mut *pool.acquire().await.unwrap(),
         invoice,
@@ -179,7 +177,7 @@ async fn a_new_request_supersedes_previews_and_queued_sends_even_with_unchanged_
             .await
             .unwrap()
             .notification_request_id,
-        Some(parent)
+        parent
     );
     service::approve(&state, next.id, send(&next), "staff", true)
         .await
@@ -1196,14 +1194,22 @@ async fn recent_history_keeps_both_latest_notification_types_and_uses_approval_t
         .execute(&pool)
         .await
         .unwrap();
+    let pickup_parent = repository::ensure_request(
+        &mut *pool.acquire().await.unwrap(),
+        invoice,
+        "invoice_ready",
+        None,
+    )
+    .await
+    .unwrap();
     let pickup: Uuid = sqlx::query_scalar(
-        "INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,state,snapshot,created_by,approved_by,approved_at)
-         SELECT invoice_id,'invoice_ready','old-ready',source_hash,preview_version,'approved',snapshot,'staff','staff',now()-interval '100 days'
+        "INSERT INTO notifications(invoice_id,notification_request_id,kind,event_key,source_hash,preview_version,state,snapshot,created_by,approved_by,approved_at)
+         SELECT invoice_id,$2,'invoice_ready','old-ready',source_hash,preview_version,'approved',snapshot,'staff','staff',now()-interval '100 days'
          FROM notifications WHERE id=$1 RETURNING id"
-    ).bind(original.id).fetch_one(&pool).await.unwrap();
+    ).bind(original.id).bind(pickup_parent).fetch_one(&pool).await.unwrap();
     sqlx::query(
-        "INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,state,snapshot,created_by,created_at,approved_by,approved_at)
-         SELECT invoice_id,'manual_resend','history-'||item,source_hash||item,preview_version,'approved',snapshot,'staff',now()-interval '300 days','staff',now()-item*interval '1 minute'
+        "INSERT INTO notifications(invoice_id,notification_request_id,kind,event_key,source_hash,preview_version,state,snapshot,created_by,created_at,approved_by,approved_at)
+         SELECT invoice_id,notification_request_id,'manual_resend','history-'||item,source_hash||item,preview_version,'approved',snapshot,'staff',now()-interval '300 days','staff',now()-item*interval '1 minute'
          FROM notifications CROSS JOIN generate_series(1,101) item WHERE id=$1"
     ).bind(original.id).execute(&pool).await.unwrap();
     let history = repository::history(&pool, invoice).await.unwrap();
@@ -1412,14 +1418,13 @@ async fn an_updated_preview_cannot_duplicate_an_approved_resend_for_the_same_req
     let parent = repository::get(&pool, initial.id)
         .await
         .unwrap()
-        .notification_request_id
-        .unwrap();
+        .notification_request_id;
     assert_eq!(
         repository::get(&pool, resend.id)
             .await
             .unwrap()
             .notification_request_id,
-        Some(parent)
+        parent
     );
     service::approve(&state, resend.id, send(&resend), "other-staff", true)
         .await

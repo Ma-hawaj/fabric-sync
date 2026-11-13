@@ -6,7 +6,7 @@ use uuid::Uuid;
 #[derive(FromRow)]
 pub(super) struct Job {
     pub gift_card_id: Uuid,
-    pub notification_request_id: Option<Uuid>,
+    pub notification_request_id: Uuid,
     pub source_hash: String,
     pub normalized_mobile: String,
     pub parameters: Json<Vec<String>>,

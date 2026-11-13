@@ -26,8 +26,8 @@ SQLx applies the files in version order:
 2. `0002_notification_schema.sql` creates immutable notification requests, PDF
    artifacts, notification previews and approvals, recipients, delivery attempts,
    webhook storage, and the staff-approved gift card delivery queue with its
-   immutable PNG attachments. Both sending pipelines reference their request
-   through explicit foreign keys. Manual previews create no outstanding work
+   immutable PNG attachments. Both sending pipelines require a parent request
+   through mandatory foreign keys. Manual previews create no outstanding work
    until approved, and existing/imported records are not backfilled.
 3. `0003_readiness_and_revisions.sql` creates the invoice-readiness view and the
    triggers that serialize related writes and invalidate outdated previews.

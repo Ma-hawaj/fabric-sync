@@ -185,14 +185,9 @@ pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
         }
         Err(error) => return Err(error),
     };
-    let current_request = match job.notification_request_id {
-        Some(parent) => {
-            crate::features::notifications::repository::gift_card_request_id(&mut tx, card_id)
-                .await?
-                == Some(parent)
-        }
-        None => true,
-    };
+    let current_request =
+        crate::features::notifications::repository::gift_card_request_id(&mut tx, card_id).await?
+            == Some(job.notification_request_id);
     let valid = current_request && current.can_send && current.source_hash == job.source_hash;
     if !valid {
         store::cancel(&mut tx, id).await?;

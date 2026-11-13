@@ -35,8 +35,8 @@ async fn request_id(
 
 async fn approved(pool: &PgPool, invoice: Uuid, kind: &str, _generation: i64) -> Uuid {
     let (revision, _) = super::repository::revision(pool, invoice).await.unwrap();
-    let event = request_id(
-        pool,
+    let event = super::repository::ensure_request(
+        &mut *pool.acquire().await.unwrap(),
         invoice,
         if kind == "invoice_ready" {
             "invoice_ready"
@@ -45,7 +45,8 @@ async fn approved(pool: &PgPool, invoice: Uuid, kind: &str, _generation: i64) ->
         },
         None,
     )
-    .await;
+    .await
+    .unwrap();
     sqlx::query_scalar(
         "INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,state,snapshot,created_by,approved_by,approved_at,notification_request_id) \
          VALUES($1,$2,$3,'test', $4,'approved',$5,'staff','staff',now(),$6) RETURNING id",
@@ -74,7 +75,7 @@ async fn attention_includes_invoices_without_any_preview_or_approved_send(pool: 
     assert!(result[0].needs_attention);
     assert!(result[0].notification_id.is_none());
     // An unapproved preview, including one abandoned in another tab, isn't a send.
-    sqlx::query("INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,snapshot,created_by) VALUES($1,'invoice_created','created','test',$2,'{}','staff')")
+    sqlx::query("INSERT INTO notifications(invoice_id,notification_request_id,kind,event_key,source_hash,preview_version,snapshot,created_by) VALUES($1,(SELECT id FROM notification_requests WHERE invoice_id=$1 AND kind='invoice' ORDER BY requested_at DESC,id DESC LIMIT 1),'invoice_created','created','test',$2,'{}','staff')")
         .bind(invoice).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
     assert_eq!(attention::summary(&pool).await.unwrap().not_sent, 1);
 }
@@ -108,7 +109,7 @@ async fn attention_does_not_invent_work_for_imported_invoices_or_repairs(pool: P
     assert!(rows(&pool).await.is_empty());
     assert_eq!(attention::summary(&pool).await.unwrap().total, 0);
 
-    // Real attempts, including failures for old invoices, remain visible.
+    // A deliberate manual send creates its own request, and real failures stay visible.
     let failed = approved(&pool, invoice, "invoice_created", 0).await;
     recipient(&pool, failed, "+97333112233", "failed").await;
     let result = rows(&pool).await;
@@ -274,9 +275,15 @@ async fn request_history_is_immutable_and_separates_identical_content_from_new_a
 }
 
 #[sqlx::test]
-async fn database_request_links_cannot_cross_invoice_or_gift_card_targets(pool: PgPool) {
+async fn database_request_links_are_required_and_cannot_cross_targets(pool: PgPool) {
     let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
     let parent = request_id(&pool, invoice, "invoice", None).await.unwrap();
+    let missing = sqlx::query("INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,snapshot,created_by) VALUES($1,'invoice_created','missing-parent','test',$2,'{}','staff')")
+        .bind(invoice).bind(Uuid::new_v4()).execute(&pool).await.unwrap_err();
+    assert_eq!(
+        missing.as_database_error().unwrap().code().as_deref(),
+        Some("23502")
+    );
     let other: Uuid = sqlx::query_scalar("INSERT INTO invoices(total_price,vat_rate,taxable_amount,vat_amount) VALUES(0,0.1,0,0) RETURNING id")
         .fetch_one(&pool).await.unwrap();
     let error = sqlx::query("INSERT INTO notifications(invoice_id,notification_request_id,kind,event_key,source_hash,preview_version,snapshot,created_by) VALUES($1,$2,'invoice_created','wrong-parent','test',$3,'{}','staff')")
@@ -294,6 +301,16 @@ async fn database_request_links_cannot_cross_invoice_or_gift_card_targets(pool: 
             .unwrap()
             .unwrap();
     let delivery = gift_card_delivery(&pool, card, "delivered").await;
+    let missing =
+        sqlx::query("UPDATE gift_card_deliveries SET notification_request_id=NULL WHERE id=$1")
+            .bind(delivery)
+            .execute(&pool)
+            .await
+            .unwrap_err();
+    assert_eq!(
+        missing.as_database_error().unwrap().code().as_deref(),
+        Some("23502")
+    );
     let error = sqlx::query(
         "UPDATE gift_card_deliveries SET gift_card_id=$2,notification_request_id=$3 WHERE id=$1",
     )
@@ -310,9 +327,7 @@ async fn database_request_links_cannot_cross_invoice_or_gift_card_targets(pool: 
 }
 
 #[sqlx::test]
-async fn untracked_gift_cards_do_not_create_backlog_but_legacy_failed_sends_stay_visible(
-    pool: PgPool,
-) {
+async fn untracked_gift_cards_stay_hidden_until_a_manual_send_creates_a_request(pool: PgPool) {
     let card = gift_card(&pool).await;
     sqlx::query("DELETE FROM notification_requests WHERE gift_card_id=$1")
         .bind(card)
@@ -409,7 +424,7 @@ async fn attention_flags_a_requested_invoice_update_and_preserves_the_previous_r
     assert_eq!(attention::summary(&pool).await.unwrap().not_sent, 1);
 
     // Opening or abandoning a current preview cannot clear the outstanding version.
-    sqlx::query("INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,snapshot,created_by) VALUES($1,'invoice_updated','updated','new-version',$2,'{}','staff')")
+    sqlx::query("INSERT INTO notifications(invoice_id,notification_request_id,kind,event_key,source_hash,preview_version,snapshot,created_by) VALUES($1,(SELECT id FROM notification_requests WHERE invoice_id=$1 AND kind='invoice' ORDER BY requested_at DESC,id DESC LIMIT 1),'invoice_updated','updated','new-version',$2,'{}','staff')")
         .bind(invoice).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
     assert!(rows(&pool).await[0].needs_attention);
 
@@ -674,9 +689,10 @@ async fn gift_card(pool: &PgPool) -> Uuid {
 }
 
 async fn gift_card_delivery(pool: &PgPool, card: Uuid, status: &str) -> Uuid {
-    let parent = super::repository::gift_card_request_id(&mut *pool.acquire().await.unwrap(), card)
-        .await
-        .unwrap();
+    let parent =
+        super::repository::ensure_gift_card_request(&mut *pool.acquire().await.unwrap(), card)
+            .await
+            .unwrap();
     sqlx::query_scalar("INSERT INTO gift_card_deliveries(gift_card_id,request_id,approved_by,source_hash,normalized_mobile,body,parameters,template_name,language,image_png,image_filename,image_sha256,state,last_error,notification_request_id) VALUES($1,$2,'staff','test','+97333991122','Gift card','[]','gift_card_image_v1','en_US',decode('01','hex'),'card.png',repeat('a',64),$3,CASE WHEN $3='failed' THEN 'Invalid destination' END,$4) RETURNING id")
         .bind(card).bind(Uuid::new_v4()).bind(status).bind(parent).fetch_one(pool).await.unwrap()
 }
@@ -715,6 +731,29 @@ async fn attention_includes_gift_card_failures_and_uses_the_latest_resend(pool: 
     assert_eq!(result[0].notification_id, Some(resend));
     assert_eq!(result[0].status, "delivered");
     assert_eq!(result[0].delivered_count, 1);
+    assert_eq!(attention::summary(&pool).await.unwrap().total, 0);
+}
+
+#[sqlx::test]
+async fn a_gift_card_resend_to_a_corrected_phone_resolves_the_single_recipient(pool: PgPool) {
+    let card = gift_card(&pool).await;
+    gift_card_delivery(&pool, card, "failed").await;
+    sqlx::query("UPDATE gift_cards SET recipient_phone='+97333112233' WHERE id=$1")
+        .bind(card)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let corrected = gift_card_delivery(&pool, card, "read").await;
+    sqlx::query("UPDATE gift_card_deliveries SET normalized_mobile='+97333112233' WHERE id=$1")
+        .bind(corrected)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let rows = rows(&pool).await;
+    assert_eq!(rows[0].status, "delivered");
+    assert_eq!(rows[0].recipient_count, 1);
+    assert_eq!(rows[0].failed_count, 0);
+    assert_eq!(rows[0].recipients[0]["normalizedMobile"], "+97333112233");
     assert_eq!(attention::summary(&pool).await.unwrap().total, 0);
 }
 

@@ -50,8 +50,7 @@ CREATE TABLE notifications (
     kind TEXT NOT NULL CHECK (
         kind IN ('invoice_created', 'invoice_updated', 'invoice_ready', 'manual_resend')
     ),
-    -- Nullable only for historical records; every application-created send has a parent.
-    notification_request_id UUID,
+    notification_request_id UUID NOT NULL,
     FOREIGN KEY (notification_request_id, invoice_id) REFERENCES notification_requests(id, invoice_id),
     event_key TEXT NOT NULL,
     source_hash TEXT NOT NULL,
@@ -142,7 +141,7 @@ CREATE INDEX whatsapp_webhook_pending
 CREATE TABLE gift_card_deliveries (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     gift_card_id UUID NOT NULL REFERENCES gift_cards(id),
-    notification_request_id UUID,
+    notification_request_id UUID NOT NULL,
     FOREIGN KEY (notification_request_id, gift_card_id) REFERENCES notification_requests(id, gift_card_id),
     request_id UUID NOT NULL UNIQUE,
     approved_by TEXT NOT NULL,
@@ -172,8 +171,8 @@ CREATE INDEX gift_card_delivery_queue ON gift_card_deliveries(available_at) WHER
 CREATE INDEX gift_card_delivery_request_history
     ON gift_card_deliveries(notification_request_id, created_at DESC, id DESC);
 
--- An unapproved manual preview is not a reminder. Existing unlinked deliveries
--- remain history without inventing notification work for imported records.
+-- An unapproved manual preview is not a reminder. Only actual notification
+-- requests participate, so imported business records cannot create a backlog.
 CREATE VIEW notification_current_requests AS
 SELECT DISTINCT ON (r.kind, r.invoice_id, r.repair_id, r.gift_card_id) r.*
 FROM notification_requests r

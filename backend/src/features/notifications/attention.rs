@@ -6,8 +6,8 @@ use crate::{
 use serde::Serialize;
 use sqlx::{FromRow, PgPool};
 
-// Start from invoices rather than notifications: closing or skipping a preview
-// must not hide a customer who still needs their first invoice or pickup notice.
+// Requests define outstanding work. Closing a preview leaves its business
+// request pending, while untracked business records never become reminders.
 const SPEC: ListSpec = ListSpec {
     base_sql: include_str!("attention.sql"),
     columns: &[

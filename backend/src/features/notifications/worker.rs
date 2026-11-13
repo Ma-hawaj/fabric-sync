@@ -64,7 +64,7 @@ pub(super) async fn tick(state: &AppState) -> Result<(), AppError> {
     repository::start_attempt(&mut tx, &job).await?;
     tx.commit().await?;
     let notification = repository::get(state.db(), job.notification_id).await?;
-    let current_request = if let Some(parent) = notification.notification_request_id {
+    let current_request = {
         let mut conn = state.db().acquire().await?;
         repository::request_id(
             &mut conn,
@@ -73,9 +73,7 @@ pub(super) async fn tick(state: &AppState) -> Result<(), AppError> {
             notification.snapshot.repair_id,
         )
         .await?
-            == Some(parent)
-    } else {
-        true // Historical approved deliveries keep their existing pipeline.
+            == Some(notification.notification_request_id)
     };
     match service::source(
         state,

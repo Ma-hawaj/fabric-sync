@@ -504,16 +504,6 @@ pub async fn mark_stale(conn: &mut PgConnection, id: Uuid) -> Result<(), AppErro
     cancel_unstarted(conn, id).await
 }
 
-pub async fn attach_request(
-    conn: &mut PgConnection,
-    id: Uuid,
-    request: Uuid,
-) -> Result<(), AppError> {
-    sqlx::query("UPDATE notifications SET notification_request_id=$2 WHERE id=$1 AND state='draft' AND notification_request_id IS NULL")
-        .bind(id).bind(request).execute(conn).await?;
-    Ok(())
-}
-
 pub async fn request_has_approval(
     conn: &mut PgConnection,
     request: Uuid,
@@ -1009,7 +999,7 @@ pub async fn sends(db: &PgPool, id: Uuid) -> Result<Vec<History>, AppError> {
                )
            AND (n.kind = 'invoice_ready') = (SELECT kind = 'invoice_ready' FROM notifications WHERE id = $1)
            AND n.snapshot->>'repairId' IS NOT DISTINCT FROM (SELECT snapshot->>'repairId' FROM notifications WHERE id = $1)
-           AND n.notification_request_id IS NOT DISTINCT FROM (SELECT notification_request_id FROM notifications WHERE id=$1)
+           AND n.notification_request_id = (SELECT notification_request_id FROM notifications WHERE id=$1)
            AND n.approved_at IS NOT NULL
          GROUP BY n.id
          ORDER BY n.approved_at DESC, n.id DESC

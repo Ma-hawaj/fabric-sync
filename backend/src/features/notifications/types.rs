@@ -75,7 +75,7 @@ pub struct Recipient {
 pub struct NotificationRow {
     pub id: Uuid,
     pub invoice_id: Uuid,
-    pub notification_request_id: Option<Uuid>,
+    pub notification_request_id: Uuid,
     pub kind: String,
     pub state: String,
     pub source_hash: String,

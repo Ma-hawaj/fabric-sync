@@ -464,41 +464,29 @@ pub async fn approve(
     }
     let request_kind =
         repository::request_kind(&notification.kind, notification.snapshot.repair_id);
-    if let Some(parent) = notification.notification_request_id {
-        if repository::request_id(
-            &mut tx,
-            notification.invoice_id,
-            request_kind,
-            notification.snapshot.repair_id,
-        )
-        .await?
-            != Some(parent)
-        {
-            repository::mark_stale(&mut tx, id).await?;
-            tx.commit().await?;
-            return Err(AppError::Conflict(
-                "A newer notification action exists. Refresh the preview.".into(),
-            ));
-        }
-        if notification.resend_of.is_none()
-            && notification.kind != "manual_resend"
-            && repository::request_has_approval(&mut tx, parent).await?
-        {
-            repository::mark_stale(&mut tx, id).await?;
-            tx.commit().await?;
-            return Err(AppError::Conflict(
-                "This notification action already has an approved send. Use Preview resend in its history.".into(),
-            ));
-        }
-    } else if send {
-        let parent = repository::ensure_request(
-            &mut tx,
-            notification.invoice_id,
-            request_kind,
-            notification.snapshot.repair_id,
-        )
-        .await?;
-        repository::attach_request(&mut tx, id, parent).await?;
+    let parent = notification.notification_request_id;
+    if repository::request_id(
+        &mut tx,
+        notification.invoice_id,
+        request_kind,
+        notification.snapshot.repair_id,
+    )
+    .await?
+        != Some(parent)
+    {
+        repository::mark_stale(&mut tx, id).await?;
+        tx.commit().await?;
+        return Err(AppError::Conflict(
+            "A newer notification action exists. Refresh the preview.".into(),
+        ));
+    }
+    if notification.resend_of.is_none()
+        && notification.kind != "manual_resend"
+        && repository::request_has_approval(&mut tx, parent).await?
+    {
+        repository::mark_stale(&mut tx, id).await?;
+        tx.commit().await?;
+        return Err(AppError::Conflict("This notification action already has an approved send. Use Preview resend in its history.".into()));
     }
     if let Some(original) = notification.resend_of {
         validate_resend(
