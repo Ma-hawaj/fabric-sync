@@ -35,6 +35,12 @@ export function useCreateInvoice() {
         queryKey: ['invoice-order-material'],
       })
       void queryClient.invalidateQueries({ queryKey: ['gift-cards'] })
+      void queryClient.invalidateQueries({
+        queryKey: ['notification-attention'],
+      })
+      void queryClient.invalidateQueries({
+        queryKey: ['notification-attention-summary'],
+      })
     },
   })
 }

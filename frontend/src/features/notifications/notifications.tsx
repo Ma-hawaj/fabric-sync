@@ -149,8 +149,9 @@ export function NotificationsPage() {
         </div>
         {view === 'attention' && (
           <p className="text-xs text-muted-foreground">
-            Oldest outstanding items appear first. Messages already queued or
-            accepted by WhatsApp appear in History.
+            Oldest outstanding items appear first. Reminders follow new invoice
+            and pickup actions; historical imports do not create a backlog.
+            Queued or accepted messages appear in History.
           </p>
         )}
         {view === 'history' && (

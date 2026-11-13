@@ -943,6 +943,20 @@ pub async fn update_repair(
     .await?
     .ok_or_else(|| AppError::NotFound(format!("repair {repair_id} not found")))?;
 
+    if status == Some(RepairStatus::Completed) {
+        let invoice_id = repository::lock_order(&mut tx, order_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("order {order_id} not found")))?
+            .invoice_id;
+        crate::features::notifications::repository::request_notification(
+            &mut tx,
+            invoice_id,
+            "repair_ready",
+            Some(repair_id),
+        )
+        .await?;
+    }
+
     tx.commit().await?;
 
     tracing::info!(
@@ -1088,6 +1102,84 @@ pub async fn list_all_repairs(
 
 #[cfg(test)]
 mod tests {
+    #[sqlx::test]
+    async fn live_repair_completion_on_an_import_records_only_the_new_notification(
+        pool: sqlx::PgPool,
+    ) {
+        async fn event(pool: &sqlx::PgPool, repair: uuid::Uuid) -> uuid::Uuid {
+            sqlx::query_scalar("SELECT id FROM notification_requests WHERE repair_id=$1")
+                .bind(repair)
+                .fetch_one(pool)
+                .await
+                .unwrap()
+        }
+        let (invoice, orders, _, _) = crate::test_support::invoice(&pool, 1, false).await;
+        sqlx::query("DELETE FROM notification_requests WHERE invoice_id=$1")
+            .bind(invoice)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE orders SET status='collected',collected_at=now() WHERE id=$1")
+            .bind(orders[0])
+            .execute(&pool)
+            .await
+            .unwrap();
+        let state = crate::test_support::state(pool.clone(), None, None).await;
+        super::create_repair(
+            &state,
+            orders[0],
+            serde_json::from_value(serde_json::json!({"reason":"New live repair","charge":0}))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        let repair_id = sqlx::query_scalar("SELECT id FROM order_repairs WHERE order_id=$1")
+            .bind(orders[0])
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let completed =
+            || serde_json::from_value(serde_json::json!({"status":"completed"})).unwrap();
+        super::update_repair(&state, orders[0], repair_id, completed())
+            .await
+            .unwrap();
+        let first = event(&pool, repair_id).await;
+        let requests: Vec<(String, Option<uuid::Uuid>)> =
+            sqlx::query_as("SELECT kind,repair_id FROM notification_requests WHERE invoice_id=$1")
+                .bind(invoice)
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(requests, vec![("repair_ready".into(), Some(repair_id))]);
+
+        // Repeated ready clicks and incidental edits keep the same request.
+        super::update_repair(&state, orders[0], repair_id, completed())
+            .await
+            .unwrap();
+        super::update_repair(
+            &state,
+            orders[0],
+            repair_id,
+            serde_json::from_value(serde_json::json!({"notes":"Internal follow-up","charge":5}))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(event(&pool, repair_id).await, first);
+        super::update_repair(
+            &state,
+            orders[0],
+            repair_id,
+            serde_json::from_value(serde_json::json!({"status":"open"})).unwrap(),
+        )
+        .await
+        .unwrap();
+        super::update_repair(&state, orders[0], repair_id, completed())
+            .await
+            .unwrap();
+        assert_ne!(event(&pool, repair_id).await, first);
+    }
+
     #[sqlx::test]
     async fn repeated_repair_ready_keeps_the_completion_and_notification_revision(
         pool: sqlx::PgPool,

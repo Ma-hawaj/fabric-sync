@@ -11,8 +11,41 @@ async fn rows(pool: &PgPool) -> Vec<AttentionRow> {
         .data
 }
 
+async fn request(pool: &PgPool, invoice: Uuid, kind: &str, repair: Option<Uuid>) {
+    super::repository::request_notification(
+        &mut *pool.acquire().await.unwrap(),
+        invoice,
+        kind,
+        repair,
+    )
+    .await
+    .unwrap();
+}
+
+async fn request_id(
+    pool: &PgPool,
+    invoice: Uuid,
+    kind: &str,
+    repair: Option<Uuid>,
+) -> Option<Uuid> {
+    super::repository::request_id(&mut *pool.acquire().await.unwrap(), invoice, kind, repair)
+        .await
+        .unwrap()
+}
+
 async fn approved(pool: &PgPool, invoice: Uuid, kind: &str, generation: i64) -> Uuid {
     let (revision, _) = super::repository::revision(pool, invoice).await.unwrap();
+    let event = request_id(
+        pool,
+        invoice,
+        if kind == "invoice_ready" {
+            "invoice_ready"
+        } else {
+            "invoice"
+        },
+        None,
+    )
+    .await;
     sqlx::query_scalar(
         "INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,state,snapshot,created_by,approved_by,approved_at) \
          VALUES($1,$2,$3,'test', $4,'approved',$5,'staff','staff',now()) RETURNING id",
@@ -21,7 +54,7 @@ async fn approved(pool: &PgPool, invoice: Uuid, kind: &str, generation: i64) -> 
     .bind(kind)
     .bind(format!("test:{}", Uuid::new_v4()))
     .bind(Uuid::new_v4())
-    .bind(json!({"readinessGeneration":generation,"revision":revision}))
+    .bind(json!({"readinessGeneration":generation,"revision":revision,"attentionEventId":event}))
     .fetch_one(pool).await.unwrap()
 }
 
@@ -46,7 +79,207 @@ async fn attention_includes_invoices_without_any_preview_or_approved_send(pool: 
 }
 
 #[sqlx::test]
-async fn attention_flags_an_unsent_invoice_revision_and_preserves_the_previous_results(
+async fn attention_does_not_invent_work_for_imported_invoices_or_repairs(pool: PgPool) {
+    let (invoice, orders, _, _) = test_support::invoice(&pool, 1, false).await;
+    // Imports write domain rows without a notification request. Attribution or
+    // recent edits must not be used to guess whether historical work is due.
+    sqlx::query("DELETE FROM notification_requests WHERE invoice_id=$1")
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE invoices SET created_by='known historical actor' WHERE id=$1")
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE orders SET status='ready',ready_at=now() WHERE id=$1")
+        .bind(orders[0])
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO order_repairs(order_id,reason,status,completed_at) VALUES($1,'Imported repair','completed',now())")
+        .bind(orders[0]).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE customers SET name='Corrected historical name'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(rows(&pool).await.is_empty());
+    assert_eq!(attention::summary(&pool).await.unwrap().total, 0);
+
+    // Real attempts, including failures for old invoices, remain visible.
+    let failed = approved(&pool, invoice, "invoice_created", 0).await;
+    recipient(&pool, failed, "+97333112233", "failed").await;
+    let result = rows(&pool).await;
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].status, "failed");
+    assert_eq!(attention::summary(&pool).await.unwrap().failed, 1);
+}
+
+#[sqlx::test]
+async fn attention_tracks_new_pickup_activity_on_an_imported_invoice(pool: PgPool) {
+    let (invoice, orders, _, pickup) = test_support::invoice(&pool, 1, false).await;
+    sqlx::query("DELETE FROM notification_requests WHERE invoice_id=$1")
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(rows(&pool).await.is_empty());
+    test_support::finish_stages(&pool, orders[0], pickup).await;
+    readiness::confirm(&pool, invoice, None, "staff", true)
+        .await
+        .unwrap();
+    let result = rows(&pool).await;
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].kind, "invoice_ready");
+    assert!(result[0].needs_attention);
+    assert_eq!(attention::summary(&pool).await.unwrap().not_sent, 1);
+}
+
+#[sqlx::test]
+async fn attention_does_not_reopen_delivered_invoices_for_related_data_edits(pool: PgPool) {
+    let (first, first_orders, _, pickup) = test_support::invoice(&pool, 1, false).await;
+    let sent = approved(&pool, first, "invoice_created", 0).await;
+    recipient(&pool, sent, "+97333112233", "delivered").await;
+    sqlx::query("UPDATE customers SET name='First historical customer'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (second, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let sent = approved(&pool, second, "invoice_created", 0).await;
+    recipient(&pool, sent, "+97333112233", "delivered").await;
+    let before = super::repository::revision(&pool, first).await.unwrap().0;
+    sqlx::query("UPDATE customers SET address='Corrected address',mobile_no='+97333112233'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE branch SET name=name || ' renamed' WHERE id=$1")
+        .bind(pickup)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO invoice_payments(invoice_id,amount,payment_type) VALUES($1,10,'cash')",
+    )
+    .bind(first)
+    .execute(&pool)
+    .await
+    .unwrap();
+    test_support::finish_stages(&pool, first_orders[0], pickup).await;
+    sqlx::query("UPDATE invoices SET target_date=CURRENT_DATE WHERE id=$1")
+        .bind(first)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(super::repository::revision(&pool, first).await.unwrap().0 > before);
+    let result = rows(&pool).await;
+    assert_eq!(result.len(), 2);
+    assert!(result.iter().all(|row| row.status == "delivered"
+        && !row.needs_attention
+        && row.previous_version.is_null()));
+    assert_eq!(attention::summary(&pool).await.unwrap().total, 0);
+}
+
+#[sqlx::test]
+async fn attention_preserves_unresolved_destinations_across_incidental_content_changes(
+    pool: PgPool,
+) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let original = approved(&pool, invoice, "invoice_created", 0).await;
+    recipient(&pool, original, "+97333112233", "delivered").await;
+    recipient(&pool, original, "+97333991122", "failed").await;
+    recipient(&pool, original, "+97333445566", "failed").await;
+    sqlx::query("UPDATE customers SET name='Corrected name'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let resent = approved(&pool, invoice, "manual_resend", 0).await;
+    sqlx::query("UPDATE notifications SET source_hash='refreshed-preview' WHERE id=$1")
+        .bind(resent)
+        .execute(&pool)
+        .await
+        .unwrap();
+    recipient(&pool, resent, "+97333991122", "delivered").await;
+    let result = rows(&pool).await;
+    assert_eq!(result[0].status, "failed");
+    assert_eq!(result[0].delivered_count, 2);
+    assert_eq!(result[0].failed_count, 1);
+    assert_eq!(result[0].recipient_count, 3);
+    assert!(result[0].previous_version.is_null());
+}
+
+#[sqlx::test]
+async fn notification_requests_rollback_with_the_business_action(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let original = request_id(&pool, invoice, "invoice", None).await;
+    let mut tx = pool.begin().await.unwrap();
+    super::repository::request_notification(&mut tx, invoice, "invoice", None)
+        .await
+        .unwrap();
+    tx.rollback().await.unwrap();
+    assert_eq!(request_id(&pool, invoice, "invoice", None).await, original);
+}
+
+#[sqlx::test]
+async fn invoice_create_and_explicit_edit_record_their_own_notification_actions(pool: PgPool) {
+    let customer: Uuid = sqlx::query_scalar(
+        "INSERT INTO customers(name,mobile_no) VALUES('Invoice buyer','33112233') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let state = test_support::state(pool.clone(), None, None).await;
+    let mut input: crate::features::invoices::types::CreateInvoiceInput =
+        serde_json::from_value(json!({
+        "expectedVatRate":0.1,"discountUnit":"amount","customerId":customer,
+            "giftCards":[{"amount":25,"boughtFor":"Recipient","recipientPhone":"33991122"}]
+        }))
+        .unwrap();
+    let created =
+        crate::features::invoices::service::create_invoice(&state, input.clone(), "staff")
+            .await
+            .unwrap();
+    let first_event = request_id(&pool, created.id, "invoice", None).await;
+    assert!(first_event.is_some());
+    let sent = approved(&pool, created.id, "invoice_created", 0).await;
+    recipient(&pool, sent, "+97333112233", "delivered").await;
+    sqlx::query("UPDATE customers SET name='Corrected buyer' WHERE id=$1")
+        .bind(customer)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        request_id(&pool, created.id, "invoice", None).await,
+        first_event
+    );
+    assert_eq!(
+        rows(&pool)
+            .await
+            .iter()
+            .find(|row| row.kind == "invoice")
+            .unwrap()
+            .status,
+        "delivered"
+    );
+
+    input.gift_cards[0].code = created.gift_cards[0].code.clone();
+    input.gift_cards[0].amount = 30.0;
+    crate::features::invoices::service::update_invoice(&state, created.id, input)
+        .await
+        .unwrap();
+    assert_ne!(
+        request_id(&pool, created.id, "invoice", None).await,
+        first_event
+    );
+    let result = rows(&pool).await;
+    let updated = result.iter().find(|row| row.kind == "invoice").unwrap();
+    assert_eq!(updated.status, "not_sent");
+    assert!(updated.needs_attention);
+    assert_eq!(updated.previous_version["status"], "delivered");
+}
+
+#[sqlx::test]
+async fn attention_flags_a_requested_invoice_update_and_preserves_the_previous_results(
     pool: PgPool,
 ) {
     let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
@@ -58,6 +291,7 @@ async fn attention_flags_an_unsent_invoice_revision_and_preserves_the_previous_r
         .execute(&pool)
         .await
         .unwrap();
+    request(&pool, invoice, "invoice", None).await;
     let result = rows(&pool).await;
     let row = &result[0];
     assert_eq!(row.status, "not_sent");
@@ -114,6 +348,7 @@ async fn attention_retains_uncertain_previous_delivery_when_the_invoice_changes(
         .execute(&pool)
         .await
         .unwrap();
+    request(&pool, invoice, "invoice", None).await;
     let result = rows(&pool).await;
     assert_eq!(result[0].status, "not_sent");
     assert_eq!(result[0].uncertain_count, 0);
@@ -122,7 +357,7 @@ async fn attention_retains_uncertain_previous_delivery_when_the_invoice_changes(
 }
 
 #[sqlx::test]
-async fn attention_checks_the_current_revision_for_each_ready_target(pool: PgPool) {
+async fn attention_keeps_ready_results_after_unrelated_invoice_changes(pool: PgPool) {
     let (invoice, orders, _, pickup) = test_support::invoice(&pool, 1, false).await;
     test_support::finish_stages(&pool, orders[0], pickup).await;
     readiness::confirm(&pool, invoice, None, "staff", true)
@@ -142,16 +377,16 @@ async fn attention_checks_the_current_revision_for_each_ready_target(pool: PgPoo
         .iter()
         .find(|row| row.kind == "invoice_ready")
         .unwrap();
-    assert_eq!(pickup.status, "not_sent");
-    assert_eq!(pickup.previous_version["status"], "delivered");
+    assert_eq!(pickup.status, "delivered");
+    assert!(pickup.previous_version.is_null());
     let repair = result
         .iter()
         .find(|row| row.repair_id == Some(repair_id))
         .unwrap();
-    assert_eq!(repair.status, "not_sent");
-    assert_eq!(repair.previous_version["status"], "accepted");
-    assert!(repair.needs_attention);
-    assert_eq!(repair.accepted_count, 0);
+    assert_eq!(repair.status, "accepted");
+    assert!(repair.previous_version.is_null());
+    assert!(!repair.needs_attention);
+    assert_eq!(repair.accepted_count, 1);
 }
 
 #[sqlx::test]
@@ -426,14 +661,20 @@ async fn attention_filters_notification_types_while_summary_includes_all_types(p
 }
 
 async fn repair(pool: &PgPool, order: Uuid) -> Uuid {
-    sqlx::query_scalar("INSERT INTO order_repairs(order_id,reason,status,completed_at) VALUES($1,'Shorten sleeve','completed',now()-interval '15 minutes') RETURNING id")
-        .bind(order).fetch_one(pool).await.unwrap()
+    let id = sqlx::query_scalar("INSERT INTO order_repairs(order_id,reason,status,completed_at) VALUES($1,'Shorten sleeve','completed',now()-interval '15 minutes') RETURNING id")
+        .bind(order).fetch_one(pool).await.unwrap();
+    let invoice = crate::features::orders::readiness::invoice_for_order(pool, order)
+        .await
+        .unwrap();
+    request(pool, invoice, "repair_ready", Some(id)).await;
+    id
 }
 
 async fn repair_notice(pool: &PgPool, invoice: Uuid, repair: Uuid, status: &str) -> Uuid {
     let id = approved(pool, invoice, "invoice_ready", 0).await;
-    sqlx::query("UPDATE notifications SET snapshot=snapshot || jsonb_build_object('repairId',$2::uuid::text) WHERE id=$1")
-        .bind(id).bind(repair).execute(pool).await.unwrap();
+    let event = request_id(pool, invoice, "repair_ready", Some(repair)).await;
+    sqlx::query("UPDATE notifications SET snapshot=snapshot || jsonb_build_object('repairId',$2::uuid::text,'attentionEventId',$3::uuid::text) WHERE id=$1")
+        .bind(id).bind(repair).bind(event).execute(pool).await.unwrap();
     recipient(pool, id, "+97333112233", status).await;
     id
 }
@@ -457,8 +698,8 @@ async fn attention_separates_repairs_from_invoice_pickup_notices(pool: PgPool) {
         .find(|row| row.kind == "invoice_ready")
         .unwrap();
     assert_eq!(pickup.notification_id, Some(normal));
-    assert_eq!(pickup.status, "not_sent");
-    assert_eq!(pickup.previous_version["status"], "delivered");
+    assert_eq!(pickup.status, "delivered");
+    assert!(pickup.previous_version.is_null());
     let first_row = result
         .iter()
         .find(|row| row.repair_id == Some(first))

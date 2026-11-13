@@ -141,6 +141,13 @@ pub async fn confirm(
     let became_ready = was_ready != "ready" && now_ready == "ready";
     if became_ready {
         repository::next_generation(&mut tx, invoice_id).await?;
+        crate::features::notifications::repository::request_notification(
+            &mut tx,
+            invoice_id,
+            "invoice_ready",
+            None,
+        )
+        .await?;
     }
     tx.commit().await?;
     Ok(ReadyResult {

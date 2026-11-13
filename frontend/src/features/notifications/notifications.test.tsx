@@ -321,7 +321,9 @@ describe('notification attention queue', () => {
     ])
     fireEvent.click(screen.getByRole('button', { name: 'Review' }))
     const detail = screen.getByRole('dialog')
-    expect(within(detail).getByText(/content changed since/)).toBeTruthy()
+    expect(
+      within(detail).getByText(/needs a fresh preview and approval/),
+    ).toBeTruthy()
     expect(
       within(detail).getByText('Previous version: latest result per recipient'),
     ).toBeTruthy()

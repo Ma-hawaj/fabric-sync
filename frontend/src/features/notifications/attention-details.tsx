@@ -53,8 +53,8 @@ export function AttentionDetails({
           {row.previousVersion && (
             <div className="space-y-2">
               <p>
-                The content changed since the last approved send. Preview and
-                approve the updated message before sending it.
+                This notification needs a fresh preview and approval. The
+                earlier delivery result is shown below.
               </p>
               <p className="font-medium">
                 Previous version: {attentionLabels[row.previousVersion.status]}

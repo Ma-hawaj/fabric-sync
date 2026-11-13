@@ -23,12 +23,13 @@ WITH customers_by_invoice AS (
     ORDER BY invoice_id, (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), approved_at DESC, id DESC
 ), context AS (
     SELECT i.id AS invoice_id, i.invoice_number, i.created_at,
-           i.readiness_generation, i.notification_revision, i.collection_method, b.name AS branch_name,
+           i.readiness_generation, i.collection_method, b.name AS branch_name,
            c.customers, c.customer_name, c.customer_mobile, coalesce(c.enabled, false) AS enabled,
            readiness.readiness_status,
            ready.waiting_since AS ready_since,
            kind.kind, i.id AS entity_id, 'INV-' || i.invoice_number::text AS reference,
-           NULL::uuid AS repair_id, NULL::uuid AS order_id, NULL::text AS repair_reason
+           NULL::uuid AS repair_id, NULL::uuid AS order_id, NULL::text AS repair_reason,
+           request.id AS request_id, request.requested_at
     FROM invoices i
     JOIN invoice_readiness readiness ON readiness.invoice_id = i.id
     LEFT JOIN branch b ON b.id = i.branch_id
@@ -39,16 +40,19 @@ WITH customers_by_invoice AS (
           AND NOT EXISTS (SELECT 1 FROM invoice_return_lines l WHERE l.order_id = o.id)
     ) ready ON true
     CROSS JOIN (VALUES ('invoice'), ('invoice_ready')) kind(kind)
+    LEFT JOIN notification_requests request ON request.invoice_id = i.id
+        AND request.kind = kind.kind AND request.repair_id IS NULL
 ), repair_context AS (
     SELECT i.id AS invoice_id, i.invoice_number, i.created_at,
-           i.readiness_generation, i.notification_revision, i.collection_method, b.name AS branch_name,
+           i.readiness_generation, i.collection_method, b.name AS branch_name,
            jsonb_build_array(jsonb_build_object('id', c.id, 'name', c.name, 'mobileNo', c.mobile_no)) AS customers,
            c.name AS customer_name, c.mobile_no AS customer_mobile,
            c.whatsapp_notifications_enabled AND oc.outcome = 'active' AS enabled,
            CASE WHEN r.status = 'completed' THEN 'ready' ELSE r.status END AS readiness_status,
            r.completed_at AS ready_since, 'repair_ready' AS kind,
            r.id AS entity_id, 'ORD-' || o.order_number::text || ' repair' AS reference,
-           r.id AS repair_id, o.id AS order_id, r.reason AS repair_reason
+           r.id AS repair_id, o.id AS order_id, r.reason AS repair_reason,
+           request.id AS request_id, request.requested_at
     FROM order_repairs r
     JOIN orders o ON o.id = r.order_id
     JOIN order_outcomes oc ON oc.order_id = o.id
@@ -56,6 +60,8 @@ WITH customers_by_invoice AS (
     JOIN measurements m ON m.id = o.measurement_id
     JOIN customers c ON c.id = m.customer_id
     LEFT JOIN branch b ON b.id = i.branch_id
+    LEFT JOIN notification_requests request ON request.invoice_id = i.id
+        AND request.kind = 'repair_ready' AND request.repair_id = r.id
     WHERE r.status = 'completed' OR EXISTS (
         SELECT 1 FROM latest n WHERE n.invoice_id = i.id AND n.repair_id = r.id::text
     )
@@ -68,14 +74,18 @@ WITH customers_by_invoice AS (
            c.invoice_id, c.invoice_number, c.branch_name, c.customer_name, c.customer_mobile,
            coalesce(c.customers, '[]'::jsonb) AS customers, c.kind,
            n.id AS notification_id, n.approved_at AS last_attempt_at,
-           cycle.current_generation AND coalesce(
-               (n.snapshot->>'revision')::bigint = c.notification_revision, true
-           ) AS current_version,
-           (c.enabled AND (c.kind = 'invoice' OR
+           cycle.current_generation AND (c.request_id IS NULL OR coalesce(
+               n.snapshot->>'attentionEventId' = c.request_id::text, false
+           )) AS current_version,
+           (c.enabled AND (c.request_id IS NOT NULL OR n.id IS NOT NULL) AND (c.kind = 'invoice' OR
              (c.kind = 'repair_ready' AND c.readiness_status = 'ready' AND c.ready_since IS NOT NULL AND c.branch_name IS NOT NULL) OR
              (c.kind = 'invoice_ready' AND c.collection_method = 'pickup' AND c.readiness_status = 'ready'))) AS eligible,
            CASE WHEN c.kind IN ('invoice_ready', 'repair_ready') THEN coalesce(c.ready_since, n.approved_at, c.created_at)
-                ELSE coalesce(r.awaiting_since, n.approved_at, c.created_at) END AS waiting_since,
+                ELSE CASE WHEN c.request_id IS NOT NULL AND
+                    n.snapshot->>'attentionEventId' IS DISTINCT FROM c.request_id::text
+                    THEN c.requested_at
+                    ELSE coalesce(r.awaiting_since, n.approved_at, c.requested_at, c.created_at) END
+           END AS waiting_since,
            coalesce(r.recipient_count, 0) AS recipient_count,
            coalesce(r.queued_count, 0) AS queued_count,
            coalesce(r.accepted_count, 0) AS accepted_count,
@@ -131,11 +141,13 @@ WITH customers_by_invoice AS (
             WHERE sends.invoice_id = c.invoice_id AND sends.approved_at IS NOT NULL
               AND (sends.kind = 'invoice_ready') = (c.kind IN ('invoice_ready', 'repair_ready'))
               AND sends.snapshot->>'repairId' IS NOT DISTINCT FROM c.repair_id::text
-              AND sends.source_hash = n.source_hash
+              AND CASE WHEN n.snapshot->>'attentionEventId' IS NOT NULL THEN
+                  sends.snapshot->>'attentionEventId' = n.snapshot->>'attentionEventId'
+                  ELSE sends.source_hash = n.source_hash END
             ORDER BY r.normalized_mobile, sends.approved_at DESC, sends.id DESC
         ) destinations
     ) r ON true
-    WHERE n.id IS NOT NULL OR (c.enabled AND
+    WHERE n.id IS NOT NULL OR (c.request_id IS NOT NULL AND c.enabled AND
         (c.kind = 'invoice' OR
          (c.kind = 'repair_ready' AND c.readiness_status = 'ready' AND c.ready_since IS NOT NULL AND c.branch_name IS NOT NULL) OR
          (c.kind = 'invoice_ready' AND c.collection_method = 'pickup' AND c.readiness_status = 'ready')))

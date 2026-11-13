@@ -236,13 +236,28 @@ preview flow, carrying the repair ID through preparation, refreshing, and
 resending. The server and preview reject a different repair context before
 sending.
 
-Invoice, pickup, and repair entries compare the current notification revision
-with the last approved snapshot. If it changed, the row returns to **Not sent**
-and **Needs attention**, labelled **Updated version not sent**. The previous
-version's delivery result appears separately beneath it and in the review panel;
-its delivered or accepted recipients do not count toward the current version.
+Invoice, pickup, and repair reminders come from specific application actions:
+creating or explicitly editing an invoice, confirming pickup readiness, and
+completing a repair. These actions persist a notification request in the same
+transaction as the change. The queue compares that request with the last approved
+snapshot, independently of the broader revision counter used for preview safety.
+Customer and catalog edits, payments, production progress, internal repair edits,
+and other incidental writes do not create another notification request.
+
+Existing invoices and repairs are not backfilled when tracking starts, and
+ingestion does not create requests. Historical imports therefore do not create
+an unsent backlog. A subsequent live invoice edit, pickup confirmation, or repair
+completion on an imported invoice creates only the relevant new reminder.
+Actual approved attempts, including failed historical sends, remain visible.
+
+When a new notification action supersedes an approved message, the row returns
+to **Not sent** and **Needs attention**, labelled **Updated version not sent**.
+The previous version's delivery result appears separately beneath it and in the
+review panel; its delivered or accepted recipients do not count toward the new
+request. Selective resends for the same request preserve unresolved destinations
+even when incidental data changes require a fresh preview.
 Opening, abandoning, or skipping a preview does not clear the outstanding
-version. A new approval queues the current content, and the previous sends remain
+request. A new approval queues the current content, and the previous sends remain
 in history. Late delivery callbacks for older content do not change the current
 version's result. An uncertain previous delivery still requires checking before
 opening the updated preview.

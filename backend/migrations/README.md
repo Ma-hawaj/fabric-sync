@@ -31,6 +31,10 @@ SQLx applies the files in version order:
    Readiness excludes closed orders, and credits/refunds invalidate previews.
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
    return-line lookups and the unique index allowing one closure per garment.
+5. `0005_notification_requests.sql` records notification work created by invoice
+   saves, pickup confirmations, and repair completions. It deliberately does not
+   backfill existing records: imports and historical data are not a notification
+   backlog. Existing approved delivery attempts remain available independently.
 
 The core schema defines readable customer IDs (`C-6216`) and permanent
 per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.

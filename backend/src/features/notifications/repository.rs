@@ -179,6 +179,44 @@ pub async fn revision(db: &PgPool, invoice_id: Uuid) -> Result<(i64, i64), AppEr
     .ok_or_else(|| AppError::NotFound("Invoice not found.".into()))
 }
 
+/// Call only for a business action that requires a customer notification, in
+/// the same transaction as that action. Imports and ordinary related edits do
+/// not create work merely because they invalidate an old preview.
+pub async fn request_notification(
+    conn: &mut PgConnection,
+    invoice: Uuid,
+    kind: &str,
+    repair: Option<Uuid>,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "INSERT INTO notification_requests(invoice_id,kind,repair_id) VALUES($1,$2,$3) \
+         ON CONFLICT(invoice_id,kind,repair_id) DO UPDATE SET id=uuidv7(),requested_at=clock_timestamp()",
+    )
+    .bind(invoice)
+    .bind(kind)
+    .bind(repair)
+    .execute(conn)
+    .await?;
+    Ok(())
+}
+
+pub async fn request_id(
+    conn: &mut PgConnection,
+    invoice: Uuid,
+    kind: &str,
+    repair: Option<Uuid>,
+) -> Result<Option<Uuid>, AppError> {
+    Ok(sqlx::query_scalar(
+        "SELECT id FROM notification_requests WHERE invoice_id=$1 AND kind=$2 \
+         AND repair_id IS NOT DISTINCT FROM $3",
+    )
+    .bind(invoice)
+    .bind(kind)
+    .bind(repair)
+    .fetch_optional(conn)
+    .await?)
+}
+
 pub async fn artifact_id(db: &PgPool, invoice: Uuid, hash: &str) -> Result<Option<Uuid>, AppError> {
     Ok(sqlx::query_scalar(
         "SELECT id FROM document_artifacts WHERE invoice_id=$1 AND source_hash=$2",
@@ -428,6 +466,15 @@ pub async fn insert_notification(
     // independent of the invoice pickup generation.
     let mut stored_snapshot =
         serde_json::to_value(snapshot).map_err(|error| AppError::Config(error.to_string()))?;
+    let request_kind = if snapshot.repair_id.is_some() {
+        "repair_ready"
+    } else if input.kind == "invoice_ready" {
+        "invoice_ready"
+    } else {
+        "invoice"
+    };
+    stored_snapshot["attentionEventId"] =
+        serde_json::json!(request_id(conn, invoice, request_kind, snapshot.repair_id).await?);
     if input.kind == "invoice_ready" && snapshot.repair_id.is_none() {
         let generation: i64 =
             sqlx::query_scalar("SELECT readiness_generation FROM invoices WHERE id=$1")
