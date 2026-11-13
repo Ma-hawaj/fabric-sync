@@ -151,6 +151,8 @@ pub struct AttentionRow {
     #[sqlx(json)]
     pub recipients: Value,
     pub error_message: Option<String>,
+    #[sqlx(json)]
+    pub previous_version: Value,
 }
 
 #[derive(Debug, Serialize, FromRow)]

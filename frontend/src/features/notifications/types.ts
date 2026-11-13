@@ -93,6 +93,11 @@ export interface NotificationAttentionRow {
   cancelledCount: number
   recipients: Recipient[]
   errorMessage: string | null
+  previousVersion: {
+    status: AttentionStatus
+    recipients: Recipient[]
+    errorMessage: string | null
+  } | null
 }
 
 export interface NotificationAttentionSummary {

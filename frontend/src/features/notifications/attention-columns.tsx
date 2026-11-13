@@ -6,7 +6,9 @@ import { DataTableColumnHeader } from '@/components/data-table/data-table-column
 import { defineColumns } from '@/lib/define-columns'
 import {
   attentionLabels,
+  attentionLabel,
   attentionTones,
+  needsDeliveryCheck,
   notificationTypeLabels,
   notificationTypeOptions,
   unsentNotificationLabels,
@@ -51,9 +53,13 @@ function NotificationReference({ item }: { item: NotificationAttentionRow }) {
   )
 }
 
-export function getAttentionColumns(
-  onReview: (row: NotificationAttentionRow) => void,
-) {
+export function getAttentionColumns({
+  onReview,
+  onPreview,
+}: {
+  onReview: (row: NotificationAttentionRow) => void
+  onPreview: (row: NotificationAttentionRow) => void
+}) {
   return defineColumns<NotificationAttentionRow>()([
     {
       accessorKey: 'reference',
@@ -117,8 +123,16 @@ export function getAttentionColumns(
         return (
           <div className="space-y-1.5">
             <StatusBadge tone={attentionTones[item.status]}>
-              {attentionLabels[item.status]}
+              {attentionLabel(item)}
             </StatusBadge>
+            {item.previousVersion && (
+              <button
+                className="block max-w-full whitespace-normal text-start text-xs text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-foreground"
+                onClick={() => onReview(item)}
+              >
+                Previous version: {attentionLabels[item.previousVersion.status]}
+              </button>
+            )}
             {item.status === 'failed' && (
               <p className="text-xs text-muted-foreground">
                 {item.failedCount} of {item.recipientCount} recipients failed
@@ -129,7 +143,7 @@ export function getAttentionColumns(
                 {item.deliveredCount} of {item.recipientCount} delivered
               </p>
             )}
-            {item.status === 'not_sent' && (
+            {item.status === 'not_sent' && !item.previousVersion && (
               <p className="text-xs text-muted-foreground">
                 {unsentNotificationLabels[item.kind]}
               </p>
@@ -183,10 +197,20 @@ export function getAttentionColumns(
         <Button
           variant="outline"
           size="sm"
-          onClick={() => onReview(row.original)}
+          onClick={() =>
+            row.original.status === 'not_sent' &&
+            row.original.eligible &&
+            !needsDeliveryCheck(row.original)
+              ? onPreview(row.original)
+              : onReview(row.original)
+          }
         >
-          {row.original.status === 'not_sent' && row.original.eligible
-            ? 'Preview & send'
+          {row.original.status === 'not_sent' &&
+          row.original.eligible &&
+          !needsDeliveryCheck(row.original)
+            ? row.original.previousVersion
+              ? 'Preview update'
+              : 'Preview & send'
             : 'Review'}
         </Button>
       ),

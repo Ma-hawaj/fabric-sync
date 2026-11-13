@@ -44,3 +44,15 @@ export const attentionTones: Record<AttentionStatus, StatusTone> = {
   accepted: 'info',
   delivered: 'success',
 }
+
+export function attentionLabel(row: NotificationAttentionRow) {
+  return row.status === 'not_sent' && row.previousVersion
+    ? 'Updated version not sent'
+    : attentionLabels[row.status]
+}
+
+export function needsDeliveryCheck(row: NotificationAttentionRow) {
+  return (
+    row.status === 'uncertain' || row.previousVersion?.status === 'uncertain'
+  )
+}

@@ -12,6 +12,7 @@ async fn rows(pool: &PgPool) -> Vec<AttentionRow> {
 }
 
 async fn approved(pool: &PgPool, invoice: Uuid, kind: &str, generation: i64) -> Uuid {
+    let (revision, _) = super::repository::revision(pool, invoice).await.unwrap();
     sqlx::query_scalar(
         "INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,state,snapshot,created_by,approved_by,approved_at) \
          VALUES($1,$2,$3,'test', $4,'approved',$5,'staff','staff',now()) RETURNING id",
@@ -20,7 +21,7 @@ async fn approved(pool: &PgPool, invoice: Uuid, kind: &str, generation: i64) -> 
     .bind(kind)
     .bind(format!("test:{}", Uuid::new_v4()))
     .bind(Uuid::new_v4())
-    .bind(json!({"readinessGeneration":generation}))
+    .bind(json!({"readinessGeneration":generation,"revision":revision}))
     .fetch_one(pool).await.unwrap()
 }
 
@@ -42,6 +43,115 @@ async fn attention_includes_invoices_without_any_preview_or_approved_send(pool: 
     sqlx::query("INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,snapshot,created_by) VALUES($1,'invoice_created','created','test',$2,'{}','staff')")
         .bind(invoice).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
     assert_eq!(attention::summary(&pool).await.unwrap().not_sent, 1);
+}
+
+#[sqlx::test]
+async fn attention_flags_an_unsent_invoice_revision_and_preserves_the_previous_results(
+    pool: PgPool,
+) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let original = approved(&pool, invoice, "invoice_created", 0).await;
+    recipient(&pool, original, "+97333112233", "delivered").await;
+    assert!(!rows(&pool).await[0].needs_attention);
+    sqlx::query("UPDATE invoices SET total_price=120 WHERE id=$1")
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let result = rows(&pool).await;
+    let row = &result[0];
+    assert_eq!(row.status, "not_sent");
+    assert!(row.needs_attention);
+    assert_eq!(row.notification_id, Some(original));
+    assert_eq!(row.delivered_count, 0);
+    assert!(row.recipients.as_array().unwrap().is_empty());
+    assert_eq!(row.previous_version["status"], "delivered");
+    assert_eq!(row.previous_version["recipients"][0]["status"], "delivered");
+    assert_eq!(attention::summary(&pool).await.unwrap().not_sent, 1);
+
+    // Opening or abandoning a current preview cannot clear the outstanding version.
+    sqlx::query("INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,snapshot,created_by) VALUES($1,'invoice_updated','updated','new-version',$2,'{}','staff')")
+        .bind(invoice).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
+    assert!(rows(&pool).await[0].needs_attention);
+
+    let updated = approved(&pool, invoice, "invoice_updated", 0).await;
+    sqlx::query("UPDATE notifications SET source_hash='new-version' WHERE id=$1")
+        .bind(updated)
+        .execute(&pool)
+        .await
+        .unwrap();
+    recipient(&pool, updated, "+97333112233", "queued").await;
+    let result = rows(&pool).await;
+    assert_eq!(result[0].status, "queued");
+    assert!(!result[0].needs_attention);
+    assert!(result[0].previous_version.is_null());
+    assert_eq!(result[0].delivered_count, 0);
+    assert_eq!(attention::summary(&pool).await.unwrap().total, 0);
+
+    // A late callback for the older content cannot mark this version delivered.
+    sqlx::query("UPDATE notification_recipients SET status='read' WHERE notification_id=$1")
+        .bind(original)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows(&pool).await[0].status, "queued");
+    assert_eq!(
+        super::repository::history(&pool, invoice)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[sqlx::test]
+async fn attention_retains_uncertain_previous_delivery_when_the_invoice_changes(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let original = approved(&pool, invoice, "invoice_created", 0).await;
+    recipient(&pool, original, "+97333112233", "uncertain").await;
+    sqlx::query("UPDATE invoices SET total_price=120 WHERE id=$1")
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let result = rows(&pool).await;
+    assert_eq!(result[0].status, "not_sent");
+    assert_eq!(result[0].uncertain_count, 0);
+    assert_eq!(result[0].previous_version["status"], "uncertain");
+    assert_eq!(attention::summary(&pool).await.unwrap().not_sent, 1);
+}
+
+#[sqlx::test]
+async fn attention_checks_the_current_revision_for_each_ready_target(pool: PgPool) {
+    let (invoice, orders, _, pickup) = test_support::invoice(&pool, 1, false).await;
+    test_support::finish_stages(&pool, orders[0], pickup).await;
+    readiness::confirm(&pool, invoice, None, "staff", true)
+        .await
+        .unwrap();
+    let repair_id = repair(&pool, orders[0]).await;
+    let pickup_notice = approved(&pool, invoice, "invoice_ready", 1).await;
+    recipient(&pool, pickup_notice, "+97333112233", "delivered").await;
+    repair_notice(&pool, invoice, repair_id, "accepted").await;
+    sqlx::query("UPDATE invoices SET total_price=120 WHERE id=$1")
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let result = rows(&pool).await;
+    let pickup = result
+        .iter()
+        .find(|row| row.kind == "invoice_ready")
+        .unwrap();
+    assert_eq!(pickup.status, "not_sent");
+    assert_eq!(pickup.previous_version["status"], "delivered");
+    let repair = result
+        .iter()
+        .find(|row| row.repair_id == Some(repair_id))
+        .unwrap();
+    assert_eq!(repair.status, "not_sent");
+    assert_eq!(repair.previous_version["status"], "accepted");
+    assert!(repair.needs_attention);
+    assert_eq!(repair.accepted_count, 0);
 }
 
 #[sqlx::test]
@@ -322,7 +432,7 @@ async fn repair(pool: &PgPool, order: Uuid) -> Uuid {
 
 async fn repair_notice(pool: &PgPool, invoice: Uuid, repair: Uuid, status: &str) -> Uuid {
     let id = approved(pool, invoice, "invoice_ready", 0).await;
-    sqlx::query("UPDATE notifications SET snapshot=jsonb_build_object('repairId',$2::uuid::text) WHERE id=$1")
+    sqlx::query("UPDATE notifications SET snapshot=snapshot || jsonb_build_object('repairId',$2::uuid::text) WHERE id=$1")
         .bind(id).bind(repair).execute(pool).await.unwrap();
     recipient(pool, id, "+97333112233", status).await;
     id
@@ -347,7 +457,8 @@ async fn attention_separates_repairs_from_invoice_pickup_notices(pool: PgPool) {
         .find(|row| row.kind == "invoice_ready")
         .unwrap();
     assert_eq!(pickup.notification_id, Some(normal));
-    assert_eq!(pickup.status, "delivered");
+    assert_eq!(pickup.status, "not_sent");
+    assert_eq!(pickup.previous_version["status"], "delivered");
     let first_row = result
         .iter()
         .find(|row| row.repair_id == Some(first))

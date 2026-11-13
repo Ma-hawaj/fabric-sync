@@ -33,11 +33,7 @@ export function NotificationsPage() {
   const [review, setReview] = useState<NotificationAttentionRow | null>(null)
   const [preview, setPreview] = useState<NotificationAttentionRow | null>(null)
   const columns = useMemo(
-    () =>
-      getAttentionColumns((row) => {
-        if (row.status === 'not_sent' && row.eligible) setPreview(row)
-        else setReview(row)
-      }),
+    () => getAttentionColumns({ onReview: setReview, onPreview: setPreview }),
     [],
   )
   const { searchParams } = useListParams({ columns })
@@ -228,9 +224,11 @@ export function NotificationsPage() {
         kind={
           preview?.kind === 'invoice_ready' || preview?.kind === 'repair_ready'
             ? 'invoice_ready'
-            : preview?.notificationId
-              ? 'manual_resend'
-              : 'invoice_created'
+            : preview?.previousVersion
+              ? 'invoice_updated'
+              : preview?.notificationId
+                ? 'manual_resend'
+                : 'invoice_created'
         }
         resendOf={preview?.notificationId ?? undefined}
         repairId={preview?.repairId ?? undefined}

@@ -87,6 +87,7 @@ function row(
     cancelledCount: 0,
     recipients: [],
     errorMessage: null,
+    previousVersion: null,
     ...values,
   }
 }
@@ -215,6 +216,128 @@ describe('notification attention queue', () => {
     expect(screen.getByText('Ready but not notified')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Preview & send' }))
     expect(screen.getByRole('dialog').textContent).toContain('invoice_ready')
+  })
+
+  it('flags changed content while preserving the previous delivery result', () => {
+    mount([
+      row('invoice-42', {
+        notificationId: 'previous-send',
+        previousVersion: {
+          status: 'delivered',
+          recipients: [],
+          errorMessage: null,
+        },
+      }),
+    ])
+    expect(screen.getByText('Updated version not sent')).toBeTruthy()
+    expect(screen.getByText('Previous version: Delivered')).toBeTruthy()
+    expect(screen.queryByText('Invoice message outstanding')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Preview update' }))
+    expect(screen.getByRole('dialog').textContent).toContain(
+      'invoice-42 · invoice_updated · previous-send',
+    )
+    expect(apiClient.post).not.toHaveBeenCalled()
+  })
+
+  it('opens the earlier delivery details without sending the updated version', () => {
+    mount([
+      row('invoice-42', {
+        notificationId: 'previous-send',
+        previousVersion: {
+          status: 'delivered',
+          errorMessage: null,
+          recipients: [
+            {
+              id: 'previous-recipient',
+              normalizedMobile: '+97333112233',
+              customers: [
+                { id: 'a', name: 'Ahmed', mobileNo: '33112233', enabled: true },
+              ],
+              selected: true,
+              status: 'delivered',
+              errorMessage: null,
+            },
+          ],
+        },
+      }),
+    ])
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Previous version: Delivered' }),
+    )
+    const detail = screen.getByRole('dialog')
+    expect(within(detail).getByText('Updated version not sent')).toBeTruthy()
+    expect(within(detail).getByText('+97333112233')).toBeTruthy()
+    expect(within(detail).getByText('Delivered')).toBeTruthy()
+    expect(
+      within(detail).getByRole('button', { name: 'Preview updated message' }),
+    ).toBeTruthy()
+    expect(apiClient.post).not.toHaveBeenCalled()
+  })
+
+  it('keeps the repair context when previewing an updated repair notice', () => {
+    mount([
+      row('repair-1', {
+        kind: 'repair_ready',
+        invoiceId: 'invoice-42',
+        repairId: 'repair-1',
+        notificationId: 'previous-repair-send',
+        previousVersion: {
+          status: 'accepted',
+          recipients: [],
+          errorMessage: null,
+        },
+      }),
+    ])
+    expect(
+      screen.getByText('Previous version: Accepted by WhatsApp'),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Preview update' }))
+    expect(screen.getByRole('dialog').textContent).toContain(
+      'invoice-42 · invoice_ready · previous-repair-send · repair-1',
+    )
+  })
+
+  it('requires checking an uncertain previous version before previewing the update', () => {
+    mount([
+      row('invoice-42', {
+        notificationId: 'previous-send',
+        previousVersion: {
+          status: 'uncertain',
+          errorMessage: 'Submission interrupted',
+          recipients: [
+            {
+              id: 'previous-recipient',
+              normalizedMobile: '+97333112233',
+              customers: [
+                { id: 'a', name: 'Ahmed', mobileNo: '33112233', enabled: true },
+              ],
+              selected: true,
+              status: 'uncertain',
+              errorMessage: 'Submission interrupted',
+            },
+          ],
+        },
+      }),
+    ])
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+    const detail = screen.getByRole('dialog')
+    expect(within(detail).getByText(/content changed since/)).toBeTruthy()
+    expect(
+      within(detail).getByText('Previous version: latest result per recipient'),
+    ).toBeTruthy()
+    expect(within(detail).getByText('+97333112233')).toBeTruthy()
+    const preview = within(detail).getByRole('button', {
+      name: 'Preview updated message',
+    })
+    expect(preview.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(
+      within(detail).getByRole('checkbox', { name: /I checked delivery/ }),
+    )
+    expect(preview.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(preview)
+    expect(screen.getByRole('dialog').textContent).toContain(
+      'invoice_updated · previous-send',
+    )
   })
 
   it('labels invoice sends and ready notices separately', () => {

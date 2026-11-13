@@ -23,7 +23,7 @@ WITH customers_by_invoice AS (
     ORDER BY invoice_id, (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), approved_at DESC, id DESC
 ), context AS (
     SELECT i.id AS invoice_id, i.invoice_number, i.created_at,
-           i.readiness_generation, i.collection_method, b.name AS branch_name,
+           i.readiness_generation, i.notification_revision, i.collection_method, b.name AS branch_name,
            c.customers, c.customer_name, c.customer_mobile, coalesce(c.enabled, false) AS enabled,
            readiness.readiness_status,
            ready.waiting_since AS ready_since,
@@ -41,7 +41,7 @@ WITH customers_by_invoice AS (
     CROSS JOIN (VALUES ('invoice'), ('invoice_ready')) kind(kind)
 ), repair_context AS (
     SELECT i.id AS invoice_id, i.invoice_number, i.created_at,
-           i.readiness_generation, i.collection_method, b.name AS branch_name,
+           i.readiness_generation, i.notification_revision, i.collection_method, b.name AS branch_name,
            jsonb_build_array(jsonb_build_object('id', c.id, 'name', c.name, 'mobileNo', c.mobile_no)) AS customers,
            c.name AS customer_name, c.mobile_no AS customer_mobile,
            c.whatsapp_notifications_enabled AND oc.outcome = 'active' AS enabled,
@@ -63,11 +63,14 @@ WITH customers_by_invoice AS (
     SELECT * FROM context
     UNION ALL
     SELECT * FROM repair_context
-), outcomes AS (
+), version_results AS (
     SELECT c.entity_id, c.reference, c.repair_id, c.order_id, c.repair_reason,
            c.invoice_id, c.invoice_number, c.branch_name, c.customer_name, c.customer_mobile,
            coalesce(c.customers, '[]'::jsonb) AS customers, c.kind,
            n.id AS notification_id, n.approved_at AS last_attempt_at,
+           cycle.current_generation AND coalesce(
+               (n.snapshot->>'revision')::bigint = c.notification_revision, true
+           ) AS current_version,
            (c.enabled AND (c.kind = 'invoice' OR
              (c.kind = 'repair_ready' AND c.readiness_status = 'ready' AND c.ready_since IS NOT NULL AND c.branch_name IS NOT NULL) OR
              (c.kind = 'invoice_ready' AND c.collection_method = 'pickup' AND c.readiness_status = 'ready'))) AS eligible,
@@ -83,7 +86,6 @@ WITH customers_by_invoice AS (
            coalesce(r.recipients, '[]'::jsonb) AS recipients,
            r.error_message,
            CASE
-             WHEN NOT cycle.current_generation THEN 'not_sent'
              WHEN coalesce(r.uncertain_count, 0) > 0 THEN 'uncertain'
              WHEN coalesce(r.failed_count, 0) > 0 THEN 'failed'
              WHEN coalesce(r.cancelled_count, 0) > 0 THEN 'not_sent'
@@ -130,7 +132,6 @@ WITH customers_by_invoice AS (
               AND (sends.kind = 'invoice_ready') = (c.kind IN ('invoice_ready', 'repair_ready'))
               AND sends.snapshot->>'repairId' IS NOT DISTINCT FROM c.repair_id::text
               AND sends.source_hash = n.source_hash
-              AND cycle.current_generation
             ORDER BY r.normalized_mobile, sends.approved_at DESC, sends.id DESC
         ) destinations
     ) r ON true
@@ -138,6 +139,25 @@ WITH customers_by_invoice AS (
         (c.kind = 'invoice' OR
          (c.kind = 'repair_ready' AND c.readiness_status = 'ready' AND c.ready_since IS NOT NULL AND c.branch_name IS NOT NULL) OR
          (c.kind = 'invoice_ready' AND c.collection_method = 'pickup' AND c.readiness_status = 'ready')))
+), outcomes AS (
+    SELECT entity_id, reference, repair_id, order_id, repair_reason,
+           invoice_id, invoice_number, branch_name, customer_name, customer_mobile,
+           customers, kind, notification_id, last_attempt_at, eligible, waiting_since,
+           CASE WHEN current_version THEN recipient_count ELSE 0 END AS recipient_count,
+           CASE WHEN current_version THEN queued_count ELSE 0 END AS queued_count,
+           CASE WHEN current_version THEN accepted_count ELSE 0 END AS accepted_count,
+           CASE WHEN current_version THEN delivered_count ELSE 0 END AS delivered_count,
+           CASE WHEN current_version THEN failed_count ELSE 0 END AS failed_count,
+           CASE WHEN current_version THEN uncertain_count ELSE 0 END AS uncertain_count,
+           CASE WHEN current_version THEN cancelled_count ELSE 0 END AS cancelled_count,
+           CASE WHEN current_version THEN recipients ELSE '[]'::jsonb END AS recipients,
+           CASE WHEN current_version THEN error_message END AS error_message,
+           CASE WHEN current_version THEN status ELSE 'not_sent' END AS status,
+           CASE WHEN NOT current_version AND notification_id IS NOT NULL THEN
+               jsonb_build_object('status', status, 'recipients', recipients,
+                   'errorMessage', error_message)
+               ELSE 'null'::jsonb END AS previous_version
+    FROM version_results
 ), gift_card_context AS (
     SELECT g.id AS entity_id, sale.id AS invoice_id, sale.invoice_number,
            sale.branch_name, g.code AS reference, g.id AS gift_card_id,
@@ -175,7 +195,7 @@ WITH customers_by_invoice AS (
            NULL::text AS gift_card_code, repair_id, order_id, repair_reason, customer_name, customer_mobile, customers,
            kind, notification_id, last_attempt_at, eligible, waiting_since,
            recipient_count, queued_count, accepted_count, delivered_count,
-           failed_count, uncertain_count, cancelled_count, recipients, error_message, status
+           failed_count, uncertain_count, cancelled_count, recipients, error_message, status, previous_version
     FROM outcomes
     UNION ALL
     SELECT entity_id, invoice_id, invoice_number, branch_name, reference, gift_card_id,
@@ -194,7 +214,7 @@ WITH customers_by_invoice AS (
                    'normalizedMobile', normalized_mobile, 'customers', customers,
                    'selected', true, 'status', CASE WHEN delivery_state = 'sending' THEN 'submitting' ELSE delivery_state END,
                    'errorMessage', error_message)) END AS recipients,
-           error_message, status
+           error_message, status, 'null'::jsonb AS previous_version
     FROM gift_card_context WHERE eligible OR notification_id IS NOT NULL
 )
 SELECT *, eligible AND status IN ('not_sent', 'failed', 'uncertain', 'delayed') AS needs_attention

@@ -13,7 +13,9 @@ import {
 } from '@/components/ui/sheet'
 import {
   attentionLabels,
+  attentionLabel,
   attentionTones,
+  needsDeliveryCheck,
   notificationTypeLabels,
 } from './attention-labels'
 import type { NotificationAttentionRow } from './types'
@@ -30,6 +32,8 @@ export function AttentionDetails({
   const [checkedDelivery, setCheckedDelivery] = useState(false)
   const canPreview =
     row.eligible && row.status !== 'queued' && row.status !== 'delayed'
+  const checkDelivery = needsDeliveryCheck(row)
+  const recipients = row.previousVersion?.recipients ?? row.recipients
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="sm:max-w-lg">
@@ -44,9 +48,20 @@ export function AttentionDetails({
         </SheetHeader>
         <div className="flex-1 space-y-5 overflow-y-auto px-6 pb-6 text-sm">
           <StatusBadge tone={attentionTones[row.status]}>
-            {attentionLabels[row.status]}
+            {attentionLabel(row)}
           </StatusBadge>
-          {row.status === 'uncertain' && (
+          {row.previousVersion && (
+            <div className="space-y-2">
+              <p>
+                The content changed since the last approved send. Preview and
+                approve the updated message before sending it.
+              </p>
+              <p className="font-medium">
+                Previous version: {attentionLabels[row.previousVersion.status]}
+              </p>
+            </div>
+          )}
+          {checkDelivery && (
             <div className="space-y-3 rounded-lg border p-3">
               <p>
                 WhatsApp may have received this message. Check delivery before
@@ -57,7 +72,7 @@ export function AttentionDetails({
                   checked={checkedDelivery}
                   onCheckedChange={setCheckedDelivery}
                 />
-                I checked delivery and a resend is needed.
+                I checked delivery and another message is needed.
               </label>
             </div>
           )}
@@ -85,9 +100,9 @@ export function AttentionDetails({
               Last approved send: {new Date(row.lastAttemptAt).toLocaleString()}
             </p>
           )}
-          {row.errorMessage && (
+          {(row.previousVersion?.errorMessage || row.errorMessage) && (
             <p className="whitespace-pre-wrap text-destructive">
-              {row.errorMessage}
+              {row.previousVersion?.errorMessage || row.errorMessage}
             </p>
           )}
           {row.repairReason && (
@@ -96,10 +111,14 @@ export function AttentionDetails({
               {row.repairReason}
             </p>
           )}
-          {row.recipients.length > 0 && (
+          {recipients.length > 0 && (
             <div className="space-y-3">
-              <h3 className="font-medium">Latest result per recipient</h3>
-              {row.recipients.map((recipient) => (
+              <h3 className="font-medium">
+                {row.previousVersion
+                  ? 'Previous version: latest result per recipient'
+                  : 'Latest result per recipient'}
+              </h3>
+              {recipients.map((recipient) => (
                 <div
                   key={recipient.id}
                   className="space-y-1 rounded-lg border p-3"
@@ -136,10 +155,14 @@ export function AttentionDetails({
         <SheetFooter>
           {canPreview && (
             <Button
-              disabled={row.status === 'uncertain' && !checkedDelivery}
+              disabled={checkDelivery && !checkedDelivery}
               onClick={() => onPreview(row)}
             >
-              {row.notificationId ? 'Preview resend' : 'Preview & send'}
+              {row.previousVersion
+                ? 'Preview updated message'
+                : row.notificationId
+                  ? 'Preview resend'
+                  : 'Preview & send'}
             </Button>
           )}
           {row.kind === 'repair_ready' && row.orderId ? (

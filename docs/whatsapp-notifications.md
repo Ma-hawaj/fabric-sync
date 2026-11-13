@@ -236,6 +236,17 @@ preview flow, carrying the repair ID through preparation, refreshing, and
 resending. The server and preview reject a different repair context before
 sending.
 
+Invoice, pickup, and repair entries compare the current notification revision
+with the last approved snapshot. If it changed, the row returns to **Not sent**
+and **Needs attention**, labelled **Updated version not sent**. The previous
+version's delivery result appears separately beneath it and in the review panel;
+its delivered or accepted recipients do not count toward the current version.
+Opening, abandoning, or skipping a preview does not clear the outstanding
+version. A new approval queues the current content, and the previous sends remain
+in history. Late delivery callbacks for older content do not change the current
+version's result. An uncertain previous delivery still requires checking before
+opening the updated preview.
+
 Completed repairs awaiting a notice appear separately, including repairs of
 already-collected orders. Each repair has its own latest send and completion
 cycle; one repair's message cannot overwrite another repair or the original
