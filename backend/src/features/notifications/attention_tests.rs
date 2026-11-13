@@ -33,7 +33,7 @@ async fn request_id(
         .unwrap()
 }
 
-async fn approved(pool: &PgPool, invoice: Uuid, kind: &str, generation: i64) -> Uuid {
+async fn approved(pool: &PgPool, invoice: Uuid, kind: &str, _generation: i64) -> Uuid {
     let (revision, _) = super::repository::revision(pool, invoice).await.unwrap();
     let event = request_id(
         pool,
@@ -47,14 +47,15 @@ async fn approved(pool: &PgPool, invoice: Uuid, kind: &str, generation: i64) -> 
     )
     .await;
     sqlx::query_scalar(
-        "INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,state,snapshot,created_by,approved_by,approved_at) \
-         VALUES($1,$2,$3,'test', $4,'approved',$5,'staff','staff',now()) RETURNING id",
+        "INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,state,snapshot,created_by,approved_by,approved_at,notification_request_id) \
+         VALUES($1,$2,$3,'test', $4,'approved',$5,'staff','staff',now(),$6) RETURNING id",
     )
     .bind(invoice)
     .bind(kind)
     .bind(format!("test:{}", Uuid::new_v4()))
     .bind(Uuid::new_v4())
-    .bind(json!({"readinessGeneration":generation,"revision":revision,"attentionEventId":event}))
+    .bind(json!({"revision":revision}))
+    .bind(event)
     .fetch_one(pool).await.unwrap()
 }
 
@@ -218,6 +219,110 @@ async fn notification_requests_rollback_with_the_business_action(pool: PgPool) {
         .unwrap();
     tx.rollback().await.unwrap();
     assert_eq!(request_id(&pool, invoice, "invoice", None).await, original);
+}
+
+#[sqlx::test]
+async fn request_history_is_immutable_and_separates_identical_content_from_new_actions(
+    pool: PgPool,
+) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let first_parent = request_id(&pool, invoice, "invoice", None).await.unwrap();
+    let first = approved(&pool, invoice, "invoice_created", 0).await;
+    recipient(&pool, first, "+97333112233", "delivered").await;
+    request(&pool, invoice, "invoice", None).await;
+    let next_parent = request_id(&pool, invoice, "invoice", None).await.unwrap();
+    assert_ne!(first_parent, next_parent);
+    let stored_parent: Uuid =
+        sqlx::query_scalar("SELECT notification_request_id FROM notifications WHERE id=$1")
+            .bind(first)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored_parent, first_parent);
+    let unchanged = sqlx::query("UPDATE notification_requests SET requested_at=now() WHERE id=$1")
+        .bind(first_parent)
+        .execute(&pool)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        unchanged.as_database_error().unwrap().code().as_deref(),
+        Some("23514")
+    );
+    let next = approved(&pool, invoice, "invoice_updated", 0).await;
+    recipient(&pool, next, "+97333112233", "queued").await;
+    assert_eq!(
+        super::repository::history(&pool, invoice)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        super::repository::sends(&pool, first).await.unwrap().len(),
+        1
+    );
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM notification_requests WHERE invoice_id=$1")
+            .bind(invoice)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 2);
+    let rows = rows(&pool).await;
+    assert_eq!(rows[0].status, "queued");
+    assert_eq!(rows[0].delivered_count, 0);
+}
+
+#[sqlx::test]
+async fn database_request_links_cannot_cross_invoice_or_gift_card_targets(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let parent = request_id(&pool, invoice, "invoice", None).await.unwrap();
+    let other: Uuid = sqlx::query_scalar("INSERT INTO invoices(total_price,vat_rate,taxable_amount,vat_amount) VALUES(0,0.1,0,0) RETURNING id")
+        .fetch_one(&pool).await.unwrap();
+    let error = sqlx::query("INSERT INTO notifications(invoice_id,notification_request_id,kind,event_key,source_hash,preview_version,snapshot,created_by) VALUES($1,$2,'invoice_created','wrong-parent','test',$3,'{}','staff')")
+        .bind(other).bind(parent).bind(Uuid::new_v4()).execute(&pool).await.unwrap_err();
+    assert_eq!(
+        error.as_database_error().unwrap().code().as_deref(),
+        Some("23503")
+    );
+    let card = gift_card(&pool).await;
+    let other_card: Uuid = sqlx::query_scalar("INSERT INTO gift_cards(code,initial_amount,balance,recipient_phone) VALUES('GC-OTHER',25,25,'33991122') RETURNING id")
+        .fetch_one(&pool).await.unwrap();
+    let card_parent =
+        super::repository::gift_card_request_id(&mut *pool.acquire().await.unwrap(), card)
+            .await
+            .unwrap()
+            .unwrap();
+    let delivery = gift_card_delivery(&pool, card, "delivered").await;
+    let error = sqlx::query(
+        "UPDATE gift_card_deliveries SET gift_card_id=$2,notification_request_id=$3 WHERE id=$1",
+    )
+    .bind(delivery)
+    .bind(other_card)
+    .bind(card_parent)
+    .execute(&pool)
+    .await
+    .unwrap_err();
+    assert_eq!(
+        error.as_database_error().unwrap().code().as_deref(),
+        Some("23503")
+    );
+}
+
+#[sqlx::test]
+async fn untracked_gift_cards_do_not_create_backlog_but_legacy_failed_sends_stay_visible(
+    pool: PgPool,
+) {
+    let card = gift_card(&pool).await;
+    sqlx::query("DELETE FROM notification_requests WHERE gift_card_id=$1")
+        .bind(card)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(rows(&pool).await.is_empty());
+    gift_card_delivery(&pool, card, "failed").await;
+    assert_eq!(rows(&pool).await[0].status, "failed");
+    assert_eq!(attention::summary(&pool).await.unwrap().failed, 1);
 }
 
 #[sqlx::test]
@@ -560,13 +665,20 @@ async fn attention_summary_counts_all_matching_items_beyond_the_current_page(poo
 }
 
 async fn gift_card(pool: &PgPool) -> Uuid {
-    sqlx::query_scalar("INSERT INTO gift_cards(code,initial_amount,balance,bought_for,recipient_phone) VALUES('GC-ATTENTION',25,25,'Fatima','33991122') RETURNING id")
-        .fetch_one(pool).await.unwrap()
+    let id = sqlx::query_scalar("INSERT INTO gift_cards(code,initial_amount,balance,bought_for,recipient_phone) VALUES('GC-ATTENTION',25,25,'Fatima','33991122') RETURNING id")
+        .fetch_one(pool).await.unwrap();
+    super::repository::request_gift_card(&mut *pool.acquire().await.unwrap(), id)
+        .await
+        .unwrap();
+    id
 }
 
 async fn gift_card_delivery(pool: &PgPool, card: Uuid, status: &str) -> Uuid {
-    sqlx::query_scalar("INSERT INTO gift_card_deliveries(gift_card_id,request_id,approved_by,source_hash,normalized_mobile,body,parameters,template_name,language,image_png,image_filename,image_sha256,state,last_error) VALUES($1,$2,'staff','test','+97333991122','Gift card','[]','gift_card_image_v1','en_US',decode('01','hex'),'card.png',repeat('a',64),$3,CASE WHEN $3='failed' THEN 'Invalid destination' END) RETURNING id")
-        .bind(card).bind(Uuid::new_v4()).bind(status).fetch_one(pool).await.unwrap()
+    let parent = super::repository::gift_card_request_id(&mut *pool.acquire().await.unwrap(), card)
+        .await
+        .unwrap();
+    sqlx::query_scalar("INSERT INTO gift_card_deliveries(gift_card_id,request_id,approved_by,source_hash,normalized_mobile,body,parameters,template_name,language,image_png,image_filename,image_sha256,state,last_error,notification_request_id) VALUES($1,$2,'staff','test','+97333991122','Gift card','[]','gift_card_image_v1','en_US',decode('01','hex'),'card.png',repeat('a',64),$3,CASE WHEN $3='failed' THEN 'Invalid destination' END,$4) RETURNING id")
+        .bind(card).bind(Uuid::new_v4()).bind(status).bind(parent).fetch_one(pool).await.unwrap()
 }
 
 #[sqlx::test]
@@ -673,7 +785,7 @@ async fn repair(pool: &PgPool, order: Uuid) -> Uuid {
 async fn repair_notice(pool: &PgPool, invoice: Uuid, repair: Uuid, status: &str) -> Uuid {
     let id = approved(pool, invoice, "invoice_ready", 0).await;
     let event = request_id(pool, invoice, "repair_ready", Some(repair)).await;
-    sqlx::query("UPDATE notifications SET snapshot=snapshot || jsonb_build_object('repairId',$2::uuid::text,'attentionEventId',$3::uuid::text) WHERE id=$1")
+    sqlx::query("UPDATE notifications SET snapshot=snapshot || jsonb_build_object('repairId',$2::uuid::text),notification_request_id=$3 WHERE id=$1")
         .bind(id).bind(repair).bind(event).execute(pool).await.unwrap();
     recipient(pool, id, "+97333112233", status).await;
     id
@@ -796,6 +908,7 @@ async fn attention_requires_a_fresh_notice_when_a_repair_is_completed_again(pool
         .execute(&pool)
         .await
         .unwrap();
+    request(&pool, invoice, "repair_ready", Some(repair_id)).await;
     let result = rows(&pool).await;
     let row = result
         .iter()

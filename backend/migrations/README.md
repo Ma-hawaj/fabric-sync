@@ -23,18 +23,17 @@ SQLx applies the files in version order:
    sale history stays attached to the original card. Legacy orders may have an
    unknown fabric source with a null material reference; shop/customer material
    constraints remain enforced.
-2. `0002_notification_schema.sql` creates immutable PDF artifacts, notification
-   previews and approvals, recipients, delivery attempts, webhook storage, and
-   the staff-approved gift card delivery queue with its immutable PNG attachments.
+2. `0002_notification_schema.sql` creates immutable notification requests, PDF
+   artifacts, notification previews and approvals, recipients, delivery attempts,
+   webhook storage, and the staff-approved gift card delivery queue with its
+   immutable PNG attachments. Both sending pipelines reference their request
+   through explicit foreign keys. Manual previews create no outstanding work
+   until approved, and existing/imported records are not backfilled.
 3. `0003_readiness_and_revisions.sql` creates the invoice-readiness view and the
    triggers that serialize related writes and invalidate outdated previews.
    Readiness excludes closed orders, and credits/refunds invalidate previews.
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
    return-line lookups and the unique index allowing one closure per garment.
-5. `0005_notification_requests.sql` records notification work created by invoice
-   saves, pickup confirmations, and repair completions. It deliberately does not
-   backfill existing records: imports and historical data are not a notification
-   backlog. Existing approved delivery attempts remain available independently.
 
 The core schema defines readable customer IDs (`C-6216`) and permanent
 per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.

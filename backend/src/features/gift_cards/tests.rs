@@ -64,6 +64,85 @@ async fn mock_server() -> (String, Mock) {
 fn input() -> CreateGiftCardInput {
     serde_json::from_value(json!({"amount":50,"boughtFor":"  Gift Recipient  ","recipientPhone":"33112233","code":"USER-SUPPLIED"})).unwrap()
 }
+
+#[sqlx::test]
+async fn legacy_gift_card_preview_creates_a_manual_parent_only_on_approval(pool: PgPool) {
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), None, Some(url)).await;
+    let card = service::create_gift_card(&state, input(), "staff")
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM notification_requests WHERE gift_card_id=$1")
+        .bind(card.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let preview = delivery::preview(&state, card.id).await.unwrap();
+    assert!(
+        crate::features::notifications::repository::gift_card_request_id(
+            &mut *pool.acquire().await.unwrap(),
+            card.id
+        )
+        .await
+        .unwrap()
+        .is_none()
+    );
+    let command = Uuid::new_v4();
+    delivery::approve(&state, card.id, send(&preview, command), "staff")
+        .await
+        .unwrap();
+    let parent = crate::features::notifications::repository::gift_card_request_id(
+        &mut *pool.acquire().await.unwrap(),
+        card.id,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let stored: (Uuid, String) = sqlx::query_as("SELECT d.notification_request_id,r.origin FROM gift_card_deliveries d JOIN notification_requests r ON r.id=d.notification_request_id WHERE d.request_id=$1")
+        .bind(command).fetch_one(&pool).await.unwrap();
+    assert_eq!(stored, (parent, "manual".into()));
+    sqlx::query("UPDATE gift_card_deliveries SET state='failed' WHERE request_id=$1")
+        .bind(command)
+        .execute(&pool)
+        .await
+        .unwrap();
+    delivery::approve(&state, card.id, send(&preview, Uuid::new_v4()), "staff")
+        .await
+        .unwrap();
+    let parents: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT notification_request_id FROM gift_card_deliveries WHERE gift_card_id=$1",
+    )
+    .bind(card.id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(parents, vec![parent, parent]);
+
+    crate::features::notifications::repository::request_gift_card(
+        &mut *pool.acquire().await.unwrap(),
+        card.id,
+    )
+    .await
+    .unwrap();
+    let newer = crate::features::notifications::repository::gift_card_request_id(
+        &mut *pool.acquire().await.unwrap(),
+        card.id,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_ne!(parent, newer);
+    delivery::tick(&state).await.unwrap();
+    let cancelled: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM gift_card_deliveries WHERE gift_card_id=$1 AND state='cancelled'",
+    )
+    .bind(card.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(cancelled, 1);
+    assert!(mock.messages.lock().unwrap().is_empty());
+}
 fn send(preview: &delivery::Preview, request_id: Uuid) -> delivery::SendInput {
     delivery::SendInput {
         source_hash: preview.source_hash.clone(),
@@ -264,6 +343,13 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
     let card = service::create_gift_card(&state, input(), "test-staff")
         .await
         .unwrap();
+    let parent = crate::features::notifications::repository::gift_card_request_id(
+        &mut *pool.acquire().await.unwrap(),
+        card.id,
+    )
+    .await
+    .unwrap()
+    .unwrap();
     let preview = delivery::preview(&state, card.id).await.unwrap();
     assert!(preview.body.contains(&card.code));
     assert!(preview.body.contains("Gift Recipient"));
@@ -279,6 +365,14 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
     delivery::approve(&state, card.id, send(&preview, request), "test-staff")
         .await
         .unwrap();
+    let linked: Uuid = sqlx::query_scalar(
+        "SELECT notification_request_id FROM gift_card_deliveries WHERE request_id=$1",
+    )
+    .bind(request)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(linked, parent);
     delivery::approve(&state, card.id, send(&preview, request), "test-staff")
         .await
         .unwrap();

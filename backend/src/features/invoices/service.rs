@@ -2291,6 +2291,7 @@ async fn write_gift_card_sales(
                 Some(&phone),
             )
             .await?;
+            crate::features::notifications::repository::request_gift_card(tx, id).await?;
             (id, code)
         };
 

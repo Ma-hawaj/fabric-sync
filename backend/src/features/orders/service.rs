@@ -1107,7 +1107,7 @@ mod tests {
         pool: sqlx::PgPool,
     ) {
         async fn event(pool: &sqlx::PgPool, repair: uuid::Uuid) -> uuid::Uuid {
-            sqlx::query_scalar("SELECT id FROM notification_requests WHERE repair_id=$1")
+            sqlx::query_scalar("SELECT id FROM notification_requests WHERE repair_id=$1 ORDER BY requested_at DESC,id DESC LIMIT 1")
                 .bind(repair)
                 .fetch_one(pool)
                 .await

@@ -142,10 +142,13 @@ pub async fn approve(
             "This gift card is already queued for delivery.".into(),
         ));
     }
+    let notification_request =
+        crate::features::notifications::repository::ensure_gift_card_request(&mut tx, id).await?;
     store::insert(
         &mut tx,
         id,
         input.request_id,
+        notification_request,
         actor,
         &current,
         state.notifications(),
@@ -182,7 +185,15 @@ pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
         }
         Err(error) => return Err(error),
     };
-    let valid = current.can_send && current.source_hash == job.source_hash;
+    let current_request = match job.notification_request_id {
+        Some(parent) => {
+            crate::features::notifications::repository::gift_card_request_id(&mut tx, card_id)
+                .await?
+                == Some(parent)
+        }
+        None => true,
+    };
+    let valid = current_request && current.can_send && current.source_hash == job.source_hash;
     if !valid {
         store::cancel(&mut tx, id).await?;
         tx.commit().await?;

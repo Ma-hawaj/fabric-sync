@@ -78,6 +78,7 @@ pub async fn get(db: &PgPool, id: Uuid) -> Result<NotificationRow, AppError> {
         r#"
         SELECT id,
                invoice_id,
+               notification_request_id,
                kind,
                state,
                source_hash,
@@ -120,13 +121,13 @@ pub async fn history(db: &PgPool, invoice_id: Uuid) -> Result<Vec<History>, AppE
     Ok(sqlx::query_as(
         r#"
         WITH versions AS (
-            SELECT DISTINCT ON ((kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), source_hash) id, kind, approved_at,
+            SELECT DISTINCT ON ((kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), notification_request_id, source_hash) id, kind, approved_at,
                    snapshot->>'repairId' AS repair_id,
-                   count(*) OVER (PARTITION BY (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), source_hash) AS send_count,
-                   first_value(kind) OVER (PARTITION BY (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), source_hash ORDER BY approved_at, id) AS original_kind
+                   count(*) OVER (PARTITION BY (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), notification_request_id, source_hash) AS send_count,
+                   first_value(kind) OVER (PARTITION BY (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), notification_request_id, source_hash ORDER BY approved_at, id) AS original_kind
               FROM notifications
              WHERE invoice_id = $1 AND approved_at IS NOT NULL
-             ORDER BY (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), source_hash, approved_at DESC, id DESC
+             ORDER BY (kind = 'invoice_ready'), coalesce(snapshot->>'repairId', ''), notification_request_id, source_hash, approved_at DESC, id DESC
         ), recent AS (
             SELECT id FROM versions
              ORDER BY approved_at DESC, id DESC
@@ -188,16 +189,23 @@ pub async fn request_notification(
     kind: &str,
     repair: Option<Uuid>,
 ) -> Result<(), AppError> {
-    sqlx::query(
-        "INSERT INTO notification_requests(invoice_id,kind,repair_id) VALUES($1,$2,$3) \
-         ON CONFLICT(invoice_id,kind,repair_id) DO UPDATE SET id=uuidv7(),requested_at=clock_timestamp()",
-    )
-    .bind(invoice)
-    .bind(kind)
-    .bind(repair)
-    .execute(conn)
-    .await?;
+    sqlx::query("INSERT INTO notification_requests(invoice_id,kind,repair_id) VALUES($1,$2,$3)")
+        .bind(invoice)
+        .bind(kind)
+        .bind(repair)
+        .execute(conn)
+        .await?;
     Ok(())
+}
+
+pub fn request_kind(kind: &str, repair: Option<Uuid>) -> &'static str {
+    if repair.is_some() {
+        "repair_ready"
+    } else if kind == "invoice_ready" {
+        "invoice_ready"
+    } else {
+        "invoice"
+    }
 }
 
 pub async fn request_id(
@@ -208,13 +216,54 @@ pub async fn request_id(
 ) -> Result<Option<Uuid>, AppError> {
     Ok(sqlx::query_scalar(
         "SELECT id FROM notification_requests WHERE invoice_id=$1 AND kind=$2 \
-         AND repair_id IS NOT DISTINCT FROM $3",
+         AND repair_id IS NOT DISTINCT FROM $3 ORDER BY requested_at DESC,id DESC LIMIT 1",
     )
     .bind(invoice)
     .bind(kind)
     .bind(repair)
     .fetch_optional(conn)
     .await?)
+}
+
+pub async fn ensure_request(
+    conn: &mut PgConnection,
+    invoice: Uuid,
+    kind: &str,
+    repair: Option<Uuid>,
+) -> Result<Uuid, AppError> {
+    if let Some(id) = request_id(conn, invoice, kind, repair).await? {
+        return Ok(id);
+    }
+    Ok(sqlx::query_scalar(
+        "INSERT INTO notification_requests(invoice_id,kind,repair_id,origin) VALUES($1,$2,$3,'manual') RETURNING id",
+    ).bind(invoice).bind(kind).bind(repair).fetch_one(conn).await?)
+}
+
+pub async fn request_gift_card(conn: &mut PgConnection, card: Uuid) -> Result<(), AppError> {
+    sqlx::query("INSERT INTO notification_requests(kind,gift_card_id) VALUES('gift_card',$1)")
+        .bind(card)
+        .execute(conn)
+        .await?;
+    Ok(())
+}
+
+pub async fn gift_card_request_id(
+    conn: &mut PgConnection,
+    card: Uuid,
+) -> Result<Option<Uuid>, AppError> {
+    Ok(sqlx::query_scalar("SELECT id FROM notification_requests WHERE gift_card_id=$1 ORDER BY requested_at DESC,id DESC LIMIT 1")
+        .bind(card).fetch_optional(conn).await?)
+}
+
+pub async fn ensure_gift_card_request(
+    conn: &mut PgConnection,
+    card: Uuid,
+) -> Result<Uuid, AppError> {
+    if let Some(id) = gift_card_request_id(conn, card).await? {
+        return Ok(id);
+    }
+    Ok(sqlx::query_scalar("INSERT INTO notification_requests(kind,gift_card_id,origin) VALUES('gift_card',$1,'manual') RETURNING id")
+        .bind(card).fetch_one(conn).await?)
 }
 
 pub async fn artifact_id(db: &PgPool, invoice: Uuid, hash: &str) -> Result<Option<Uuid>, AppError> {
@@ -297,6 +346,7 @@ pub async fn event(
         r#"
         SELECT id,
                invoice_id,
+               notification_request_id,
                kind,
                state,
                source_hash,
@@ -402,6 +452,7 @@ pub async fn approved_event(
         r#"
         SELECT id,
                invoice_id,
+               notification_request_id,
                kind,
                state,
                source_hash,
@@ -453,40 +504,38 @@ pub async fn mark_stale(conn: &mut PgConnection, id: Uuid) -> Result<(), AppErro
     cancel_unstarted(conn, id).await
 }
 
+pub async fn attach_request(
+    conn: &mut PgConnection,
+    id: Uuid,
+    request: Uuid,
+) -> Result<(), AppError> {
+    sqlx::query("UPDATE notifications SET notification_request_id=$2 WHERE id=$1 AND state='draft' AND notification_request_id IS NULL")
+        .bind(id).bind(request).execute(conn).await?;
+    Ok(())
+}
+
+pub async fn request_has_approval(
+    conn: &mut PgConnection,
+    request: Uuid,
+) -> Result<bool, AppError> {
+    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM notifications WHERE notification_request_id=$1 AND approved_at IS NOT NULL)")
+        .bind(request).fetch_one(conn).await?)
+}
+
 pub async fn insert_notification(
     conn: &mut PgConnection,
     invoice: Uuid,
     input: &PrepareInput,
+    request: Uuid,
     key: &str,
     snapshot: &Snapshot,
     artifact: Option<Uuid>,
     actor: &str,
 ) -> Result<Uuid, AppError> {
-    // Queue metadata belongs in stored JSON, keeping new Snapshot sources
-    // independent of the invoice pickup generation.
-    let mut stored_snapshot =
-        serde_json::to_value(snapshot).map_err(|error| AppError::Config(error.to_string()))?;
-    let request_kind = if snapshot.repair_id.is_some() {
-        "repair_ready"
-    } else if input.kind == "invoice_ready" {
-        "invoice_ready"
-    } else {
-        "invoice"
-    };
-    stored_snapshot["attentionEventId"] =
-        serde_json::json!(request_id(conn, invoice, request_kind, snapshot.repair_id).await?);
-    if input.kind == "invoice_ready" && snapshot.repair_id.is_none() {
-        let generation: i64 =
-            sqlx::query_scalar("SELECT readiness_generation FROM invoices WHERE id=$1")
-                .bind(invoice)
-                .fetch_one(&mut *conn)
-                .await?;
-        stored_snapshot["readinessGeneration"] = serde_json::json!(generation);
-    }
     Ok(sqlx::query_scalar(
         r#"
-        INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,snapshot,artifact_id,created_by,resend_of)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id
+        INSERT INTO notifications(invoice_id,kind,event_key,source_hash,preview_version,snapshot,artifact_id,created_by,resend_of,notification_request_id)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id
         "#
     )
         .bind(invoice)
@@ -494,10 +543,11 @@ pub async fn insert_notification(
         .bind(key)
         .bind(&snapshot.source_hash)
         .bind(Uuid::new_v4())
-        .bind(sqlx::types::Json(stored_snapshot))
+        .bind(sqlx::types::Json(snapshot))
         .bind(artifact)
         .bind(actor)
         .bind(input.resend_of)
+        .bind(request)
         .fetch_one(conn).await?)
 }
 
@@ -959,6 +1009,7 @@ pub async fn sends(db: &PgPool, id: Uuid) -> Result<Vec<History>, AppError> {
                )
            AND (n.kind = 'invoice_ready') = (SELECT kind = 'invoice_ready' FROM notifications WHERE id = $1)
            AND n.snapshot->>'repairId' IS NOT DISTINCT FROM (SELECT snapshot->>'repairId' FROM notifications WHERE id = $1)
+           AND n.notification_request_id IS NOT DISTINCT FROM (SELECT notification_request_id FROM notifications WHERE id=$1)
            AND n.approved_at IS NOT NULL
          GROUP BY n.id
          ORDER BY n.approved_at DESC, n.id DESC

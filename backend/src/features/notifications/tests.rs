@@ -90,6 +90,117 @@ fn send(draft: &Notification) -> SendInput {
 }
 
 #[sqlx::test]
+async fn manual_previews_get_a_parent_without_creating_an_unsent_backlog(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    sqlx::query("DELETE FROM notification_requests WHERE invoice_id=$1")
+        .bind(invoice)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), Some(url.clone()), Some(url)).await;
+    let draft = service::prepare(&state, invoice, prepare("invoice_created"), "staff")
+        .await
+        .unwrap();
+    let parent = repository::get(&pool, draft.id)
+        .await
+        .unwrap()
+        .notification_request_id
+        .unwrap();
+    assert_eq!(super::attention::summary(&pool).await.unwrap().total, 0);
+    service::discard_preview(&state, draft.id).await.unwrap();
+    assert_eq!(super::attention::summary(&pool).await.unwrap().total, 0);
+    let next = service::prepare(&state, invoice, prepare("invoice_created"), "staff")
+        .await
+        .unwrap();
+    assert_eq!(
+        repository::get(&pool, next.id)
+            .await
+            .unwrap()
+            .notification_request_id,
+        Some(parent)
+    );
+    service::approve(&state, next.id, send(&next), "staff", true)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE notification_recipients SET status='failed' WHERE notification_id=$1")
+        .bind(next.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(super::attention::summary(&pool).await.unwrap().failed, 1);
+    let resent = service::resend(&state, next.id, Uuid::new_v4(), "staff")
+        .await
+        .unwrap();
+    assert_eq!(
+        repository::get(&pool, resent.id)
+            .await
+            .unwrap()
+            .notification_request_id,
+        Some(parent)
+    );
+    assert!(mock.messages.lock().unwrap().is_empty());
+}
+
+#[sqlx::test]
+async fn a_new_request_supersedes_previews_and_queued_sends_even_with_unchanged_content(
+    pool: PgPool,
+) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), Some(url.clone()), Some(url)).await;
+    let draft = service::prepare(&state, invoice, prepare("invoice_created"), "staff")
+        .await
+        .unwrap();
+    let parent = repository::get(&pool, draft.id)
+        .await
+        .unwrap()
+        .notification_request_id
+        .unwrap();
+    repository::request_notification(
+        &mut *pool.acquire().await.unwrap(),
+        invoice,
+        "invoice",
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        service::approve(&state, draft.id, send(&draft), "staff", true).await,
+        Err(AppError::Conflict(_))
+    ));
+    assert_eq!(service::get(&state, draft.id).await.unwrap().state, "stale");
+    let next = service::prepare(&state, invoice, prepare("invoice_updated"), "staff")
+        .await
+        .unwrap();
+    assert_eq!(draft.snapshot.source_hash, next.snapshot.source_hash);
+    assert_ne!(
+        repository::get(&pool, next.id)
+            .await
+            .unwrap()
+            .notification_request_id,
+        Some(parent)
+    );
+    service::approve(&state, next.id, send(&next), "staff", true)
+        .await
+        .unwrap();
+    repository::request_notification(
+        &mut *pool.acquire().await.unwrap(),
+        invoice,
+        "invoice",
+        None,
+    )
+    .await
+    .unwrap();
+    worker::tick(&state).await.unwrap();
+    assert_eq!(
+        service::get(&state, next.id).await.unwrap().recipients[0].status,
+        "cancelled"
+    );
+    assert!(mock.messages.lock().unwrap().is_empty());
+}
+
+#[sqlx::test]
 async fn repair_ready_notifies_only_its_customer_after_approval_even_after_collection(
     pool: PgPool,
 ) {
@@ -131,6 +242,14 @@ async fn repair_ready_notifies_only_its_customer_after_approval_even_after_colle
         .execute(&pool)
         .await
         .unwrap();
+    repository::request_notification(
+        &mut *pool.acquire().await.unwrap(),
+        invoice,
+        "repair_ready",
+        Some(repair),
+    )
+    .await
+    .unwrap();
     let mut input = prepare("invoice_ready");
     input.repair_id = Some(repair);
     let draft = service::prepare(&state, invoice, input, "staff")
@@ -205,6 +324,14 @@ async fn reopened_repairs_cancel_queued_pickup_notices_and_preferences_still_app
         .execute(&pool)
         .await
         .unwrap();
+    repository::request_notification(
+        &mut *pool.acquire().await.unwrap(),
+        invoice,
+        "repair_ready",
+        Some(repair),
+    )
+    .await
+    .unwrap();
     sqlx::query("UPDATE customers SET whatsapp_notifications_enabled=false")
         .execute(&pool)
         .await
@@ -1151,6 +1278,14 @@ async fn resends_update_one_version_entry_and_reject_older_links(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    repository::request_notification(
+        &mut *pool.acquire().await.unwrap(),
+        invoice,
+        "invoice",
+        None,
+    )
+    .await
+    .unwrap();
     let updated = service::prepare(&state, invoice, prepare("invoice_updated"), "staff")
         .await
         .unwrap();
@@ -1247,4 +1382,53 @@ async fn repair_resends_keep_separate_attention_after_original_collection(pool: 
         .await
         .unwrap();
     assert_eq!(super::attention::summary(&pool).await.unwrap().failed, 0);
+}
+
+#[sqlx::test]
+async fn an_updated_preview_cannot_duplicate_an_approved_resend_for_the_same_request(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let (url, _) = mock_server().await;
+    let state = test_support::state(pool.clone(), Some(url.clone()), Some(url)).await;
+    let original = service::prepare(&state, invoice, prepare("invoice_created"), "staff")
+        .await
+        .unwrap();
+    service::approve(&state, original.id, send(&original), "staff", true)
+        .await
+        .unwrap();
+    repository::request_notification(
+        &mut *pool.acquire().await.unwrap(),
+        invoice,
+        "invoice",
+        None,
+    )
+    .await
+    .unwrap();
+    let initial = service::prepare(&state, invoice, prepare("invoice_updated"), "staff")
+        .await
+        .unwrap();
+    let resend = service::resend(&state, original.id, Uuid::new_v4(), "other-staff")
+        .await
+        .unwrap();
+    let parent = repository::get(&pool, initial.id)
+        .await
+        .unwrap()
+        .notification_request_id
+        .unwrap();
+    assert_eq!(
+        repository::get(&pool, resend.id)
+            .await
+            .unwrap()
+            .notification_request_id,
+        Some(parent)
+    );
+    service::approve(&state, resend.id, send(&resend), "other-staff", true)
+        .await
+        .unwrap();
+    assert!(matches!(
+        service::approve(&state, initial.id, send(&initial), "staff", true).await,
+        Err(AppError::Conflict(_))
+    ));
+    let approved: i64 = sqlx::query_scalar("SELECT count(*) FROM notifications WHERE notification_request_id=$1 AND approved_at IS NOT NULL")
+        .bind(parent).fetch_one(&pool).await.unwrap();
+    assert_eq!(approved, 1);
 }

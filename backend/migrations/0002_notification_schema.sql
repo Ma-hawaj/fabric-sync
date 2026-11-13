@@ -1,5 +1,36 @@
 -- Immutable document previews, approved notifications, delivery attempts, and webhooks.
 
+-- One stable parent for each customer notification action. Ordinary data edits
+-- and imports do not create these records. Manual previews become actionable
+-- only after a send is approved. Never replace a request when a new action occurs.
+CREATE TABLE notification_requests (
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    invoice_id UUID REFERENCES invoices(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('invoice', 'invoice_ready', 'repair_ready', 'gift_card')),
+    repair_id UUID REFERENCES order_repairs(id) ON DELETE CASCADE,
+    gift_card_id UUID REFERENCES gift_cards(id) ON DELETE CASCADE,
+    origin TEXT NOT NULL DEFAULT 'business' CHECK (origin IN ('business', 'manual')),
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    CHECK (
+        (kind IN ('invoice', 'invoice_ready') AND invoice_id IS NOT NULL AND repair_id IS NULL AND gift_card_id IS NULL)
+        OR (kind = 'repair_ready' AND invoice_id IS NOT NULL AND repair_id IS NOT NULL AND gift_card_id IS NULL)
+        OR (kind = 'gift_card' AND invoice_id IS NULL AND repair_id IS NULL AND gift_card_id IS NOT NULL)
+    ),
+    UNIQUE (id, invoice_id),
+    UNIQUE (id, gift_card_id)
+);
+CREATE INDEX notification_request_invoice_history
+    ON notification_requests(invoice_id, kind, repair_id, requested_at DESC, id DESC);
+CREATE INDEX notification_request_gift_card_history
+    ON notification_requests(gift_card_id, requested_at DESC, id DESC) WHERE kind = 'gift_card';
+
+CREATE FUNCTION immutable_notification_request() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'Notification requests are immutable; create a new request' USING ERRCODE = '23514';
+END $$;
+CREATE TRIGGER notification_request_immutable BEFORE UPDATE ON notification_requests
+    FOR EACH ROW EXECUTE FUNCTION immutable_notification_request();
+
 CREATE TABLE document_artifacts (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     invoice_id UUID NOT NULL REFERENCES invoices(id),
@@ -19,6 +50,9 @@ CREATE TABLE notifications (
     kind TEXT NOT NULL CHECK (
         kind IN ('invoice_created', 'invoice_updated', 'invoice_ready', 'manual_resend')
     ),
+    -- Nullable only for historical records; every application-created send has a parent.
+    notification_request_id UUID,
+    FOREIGN KEY (notification_request_id, invoice_id) REFERENCES notification_requests(id, invoice_id),
     event_key TEXT NOT NULL,
     source_hash TEXT NOT NULL,
     preview_version UUID NOT NULL,
@@ -50,6 +84,8 @@ CREATE INDEX notifications_preview_cleanup
 CREATE INDEX notifications_versions
     ON notifications (invoice_id, source_hash, approved_at DESC, id DESC)
     WHERE approved_at IS NOT NULL;
+CREATE INDEX notifications_request_history
+    ON notifications(notification_request_id, approved_at DESC, id DESC);
 
 CREATE TABLE notification_recipients (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -106,6 +142,8 @@ CREATE INDEX whatsapp_webhook_pending
 CREATE TABLE gift_card_deliveries (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     gift_card_id UUID NOT NULL REFERENCES gift_cards(id),
+    notification_request_id UUID,
+    FOREIGN KEY (notification_request_id, gift_card_id) REFERENCES notification_requests(id, gift_card_id),
     request_id UUID NOT NULL UNIQUE,
     approved_by TEXT NOT NULL,
     source_hash TEXT NOT NULL,
@@ -131,3 +169,15 @@ CREATE UNIQUE INDEX gift_card_delivery_pending ON gift_card_deliveries(gift_card
     WHERE state IN ('queued', 'sending');
 CREATE INDEX gift_card_delivery_history ON gift_card_deliveries(gift_card_id, created_at DESC, id DESC);
 CREATE INDEX gift_card_delivery_queue ON gift_card_deliveries(available_at) WHERE state = 'queued';
+CREATE INDEX gift_card_delivery_request_history
+    ON gift_card_deliveries(notification_request_id, created_at DESC, id DESC);
+
+-- An unapproved manual preview is not a reminder. Existing unlinked deliveries
+-- remain history without inventing notification work for imported records.
+CREATE VIEW notification_current_requests AS
+SELECT DISTINCT ON (r.kind, r.invoice_id, r.repair_id, r.gift_card_id) r.*
+FROM notification_requests r
+WHERE r.origin = 'business'
+   OR EXISTS (SELECT 1 FROM notifications n WHERE n.notification_request_id = r.id AND n.approved_at IS NOT NULL)
+   OR EXISTS (SELECT 1 FROM gift_card_deliveries d WHERE d.notification_request_id = r.id)
+ORDER BY r.kind, r.invoice_id, r.repair_id, r.gift_card_id, r.requested_at DESC, r.id DESC;
