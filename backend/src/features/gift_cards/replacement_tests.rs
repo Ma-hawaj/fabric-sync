@@ -33,7 +33,7 @@ async fn paid(state: &AppState) -> (Uuid, GiftCard) {
     let sale = invoices::service::create_invoice(
         state,
         serde_json::from_value(json!({
-            "expectedVatRate":0.1,"discountUnit":"amount",
+            "issuingBranchId":test_support::trading_branch(state.db()).await,"expectedVatRate":0.1,"discountUnit":"amount",
             "giftCards":[{"amount":110,"recipientPhone":"33112233","boughtFor":"Recipient"}]
         }))
         .unwrap(),
@@ -68,11 +68,12 @@ async fn stock(pool: &PgPool) -> (Uuid, Uuid) {
         .execute(pool)
         .await
         .unwrap();
+    test_support::open_branch(pool, branch).await;
     (product, branch)
 }
 
 fn purchase(product: Uuid, branch: Uuid, card: &GiftCard, amount: f64) -> Value {
-    json!({"expectedVatRate":0.1,"discountUnit":"amount",
+    json!({"issuingBranchId":branch,"expectedVatRate":0.1,"discountUnit":"amount",
         "products":[{"productId":product,"branchId":branch,"quantity":1,"unitPrice":amount}],
         "giftCardRedemptions":[{"code":card.code,"amount":amount}]})
 }

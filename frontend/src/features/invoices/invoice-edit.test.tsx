@@ -7,15 +7,34 @@ import { createEmptyMeasurement } from '@/features/customers/types/measurement-f
 import { measurementPayload } from '@/features/customers/hooks/use-create-customer'
 
 // Hoisted by vitest above these imports at transform time.
-const { save, navigate } = vi.hoisted(() => ({
+const { save, navigate, eligibility } = vi.hoisted(() => ({
   save: vi.fn(),
   navigate: vi.fn(),
+  eligibility: { canTrade: true, canCreateOrders: true },
 }))
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigate,
 }))
 vi.mock('./hooks/use-update-invoice', () => ({
   useUpdateInvoice: () => ({ mutateAsync: save, isPending: false }),
+}))
+vi.mock('@/features/reports/hooks/use-sales-closing', () => ({
+  useBranchDayStatus: () => ({
+    data: {
+      issuingBranchId: 'edit-counter',
+      issuingBranchName: 'Edit counter',
+      branchId: 'edit-counter',
+      date: '2026-07-19',
+      openingRecorded: true,
+      closed: false,
+      previousUnclosedDate: null,
+      trackingStartDate: '2026-07-19',
+      dailyCheckRequired: true,
+      ...eligibility,
+    },
+    isPending: false,
+    isError: false,
+  }),
 }))
 vi.mock('@/features/notifications/notification-dialog', () => ({
   NotificationDialog: ({
@@ -38,6 +57,8 @@ vi.mock('@/features/notifications/notification-dialog', () => ({
 beforeEach(() => {
   save.mockReset()
   navigate.mockReset()
+  eligibility.canTrade = true
+  eligibility.canCreateOrders = true
 })
 
 const EDIT_FIXTURE: InvoiceEdit = {
@@ -48,8 +69,10 @@ const EDIT_FIXTURE: InvoiceEdit = {
   urgentCharge: 0,
   date: '2026-07-19',
   targetDate: null,
-  branchId: null,
-  branchName: null,
+  issuingBranchId: 'edit-counter',
+  issuingBranchName: 'Edit counter',
+  branchId: 'edit-counter',
+  branchName: 'Edit counter',
   discount: 10,
   discountUnit: 'amount',
   payments: [],
@@ -80,6 +103,18 @@ function renderPage(edit: InvoiceEdit = EDIT_FIXTURE) {
 }
 
 describe('InvoiceEditPage', () => {
+  it('allows an existing invoice edit when trading is open but the branch cannot create new orders', async () => {
+    eligibility.canCreateOrders = false
+    save.mockResolvedValue({ id: EDIT_FIXTURE.id, totalPrice: 140 })
+    renderPage()
+    const button = await screen.findByRole<HTMLButtonElement>('button', {
+      name: 'Save invoice',
+    })
+    expect(button.disabled).toBe(false)
+    expect(screen.queryByText(/Record today’s opening cash/)).toBeNull()
+    fireEvent.click(button)
+    await waitFor(() => expect(save).toHaveBeenCalledOnce())
+  })
   it('saves an imported unknown-material order without selecting fabric or changing its price', async () => {
     save.mockResolvedValue({ id: EDIT_FIXTURE.id, totalPrice: 100 })
     renderPage({

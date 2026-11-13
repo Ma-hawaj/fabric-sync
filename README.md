@@ -198,6 +198,33 @@ cd frontend
 VITE_API_BASE_URL=http://localhost:8000 pnpm run dev
 ```
 
+## Branch closing report
+
+Use **Branch Closing** to choose a branch and day, count the cash drawer,
+confirm Benefit/Card totals, and see any over/short amounts. Opening float is
+saved separately before closing. Delivery fees and other paid branch expenses
+are logged and cash expenses reduce expected drawer cash. Final closing locks
+the saved report. Each branch's first saved opening starts tracking automatically;
+earlier history stays read-only without a closing backlog. New sales require
+opening cash and closure or manager skipping of earlier active days; an opening
+requires closing even with no sales. The previous active day can be closed late,
+with an explanation, before today's opening or trading. Its recorded entries
+remain read-only and the completed report locks permanently. Quiet days are
+skipped automatically. Managers can disable this trading check per branch;
+outstanding past active days and days accumulated while it is off are automatically
+skipped with an audit record and remain unreconciled. Re-enabling requires today's
+opening without a backlog from the disabled period.
+Closed reports and recorded payments always stay locked, and explained differences are
+retained. Review and close saves counts and notes in one permanent record;
+export it as CSV or print/save PDF. See [branch reconciliation](docs/sales-closing.md)
+for first opening, optional daily checks, financial ownership and immutable history.
+
+Eligible draft invoices can be edited across business days once the branch meets
+today's trading requirements. Original issue dates, issuing branches and recorded
+payments are retained. Closed and skipped reports keep their saved figures;
+unfinalized reports reflect current invoice details. Existing production,
+collection and balance restrictions continue to apply.
+
 ## Direct material sales
 
 On **New Invoice**, remove the tailoring customer block for a material-only

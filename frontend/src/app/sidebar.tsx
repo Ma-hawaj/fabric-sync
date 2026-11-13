@@ -46,10 +46,12 @@ import {
   PaletteIcon,
   SunIcon,
   WrenchIcon,
+  ClipboardListIcon,
 } from 'lucide-react'
 
 const navItems = [
   { to: '/invoices', label: 'Invoices', icon: ReceiptText },
+  { to: '/sales-closing', label: 'Branch Closing', icon: ClipboardListIcon },
   { to: '/orders', label: 'Orders', icon: ShoppingCart },
   { to: '/repairs', label: 'Repairs', icon: WrenchIcon },
   { to: '/customers', label: 'Customers', icon: ContactIcon },
@@ -191,7 +193,13 @@ export function AppSidebar() {
         {[
           {
             label: 'Workspace',
-            paths: ['/invoices', '/orders', '/repairs', '/customers'],
+            paths: [
+              '/invoices',
+              '/sales-closing',
+              '/orders',
+              '/repairs',
+              '/customers',
+            ],
           },
           {
             label: 'Catalog',

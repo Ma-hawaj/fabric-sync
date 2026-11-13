@@ -1,0 +1,73 @@
+import type { SalesClosing } from './types/sales-closing'
+
+export function closingFixture(date = '2026-11-02'): SalesClosing {
+  return {
+    businessDate: date,
+    readOnly: false,
+    trackingStartDate: date,
+    opening: {
+      id: 'opening-1',
+      amount: 20,
+      recordedAt: `${date}T05:00:00Z`,
+      recordedBy: 'test-staff',
+      notes: '',
+      supersedesId: null,
+    },
+    expenses: [],
+    branchId: '00000000-0000-4000-8000-000000000001',
+    branchName: 'Main Branch',
+    fingerprint: 'test-fingerprint',
+    closure: null,
+    unassignedActivityCount: 0,
+    date,
+    timezone: 'Asia/Bahrain',
+    generatedAt: '2026-11-02T18:00:00Z',
+    summary: {
+      unrecordedMethodCount: 0,
+      invoiceCount: 1,
+      invoiceTotal: 110,
+      taxableAmount: 100,
+      vatAmount: 10,
+      giftCardSales: 0,
+      credits: 20,
+      netInvoiceActivity: 90,
+      invoicePayments: 50,
+      repairPayments: 7,
+      externalRefunds: 5,
+      netExternalReceipts: 52,
+      giftCardRedemptions: 10,
+      giftCardRefunds: 3,
+    },
+    tenders: [
+      {
+        method: 'cash',
+        invoicePayments: 50,
+        repairPayments: 7,
+        refunds: 5,
+        net: 52,
+        expenses: 0,
+        afterExpenses: 52,
+      },
+    ],
+    activity: [
+      {
+        id: 'sale-1',
+        invoiceId: 'inv-1',
+        invoiceNumber: 1,
+        occurredAt: '2026-11-01T21:30:00Z',
+        kind: 'sale',
+        method: null,
+        amount: 110,
+      },
+      {
+        id: 'refund-1',
+        invoiceId: 'inv-2',
+        invoiceNumber: 2,
+        occurredAt: '2026-11-02T17:00:00Z',
+        kind: 'refund',
+        method: 'cash',
+        amount: 5,
+      },
+    ],
+  }
+}

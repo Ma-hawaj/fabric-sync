@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO branch_missed_closings(branch_id,business_date,reason,resolved_by,request_id,request_hash,report_snapshot) VALUES($1,$2,$3,$4,$5,$6,$7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Text",
+        "Text",
+        "Uuid",
+        "Bytea",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2adea1c1cfe64c5aef5224593607757c2769596f34e89d60503f9c75637e0fd5"
+}

@@ -230,6 +230,8 @@ pub async fn record_payment(
         verify_request_hash(&stored, &hash)?;
         payment
     } else {
+        crate::features::reports::day_service::require_invoice_trading(state, &mut tx, invoice_id)
+            .await?;
         if let Some(order_id) = input.order_id {
             if !repository::order_belongs_to_invoice(&mut tx, order_id, invoice_id).await? {
                 return Err(AppError::NotFound(format!(
@@ -294,6 +296,8 @@ pub async fn collect_invoice(
     };
 
     let payment_method = if summary.balance_due > 0.0 {
+        crate::features::reports::day_service::require_invoice_trading(state, &mut tx, invoice_id)
+            .await?;
         let payment_type = payment_type.ok_or_else(|| {
             AppError::BadRequest("settling this invoice needs a paymentType".to_string())
         })?;
@@ -1403,6 +1407,7 @@ mod tests {
         customer_fabric["urgentCharge"] = serde_json::json!(777.0);
         // Deserialize the HTTP shape directly: submitted prices cannot override the catalog.
         let mut input: CreateInvoiceInput = serde_json::from_value(serde_json::json!({
+            "issuingBranchId": production, "branchId": production,
             "targetDate": "2026-11-01",
             "discount": 10.0,
             "expectedVatRate": 0.1, "discountUnit": "percent",
@@ -1621,6 +1626,8 @@ mod tests {
         assert_eq!(totals.taxable, 84.55);
         assert_eq!(totals.vat, 8.45);
         let saved = repository::LockedInvoice {
+            issuing_branch_id: None,
+            branch_id: None,
             delivery_charge: 3.0,
             collection_method: "delivery".into(),
             vat_rate: 0.1,
@@ -2364,6 +2371,12 @@ pub async fn create_invoice(
     let mut tx = state.db().begin().await?;
     normalize_fulfilment(&mut input);
     validate_invoice_locations(&mut tx, &input, None).await?;
+    crate::features::reports::day_service::require_new_orders(
+        state,
+        &mut tx,
+        input.issuing_branch_id,
+    )
+    .await?;
     resolve_order_prices(
         &mut tx,
         &mut input,
@@ -2483,6 +2496,8 @@ pub async fn get_invoice_for_edit(
 /// The ledger is left alone — an edit never touches money, so an invoice
 /// carrying an advance stays editable. What is checked instead is that the
 /// money already taken still fits the rebuilt total.
+/// Across business days, recorded gift-card tender is also retained verbatim,
+/// including its original IDs and timestamps; it is not spent again today.
 ///
 /// Refused once goods or work have moved past the draft stage — a collected
 /// order, or any recorded stage/assignee/repair — since there is no longer
@@ -2505,6 +2520,24 @@ pub async fn update_invoice(
     normalize_fulfilment(&mut input);
     validate_invoice_locations(&mut tx, &input, Some(invoice_id)).await?;
     validate_expected_vat(input.expected_vat_rate, locked.vat_rate)?;
+    let financial_branch = locked.issuing_branch_id.or(locked.branch_id);
+    // Keep the financial branch when an older client omits the new field.
+    if input.issuing_branch_id.is_none() {
+        input.issuing_branch_id = financial_branch;
+    }
+    if input.issuing_branch_id != financial_branch {
+        return Err(AppError::Conflict(
+            "The issuing branch cannot be changed after an invoice is issued.".into(),
+        ));
+    }
+    let today =
+        crate::features::reports::day_service::require_trading(state, &mut tx, financial_branch)
+            .await?;
+    let cross_day = locked
+        .invoice_date
+        .with_timezone(&state.timezone()?)
+        .date_naive()
+        != today;
     let saved: HashMap<_, _> = repository::saved_order_prices(&mut tx, invoice_id)
         .await?
         .into_iter()
@@ -2562,6 +2595,31 @@ pub async fn update_invoice(
     let material_lines = repository::old_material_lines(&mut tx, invoice_id).await?;
     let gift_sales = repository::old_gift_card_sales(&mut tx, invoice_id).await?;
     let redemptions = repository::old_redemptions(&mut tx, invoice_id).await?;
+    if cross_day {
+        // An older draft may change, but its recorded tender is not a new
+        // payment today. Compare as a multiset so input order is immaterial.
+        let mut saved: Vec<_> = redemptions
+            .iter()
+            .map(|r| (r.code.clone(), r.amount.to_bits()))
+            .collect();
+        let mut requested = input
+            .gift_card_redemptions
+            .iter()
+            .map(|r| {
+                Ok((
+                    gift_cards_service::normalize_code(&r.code)?,
+                    r.amount.to_bits(),
+                ))
+            })
+            .collect::<Result<Vec<_>, AppError>>()?;
+        saved.sort_unstable();
+        requested.sort_unstable();
+        if saved != requested {
+            return Err(AppError::Conflict(
+                "Recorded gift-card payments on older invoices must stay unchanged.".into(),
+            ));
+        }
+    }
     let measurement_refs = repository::old_measurement_refs(&mut tx, invoice_id).await?;
 
     // Gift cards first: lock every card this invoice touched so a till
@@ -2591,8 +2649,11 @@ pub async fn update_invoice(
             )));
         }
     }
-    for redemption in &redemptions {
-        repository::refund_gift_card(&mut tx, redemption.gift_card_id, redemption.amount).await?;
+    if !cross_day {
+        for redemption in &redemptions {
+            repository::refund_gift_card(&mut tx, redemption.gift_card_id, redemption.amount)
+                .await?;
+        }
     }
 
     // Hand back what the old lines consumed. The locations are nullable in the
@@ -2626,7 +2687,9 @@ pub async fn update_invoice(
 
     // Rebuild order and retail lines, retaining all measurement history.
     // Sold gift cards go once the spent-check above has cleared them.
-    repository::delete_redemptions(&mut tx, invoice_id).await?;
+    if !cross_day {
+        repository::delete_redemptions(&mut tx, invoice_id).await?;
+    }
     repository::delete_orders(&mut tx, invoice_id).await?;
     repository::delete_items(&mut tx, invoice_id).await?;
     let sold_ids: Vec<Uuid> = gift_sales.iter().map(|sale| sale.gift_card_id).collect();
@@ -2669,17 +2732,27 @@ pub async fn update_invoice(
     )
     .await?;
 
-    let prepaid_amount = write_redemptions(
-        &mut tx,
-        invoice_id,
-        locked.invoice_date.date_naive(),
-        &input.gift_card_redemptions,
-        &redemptions
-            .iter()
-            .map(|r| r.gift_card_id)
-            .collect::<Vec<_>>(),
-    )
-    .await?;
+    let prepaid_amount = if cross_day {
+        let mut prepaid = 0.0;
+        for redemption in &redemptions {
+            if repository::voucher_has_sale_invoice(&mut tx, redemption.gift_card_id).await? {
+                prepaid += redemption.amount;
+            }
+        }
+        round2(prepaid)
+    } else {
+        write_redemptions(
+            &mut tx,
+            invoice_id,
+            locked.invoice_date.date_naive(),
+            &input.gift_card_redemptions,
+            &redemptions
+                .iter()
+                .map(|r| r.gift_card_id)
+                .collect::<Vec<_>>(),
+        )
+        .await?
+    };
 
     let totals = compute_totals(&input, locked.vat_rate, prepaid_amount);
 

@@ -386,9 +386,8 @@ pub struct InvoicePayment {
 /// as a printed document. `GET /invoices/:id` keeps serving the display shape
 /// — names without ids — which is why this is a separate type and endpoint.
 ///
-/// An invoice with payments cannot be edited at all (see
-/// service::update_invoice), so `payments` is informational here: the form
-/// maps it back to its `payments` input only when it is empty.
+/// Payments are informational: invoice edits retain the recorded ledger.
+/// Additional payments use the dedicated payment and collection endpoints.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEdit {

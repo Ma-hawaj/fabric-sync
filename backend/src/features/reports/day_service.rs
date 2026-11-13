@@ -1,0 +1,302 @@
+use chrono::{NaiveDate, Utc};
+use sqlx::PgConnection;
+use uuid::Uuid;
+
+use super::{
+    day_repository as storage, missed_service, repository, service, till_repository, types::*,
+};
+use crate::{error::AppError, state::AppState};
+
+// Every operation that changes a branch's financial report takes this lock.
+// Closing never locks invoices, so invoice -> branch lock ordering cannot cycle.
+pub(crate) async fn lock_branch(db: &mut PgConnection, branch: Uuid) -> Result<(), sqlx::Error> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!("branch-business:{branch}"))
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn business_date(
+    state: &AppState,
+    db: &mut PgConnection,
+) -> Result<NaiveDate, AppError> {
+    let (started, now) = storage::transaction_times(db).await?;
+    let zone = state.timezone()?;
+    let day = started.with_timezone(&zone).date_naive();
+    if day != now.with_timezone(&zone).date_naive() {
+        return Err(AppError::Conflict(
+            "The business date changed while saving. Refresh and try again.".into(),
+        ));
+    }
+    Ok(day)
+}
+
+pub(crate) async fn transaction_time(
+    db: &mut PgConnection,
+) -> Result<chrono::DateTime<Utc>, AppError> {
+    Ok(storage::transaction_times(db).await?.0)
+}
+
+pub(super) async fn editable(
+    state: &AppState,
+    db: &mut PgConnection,
+    branch: Uuid,
+    date: NaiveDate,
+) -> Result<NaiveDate, AppError> {
+    let today = business_date(state, db).await?;
+    if date > today {
+        return Err(AppError::BadRequest(
+            "Future branch days cannot be changed or closed.".into(),
+        ));
+    }
+    if date < today {
+        return Err(AppError::Conflict("Past reports are read-only. A manager may separately resolve a missed closing without changing its figures.".into()));
+    }
+    repository::branch_name(db, branch)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Branch not found.".into()))?;
+    if storage::closure(db, branch, date).await?.is_some() {
+        return Err(AppError::Conflict(
+            "This branch day is closed. Its report is read-only.".into(),
+        ));
+    }
+    let settings = storage::daily_check_settings(db, branch).await?;
+    if !settings.required {
+        missed_service::auto_skip(
+            state,
+            db,
+            branch,
+            today,
+            settings.changed_by.as_deref().unwrap_or("system"),
+        )
+        .await?;
+    }
+    Ok(today)
+}
+
+pub async fn status(state: &AppState, branch: Uuid) -> Result<BranchDayStatus, AppError> {
+    let mut tx = state.db().begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *tx)
+        .await?;
+    let today = business_date(state, &mut tx).await?;
+    let result = load_status(state, &mut tx, branch, today).await?;
+    tx.commit().await?;
+    Ok(result)
+}
+
+// A late close only adds counts to the last active day's existing records.
+// Financial writes and openings still use `editable`, which is today-only.
+pub(super) async fn late_closing_date(
+    db: &mut PgConnection,
+    branch: Uuid,
+    days: &storage::ActiveDays,
+) -> Result<Option<NaiveDate>, AppError> {
+    let Some(previous) = days.previous_unclosed_date else {
+        return Ok(None);
+    };
+    if days.has_activity_today || days.previous_active_date != Some(previous) {
+        return Ok(None);
+    }
+    Ok(till_repository::opening(db, branch, previous, None)
+        .await?
+        .map(|_| previous))
+}
+
+async fn load_status(
+    state: &AppState,
+    db: &mut PgConnection,
+    branch: Uuid,
+    today: NaiveDate,
+) -> Result<BranchDayStatus, AppError> {
+    repository::branch_name(db, branch)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Branch not found.".into()))?;
+    let days = storage::active_days(db, branch, state.timezone()?.name(), today).await?;
+    let previous = days.previous_unclosed_date;
+    let late_closing_date = late_closing_date(db, branch, &days).await?;
+    let opening = till_repository::opening(db, branch, today, None)
+        .await?
+        .is_some();
+    let closed = storage::closure(db, branch, today).await?.is_some();
+    let starts = till_repository::tracking_start(db, branch).await?;
+    let settings = storage::daily_check_settings(db, branch).await?;
+    let can_trade = !closed && (!settings.required || (opening && previous.is_none()));
+    Ok(BranchDayStatus {
+        late_closing_date,
+        daily_check_required: settings.required,
+        daily_check_changed_at: settings.changed_at,
+        daily_check_changed_by: settings.changed_by,
+        tracking_start_date: starts,
+        branch_id: branch,
+        date: today,
+        opening_recorded: opening,
+        closed,
+        previous_unclosed_date: if settings.required { previous } else { None },
+        can_trade,
+        can_create_orders: can_trade && storage::active_branch(db, branch).await?,
+    })
+}
+
+/// Must run inside the financial write's transaction, after locking its invoice.
+pub(crate) async fn require_trading(
+    state: &AppState,
+    db: &mut PgConnection,
+    branch: Option<Uuid>,
+) -> Result<NaiveDate, AppError> {
+    let branch = branch.ok_or_else(|| {
+        AppError::BadRequest("Choose an issuing branch before recording a sale or payment.".into())
+    })?;
+    lock_branch(db, branch).await?;
+    let today = business_date(state, db).await?;
+    let status = load_status(state, db, branch, today).await?;
+    if status.closed {
+        return Err(AppError::Conflict("This branch is closed for today. New orders and financial activity are blocked until the next business day.".into()));
+    }
+    if !status.daily_check_required {
+        missed_service::auto_skip(
+            state,
+            db,
+            branch,
+            today,
+            status.daily_check_changed_by.as_deref().unwrap_or("system"),
+        )
+        .await?;
+        return Ok(today);
+    }
+    if let Some(previous) = status.previous_unclosed_date {
+        if status.late_closing_date == Some(previous) {
+            return Err(AppError::Conflict(format!("Close this branch's previous active day {previous}, then save today's opening before new orders or financial activity.")));
+        }
+        return Err(AppError::Conflict(format!("A manager must resolve this branch's missed closing for {previous} before new orders or financial activity.")));
+    }
+    if !status.opening_recorded {
+        return Err(AppError::Conflict("Record today's opening cash for this branch before recording new orders or financial activity.".into()));
+    }
+    Ok(today)
+}
+
+pub async fn set_daily_check(
+    state: &AppState,
+    input: UpdateDailyCheckInput,
+    actor: &str,
+) -> Result<BranchDayStatus, AppError> {
+    let mut tx = state.db().begin().await?;
+    lock_branch(&mut tx, input.branch_id).await?;
+    let today = business_date(state, &mut tx).await?;
+    repository::branch_name(&mut tx, input.branch_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Branch not found.".into()))?;
+    let previous = storage::daily_check_settings(&mut tx, input.branch_id).await?;
+    if !previous.required || !input.required {
+        let disabled_by = if previous.required {
+            actor
+        } else {
+            previous.changed_by.as_deref().unwrap_or("system")
+        };
+        missed_service::auto_skip(state, &mut tx, input.branch_id, today, disabled_by).await?;
+    }
+    storage::update_daily_check(&mut tx, input.branch_id, input.required, actor).await?;
+    let result = load_status(state, &mut tx, input.branch_id, today).await?;
+    tx.commit().await?;
+    Ok(result)
+}
+
+pub(crate) async fn require_new_orders(
+    state: &AppState,
+    db: &mut PgConnection,
+    branch: Option<Uuid>,
+) -> Result<(), AppError> {
+    require_trading(state, db, branch).await?;
+    if !storage::active_branch(db, branch.expect("validated branch")).await? {
+        return Err(AppError::Conflict("This branch is inactive.".into()));
+    }
+    Ok(())
+}
+
+pub(crate) async fn require_invoice_trading(
+    state: &AppState,
+    db: &mut PgConnection,
+    invoice: Uuid,
+) -> Result<(), AppError> {
+    let branch = storage::invoice_branch(db, invoice).await?;
+    require_trading(state, db, branch).await?;
+    Ok(())
+}
+
+pub async fn close_day(
+    state: &AppState,
+    input: CloseDayInput,
+    actor: &str,
+) -> Result<SalesClosing, AppError> {
+    let hash = crate::idempotency::request_hash("branch.close.v2", input.branch_id, &input);
+    let mut tx = state.db().begin().await?;
+    lock_branch(&mut tx, input.branch_id).await?;
+    if let Some(saved) = storage::closure(&mut tx, input.branch_id, input.date).await? {
+        if saved.request_id != input.request_id {
+            return Err(AppError::Conflict(
+                "This branch day is already closed.".into(),
+            ));
+        }
+        crate::idempotency::verify_request_hash(&saved.request_hash, &hash)?;
+        return Ok(saved.into_report());
+    }
+    let today = business_date(state, &mut tx).await?;
+    if input.date < today {
+        let days =
+            storage::active_days(&mut tx, input.branch_id, state.timezone()?.name(), today).await?;
+        if late_closing_date(&mut tx, input.branch_id, &days).await? != Some(input.date) {
+            return Err(AppError::Conflict("Only the previous active day with a saved opening can be closed late, before today's opening or trading. Closed and skipped days stay locked.".into()));
+        }
+        if input.counts.notes.trim().is_empty() {
+            return Err(AppError::BadRequest(
+                "Explain why this day is being closed late in the closing notes.".into(),
+            ));
+        }
+    } else {
+        editable(state, &mut tx, input.branch_id, input.date).await?;
+    }
+    if let Some(previous) = storage::previous_unclosed(
+        &mut tx,
+        input.branch_id,
+        state.timezone()?.name(),
+        input.date,
+    )
+    .await?
+    {
+        return Err(AppError::Conflict(format!(
+            "Close the earlier active day {previous} first."
+        )));
+    }
+    let mut report = service::load(
+        &mut tx,
+        input.date,
+        state.timezone()?,
+        Utc::now(),
+        input.branch_id,
+    )
+    .await?;
+    // Preserve the submission's business date to distinguish a late close even
+    // after live report metadata advances on later reads.
+    report.business_date = Some(today);
+    if report.fingerprint != input.fingerprint {
+        return Err(AppError::Conflict(
+            "Recorded transactions changed. Refresh and review the totals before closing.".into(),
+        ));
+    }
+    let comparison = super::reconciliation::compare(&report, &input.counts)?;
+    if !comparison.matched && input.counts.notes.trim().is_empty() {
+        return Err(AppError::BadRequest(
+            "Explain the difference or unresolved activity before closing.".into(),
+        ));
+    }
+    // The one closing record contains the counts, comparison and frozen report.
+    storage::insert_closure(&mut tx, &input, &comparison, &report, &hash, actor).await?;
+    let result = storage::closure(&mut tx, input.branch_id, input.date)
+        .await?
+        .expect("new closure exists")
+        .into_report();
+    tx.commit().await?;
+    Ok(result)
+}

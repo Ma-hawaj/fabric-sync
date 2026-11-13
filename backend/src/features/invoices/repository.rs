@@ -644,6 +644,8 @@ pub async fn insert_invoice(
 /// That later read observes any changes committed while lock acquisition
 /// waited. `None` means the invoice does not exist.
 pub struct LockedInvoice {
+    pub issuing_branch_id: Option<Uuid>,
+    pub branch_id: Option<Uuid>,
     pub delivery_charge: f64,
     pub collection_method: String,
     pub vat_rate: f64,
@@ -658,7 +660,7 @@ pub async fn lock_invoice(
 ) -> Result<Option<LockedInvoice>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT invoice_date, vat_rate::float8 AS "vat_rate!", delivery_charge::float8 AS "delivery_charge!", collection_method
+        SELECT issuing_branch_id, branch_id, invoice_date, vat_rate::float8 AS "vat_rate!", delivery_charge::float8 AS "delivery_charge!", collection_method
         FROM invoices
         WHERE id = $1
         FOR UPDATE
@@ -669,6 +671,8 @@ pub async fn lock_invoice(
     .await?;
 
     Ok(row.map(|row| LockedInvoice {
+        issuing_branch_id: row.issuing_branch_id,
+        branch_id: row.branch_id,
         delivery_charge: row.delivery_charge,
         collection_method: row.collection_method,
         vat_rate: row.vat_rate,
@@ -1002,6 +1006,7 @@ pub struct OldGiftCardSale {
 /// Gift card tender this invoice spent, for paying the balance back.
 pub struct OldRedemption {
     pub gift_card_id: Uuid,
+    pub code: String,
     pub amount: f64,
 }
 
@@ -1433,9 +1438,10 @@ pub async fn old_redemptions(
     sqlx::query_as!(
         OldRedemption,
         r#"
-        SELECT gift_card_id, amount::float8 AS "amount!"
-        FROM gift_card_redemptions
-        WHERE invoice_id = $1
+        SELECT r.gift_card_id, g.code, r.amount::float8 AS "amount!"
+        FROM gift_card_redemptions r
+        JOIN gift_cards g ON g.id = r.gift_card_id
+        WHERE r.invoice_id = $1
         "#,
         invoice_id,
     )

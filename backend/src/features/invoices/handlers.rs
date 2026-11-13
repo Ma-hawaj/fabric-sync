@@ -70,8 +70,8 @@ pub async fn get_invoice_for_edit(
     ))
 }
 
-/// A full rebuild from a fresh copy of the create input. Refused once the
-/// invoice is paid, collected, or in production — see service::update_invoice.
+/// Rebuild an eligible draft, including one issued on an earlier day. Recorded
+/// payments and collection/production restrictions remain protected.
 pub async fn update_invoice(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthenticatedUser>,

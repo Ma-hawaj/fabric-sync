@@ -6,6 +6,38 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 pub async fn state(db: PgPool, renderer: Option<String>, provider: Option<String>) -> AppState {
+    // Most financial fixtures represent branches already open for business.
+    let day = chrono::Utc::now()
+        .with_timezone(&chrono_tz::Asia::Bahrain)
+        .date_naive();
+    sqlx::query("INSERT INTO branch_cash_openings(branch_id,business_date,amount,request_id,request_hash,recorded_by) SELECT id,$1,0,uuidv7(),decode(repeat('00',32),'hex'),'fixture' FROM branch ON CONFLICT DO NOTHING")
+        .bind(day).execute(&db).await.unwrap();
+    state_without_openings(db, renderer, provider).await
+}
+
+pub async fn open_branch(db: &PgPool, branch: Uuid) {
+    let day = chrono::Utc::now()
+        .with_timezone(&chrono_tz::Asia::Bahrain)
+        .date_naive();
+    sqlx::query("INSERT INTO branch_cash_openings(branch_id,business_date,amount,request_id,request_hash,recorded_by) VALUES($1,$2,0,uuidv7(),decode(repeat('00',32),'hex'),'fixture') ON CONFLICT DO NOTHING")
+        .bind(branch).bind(day).execute(db).await.unwrap();
+}
+
+pub async fn trading_branch(db: &PgPool) -> Uuid {
+    let branch = sqlx::query_scalar("INSERT INTO branch(name) VALUES($1) RETURNING id")
+        .bind(format!("Trading {}", Uuid::new_v4()))
+        .fetch_one(db)
+        .await
+        .unwrap();
+    open_branch(db, branch).await;
+    branch
+}
+
+pub async fn state_without_openings(
+    db: PgPool,
+    renderer: Option<String>,
+    provider: Option<String>,
+) -> AppState {
     let mut config = Config::from_env();
     config.delivery_charge = Some("3".into());
     config.urgent_charge_amount = Some("5".into());

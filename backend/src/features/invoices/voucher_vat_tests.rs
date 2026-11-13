@@ -28,11 +28,12 @@ async fn product(pool: &PgPool) -> (Uuid, Uuid) {
         .execute(pool)
         .await
         .unwrap();
+    test_support::open_branch(pool, branch).await;
     (product, branch)
 }
 
 fn merchandise(product: Uuid, branch: Uuid, price: f64, code: &str, redeemed: f64) -> Value {
-    json!({"expectedVatRate":0.1,"discountUnit":"amount",
+    json!({"issuingBranchId":branch,"expectedVatRate":0.1,"discountUnit":"amount",
         "products":[{"productId":product,"branchId":branch,"quantity":1,"unitPrice":price}],
         "giftCardRedemptions":[{"code":code,"amount":redeemed}]})
 }
@@ -72,8 +73,10 @@ async fn issue_partial_redemption_and_final_redemption_tax_value_exactly_once(po
     let (product, branch) = product(&pool).await;
     let sale = service::create_invoice(
         &state,
-        input(json!({"expectedVatRate":0.1,"discountUnit":"amount",
-        "giftCards":[{"amount":110,"recipientPhone":"33112233"}]})),
+        input(
+            json!({"issuingBranchId":branch,"expectedVatRate":0.1,"discountUnit":"amount",
+        "giftCards":[{"amount":110,"recipientPhone":"33112233"}]}),
+        ),
         "staff",
     )
     .await
@@ -271,7 +274,7 @@ async fn mixed_paid_and_uninvoiced_cards_exclude_only_prepaid_value(pool: PgPool
     let paid = service::create_invoice(
         &state,
         input(json!({
-            "expectedVatRate":0.1,"discountUnit":"amount",
+            "issuingBranchId":branch,"expectedVatRate":0.1,"discountUnit":"amount",
             "giftCards":[{"amount":110,"recipientPhone":"33112233"}]
         })),
         "seller",

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
+import { Route as AuthenticatedSalesClosingRouteImport } from './routes/_authenticated/sales-closing'
 import { Route as AuthenticatedProductsRouteRouteImport } from './routes/_authenticated/products/route'
 import { Route as AuthenticatedOrdersRouteRouteImport } from './routes/_authenticated/orders/route'
 import { Route as AuthenticatedOrderStagesRouteRouteImport } from './routes/_authenticated/order-stages/route'
@@ -64,6 +65,12 @@ const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedSalesClosingRoute =
+  AuthenticatedSalesClosingRouteImport.update({
+    id: '/sales-closing',
+    path: '/sales-closing',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedProductsRouteRoute =
   AuthenticatedProductsRouteRouteImport.update({
     id: '/products',
@@ -298,6 +305,7 @@ export interface FileRoutesByFullPath {
   '/order-stages': typeof AuthenticatedOrderStagesRouteRouteWithChildren
   '/orders': typeof AuthenticatedOrdersRouteRouteWithChildren
   '/products': typeof AuthenticatedProductsRouteRouteWithChildren
+  '/sales-closing': typeof AuthenticatedSalesClosingRoute
   '/users': typeof AuthenticatedUsersRoute
   '/invoices/$invoiceId': typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
   '/customers/new': typeof AuthenticatedCustomersNewRoute
@@ -330,6 +338,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/sales-closing': typeof AuthenticatedSalesClosingRoute
   '/users': typeof AuthenticatedUsersRoute
   '/customers/new': typeof AuthenticatedCustomersNewRoute
   '/design-options/new': typeof AuthenticatedDesignOptionsNewRoute
@@ -372,6 +381,7 @@ export interface FileRoutesById {
   '/_authenticated/order-stages': typeof AuthenticatedOrderStagesRouteRouteWithChildren
   '/_authenticated/orders': typeof AuthenticatedOrdersRouteRouteWithChildren
   '/_authenticated/products': typeof AuthenticatedProductsRouteRouteWithChildren
+  '/_authenticated/sales-closing': typeof AuthenticatedSalesClosingRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/invoices/$invoiceId': typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
   '/_authenticated/customers/new': typeof AuthenticatedCustomersNewRoute
@@ -415,6 +425,7 @@ export interface FileRouteTypes {
     | '/order-stages'
     | '/orders'
     | '/products'
+    | '/sales-closing'
     | '/users'
     | '/invoices/$invoiceId'
     | '/customers/new'
@@ -447,6 +458,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/sales-closing'
     | '/users'
     | '/customers/new'
     | '/design-options/new'
@@ -488,6 +500,7 @@ export interface FileRouteTypes {
     | '/_authenticated/order-stages'
     | '/_authenticated/orders'
     | '/_authenticated/products'
+    | '/_authenticated/sales-closing'
     | '/_authenticated/users'
     | '/_authenticated/invoices/$invoiceId'
     | '/_authenticated/customers/new'
@@ -545,6 +558,13 @@ declare module '@tanstack/react-router' {
       path: '/users'
       fullPath: '/users'
       preLoaderRoute: typeof AuthenticatedUsersRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/sales-closing': {
+      id: '/_authenticated/sales-closing'
+      path: '/sales-closing'
+      fullPath: '/sales-closing'
+      preLoaderRoute: typeof AuthenticatedSalesClosingRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/products': {
@@ -1001,6 +1021,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedOrderStagesRouteRoute: typeof AuthenticatedOrderStagesRouteRouteWithChildren
   AuthenticatedOrdersRouteRoute: typeof AuthenticatedOrdersRouteRouteWithChildren
   AuthenticatedProductsRouteRoute: typeof AuthenticatedProductsRouteRouteWithChildren
+  AuthenticatedSalesClosingRoute: typeof AuthenticatedSalesClosingRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
   AuthenticatedRepairsIndexRoute: typeof AuthenticatedRepairsIndexRoute
 }
@@ -1021,6 +1042,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
     AuthenticatedOrderStagesRouteRouteWithChildren,
   AuthenticatedOrdersRouteRoute: AuthenticatedOrdersRouteRouteWithChildren,
   AuthenticatedProductsRouteRoute: AuthenticatedProductsRouteRouteWithChildren,
+  AuthenticatedSalesClosingRoute: AuthenticatedSalesClosingRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
   AuthenticatedRepairsIndexRoute: AuthenticatedRepairsIndexRoute,
 }

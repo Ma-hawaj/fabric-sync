@@ -37,6 +37,7 @@ async fn fixture(pool: &PgPool) -> (Uuid, Value) {
     .fetch_one(pool)
     .await
     .unwrap();
+    crate::test_support::open_branch(pool, branch).await;
     let material: Uuid = sqlx::query_scalar(
         "INSERT INTO materials(name,junior_price,normal_price,large_price) VALUES('Cotton',90,100,150) RETURNING id",
     )
@@ -56,7 +57,7 @@ async fn fixture(pool: &PgPool) -> (Uuid, Value) {
     (
         material,
         json!({
-            "expectedVatRate":0.1,"discountUnit":"amount","targetDate":"2099-01-01",
+            "issuingBranchId":branch,"branchId":branch,"expectedVatRate":0.1,"discountUnit":"amount","targetDate":"2099-01-01",
             "customers":[{
                 "newCustomer":{"name":"Snapshot buyer","mobileNo":"33112233"},
                 "measurement":{"date":"2026-10-25","type":"body","fit":"medium"},
