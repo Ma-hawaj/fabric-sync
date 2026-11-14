@@ -31,8 +31,18 @@ export function NotificationHistory({ invoiceId }: { invoiceId: string }) {
   const [resend, setResend] = useState<NotificationHistoryRow | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const query = useNotificationHistory(invoiceId)
-  const latestInvoice = query.data?.find((row) => row.kind !== 'invoice_ready')
-  const latestReady = query.data?.find((row) => row.kind === 'invoice_ready')
+  const latestInvoice = query.data?.find(
+    (row) => row.kind !== 'invoice_ready' && !row.repairId,
+  )
+  const latestReady = query.data?.find(
+    (row) => row.kind === 'invoice_ready' && !row.repairId,
+  )
+  const latestRepairs =
+    query.data?.filter(
+      (row, index, rows) =>
+        row.repairId &&
+        rows.findIndex((item) => item.repairId === row.repairId) === index,
+    ) ?? []
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">WhatsApp notifications</h2>
@@ -52,9 +62,10 @@ export function NotificationHistory({ invoiceId }: { invoiceId: string }) {
             {[
               { label: 'Invoice', row: latestInvoice },
               { label: 'Ready for pickup', row: latestReady },
+              ...latestRepairs.map((row) => ({ label: 'Repair ready', row })),
             ].map(({ label, row }) => (
               <div
-                key={label}
+                key={row?.id ?? label}
                 className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
               >
                 <div>
@@ -91,7 +102,9 @@ export function NotificationHistory({ invoiceId }: { invoiceId: string }) {
                 <div className="mt-3 space-y-2">
                   {query.data.map((row) => (
                     <div key={row.id} className="rounded-lg border p-3 text-sm">
-                      <p className="font-medium">{kindLabels[row.kind]}</p>
+                      <p className="font-medium">
+                        {row.repairId ? 'Repair ready' : kindLabels[row.kind]}
+                      </p>
                       {row.sendCount > 1 && (
                         <p className="text-muted-foreground">
                           {row.sendCount} sends
@@ -122,6 +135,7 @@ export function NotificationHistory({ invoiceId }: { invoiceId: string }) {
           resend?.kind === 'invoice_ready' ? 'invoice_ready' : 'manual_resend'
         }
         resendOf={resend?.id}
+        repairId={resend?.repairId ?? undefined}
         onClose={() => setResend(null)}
       />
     </section>

@@ -28,6 +28,9 @@ vi.mock('@/features/locations/hooks/use-default-location', () => ({
 vi.mock('@/features/locations/components/default-location-menu', () => ({
   DefaultLocationMenu: () => null,
 }))
+vi.mock('@/features/notifications/hooks/use-notification-attention', () => ({
+  useNotificationAttentionSummary: () => ({ data: { total: 3 } }),
+}))
 vi.mock('@/components/theme-menu-items', () => ({
   ThemeMenuItems: () => null,
 }))
@@ -56,6 +59,16 @@ function openUserMenu() {
 }
 
 describe('sidebar account settings', () => {
+  it('links to branch closing and outstanding notifications with their attention count', () => {
+    openUserMenu()
+    expect(
+      screen.getByRole('link', { name: 'Branch Closing' }).getAttribute('href'),
+    ).toBe('/sales-closing')
+    expect(
+      screen.getByRole('link', { name: /Notifications/ }).getAttribute('href'),
+    ).toBe('/notifications')
+    expect(screen.getByLabelText('3 notifications need attention')).toBeTruthy()
+  })
   it('opens the Zitadel profile page in a separate tab', async () => {
     openUserMenu()
     const link = await screen.findByRole('menuitem', {

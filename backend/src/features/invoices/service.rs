@@ -2298,6 +2298,7 @@ async fn write_gift_card_sales(
                 Some(&phone),
             )
             .await?;
+            crate::features::notifications::repository::request_gift_card(tx, id).await?;
             (id, code)
         };
 
@@ -2449,6 +2450,11 @@ pub async fn create_invoice(
 
     let totals = compute_totals(&input, vat_rate, prepaid_amount);
     repository::update_tax_snapshot(&mut tx, invoice_id, totals.taxable, totals.vat).await?;
+
+    crate::features::notifications::repository::request_notification(
+        &mut tx, invoice_id, "invoice", None,
+    )
+    .await?;
 
     tx.commit().await?;
 
@@ -2765,6 +2771,11 @@ pub async fn update_invoice(
         totals.urgent_charge,
         totals.taxable,
         totals.vat,
+    )
+    .await?;
+
+    crate::features::notifications::repository::request_notification(
+        &mut tx, invoice_id, "invoice", None,
     )
     .await?;
 

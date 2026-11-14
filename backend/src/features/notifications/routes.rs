@@ -7,6 +7,8 @@ use axum::{
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/notifications", get(handlers::list))
+        .route("/notifications/summary", get(handlers::attention_summary))
         .route("/notifications/capabilities", get(handlers::capabilities))
         .route(
             "/invoices/:id/notifications",

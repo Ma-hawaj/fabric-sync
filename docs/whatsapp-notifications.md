@@ -141,8 +141,12 @@ approved template must have an **IMAGE** header; a text-only gift card template
 cannot receive the image. Set `WHATSAPP_GIFT_CARD_TEMPLATE` and
 `WHATSAPP_GIFT_CARD_BODY` to the approved gift card template and exact wording.
 Delivery uses the existing sender configuration and signed status webhook.
-Approval stores the exact PNG bytes, filename, and SHA-256 in the original
-notification schema. The preview version includes the image hash, and retries
+Approval stores the exact PNG bytes, filename, and SHA-256 in the shared
+`document_artifacts` table. Invoice PDFs and gift-card PNGs use the same
+`notifications`, `notification_recipients`, and `notification_attempts` records,
+worker, retry policy, lease recovery, and webhook status handling. The worker
+checks attachment integrity before upload. Each gift-card approval freezes a
+new PNG attachment. The preview version includes the image hash, and retries
 upload the same approved bytes. A failed image upload never submits a message.
 The gift card list refreshes delivery status every ten seconds while open.
 Accepted means the provider accepted the message; delivered/read require a
@@ -223,6 +227,126 @@ statuses. These routes authenticate Meta rather than staff OAuth tokens.
 
 ## Delivery and resending
 
+### Notifications attention queue
+
+The **Notifications** workspace page opens on **Needs attention**, ordered by
+the oldest outstanding item. Its sidebar badge counts all outstanding invoice
+and pickup messages, independently of pagination or table filters. The page
+refreshes every 30 seconds and has a manual Refresh action.
+
+Every row has an explicit **Notification type**: **Invoice send**, **Ready**,
+**Repair ready**, or **Gift card**. Repair notices reuse the existing repair-ready
+preview flow, carrying the repair ID through preparation, refreshing, and
+resending. The server and preview reject a different repair context before
+sending.
+
+Invoice, pickup, and repair reminders come from specific application actions:
+creating or explicitly editing an invoice, confirming pickup readiness, and
+completing a repair. These actions persist a notification request in the same
+transaction as the change. Gift card issuance creates a request for that card,
+including cards sold on invoices and replacement cards. Requests are immutable:
+each new action adds a row, preserving every older request and its sends.
+The queue compares request identities independently of the broader revision
+counter used for preview safety.
+Customer and catalog edits, payments, production progress, internal repair edits,
+and other incidental writes do not create another notification request.
+
+Existing invoices and repairs are not backfilled when tracking starts, and
+ingestion does not create requests. Historical imports therefore do not create
+an unsent backlog. A subsequent live invoice edit, pickup confirmation, or repair
+completion on an imported invoice creates only the relevant new reminder.
+Actual approved attempts, including failed historical sends, remain visible.
+Untracked gift cards also create no historical backlog.
+
+Every send uses the mandatory `notifications.notification_request_id` foreign
+key to its request. Composite foreign keys prevent a send from
+linking to a request for a different invoice or gift card. The request identity is separate from
+client retry/idempotency tokens and from the immutable content snapshot.
+
+The attention queue starts from `notification_current_requests`, joins the
+relevant business record for eligibility and display, and aggregates only linked
+sends. It does not infer notification work from invoices, repairs, or gift cards
+that happen to exist. A current request without a send remains outstanding;
+an earlier request's delivery result is shown separately as previous history.
+
+The query selects the latest sent request for each notification context as a
+set, then joins its recipient results. Customer aggregates are computed once,
+and current-request filters can reach the source view. This avoids rebuilding
+delivery history for each outstanding request. A partial index on gift-card
+invoice lines supports the original-sale lookup without scanning all lines.
+
+```mermaid
+flowchart LR
+  Request[Notification request] --> Notification[Approved send]
+  Notification --> Recipient[Recipient delivery]
+  Recipient --> Attempt[Provider attempts]
+  Notification --> Attachment[Optional PDF or PNG]
+```
+
+Manual sending on an untracked invoice creates a request for its preview. That
+manual request stays out of the attention queue if the preview is abandoned;
+it becomes actionable only when an approved send exists. Gift card previewing
+is read-only, and a manual parent is created at approval if needed. Resends reuse
+the current request and retain their own approval and delivery records. A newer
+business action creates a new request. Approval and worker preflight reject an
+older request even if its content hash still matches.
+
+When a new notification action supersedes an approved message, the row returns
+to **Not sent** and **Needs attention**, labelled **Updated version not sent**.
+The previous version's delivery result appears separately beneath it and in the
+review panel; its delivered or accepted recipients do not count toward the new
+request. Selective resends for the same request preserve unresolved destinations
+even when incidental data changes require a fresh preview.
+Opening, abandoning, or skipping a preview does not clear the outstanding
+request. A new approval queues the current content, and the previous sends remain
+in history. Late delivery callbacks for older content do not change the current
+version's result. An uncertain previous delivery still requires checking before
+opening the updated preview.
+
+Completed repairs awaiting a notice appear separately, including repairs of
+already-collected orders. Each repair has its own latest send and completion
+cycle; one repair's message cannot overwrite another repair or the original
+invoice pickup status. Reopening, receiving, opting out, and order closure remove
+obsolete repair work from attention. Repair records link to their order and
+show the repair reason. Invoice history and resend validation use the same
+separation. Queue identity comes from the request foreign key; message snapshots
+remain frozen content, without extra queue metadata or required fields in the
+repair workflow's snapshot constructors.
+
+Gift cards use their own card code as the reference and open the existing
+gift-card preview. The queue includes cards without a linked invoice and
+keeps multiple cards on one invoice separate. Tracked active cards with balance
+that have not expired appear as outstanding until a send is approved; failed,
+uncertain, cancelled, and overdue queued gift-card deliveries join the same
+attention count as invoice/pickup notices. Inactive, spent, and expired cards
+do not create outstanding work, while their recorded outcomes remain in History.
+
+- **Not sent** includes outstanding requests without an approved invoice send,
+  cancelled deliveries, and pickup-ready invoices without a notice for their
+  current request. Skipped, closed, and abandoned previews do not
+  count as sends. Walk-in invoices without a customer and customers who have
+  disabled notifications do not create new obligations.
+- **Failed** includes partial failures. The recipient review shows each
+  destination's latest outcome across sends for the same request, so
+  resending to one recipient cannot hide another recipient's failure.
+- **Check delivery** identifies uncertain submissions. Staff must confirm they
+  checked delivery before opening the resend preview.
+- **Waiting too long** identifies messages still queued/submitting 30 minutes
+  after approval. They may be waiting for automatic retries; this view offers
+  review rather than a new send.
+- **History** shows the latest invoice, pickup, repair, and gift-card outcomes that do not currently
+  require action, including queued and provider-accepted messages. Accepted is
+  distinct from delivered. Per-version/send history remains on the invoice.
+
+Pickup notices are actionable only for pickup invoices currently ready, with
+new readiness generations requiring a new notice. Collection, reopening, and
+opting out remove obsolete pickup work from the attention count. Sending from
+this page always opens the shared preview/approval flow; viewing the queue
+never prepares or submits a message. Sales, managers, and administrators can
+access it under the existing notification permissions.
+
+### Delivery history
+
 Send commits the approved recipient selection and queues one delivery per
 unique mobile. A Postgres-backed worker claims jobs across application
 instances. Notification history distinguishes queued, provider-accepted,
@@ -247,7 +371,9 @@ before approving an explicit resend. Other accepted destinations are not
 repeated when one destination fails. Each approved resend retains its own
 delivery identity internally so late provider callbacks and retries cannot
 overwrite a different send's results. The invoice page groups those sends under
-their content version instead of adding a new history entry for each resend.
+their request and content version instead of adding a new history entry for each
+resend. A new request remains a separate history entry even if its content is
+identical to an earlier action.
 
 Changes to invoice content, payment, recipients, or pickup readiness make old
 previews stale. Refresh and approve the current version. Reopening production

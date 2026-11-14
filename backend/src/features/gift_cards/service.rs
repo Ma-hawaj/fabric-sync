@@ -104,6 +104,7 @@ pub(super) async fn issue_with_generator(
         )
         .await?
         {
+            crate::features::notifications::repository::request_gift_card(tx, id).await?;
             return Ok((id, code));
         }
     }
