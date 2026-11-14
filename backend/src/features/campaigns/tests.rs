@@ -103,6 +103,128 @@ async fn setup(pool: &PgPool) -> (crate::state::AppState, Uuid, Uuid) {
     tx.commit().await.unwrap();
     (state, customer, t.id)
 }
+
+#[sqlx::test]
+async fn checkbox_preference_uses_server_audit_metadata_only_after_saving(pool: PgPool) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let customer: Uuid = sqlx::query_scalar(
+        "INSERT INTO customers(name,mobile_no) VALUES('Checkbox Customer','33112233') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(service::get_consent(&state, customer).await.unwrap()["consent"].is_null());
+    let before = Utc::now();
+    let result = service::consent(
+        &state,
+        customer,
+        serde_json::from_value(json!({"expectedMobile":"+97333112233","granted":true})).unwrap(),
+        "sales-operator",
+    )
+    .await
+    .unwrap();
+    let after = Utc::now();
+    let recorded: chrono::DateTime<Utc> =
+        serde_json::from_value(result["consent"]["observedAt"].clone()).unwrap();
+    assert!(recorded >= before && recorded <= after);
+    assert_eq!(
+        result["consent"]["source"],
+        "Staff saved WhatsApp promotions checkbox"
+    );
+    assert_eq!(result["consent"]["recordedBy"], "sales-operator");
+    assert_eq!(result["consent"]["granted"], true);
+    assert_eq!(
+        service::audience_count(&state, &AudienceFilter::default())
+            .await
+            .unwrap()
+            .message_count,
+        1
+    );
+    let result = service::consent(
+        &state,
+        customer,
+        serde_json::from_value(json!({"expectedMobile":"+97333112233","granted":false})).unwrap(),
+        "sales-operator",
+    )
+    .await
+    .unwrap();
+    assert_eq!(result["consent"]["granted"], false);
+    assert_eq!(
+        service::audience_count(&state, &AudienceFilter::default())
+            .await
+            .unwrap()
+            .message_count,
+        0
+    );
+    let events: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM marketing_consent_events WHERE mobile='+97333112233'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(events, 2);
+    let invoice_updates: bool =
+        sqlx::query_scalar("SELECT whatsapp_notifications_enabled FROM customers WHERE id=$1")
+            .bind(customer)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(invoice_updates);
+}
+
+#[sqlx::test]
+async fn simple_consent_keeps_phone_guard_and_legacy_metadata_validation(pool: PgPool) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let customer: Uuid = sqlx::query_scalar("INSERT INTO customers(name,mobile_no) VALUES('Legacy Consent Customer','33112233') RETURNING id")
+        .fetch_one(&pool).await.unwrap();
+    let recorded = Utc::now() - Duration::hours(1);
+    let result = service::consent(&state, customer, serde_json::from_value(json!({"expectedMobile":"+97333112233","granted":true,"source":"Written request","observedAt":recorded})).unwrap(), "sales").await.unwrap();
+    assert_eq!(result["consent"]["source"], "Written request");
+    let stored: chrono::DateTime<Utc> =
+        serde_json::from_value(result["consent"]["observedAt"].clone()).unwrap();
+    assert_eq!(stored.timestamp_micros(), recorded.timestamp_micros());
+    let error = service::consent(
+        &state,
+        customer,
+        serde_json::from_value(json!({"expectedMobile":"+97333991122","granted":false})).unwrap(),
+        "sales",
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(error, crate::error::AppError::Conflict(_)));
+    for extra in [
+        json!({"source":""}),
+        json!({"observedAt":Utc::now()+Duration::days(1)}),
+    ] {
+        let mut input = json!({"expectedMobile":"+97333112233","granted":false});
+        input
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        assert!(matches!(
+            service::consent(
+                &state,
+                customer,
+                serde_json::from_value(input).unwrap(),
+                "sales"
+            )
+            .await,
+            Err(crate::error::AppError::BadRequest(_))
+        ));
+    }
+    let events: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM marketing_consent_events WHERE mobile='+97333112233'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(events, 1);
+    assert_eq!(
+        service::get_consent(&state, customer).await.unwrap()["consent"]["granted"],
+        true
+    );
+}
+
 #[sqlx::test]
 async fn approval_is_atomic_idempotent_and_freezes_unique_destinations(pool: PgPool) {
     let (state, _, template) = setup(&pool).await;

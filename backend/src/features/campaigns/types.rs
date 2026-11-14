@@ -190,8 +190,10 @@ pub struct ApproveInput {
 pub struct ConsentInput {
     pub expected_mobile: String,
     pub granted: bool,
-    pub observed_at: DateTime<Utc>,
-    pub source: String,
+    // Simple preference saves use server-side audit metadata. Older clients may
+    // still supply the time/source of a previously obtained consent event.
+    pub observed_at: Option<DateTime<Utc>>,
+    pub source: Option<String>,
 }
 #[derive(Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]

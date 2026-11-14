@@ -396,8 +396,12 @@ pub async fn consent(
     input: ConsentInput,
     actor: &str,
 ) -> Result<Value, AppError> {
-    if input.source.trim().is_empty() || input.source.len() > 1000 || input.observed_at > Utc::now()
-    {
+    let observed_at = input.observed_at.unwrap_or_else(Utc::now);
+    let source = input
+        .source
+        .as_deref()
+        .unwrap_or("Staff saved WhatsApp promotions checkbox");
+    if source.trim().is_empty() || source.len() > 1000 || observed_at > Utc::now() {
         return Err(bad(
             "Record how consent was obtained and a time that is not in the future.",
         ));
@@ -419,8 +423,8 @@ pub async fn consent(
         &mut tx,
         &mobile,
         input.granted,
-        input.observed_at,
-        &input.source,
+        observed_at,
+        source,
         actor,
         None,
     )

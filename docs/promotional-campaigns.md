@@ -39,9 +39,15 @@ independently and never sends messages.
 
 ## Consent
 
-On an existing customer's edit page, use **WhatsApp marketing consent** to record
-an explicit opt-in or withdrawal, when it was obtained and how. This action saves
-separately from customer details and applies to the displayed saved mobile.
+On an existing customer's edit page, use the **WhatsApp promotions** checkbox and
+**Save preference**. The checkbox defaults on when no preference has been saved;
+recorded opt-outs remain off. Opening the form makes no change to eligibility:
+the selected preference takes effect only when saved. Existing customers are
+not automatically enrolled or backfilled. Staff do not need to enter a reason
+or date: the server records the saving staff member, current time and checkbox
+source in the consent history. A saved default is a staff preference action,
+not evidence that the customer explicitly opted in. This action saves separately
+from customer details and applies to the displayed saved mobile.
 Consent is shared by all customers using that normalized number. New numbers do
 not inherit consent from old numbers. Invoice-update preferences are independent.
 
