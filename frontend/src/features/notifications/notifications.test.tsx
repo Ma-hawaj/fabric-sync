@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -10,6 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { NuqsTestingAdapter } from 'nuqs/adapters/testing'
 import type { ComponentProps } from 'react'
 import { apiClient } from '@/lib/api'
+import type { ListResponse } from '@/hooks/use-list-query'
 import { NotificationsPage } from './notifications'
 import type { NotificationAttentionRow, NotificationKind } from './types'
 
@@ -525,6 +527,67 @@ describe('notification attention queue', () => {
       screen.getByRole('checkbox', { name: /I checked delivery/ }),
     )
     expect(button.hasAttribute('disabled')).toBe(false)
+  })
+
+  it.each(['failed', 'uncertain'] as const)(
+    'closes the %s details when polling removes the row and does not reopen them if it returns',
+    async (status) => {
+      const selected = row('invoice-42', {
+        status,
+        notificationId: 'send-1',
+      })
+      const client = mount([selected])
+      fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+      expect(screen.getByRole('dialog')).toBeTruthy()
+      expect(
+        screen.getByRole('button', { name: 'Preview resend' }),
+      ).toBeTruthy()
+
+      await act(async () => {
+        client.setQueriesData<ListResponse<NotificationAttentionRow>>(
+          { queryKey: ['notification-attention'] },
+          (current) =>
+            current && { ...current, data: [], total: 0, pageCount: 0 },
+        )
+      })
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(
+        screen.queryByRole('button', { name: 'Preview resend' }),
+      ).toBeNull()
+
+      await act(async () => {
+        client.setQueriesData<ListResponse<NotificationAttentionRow>>(
+          { queryKey: ['notification-attention'] },
+          (current) =>
+            current && {
+              ...current,
+              data: [selected],
+              total: 1,
+              pageCount: 1,
+            },
+        )
+      })
+      await screen.findByRole('button', { name: 'Review' })
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(apiClient.post).not.toHaveBeenCalled()
+    },
+  )
+
+  it('keeps an active notification preview open when polling removes its row', async () => {
+    const client = mount([row('invoice-42')])
+    fireEvent.click(screen.getByRole('button', { name: 'Preview & send' }))
+    await act(async () => {
+      client.setQueriesData<ListResponse<NotificationAttentionRow>>(
+        { queryKey: ['notification-attention'] },
+        (current) =>
+          current && { ...current, data: [], total: 0, pageCount: 0 },
+      )
+    })
+    await waitFor(() => expect(screen.queryByText('Ahmed')).toBeNull())
+    expect(
+      screen.getByRole('dialog', { name: 'Notification preview' }).textContent,
+    ).toContain('invoice-42')
+    expect(apiClient.post).not.toHaveBeenCalled()
   })
 
   it('keeps a queued retry out of the send flow', () => {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { parseAsInteger, parseAsStringLiteral, useQueryStates } from 'nuqs'
 import { RefreshCwIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -60,6 +60,15 @@ export function NotificationsPage() {
   }, [searchParams, view])
   const query = useNotificationAttention(request)
   const summary = useNotificationAttentionSummary()
+  const reviewRow = review
+    ? query.data.find(
+        (item) =>
+          item.entityId === review.entityId && item.kind === review.kind,
+      )
+    : undefined
+  useEffect(() => {
+    if (review && !reviewRow) setReview(null)
+  }, [review, reviewRow])
   const { table } = useDataTable({
     data: query.data,
     columns,
@@ -202,15 +211,10 @@ export function NotificationsPage() {
           )}
         </DataTable>
       )}
-      {review && (
+      {reviewRow && (
         <AttentionDetails
-          key={`${review.entityId}:${review.kind}`}
-          row={
-            query.data.find(
-              (item) =>
-                item.entityId === review.entityId && item.kind === review.kind,
-            ) ?? review
-          }
+          key={`${reviewRow.entityId}:${reviewRow.kind}`}
+          row={reviewRow}
           onClose={() => setReview(null)}
           onPreview={(row) => {
             setReview(null)

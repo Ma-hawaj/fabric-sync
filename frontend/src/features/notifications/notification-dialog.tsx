@@ -287,6 +287,7 @@ function Preview({
           {(prepareError ||
             problem ||
             draft?.state === 'stale' ||
+            (draft && repairId && draft.snapshot.repairId !== repairId) ||
             pdf.isError) && (
             <Button
               variant="outline"
