@@ -36,6 +36,15 @@ SQLx applies the files in version order:
    gift-card sale and return-line lookups, and the unique index allowing one
    closure per garment.
 
+5. `0005_marketing_campaigns.sql` adds destination-scoped marketing consent and its audit trail, immutable approved campaign snapshots, template versions, private images, shared notification targets and a marketing dispatch clock. Existing customers receive no implicit marketing opt-in.
+6. `0006_phone_whatsapp_preferences.sql` moves both invoice/pickup and marketing
+   settings into a shared phone-level record and categorized history, removing
+   the stored customer preference flag. Application startup normalizes existing
+   numbers with `WHATSAPP_DEFAULT_REGION` and drains the legacy backfill queue
+   before APIs/workers start. Conflicting invoice settings preserve opt-outs;
+   marketing values and versions are retained. The marketing consent/history
+   views provide the prior read shape without duplicating storage.
+
 The core schema defines readable customer IDs (`C-6216`) and permanent
 per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.
 Customer numbers use an identity sequence; the workbook importer preserves each

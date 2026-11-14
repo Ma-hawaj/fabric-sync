@@ -1,11 +1,15 @@
-mod attention;
+pub(crate) mod attention;
 #[cfg(test)]
 mod attention_tests;
 mod handlers;
 pub(crate) mod phone;
+pub(crate) mod preferences;
+#[cfg(test)]
+mod preferences_tests;
 pub(crate) mod repository;
 mod routes;
 pub(crate) mod service;
+pub(crate) mod transport;
 pub(crate) mod types;
 pub(crate) mod worker;
 
@@ -17,6 +21,10 @@ pub struct Config {
     #[cfg(test)]
     pub test_graph_url: Option<String>,
     pub enabled: bool,
+    pub marketing_enabled: bool,
+    pub waba_id: Option<String>,
+    pub meta_app_id: Option<String>,
+    pub campaign_interval_ms: i64,
     pub renderer_url: Option<String>,
     pub renderer_profile: String,
     pub phone_number_id: Option<String>,
@@ -53,6 +61,10 @@ impl Config {
             #[cfg(test)]
             test_graph_url: None,
             enabled: value("WHATSAPP_DELIVERY_ENABLED", "false") == "true",
+            marketing_enabled: value("WHATSAPP_MARKETING_ENABLED", "false") == "true",
+            waba_id: optional("WHATSAPP_WABA_ID"),
+            meta_app_id: optional("WHATSAPP_META_APP_ID"),
+            campaign_interval_ms: value("WHATSAPP_CAMPAIGN_INTERVAL_MS", "1000").parse::<i64>().unwrap_or(1000).clamp(100, 60000),
             renderer_url: optional("DOCUMENT_RENDERER_URL"),
             renderer_profile: value(
                 "DOCUMENT_RENDERER_PROFILE",

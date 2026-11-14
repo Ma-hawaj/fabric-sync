@@ -27,13 +27,14 @@ pub async fn repair_ready_context(
         "SELECT o.order_number, i.invoice_number, r.status, oc.outcome, r.completed_at,
                 GREATEST(r.charge - r.received_amount, 0)::float8 AS balance,
                 b.name AS branch_name, c.id AS customer_id, c.name, c.mobile_no,
-                c.whatsapp_notifications_enabled AS enabled
+                COALESCE(wp.invoice_updates_enabled,true) AS enabled
          FROM order_repairs r
          JOIN orders o ON o.id = r.order_id
          JOIN order_outcomes oc ON oc.order_id = o.id
          JOIN invoices i ON i.id = o.invoice_id
          JOIN measurements m ON m.id = o.measurement_id
          JOIN customers c ON c.id = m.customer_id
+         LEFT JOIN whatsapp_preferences wp ON wp.mobile=c.whatsapp_mobile
          LEFT JOIN branch b ON b.id = i.branch_id
          WHERE r.id = $1 AND i.id = $2",
     )
@@ -50,8 +51,9 @@ pub async fn customers(db: &PgPool, invoice_id: Uuid) -> Result<Vec<Customer>, A
         SELECT DISTINCT c.id,
                c.name,
                c.mobile_no,
-               c.whatsapp_notifications_enabled AS enabled
+               COALESCE(wp.invoice_updates_enabled,true) AS enabled
           FROM customers c
+          LEFT JOIN whatsapp_preferences wp ON wp.mobile=c.whatsapp_mobile
          WHERE c.id = (
                 SELECT customer_id
                   FROM invoices
@@ -372,6 +374,7 @@ pub async fn event(
 }
 
 pub async fn lock_invoice(conn: &mut PgConnection, id: Uuid) -> Result<i64, AppError> {
+    super::preferences::lock(conn).await?;
     sqlx::query_scalar(
         r#"
         SELECT notification_revision
@@ -529,8 +532,8 @@ pub struct NewSend<'a> {
 
 pub async fn insert_send(conn: &mut PgConnection, send: NewSend<'_>) -> Result<Uuid, AppError> {
     Ok(sqlx::query_scalar(
-        "INSERT INTO notifications(invoice_id,gift_card_id,kind,event_key,command_id,source_hash,preview_version,snapshot,artifact_id,created_by,resend_of,notification_request_id)
-         SELECT invoice_id,gift_card_id,$2,$3,$4,$5,$6,$7,$8,$9,$10,id FROM notification_requests WHERE id=$1 RETURNING id"
+        "INSERT INTO notifications(invoice_id,gift_card_id,campaign_id,kind,event_key,command_id,source_hash,preview_version,snapshot,artifact_id,created_by,resend_of,notification_request_id)
+         SELECT invoice_id,gift_card_id,campaign_id,$2,$3,$4,$5,$6,$7,$8,$9,$10,id FROM notification_requests WHERE id=$1 RETURNING id"
     )
         .bind(send.request).bind(send.kind).bind(send.event_key).bind(send.command)
         .bind(&send.snapshot.source_hash).bind(Uuid::new_v4()).bind(sqlx::types::Json(send.snapshot))
@@ -600,17 +603,22 @@ pub async fn store_image(
 
 #[derive(sqlx::FromRow)]
 pub struct Target {
+    pub campaign_id: Option<Uuid>,
     pub invoice_id: Option<Uuid>,
     pub gift_card_id: Option<Uuid>,
 }
 
 pub async fn lock_target(conn: &mut PgConnection, request: Uuid) -> Result<Target, AppError> {
-    let target: Target =
-        sqlx::query_as("SELECT invoice_id,gift_card_id FROM notification_requests WHERE id=$1")
-            .bind(request)
-            .fetch_one(&mut *conn)
-            .await?;
-    if let Some(invoice) = target.invoice_id {
+    let target: Target = sqlx::query_as(
+        "SELECT invoice_id,gift_card_id,campaign_id FROM notification_requests WHERE id=$1",
+    )
+    .bind(request)
+    .fetch_one(&mut *conn)
+    .await?;
+    if let Some(campaign) = target.campaign_id {
+        crate::features::campaigns::repository::consent_lock(conn).await?;
+        crate::features::campaigns::repository::campaign(conn, campaign, true).await?;
+    } else if let Some(invoice) = target.invoice_id {
         lock_invoice(conn, invoice).await?;
     } else if let Some(card) = target.gift_card_id {
         lock_gift_card(conn, card).await?;
@@ -621,7 +629,7 @@ pub async fn lock_target(conn: &mut PgConnection, request: Uuid) -> Result<Targe
 pub async fn is_current_request(conn: &mut PgConnection, request: Uuid) -> Result<bool, AppError> {
     Ok(sqlx::query_scalar("SELECT NOT EXISTS(SELECT 1 FROM notification_requests newer JOIN notification_requests current ON current.id=$1
         WHERE newer.kind=current.kind AND newer.invoice_id IS NOT DISTINCT FROM current.invoice_id
-        AND newer.repair_id IS NOT DISTINCT FROM current.repair_id AND newer.gift_card_id IS NOT DISTINCT FROM current.gift_card_id
+        AND newer.repair_id IS NOT DISTINCT FROM current.repair_id AND newer.gift_card_id IS NOT DISTINCT FROM current.gift_card_id AND newer.campaign_id IS NOT DISTINCT FROM current.campaign_id
         AND (newer.requested_at,newer.id)>(current.requested_at,current.id))")
         .bind(request).fetch_one(conn).await?)
 }
@@ -826,26 +834,24 @@ pub async fn recover_leases(db: &PgPool) -> Result<(), AppError> {
     Ok(())
 }
 
+#[cfg(test)]
 pub async fn next_job(db: &PgPool) -> Result<Option<(Uuid, Uuid)>, AppError> {
+    next_job_for_channels(db, true).await
+}
+pub async fn next_job_for_channels(
+    db: &PgPool,
+    marketing: bool,
+) -> Result<Option<(Uuid, Uuid)>, AppError> {
+    Ok(sqlx::query_as("SELECT r.id,n.notification_request_id FROM notification_recipients r JOIN notifications n ON n.id=r.notification_id LEFT JOIN campaigns c ON c.id=n.campaign_id WHERE r.status='queued' AND n.state='approved' AND r.next_attempt_at <= now() AND (n.campaign_id IS NULL OR ($1 AND c.state IN ('scheduled','sending','blocked') AND c.send_at <= now() AND c.expires_at > now() AND (SELECT next_at<=now() FROM campaign_dispatch_clock WHERE id=true))) ORDER BY (n.kind='campaign'),r.next_attempt_at,r.id LIMIT 1").bind(marketing).fetch_optional(db).await?)
+}
+pub async fn target(db: &PgPool, request: Uuid) -> Result<Target, AppError> {
     Ok(sqlx::query_as(
-        r#"
-        SELECT r.id,
-               n.notification_request_id
-          FROM notification_recipients r
-          JOIN notifications n
-            ON n.id = r.notification_id
-         WHERE r.status = 'queued'
-           AND n.state = 'approved'
-           AND r.next_attempt_at <= now()
-         ORDER BY r.next_attempt_at,
-                  r.id
-         LIMIT 1
-        "#,
+        "SELECT invoice_id,gift_card_id,campaign_id FROM notification_requests WHERE id=$1",
     )
-    .fetch_optional(db)
+    .bind(request)
+    .fetch_one(db)
     .await?)
 }
-
 pub async fn lock_job(conn: &mut PgConnection, id: Uuid) -> Result<Option<Job>, AppError> {
     Ok(sqlx::query_as(
         r#"
@@ -918,7 +924,7 @@ pub async fn finish_attempt(
                      END,
                updated_at = now()
          WHERE id = $1
-           AND status = 'submitting'
+           AND (status = 'submitting' OR (status='uncertain' AND $3::text IS NOT NULL))
         "#,
     )
     .bind(job.id)
@@ -949,7 +955,7 @@ pub async fn finish_attempt(
     Ok(())
 }
 
-pub async fn request_started(db: &PgPool, job: &Job) -> Result<(), AppError> {
+pub async fn request_started(db: &mut PgConnection, job: &Job) -> Result<(), AppError> {
     sqlx::query(
         r#"
         UPDATE notification_attempts

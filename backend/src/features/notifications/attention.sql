@@ -9,13 +9,15 @@ WITH current_requests AS NOT MATERIALIZED (
            string_agg(mobile_no, ', ' ORDER BY name, id) AS customer_mobile,
            bool_or(whatsapp_notifications_enabled) AS enabled
     FROM (
-        SELECT i.id AS invoice_id, c.id, c.name, c.mobile_no, c.whatsapp_notifications_enabled
+        SELECT i.id AS invoice_id, c.id, c.name, c.mobile_no, coalesce(wp.invoice_updates_enabled,true) AS whatsapp_notifications_enabled
         FROM invoices i JOIN customers c ON c.id = i.customer_id
+        LEFT JOIN whatsapp_preferences wp ON wp.mobile=c.whatsapp_mobile
         WHERE i.id IN (SELECT invoice_id FROM current_requests)
         UNION
-        SELECT o.invoice_id, c.id, c.name, c.mobile_no, c.whatsapp_notifications_enabled
+        SELECT o.invoice_id, c.id, c.name, c.mobile_no, coalesce(wp.invoice_updates_enabled,true) AS whatsapp_notifications_enabled
         FROM orders o JOIN measurements m ON m.id = o.measurement_id
         JOIN customers c ON c.id = m.customer_id
+        LEFT JOIN whatsapp_preferences wp ON wp.mobile=c.whatsapp_mobile
         WHERE o.invoice_id IN (SELECT invoice_id FROM current_requests)
     ) customers
     GROUP BY invoice_id
@@ -40,7 +42,7 @@ WITH current_requests AS NOT MATERIALIZED (
            r.id, o.id, r.reason, NULL::uuid, NULL::text,
            jsonb_build_array(jsonb_build_object('id', c.id, 'name', c.name, 'mobileNo', c.mobile_no)),
            c.name, c.mobile_no,
-           c.whatsapp_notifications_enabled AND oc.outcome = 'active'
+           coalesce(wp.invoice_updates_enabled,true) AND oc.outcome = 'active'
                AND r.status = 'completed' AND r.completed_at IS NOT NULL AND b.name IS NOT NULL
     FROM current_requests request
     JOIN order_repairs r ON r.id = request.repair_id
@@ -49,6 +51,7 @@ WITH current_requests AS NOT MATERIALIZED (
     JOIN invoices i ON i.id = request.invoice_id AND i.id = o.invoice_id
     JOIN measurements m ON m.id = o.measurement_id
     JOIN customers c ON c.id = m.customer_id
+    LEFT JOIN whatsapp_preferences wp ON wp.mobile=c.whatsapp_mobile
     LEFT JOIN branch b ON b.id = i.branch_id
     WHERE request.kind = 'repair_ready'
     UNION ALL
@@ -72,7 +75,7 @@ WITH current_requests AS NOT MATERIALIZED (
     WHERE request.kind = 'gift_card'
 ), latest_sends AS (
     SELECT DISTINCT ON (notification_request_id) notification_request_id AS request_id, id AS notification_id, approved_at
-    FROM notifications WHERE approved_at IS NOT NULL
+    FROM notifications WHERE approved_at IS NOT NULL AND kind <> 'campaign'
     ORDER BY request_id, approved_at DESC, id DESC
 ), recipient_results AS (
     -- An invoice resend replaces only its selected destinations. Gift cards
@@ -81,7 +84,7 @@ WITH current_requests AS NOT MATERIALIZED (
            n.notification_request_id AS request_id, r.id, r.normalized_mobile,
            r.customers, r.status, r.error_message, n.approved_at
     FROM notifications n JOIN notification_recipients r ON r.notification_id = n.id AND r.selected
-    WHERE n.approved_at IS NOT NULL
+    WHERE n.approved_at IS NOT NULL AND n.kind <> 'campaign'
     ORDER BY n.notification_request_id, (CASE WHEN n.kind = 'gift_card' THEN 'recipient' ELSE r.normalized_mobile END), n.approved_at DESC, n.id DESC
 ), request_results AS (
     SELECT latest.request_id, latest.notification_id, latest.approved_at,

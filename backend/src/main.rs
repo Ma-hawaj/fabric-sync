@@ -74,6 +74,8 @@ async fn run() -> Result<(), error::AppError> {
     if config.seed_dev_data {
         seed::run(&db).await?;
     }
+    features::notifications::preferences::initialize(&db, &config.notifications.default_region)
+        .await?;
 
     let token_introspection = auth::TokenIntrospection::discover(&config)
         .await
@@ -83,6 +85,7 @@ async fn run() -> Result<(), error::AppError> {
         .map_err(error::AppError::Auth)?;
     let state = AppState::new(config, db, token_introspection, zitadel_users);
     features::notifications::start(state.clone());
+    features::campaigns::provider::start_sync(state.clone());
     let app = app::router(state);
 
     tracing::info!("Listening on: {}", address);

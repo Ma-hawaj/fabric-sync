@@ -679,10 +679,7 @@ async fn attention_excludes_opted_out_walk_in_and_delivery_pickup_notices(pool: 
         .await
         .unwrap();
     assert_eq!(rows(&pool).await.len(), 1);
-    sqlx::query("UPDATE customers SET whatsapp_notifications_enabled=false")
-        .execute(&pool)
-        .await
-        .unwrap();
+    crate::test_support::set_invoice_updates(&pool, false).await;
     assert!(rows(&pool).await.is_empty());
     sqlx::query("UPDATE customers SET name='Existing customer'")
         .execute(&pool)

@@ -1,6 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
-import type { CustomerFormValues } from '../types/customer-form'
+import type {
+  CustomerFormValues,
+  CustomerMarketingPreference,
+} from '../types/customer-form'
 import type { Customer } from '../types/customers'
 import type { MeasurementDraft } from '../types/measurement-form'
 
@@ -48,11 +51,18 @@ export function measurementPayload(measurement: MeasurementDraft) {
   }
 }
 
-async function createCustomer(values: CustomerFormValues): Promise<Customer> {
+async function createCustomer(
+  values: CustomerFormValues & {
+    marketingPreference?: CustomerMarketingPreference
+  },
+): Promise<Customer> {
   const { data } = await apiClient.post<Customer>('/customers', {
     name: values.name,
     mobileNo: values.mobileNo,
     whatsappNotificationsEnabled: values.whatsappNotificationsEnabled,
+    ...(values.marketingPreference
+      ? { marketingPreference: values.marketingPreference }
+      : {}),
     address: values.address.trim(),
     measurement: values.addMeasurement
       ? measurementPayload(values.measurement)
@@ -71,6 +81,11 @@ export function useCreateCustomer() {
       // each holds an envelope rather than a bare array, so there is no
       // single list to splice into. Prefix matching refreshes them all.
       void queryClient.invalidateQueries({ queryKey: ['customers'] })
+      void queryClient.invalidateQueries({ queryKey: ['marketing-consent'] })
+      void queryClient.invalidateQueries({
+        queryKey: ['campaign-audience-count'],
+      })
+      void queryClient.invalidateQueries({ queryKey: ['campaigns'] })
     },
   })
 }

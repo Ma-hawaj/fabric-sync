@@ -156,6 +156,7 @@ pub async fn approve(
     )
     .await?;
     let snapshot = Snapshot {
+        quick_replies: vec![],
         repair_id: None,
         invoice_number: None,
         source_hash: current.source_hash,

@@ -13,6 +13,7 @@ use super::{
         Customer, UpdateCustomerInput,
     },
 };
+use crate::features::notifications::{phone, preferences};
 
 pub async fn list_customers(
     state: &AppState,
@@ -30,6 +31,7 @@ pub async fn get_customer(state: &AppState, customer_id: Uuid) -> Result<Custome
 pub async fn create_customer(
     state: &AppState,
     input: CreateCustomerInput,
+    marketing_actor: Option<&str>,
 ) -> Result<Customer, AppError> {
     let (name, mobile_no) = normalize_customer_identity(&input.name, &input.mobile_no)?;
 
@@ -37,15 +39,52 @@ pub async fn create_customer(
         validate_measurement(measurement)?;
     }
 
-    let customer_id = repository::create_customer(
-        state,
+    let mut tx = state.db().begin().await?;
+    preferences::lock(&mut tx).await?;
+    if input.marketing_preference.is_some() {
+        if marketing_actor.is_none() {
+            return Err(AppError::Forbidden(
+                "Marketing preferences require sales access.".into(),
+            ));
+        }
+    }
+    let customer_id = repository::insert_customer(
+        &mut tx,
         &name,
         &mobile_no,
-        input.whatsapp_notifications_enabled,
+        &state.notifications().default_region,
         input.address.as_deref(),
-        input.measurement.as_ref(),
     )
     .await?;
+    if let Some(mobile) = phone::normalize(&mobile_no, &state.notifications().default_region) {
+        preferences::save_invoice(
+            &mut tx,
+            &mobile,
+            input.whatsapp_notifications_enabled,
+            true,
+            marketing_actor.unwrap_or("staff"),
+        )
+        .await?;
+    } else if !input.whatsapp_notifications_enabled {
+        return Err(AppError::BadRequest(
+            "Enter a valid mobile number to save WhatsApp preferences.".into(),
+        ));
+    }
+    if let Some(measurement) = input.measurement.as_ref() {
+        repository::insert_measurement(&mut tx, customer_id, measurement).await?;
+    }
+    if let Some(preference) = input.marketing_preference.as_ref() {
+        crate::features::campaigns::service::save_customer_preference(
+            state,
+            &mut tx,
+            &mobile_no,
+            None,
+            preference,
+            marketing_actor.unwrap(),
+        )
+        .await?;
+    }
+    tx.commit().await?;
 
     let customer = repository::get_customer(state, customer_id)
         .await?
@@ -60,6 +99,7 @@ pub async fn update_customer(
     state: &AppState,
     customer_id: Uuid,
     input: UpdateCustomerInput,
+    marketing_actor: Option<&str>,
 ) -> Result<Customer, AppError> {
     let name = input
         .name
@@ -76,20 +116,74 @@ pub async fn update_customer(
         && mobile_no.is_none()
         && input.whatsapp_notifications_enabled.is_none()
         && input.address.is_none()
+        && input.marketing_preference.is_none()
     {
         return Err(AppError::BadRequest("nothing to update".to_string()));
     }
 
-    let customer = repository::update_customer(
-        state,
+    let mut tx = state.db().begin().await?;
+    preferences::lock(&mut tx).await?;
+    if input.marketing_preference.is_some() && marketing_actor.is_none() {
+        return Err(AppError::Forbidden(
+            "Marketing preferences require sales access.".into(),
+        ));
+    }
+    let previous_mobile = Some(
+        repository::lock_customer_mobile(&mut tx, customer_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("customer {customer_id} not found")))?,
+    );
+    let target = mobile_no.as_deref().or(previous_mobile.as_deref()).unwrap();
+    let normalized = phone::normalize(target, &state.notifications().default_region);
+    let updated = repository::update_customer(
+        &mut tx,
         customer_id,
         name.as_deref(),
         mobile_no.as_deref(),
-        input.whatsapp_notifications_enabled,
+        normalized.as_deref(),
         input.address.as_deref(),
     )
-    .await?
-    .ok_or_else(|| AppError::NotFound(format!("customer {customer_id} not found")))?;
+    .await?;
+    if !updated {
+        return Err(AppError::NotFound(format!(
+            "customer {customer_id} not found"
+        )));
+    }
+    if let Some(enabled) = input.whatsapp_notifications_enabled {
+        if let Some(normalized) = normalized.as_deref() {
+            let changed_number = previous_mobile
+                .as_deref()
+                .and_then(|m| phone::normalize(m, &state.notifications().default_region))
+                .as_deref()
+                != Some(normalized);
+            preferences::save_invoice(
+                &mut tx,
+                normalized,
+                enabled,
+                changed_number,
+                marketing_actor.unwrap_or("staff"),
+            )
+            .await?;
+        } else if !enabled {
+            return Err(AppError::BadRequest(
+                "Enter a valid mobile number to save WhatsApp preferences.".into(),
+            ));
+        }
+    }
+    if let Some(preference) = input.marketing_preference.as_ref() {
+        let target = mobile_no.as_deref().or(previous_mobile.as_deref()).unwrap();
+        crate::features::campaigns::service::save_customer_preference(
+            state,
+            &mut tx,
+            target,
+            previous_mobile.as_deref(),
+            preference,
+            marketing_actor.unwrap(),
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    let customer = get_customer(state, customer_id).await?;
 
     tracing::info!(customer_id = %customer_id, "customer updated");
 
@@ -99,6 +193,20 @@ pub async fn update_customer(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn create_customer(
+        state: &AppState,
+        input: CreateCustomerInput,
+    ) -> Result<Customer, AppError> {
+        super::create_customer(state, input, None).await
+    }
+    async fn update_customer(
+        state: &AppState,
+        id: Uuid,
+        input: UpdateCustomerInput,
+    ) -> Result<Customer, AppError> {
+        super::update_customer(state, id, input, None).await
+    }
 
     #[test]
     fn normalize_customer_identity_trims_both_fields() {
@@ -146,7 +254,7 @@ mod tests {
 
         // Invoice creation uses this same transaction-scoped repository path.
         let mut tx = pool.begin().await.unwrap();
-        let next = repository::insert_customer(&mut tx, "Next customer", "33112233", true, None)
+        let next = repository::insert_customer(&mut tx, "Next customer", "33112233", "BH", None)
             .await
             .unwrap();
         tx.commit().await.unwrap();

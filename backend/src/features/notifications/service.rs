@@ -113,6 +113,7 @@ pub(crate) async fn source(
     }
     Ok(Source {
         snapshot: Snapshot {
+            quick_replies: vec![],
             repair_id: None,
             invoice_number: Some(detail.invoice_number),
             source_hash,
@@ -182,6 +183,7 @@ async fn repair_source(
     }
     Ok(Source {
         snapshot: Snapshot {
+            quick_replies: vec![],
             repair_id: Some(repair_id),
             invoice_number: Some(repair.invoice_number),
             source_hash,

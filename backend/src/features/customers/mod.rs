@@ -9,4 +9,7 @@ pub(crate) mod types;
 pub use routes::router;
 
 #[cfg(test)]
+mod marketing_tests;
+
+#[cfg(test)]
 mod number_tests;

@@ -1,32 +1,24 @@
+use super::{
+    repository::{self, Job},
+    service,
+    transport::{self, Failure},
+};
+use crate::{error::AppError, state::AppState};
 use hmac::{Hmac, Mac};
-use serde_json::{json, Value};
+use serde_json::Value;
 use sha2::Sha256;
 use sqlx::PgPool;
 use subtle::ConstantTimeEq;
 
-use super::{
-    repository::{self, Job},
-    service,
-};
-use crate::{error::AppError, state::AppState};
-
-#[derive(Debug)]
-struct Failure {
-    message: String,
-    retry: bool,
-    uncertain: bool,
-    retry_after: i64,
-}
-
 pub fn start(state: AppState) {
     tokio::spawn(async move {
         let mut maintenance = tokio::time::Instant::now();
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(3));
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(250));
         loop {
             interval.tick().await;
             if tokio::time::Instant::now() >= maintenance {
                 if let Err(error) = repository::cleanup(state.db(), state.notifications()).await {
-                    tracing::warn!(error=?error, "notification cleanup failed");
+                    tracing::warn!(error=?error,"notification cleanup failed");
                 }
                 maintenance = tokio::time::Instant::now() + std::time::Duration::from_secs(3600);
             }
@@ -36,19 +28,27 @@ pub fn start(state: AppState) {
         }
     });
 }
-
 pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
-    // A dead worker may have submitted externally without persisting the ID.
-    // Never replay an expired submission lease automatically.
     repository::recover_leases(state.db()).await?;
+    crate::features::campaigns::repository::maintenance(state.db()).await?;
     process_webhooks(state.db()).await?;
     if !state.notifications().can_send() {
         return Ok(());
     }
-    // Lock the business target before its send and recipient, matching approval.
-    let Some((id, request)) = repository::next_job(state.db()).await? else {
+    let Some((id, request)) =
+        repository::next_job_for_channels(state.db(), state.notifications().marketing_enabled)
+            .await?
+    else {
         return Ok(());
     };
+    let candidate = repository::target(state.db(), request).await?;
+    // Provider template checks occur before opening a claim transaction. A
+    // paused marketing campaign cannot hold locks or consume critical jobs.
+    if let Some(campaign) = candidate.campaign_id {
+        if !crate::features::campaigns::service::template_ready(state, campaign, id).await? {
+            return Ok(());
+        }
+    }
     let mut tx = state.db().begin().await?;
     let target = repository::lock_target(&mut tx, request).await?;
     let Some(mut job) = repository::lock_job(&mut tx, id).await? else {
@@ -56,6 +56,35 @@ pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
     };
     let notification = repository::get_in(&mut tx, job.notification_id).await?;
     let current_request = repository::is_current_request(&mut tx, request).await?;
+    if let Some(campaign) = target.campaign_id {
+        if let Some(reason) =
+            crate::features::campaigns::repository::eligible(&mut tx, campaign, id).await?
+        {
+            job.attempt_count += 1;
+            repository::start_attempt(&mut tx, &job).await?;
+            repository::finish_attempt(
+                &mut tx,
+                &job,
+                reason,
+                reason,
+                None,
+                Some("Campaign expired, cancelled, or recipient consent/phone changed."),
+                0,
+            )
+            .await?;
+            tx.commit().await?;
+            return Ok(());
+        }
+        if !crate::features::campaigns::repository::reserve(
+            &mut tx,
+            campaign,
+            state.notifications().campaign_interval_ms,
+        )
+        .await?
+        {
+            return Ok(());
+        }
+    }
     let gift_validation = if let Some(card) = target.gift_card_id {
         Some(
             crate::features::gift_cards::delivery::validate(
@@ -72,7 +101,9 @@ pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
     job.attempt_count += 1;
     repository::start_attempt(&mut tx, &job).await?;
     tx.commit().await?;
-    let validation = if let Some(result) = gift_validation {
+    let validation = if target.campaign_id.is_some() {
+        Ok(true)
+    } else if let Some(result) = gift_validation {
         result
     } else {
         service::source(
@@ -82,7 +113,7 @@ pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
             notification.snapshot.repair_id,
         )
         .await
-        .map(|source| source.snapshot.source_hash == notification.source_hash)
+        .map(|s| s.snapshot.source_hash == notification.source_hash)
     };
     let invalid = match validation {
         Ok(true) if current_request => None,
@@ -101,7 +132,7 @@ pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
             tracing::warn!(notification_id=%notification.id,error=?error,"notification preflight failed");
             Some((
                 "failed",
-                "Could not revalidate the notification before sending.".to_string(),
+                "Could not revalidate the notification before sending.".into(),
                 true,
             ))
         }
@@ -117,33 +148,30 @@ pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
         finish(state, &job, status, None, Some(&message), retry, 0).await?;
         return Ok(());
     }
-    // The claim is the cancellation cutoff. Only frozen data is used from here.
-    let result = send(state, &job, &notification).await;
+    let result = send(state, &job, &notification, request, target.campaign_id).await;
     match result {
-        Ok(message_id) => {
-            finish(state, &job, "accepted", Some(&message_id), None, false, 0).await?
-        }
+        Ok(id) => finish(state, &job, "accepted", Some(&id), None, false, 0).await?,
         Err(error) => {
+            let status = if error.uncertain {
+                "uncertain"
+            } else {
+                error.terminal_status.unwrap_or("failed")
+            };
             finish(
                 state,
                 &job,
-                if error.uncertain {
-                    "uncertain"
-                } else {
-                    "failed"
-                },
+                status,
                 None,
                 Some(&error.message),
                 error.retry,
                 error.retry_after,
             )
-            .await?
+            .await?;
         }
     }
     process_webhooks(state.db()).await?;
     Ok(())
 }
-
 async fn finish(
     state: &AppState,
     job: &Job,
@@ -170,143 +198,66 @@ async fn finish(
     tx.commit().await?;
     Ok(())
 }
-
 async fn send(
     state: &AppState,
     job: &Job,
     notification: &super::types::NotificationRow,
+    request: uuid::Uuid,
+    campaign: Option<uuid::Uuid>,
 ) -> Result<String, Failure> {
-    let config = state.notifications();
-    let client = service::http_client()
-        .map_err(|_| failure("Could not initialize the sender", true, false))?;
-    let token = config
-        .access_token
-        .as_deref()
-        .ok_or_else(|| failure("WhatsApp is not configured", false, false))?;
-    let root = format!(
-        "https://graph.facebook.com/{}/{}",
-        config.api_version,
-        config.phone_number_id.as_deref().unwrap_or_default()
-    );
-    #[cfg(test)]
-    let root = config.test_graph_url.clone().unwrap_or(root);
-    let mut components = vec![
-        json!({"type":"body","parameters":notification.snapshot.parameters.iter().map(|value|json!({"type":"text","text":value})).collect::<Vec<_>>()}),
-    ];
-    if let Some(artifact_id) = notification.artifact_id {
-        let artifact = repository::attachment(state.db(), artifact_id)
-            .await
-            .map_err(|_| failure("The approved attachment could not be loaded", true, false))?;
-        if service::hash(&artifact.content) != artifact.sha256 {
-            return Err(failure(
-                "The approved attachment failed its integrity check. Preview and send again.",
-                false,
-                false,
-            ));
-        }
-        let header = match artifact.mime_type.as_str() {
-            "application/pdf" => "document",
-            "image/png" => "image",
-            _ => return Err(failure("Invalid attachment type", false, false)),
-        };
-        let part = reqwest::multipart::Part::bytes(artifact.content)
-            .file_name(artifact.filename.clone())
-            .mime_str(&artifact.mime_type)
-            .map_err(|_| failure("Invalid attachment type", false, false))?;
-        let response = client
-            .post(format!("{root}/media"))
-            .bearer_auth(token)
-            .multipart(
-                reqwest::multipart::Form::new()
-                    .part("file", part)
-                    .text("messaging_product", "whatsapp")
-                    .text("type", artifact.mime_type),
-            )
-            .send()
-            .await
-            .map_err(|_| failure("The attachment upload was interrupted", true, false))?;
-        let value = graph_response(response, false).await?;
-        let media_id = value["id"]
-            .as_str()
-            .filter(|id| !id.is_empty())
-            .ok_or_else(|| failure("WhatsApp did not return a media ID", true, false))?;
-        let media = if header == "document" {
-            json!({"id":media_id,"filename":artifact.filename})
-        } else {
-            json!({"id":media_id})
-        };
-        components.insert(
-            0,
-            json!({"type":"header","parameters":[{"type":header,header:media}]}),
-        );
-    }
-    repository::request_started(state.db(), job)
+    let artifact = if let Some(id) = notification.artifact_id {
+        Some(repository::attachment(state.db(), id).await.map_err(|_| {
+            transport::failure("The approved attachment could not be loaded", true, false)
+        })?)
+    } else {
+        None
+    };
+    let prepared = transport::prepare(state, &notification.snapshot, artifact).await?;
+    let mut tx = state
+        .db()
+        .begin()
         .await
-        .map_err(|_| failure("Could not record the send attempt", true, false))?;
-    let response=client.post(format!("{root}/messages")).bearer_auth(token).json(&json!({"messaging_product":"whatsapp","to":job.normalized_mobile.trim_start_matches('+'),"type":"template","template":{"name":notification.snapshot.template_name,"language":{"code":notification.snapshot.language},"components":components}}))
-        .send().await.map_err(|_|failure("The send result is unknown. Check WhatsApp delivery before explicitly resending.",false,true))?;
-    let value = graph_response(response, true).await?;
-    value["messages"][0]["id"]
-        .as_str()
-        .filter(|v| !v.is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| {
-            failure(
-                "WhatsApp returned no message ID. Check delivery before resending.",
+        .map_err(|_| transport::failure("Could not record the send attempt", true, false))?;
+    if let Some(campaign) = campaign {
+        repository::lock_target(&mut tx, request)
+            .await
+            .map_err(|_| transport::failure("Could not lock campaign", true, false))?;
+        if let Some(status) =
+            crate::features::campaigns::repository::eligible(&mut tx, campaign, job.id)
+                .await
+                .map_err(|_| transport::failure("Could not revalidate campaign", true, false))?
+        {
+            let mut error=transport::failure("Campaign expired, cancelled, or recipient consent/phone changed before submission.",false,false);
+            error.terminal_status = Some(status);
+            return Err(error);
+        }
+    } else if let Some(invoice) = notification
+        .invoice_id
+        .filter(|_| notification.kind != "gift_card")
+    {
+        let revision = repository::lock_invoice(&mut tx, invoice)
+            .await
+            .map_err(|_| transport::failure("Could not lock invoice preferences", true, false))?;
+        let enabled = super::preferences::invoice_enabled(&mut tx, &job.normalized_mobile)
+            .await
+            .map_err(|_| transport::failure("Could not check invoice preferences", true, false))?;
+        if !enabled || revision != notification.snapshot.revision {
+            let mut error = transport::failure(
+                "Invoice, phone or WhatsApp preferences changed before submission.",
                 false,
-                true,
-            )
-        })
-}
-
-fn failure(message: &str, retry: bool, uncertain: bool) -> Failure {
-    Failure {
-        message: message.chars().take(700).collect(),
-        retry,
-        uncertain,
-        retry_after: 0,
+                false,
+            );
+            error.terminal_status = Some("cancelled");
+            return Err(error);
+        }
     }
-}
-
-async fn graph_response(
-    response: reqwest::Response,
-    message_request: bool,
-) -> Result<Value, Failure> {
-    let status = response.status();
-    let retry_after = response
-        .headers()
-        .get(reqwest::header::RETRY_AFTER)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| {
-            v.parse::<i64>().ok().or_else(|| {
-                chrono::DateTime::parse_from_rfc2822(v)
-                    .ok()
-                    .map(|at| (at.with_timezone(&chrono::Utc) - chrono::Utc::now()).num_seconds())
-            })
-        })
-        .unwrap_or(0)
-        .clamp(0, 86400);
-    let value: Value = response.json().await.map_err(|_| {
-        failure(
-            "WhatsApp returned an unreadable response",
-            !message_request,
-            message_request,
-        )
-    })?;
-    if status.is_success() {
-        return Ok(value);
-    }
-    let message = value["error"]["message"]
-        .as_str()
-        .unwrap_or("WhatsApp rejected this request");
-    let known_error = value.get("error").is_some();
-    let mut error = failure(
-        message,
-        known_error && (status.as_u16() == 429 || status.is_server_error()),
-        message_request && !known_error,
-    );
-    error.retry_after = retry_after;
-    Err(error)
+    repository::request_started(&mut tx, job)
+        .await
+        .map_err(|_| transport::failure("Could not record the send attempt", true, false))?;
+    tx.commit()
+        .await
+        .map_err(|_| transport::failure("Could not record the send attempt", true, false))?;
+    transport::submit(state, &job.normalized_mobile, prepared).await
 }
 
 pub fn valid_verification_token(expected: Option<&str>, candidate: &str) -> bool {
@@ -375,6 +326,7 @@ async fn process_webhooks(db: &PgPool) -> Result<(), AppError> {
                 }
             }
         }
+        crate::features::campaigns::service::webhook(db, &payload).await?;
         repository::webhook_checked(db, id, matched).await?;
     }
     Ok(())

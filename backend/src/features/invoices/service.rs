@@ -969,6 +969,7 @@ fn validate(input: &CreateInvoiceInput) -> Result<(), AppError> {
 async fn resolve_customer_id(
     tx: &mut sqlx::PgTransaction<'_>,
     customer: &InvoiceCustomerInput,
+    phone_region: &str,
 ) -> Result<uuid::Uuid, AppError> {
     match (&customer.existing_customer_id, &customer.new_customer) {
         (Some(id), None) => Ok(*id),
@@ -979,7 +980,7 @@ async fn resolve_customer_id(
                 tx,
                 &name,
                 &mobile_no,
-                true,
+                phone_region,
                 new_customer.address.as_deref(),
             )
                 .await
@@ -2407,7 +2408,8 @@ pub async fn create_invoice(
     }
 
     for customer in &input.customers {
-        let customer_id = resolve_customer_id(&mut tx, customer).await?;
+        let customer_id =
+            resolve_customer_id(&mut tx, customer, &state.notifications().default_region).await?;
         let measurement_id =
             resolve_measurement(&mut tx, customer_id, &customer.measurement, &[]).await?;
         write_customer_orders(&mut tx, invoice_id, measurement_id, &customer.orders).await?;
@@ -2644,7 +2646,8 @@ pub async fn update_invoice(
     // this invoice. Reuse unchanged snapshots, append changed values, and
     // retain records even when their customer block has been removed.
     for customer in &input.customers {
-        let customer_id = resolve_customer_id(&mut tx, customer).await?;
+        let customer_id =
+            resolve_customer_id(&mut tx, customer, &state.notifications().default_region).await?;
         let old_ids: Vec<Uuid> = measurement_refs
             .iter()
             .filter(|reference| reference.customer_id == customer_id)

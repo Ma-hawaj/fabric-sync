@@ -22,8 +22,16 @@ pub struct Destination {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuickReply {
+    pub index: u8,
+    pub payload: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub quick_replies: Vec<QuickReply>,
     #[serde(default)]
     pub repair_id: Option<Uuid>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -91,9 +99,12 @@ pub struct NotificationRow {
 impl NotificationRow {
     pub fn invoice_id(&self) -> Result<Uuid, crate::error::AppError> {
         self.invoice_id.ok_or_else(|| {
-            crate::error::AppError::BadRequest(
-                "Use the gift card preview and send endpoints for this notification.".into(),
-            )
+            crate::error::AppError::BadRequest(if self.kind == "campaign" {
+                "Use the campaign preview and manager approval endpoints for this notification."
+                    .into()
+            } else {
+                "Use the gift card preview and send endpoints for this notification.".into()
+            })
         })
     }
 }

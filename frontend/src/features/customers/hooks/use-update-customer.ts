@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import type { Customer } from '../types/customers'
+import type { CustomerMarketingPreference } from '../types/customer-form'
 
 // PATCH accepts any subset of the fields, so this serves the edit form
 // and any future single-field action.
@@ -9,6 +10,7 @@ export interface UpdateCustomerInput {
   name?: string
   mobileNo?: string
   whatsappNotificationsEnabled?: boolean
+  marketingPreference?: CustomerMarketingPreference
   address?: string
 }
 
@@ -31,6 +33,11 @@ export function useUpdateCustomer() {
       // each holds an envelope rather than a bare array, so there is no
       // single list to splice into. Prefix matching refreshes them all.
       void queryClient.invalidateQueries({ queryKey: ['customers'] })
+      void queryClient.invalidateQueries({ queryKey: ['marketing-consent'] })
+      void queryClient.invalidateQueries({
+        queryKey: ['campaign-audience-count'],
+      })
+      void queryClient.invalidateQueries({ queryKey: ['campaigns'] })
     },
   })
 }

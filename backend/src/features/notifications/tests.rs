@@ -16,6 +16,7 @@ struct Mock {
     messages: Arc<Mutex<Vec<Value>>>,
     reject_next: Arc<AtomicBool>,
     missing_id: Arc<AtomicBool>,
+    withdraw_updates_on_upload: Arc<Mutex<Option<PgPool>>>,
 }
 async fn mock_renderer(
     State(mock): State<Mock>,
@@ -27,6 +28,10 @@ async fn mock_renderer(
 }
 async fn mock_upload(State(mock): State<Mock>, body: Bytes) -> Json<Value> {
     mock.uploads.lock().unwrap().push(body.to_vec());
+    let withdrawal = mock.withdraw_updates_on_upload.lock().unwrap().take();
+    if let Some(pool) = withdrawal {
+        test_support::set_invoice_updates(&pool, false).await;
+    }
     Json(json!({"id":"test-media"}))
 }
 async fn mock_send(
@@ -87,6 +92,34 @@ fn send(draft: &Notification) -> SendInput {
             .map(|r| r.normalized_mobile.clone())
             .collect(),
     }
+}
+
+#[sqlx::test]
+async fn shared_invoice_opt_out_during_upload_prevents_submission_with_one_connection(
+    pool: PgPool,
+) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let db = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(pool.connect_options().as_ref().clone())
+        .await
+        .unwrap();
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(db.clone(), Some(url.clone()), Some(url)).await;
+    let draft = service::prepare(&state, invoice, prepare("invoice_created"), "staff")
+        .await
+        .unwrap();
+    service::approve(&state, draft.id, send(&draft), "staff", true)
+        .await
+        .unwrap();
+    *mock.withdraw_updates_on_upload.lock().unwrap() = Some(db);
+    worker::tick(&state).await.unwrap();
+    assert_eq!(mock.uploads.lock().unwrap().len(), 1);
+    assert!(mock.messages.lock().unwrap().is_empty());
+    assert_eq!(
+        service::get(&state, draft.id).await.unwrap().recipients[0].status,
+        "cancelled"
+    );
 }
 
 #[sqlx::test]
@@ -330,10 +363,7 @@ async fn reopened_repairs_cancel_queued_pickup_notices_and_preferences_still_app
     )
     .await
     .unwrap();
-    sqlx::query("UPDATE customers SET whatsapp_notifications_enabled=false")
-        .execute(&pool)
-        .await
-        .unwrap();
+    crate::test_support::set_invoice_updates(&pool, false).await;
     let mut input = prepare("invoice_ready");
     input.repair_id = Some(repair);
     let opted_out = service::prepare(&state, invoice, input, "staff")
@@ -659,10 +689,7 @@ async fn reopened_ready_orders_and_opted_out_destinations_are_not_sent(pool: PgP
         service::get(&state, draft.id).await.unwrap().recipients[0].status,
         "cancelled"
     );
-    sqlx::query("UPDATE customers SET whatsapp_notifications_enabled=false")
-        .execute(&pool)
-        .await
-        .unwrap();
+    crate::test_support::set_invoice_updates(&pool, false).await;
     let updated = service::prepare(&state, invoice, prepare("manual_resend"), "staff")
         .await
         .unwrap();
@@ -907,7 +934,7 @@ async fn fresh_migrations_support_collection_readiness_and_customer_defaults(poo
             .unwrap();
     assert_eq!(statuses, vec!["collected", "pending"]);
     assert!(sqlx::query_scalar::<_, bool>(
-        "SELECT bool_and(whatsapp_notifications_enabled) FROM customers"
+        "SELECT bool_and(coalesce(p.invoice_updates_enabled,true)) FROM customers c LEFT JOIN whatsapp_preferences p ON p.mobile=c.whatsapp_mobile"
     )
     .fetch_one(&pool)
     .await

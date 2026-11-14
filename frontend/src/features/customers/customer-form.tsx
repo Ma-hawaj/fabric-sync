@@ -1,4 +1,7 @@
+import { useMarketingConsent } from '@/features/campaigns/hooks'
+import type { ConsentResponse } from '@/features/campaigns/types'
 import { useForm } from '@tanstack/react-form'
+import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -16,8 +19,19 @@ import {
 } from './types/customer-form'
 import type { Customer } from './types/customers'
 import { ApiError } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
+import { canAccess } from '@/lib/permissions'
 
 export function CustomerFormPage({ customerId }: { customerId?: string }) {
+  const { user } = useAuth()
+  const canEditMarketing = canAccess(
+    user,
+    'PUT',
+    '/customers/customer/marketing-consent',
+  )
+  const marketing = useMarketingConsent(
+    canEditMarketing ? (customerId ?? null) : null,
+  )
   const { data: existing, isLoading, isError } = useCustomer(customerId ?? null)
 
   if (customerId && isLoading) {
@@ -36,12 +50,44 @@ export function CustomerFormPage({ customerId }: { customerId?: string }) {
     )
   }
 
+  if (customerId && canEditMarketing && marketing.isError) {
+    return (
+      <div role="alert" className="space-y-3">
+        <p>Could not load WhatsApp preferences.</p>
+        <Button variant="outline" onClick={() => void marketing.refetch()}>
+          Retry
+        </Button>
+      </div>
+    )
+  }
+  if (customerId && canEditMarketing && !marketing.data)
+    return <p>Loading WhatsApp preferences...</p>
+
   // Keyed so the form re-initialises if the underlying customer changes —
   // defaultValues is only read on the first render.
-  return <CustomerForm key={existing?.id ?? 'new'} existing={existing} />
+  return (
+    <CustomerForm
+      key={existing?.id ?? 'new'}
+      existing={existing}
+      marketing={marketing.data ?? null}
+      canEditMarketing={canEditMarketing}
+    />
+  )
 }
 
-function CustomerForm({ existing }: { existing?: Customer }) {
+function CustomerForm({
+  existing: loadedCustomer,
+  marketing: loadedMarketing,
+  canEditMarketing,
+}: {
+  existing?: Customer
+  marketing: ConsentResponse | null
+  canEditMarketing: boolean
+}) {
+  // Keep the version paired with the values originally loaded into this form.
+  // Background refreshes must not turn a routine edit into a re-subscription.
+  const [marketing] = useState(loadedMarketing)
+  const [existing] = useState(loadedCustomer)
   const navigate = useNavigate()
   const createCustomer = useCreateCustomer()
   const updateCustomer = useUpdateCustomer()
@@ -49,19 +95,39 @@ function CustomerForm({ existing }: { existing?: Customer }) {
 
   const form = useForm({
     defaultValues: existing
-      ? customerToFormValues(existing)
+      ? customerToFormValues(existing, marketing?.consent?.granted ?? true)
       : createEmptyCustomerForm(),
     validators: { onSubmit: customerFormSchema },
     onSubmit: async ({ value }) => {
+      const marketingPreference =
+        canEditMarketing &&
+        (!existing ||
+          !marketing?.consent ||
+          value.whatsappMarketingEnabled !== marketing.consent.granted ||
+          value.mobileNo !== existing.mobileNo)
+          ? {
+              granted: value.whatsappMarketingEnabled,
+              expectedMobile: marketing?.mobile ?? null,
+              expectedVersion: marketing?.consent?.version ?? null,
+            }
+          : undefined
       const pending = existing
         ? updateCustomer.mutateAsync({
             id: existing.id,
             name: value.name,
             mobileNo: value.mobileNo,
-            whatsappNotificationsEnabled: value.whatsappNotificationsEnabled,
+            ...(value.whatsappNotificationsEnabled !==
+              (existing.whatsappNotificationsEnabled ?? true) ||
+            value.mobileNo !== existing.mobileNo
+              ? {
+                  whatsappNotificationsEnabled:
+                    value.whatsappNotificationsEnabled,
+                }
+              : {}),
+            ...(marketingPreference ? { marketingPreference } : {}),
             address: value.address,
           })
-        : createCustomer.mutateAsync(value)
+        : createCustomer.mutateAsync({ ...value, marketingPreference })
       toast.promise(pending, {
         loading: existing ? 'Saving customer...' : 'Adding customer...',
         success: (customer) =>
@@ -69,8 +135,10 @@ function CustomerForm({ existing }: { existing?: Customer }) {
             ? `${customer.name} was updated.`
             : `${customer.name} was added.`,
         error: (error) =>
-          error instanceof ApiError && error.status === 409
-            ? 'A customer with this name and phone number already exists.'
+          error instanceof ApiError
+            ? error.status === 409 && !error.message.includes('Reload')
+              ? 'A customer with this name and phone number already exists.'
+              : error.message
             : 'Could not save this customer. Please try again.',
       })
 
@@ -91,7 +159,7 @@ function CustomerForm({ existing }: { existing?: Customer }) {
         </h1>
         <p className="text-muted-foreground">
           {existing
-            ? 'Update this customer’s details and WhatsApp preference. Measurements are kept as they are.'
+            ? 'Update this customer’s details and WhatsApp preferences. Measurements are kept as they are.'
             : 'Register a new customer so they can be selected on invoices and orders.'}
         </p>
       </div>
@@ -131,6 +199,22 @@ function CustomerForm({ existing }: { existing?: Customer }) {
               </label>
             )}
           </form.Field>
+          {canEditMarketing && (
+            <form.Field name="whatsappMarketingEnabled">
+              {(field) => (
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={field.state.value}
+                    disabled={mutation.isPending}
+                    onCheckedChange={field.handleChange}
+                    onBlur={field.handleBlur}
+                  />
+                  Receive promotional offers via WhatsApp
+                </label>
+              )}
+            </form.Field>
+          )}
         </div>
 
         {!existing && (

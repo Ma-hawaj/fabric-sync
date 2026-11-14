@@ -31,6 +31,7 @@ import { usePreferences } from '@/features/locations/hooks/use-default-location'
 import { DefaultLocationMenu } from '@/features/locations/components/default-location-menu'
 import { NotificationAttentionBadge } from '@/features/notifications/attention-badge'
 import {
+  MegaphoneIcon,
   UsersIcon,
   ShoppingCart,
   ReceiptText,
@@ -51,6 +52,12 @@ import {
 } from 'lucide-react'
 
 const navItems = [
+  { to: '/campaigns', label: 'Campaigns', icon: MegaphoneIcon },
+  {
+    to: '/campaign-templates',
+    label: 'Marketing Templates',
+    icon: MegaphoneIcon,
+  },
   { to: '/invoices', label: 'Invoices', icon: ReceiptText },
   { to: '/notifications', label: 'Notifications', icon: BellIcon },
   { to: '/orders', label: 'Orders', icon: ShoppingCart },
@@ -200,6 +207,8 @@ export function AppSidebar() {
               '/orders',
               '/repairs',
               '/customers',
+              '/campaigns',
+              '/campaign-templates',
             ],
           },
           {
