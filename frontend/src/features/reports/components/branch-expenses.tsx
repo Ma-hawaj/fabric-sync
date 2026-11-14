@@ -4,6 +4,7 @@ import { PermissionGuard } from '@/components/permission-guard'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table/data-table'
 import { useDataTable } from '@/hooks/use-data-table'
+import { StaffName } from '@/features/users/components/staff-name'
 import { formatBhd, methodLabel, isClosingReadOnly } from '../lib/sales-closing'
 import type { BranchExpense, SalesClosing } from '../types/sales-closing'
 import { ExpenseForm, VoidExpenseForm } from './till-forms'
@@ -83,7 +84,7 @@ function ExpenseTable({
       },
       {
         accessorKey: 'paymentType',
-        header: 'Paid by',
+        header: 'Method',
         cell: ({ row }) => methodLabel(row.original.paymentType),
         size: 100,
       },
@@ -109,10 +110,29 @@ function ExpenseTable({
         size: 170,
       },
       {
+        accessorKey: 'recordedBy',
+        header: 'Recorded by',
+        cell: ({ row }) => <StaffName userId={row.original.recordedBy} />,
+        size: 170,
+      },
+      {
         id: 'status',
         header: 'Status',
         cell: ({ row }) =>
-          row.original.voidedAt ? `Voided: ${row.original.voidReason}` : 'Paid',
+          row.original.voidedAt ? (
+            <div>
+              <p>Voided: {row.original.voidReason}</p>
+              <p className="text-xs text-muted-foreground">
+                By <StaffName userId={row.original.voidedBy} />
+                {' · '}
+                {new Date(row.original.voidedAt).toLocaleString('en-GB', {
+                  timeZone: report.timezone,
+                })}
+              </p>
+            </div>
+          ) : (
+            'Paid'
+          ),
         size: 170,
       },
       {

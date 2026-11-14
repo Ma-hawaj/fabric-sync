@@ -214,6 +214,12 @@ comparison, frozen report, staff/time and retry identity. There is no check tabl
 check ID or draft-write endpoint. API responses expose these values together
 under `closure`; open and missed days have no closing count.
 
+The screen resolves saved staff IDs through the existing staff directory for
+openings (including the latest correction), expense recording/voiding, closing
+and skipped days. Missing users or directory failures show an unavailable-staff
+label. Names reflect the current directory; stored IDs and frozen figures do
+not change.
+
 This migration consolidates the feature's unmerged development migrations.
 Disposable development databases that already applied those earlier versions
 must be recreated; this is not an upgrade script for that intermediate schema.

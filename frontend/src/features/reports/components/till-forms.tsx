@@ -7,6 +7,7 @@ import { NumberField, TextField, TextareaField } from '@/components/form/fields'
 import { Button } from '@/components/ui/button'
 import { SegmentedOptions } from '@/components/form/segmented-options'
 import { Field, FieldError } from '@/components/ui/field'
+import { StaffName } from '@/features/users/components/staff-name'
 import { useTillAction } from '../hooks/use-sales-closing'
 import {
   expenseSchema,
@@ -47,7 +48,9 @@ export function OpeningCashSection({
             {new Date(opening.recordedAt).toLocaleString('en-GB', {
               timeZone: report.timezone,
             })}
-            . This amount is read-only at closing.
+            {' · Recorded by '}
+            <StaffName userId={opening.recordedBy} />. This amount is read-only
+            at closing.
             {opening.supersedesId
               ? ' A correction is recorded in its history.'
               : ''}

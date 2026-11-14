@@ -1,9 +1,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { NuqsTestingAdapter } from 'nuqs/adapters/testing'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import { apiClient } from '@/lib/api'
+import { STAFF_USER } from '@/features/users/test-fixtures'
 import { SalesClosingPage } from './sales-closing'
 import { closingFixture } from './test-fixtures'
 import { compareCounts } from './lib/closing-counts'
@@ -22,6 +29,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 const branch = closingFixture().branchId
 const secondBranch = '00000000-0000-4000-8000-000000000002'
+const manager = { ...STAFF_USER, id: 'manager', name: 'Omar Ali' }
 
 function setup(
   searchParams = '',
@@ -49,6 +57,7 @@ function setup(
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
+  client.setQueryData(['users'], [STAFF_USER, manager])
   client.setQueryData(['locations', ''], {
     data: [
       {
@@ -103,7 +112,7 @@ function finalize(report: SalesClosing, counts: ClosingCounts) {
   report.closure = {
     id: 'closure-1',
     closedAt: '2026-11-02T18:30:00Z',
-    closedBy: 'test-closer',
+    closedBy: STAFF_USER.id,
     counts,
     comparison: compareCounts(report, counts),
   }
@@ -126,6 +135,34 @@ beforeEach(() => {
 })
 
 describe('branch closing workflow', () => {
+  it('identifies an expense recorder separately from the manager who voided it', async () => {
+    const report = closingFixture()
+    report.expenses = [
+      {
+        id: 'expense-voided',
+        amount: 5,
+        paymentType: 'cash',
+        reason: 'Delivery fee',
+        paidTo: 'Courier',
+        reference: 'D100',
+        recordedAt: '2026-11-02T09:00:00Z',
+        recordedBy: STAFF_USER.id,
+        voidedAt: '2026-11-02T10:00:00Z',
+        voidReason: 'Duplicate receipt',
+        voidedBy: manager.id,
+      },
+    ]
+    vi.mocked(apiClient.get).mockResolvedValue({ data: report })
+    const client = setup(`?branchId=${branch}`)
+    const row = (await screen.findByText('Delivery fee')).closest('tr')!
+    expect(within(row).getByText(STAFF_USER.name)).toBeTruthy()
+    expect(within(row).getByText(manager.name)).toBeTruthy()
+    expect(within(row).getByText('Voided: Duplicate receipt')).toBeTruthy()
+    expect(within(row).queryByText(STAFF_USER.id)).toBeNull()
+    expect(within(row).queryByText(manager.id)).toBeNull()
+    client.clear()
+  })
+
   it('closes a previous day once with a reason while its opening and expenses remain read-only', async () => {
     const report = closingFixture()
     report.readOnly = true
@@ -327,7 +364,7 @@ describe('branch closing workflow', () => {
         id: 'missed-1',
         reason: input.reason,
         resolvedAt: '2026-11-03T06:00:00Z',
-        resolvedBy: 'manager',
+        resolvedBy: STAFF_USER.id,
       }
       report.previousUnclosedDate = null
       return { data: { ...report } }
@@ -349,6 +386,9 @@ describe('branch closing workflow', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Skip missed day' }))
     await screen.findByText('Skipped · Unreconciled · Read-only')
+    expect(
+      within(screen.getByRole('status')).getByText(STAFF_USER.name),
+    ).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Skip missed day' })).toBeNull()
     expect(
       screen.queryByRole('button', { name: 'Review and close day' }),
@@ -402,6 +442,9 @@ describe('branch closing workflow', () => {
       screen.getByRole('button', { name: 'Review and close day' }),
     )
     await screen.findByText('Closed · Read-only')
+    expect(
+      within(screen.getByRole('status')).getByText(STAFF_USER.name),
+    ).toBeTruthy()
     expect(
       screen.queryByRole('button', { name: 'Review and close day' }),
     ).toBeNull()
@@ -601,6 +644,10 @@ describe('branch closing workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save opening cash' }))
     await screen.findByLabelText('Cash physically counted (BHD)')
     expect(screen.queryByLabelText('Opening cash counted (BHD)')).toBeNull()
+    const opening = screen
+      .getByRole('heading', { name: '1. Opening cash' })
+      .closest('section')!
+    expect(within(opening).getByText(STAFF_USER.name)).toBeTruthy()
     fireEvent.click(screen.getByText('Add paid expense'))
     for (const [label, value] of [
       ['Expense amount (BHD)', '5.005'],
@@ -611,6 +658,8 @@ describe('branch closing workflow', () => {
       fireEvent.change(screen.getByLabelText(label), { target: { value } })
     fireEvent.click(screen.getByRole('button', { name: 'Record paid expense' }))
     await screen.findByText(/Paid from cash drawer: BHD 5.005/)
+    const expense = screen.getByText('Delivery fee').closest('tr')!
+    expect(within(expense).getByText(STAFF_USER.name)).toBeTruthy()
     expect(apiClient.post).toHaveBeenCalledWith(
       '/sales-closing/expenses',
       expect.objectContaining({

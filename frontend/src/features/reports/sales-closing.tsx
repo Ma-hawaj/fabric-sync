@@ -42,6 +42,7 @@ import { SkipMissedDay } from './components/missed-closing'
 import { useAllLocations } from '@/features/locations/hooks/use-locations'
 import { usePreferences } from '@/features/locations/hooks/use-default-location'
 import { closingBranches } from '@/features/locations/lib/location-filters'
+import { StaffName } from '@/features/users/components/staff-name'
 import type { ClosingActivity, SalesClosing } from './types/sales-closing'
 
 function ActivityTable({ report }: { report: SalesClosing }) {
@@ -309,7 +310,9 @@ function ReportContent({
           {new Date(report.closure.closedAt).toLocaleString('en-GB', {
             timeZone: report.timezone,
           })}
-          . This saved report is read-only and remains available for export.
+          {' by '}
+          <StaffName userId={report.closure.closedBy} />. This saved report is
+          read-only and remains available for export.
           {!report.closure.comparison.matched
             ? ' Differences or unresolved activity remain recorded below.'
             : ''}
@@ -326,7 +329,7 @@ function ReportContent({
             {new Date(report.missedClosing.resolvedAt).toLocaleString('en-GB', {
               timeZone: report.timezone,
             })}{' '}
-            · {report.missedClosing.resolvedBy}
+            · By <StaffName userId={report.missedClosing.resolvedBy} />
           </p>
         </div>
       ) : late ? (
