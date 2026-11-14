@@ -195,6 +195,13 @@ pub struct ConsentInput {
     pub observed_at: Option<DateTime<Utc>>,
     pub source: Option<String>,
 }
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CustomerMarketingPreference {
+    pub granted: bool,
+    pub expected_mobile: Option<String>,
+    pub expected_version: Option<Uuid>,
+}
 #[derive(Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Consent {

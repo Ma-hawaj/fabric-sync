@@ -432,6 +432,77 @@ pub async fn consent(
     tx.commit().await?;
     get_consent(state, id).await
 }
+
+/// Runs inside the customer save transaction, after the shared consent lock.
+pub async fn save_customer_preference(
+    state: &AppState,
+    db: &mut PgConnection,
+    mobile: &str,
+    previous_mobile: Option<&str>,
+    input: &CustomerMarketingPreference,
+    actor: &str,
+) -> Result<(), AppError> {
+    let normalize = |raw: &str| {
+        crate::features::notifications::phone::normalize(raw, &state.notifications().default_region)
+    };
+    let target = normalize(mobile);
+    if target.is_none() && input.granted {
+        return Err(bad("Enter a valid mobile number for WhatsApp promotions."));
+    }
+    let existing = if let Some(target) = target.as_deref() {
+        store::consent(db, target).await?
+    } else {
+        None
+    };
+    let same_number = if let Some(previous) = previous_mobile {
+        let previous = normalize(previous);
+        if previous != input.expected_mobile {
+            return Err(AppError::Conflict(
+                "Customer phone changed. Reload the customer form.".into(),
+            ));
+        }
+        let current = if previous == target {
+            existing.as_ref().map(|c| c.version)
+        } else if let Some(previous) = previous.as_deref() {
+            store::consent(db, previous).await?.map(|c| c.version)
+        } else {
+            None
+        };
+        if current != input.expected_version {
+            return Err(AppError::Conflict(
+                "Promotions preference changed. Reload the customer form.".into(),
+            ));
+        }
+        previous == target
+    } else {
+        false
+    };
+    let Some(target) = target else {
+        return Ok(());
+    };
+    // A new customer or changed number must not re-enable an existing shared
+    // phone opt-out through the form's checked default.
+    if !same_number && input.granted && existing.as_ref().is_some_and(|c| !c.granted) {
+        return Ok(());
+    }
+    if existing
+        .as_ref()
+        .is_some_and(|c| c.granted == input.granted)
+    {
+        return Ok(());
+    }
+    store::record_consent(
+        db,
+        &target,
+        input.granted,
+        Utc::now(),
+        "Staff saved customer form promotions checkbox",
+        actor,
+        None,
+    )
+    .await
+}
+
 pub async fn upload(state: &AppState, input: AssetInput, actor: &str) -> Result<Asset, AppError> {
     if input.filename.is_empty()
         || input.filename.len() > 180

@@ -318,32 +318,16 @@ pub async fn insert_customer(
     .await
 }
 
-pub async fn create_customer(
-    state: &AppState,
-    name: &str,
-    mobile_no: &str,
-    whatsapp_notifications_enabled: bool,
-    address: Option<&str>,
-    measurement: Option<&CreateMeasurementInput>,
-) -> Result<Uuid, sqlx::Error> {
-    let mut tx = state.db().begin().await?;
-
-    let customer_id = insert_customer(
-        &mut tx,
-        name,
-        mobile_no,
-        whatsapp_notifications_enabled,
-        address,
+pub async fn lock_customer_mobile(
+    tx: &mut sqlx::PgTransaction<'_>,
+    id: Uuid,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT mobile_no FROM customers WHERE id = $1 FOR UPDATE",
+        id
     )
-    .await?;
-
-    if let Some(measurement) = measurement {
-        insert_measurement(&mut tx, customer_id, measurement).await?;
-    }
-
-    tx.commit().await?;
-
-    Ok(customer_id)
+    .fetch_optional(&mut **tx)
+    .await
 }
 
 // COALESCE leaves any field the caller omitted untouched, so a partial update
@@ -351,13 +335,13 @@ pub async fn create_customer(
 // (with its measurements JSON) is re-read through the list SPEC afterwards,
 // since `RETURNING` alone can't build that projection.
 pub async fn update_customer(
-    state: &AppState,
+    tx: &mut sqlx::PgTransaction<'_>,
     customer_id: Uuid,
     name: Option<&str>,
     mobile_no: Option<&str>,
     whatsapp_notifications_enabled: Option<bool>,
     address: Option<&str>,
-) -> Result<Option<Customer>, AppError> {
+) -> Result<bool, sqlx::Error> {
     let address = address.map(str::trim);
     let updated = sqlx::query_scalar!(
         r#"
@@ -375,12 +359,8 @@ pub async fn update_customer(
         whatsapp_notifications_enabled,
         address,
     )
-    .fetch_optional(state.db())
+    .fetch_optional(&mut **tx)
     .await?;
 
-    if updated.is_none() {
-        return Ok(None);
-    }
-
-    get_customer(state, customer_id).await
+    Ok(updated.is_some())
 }

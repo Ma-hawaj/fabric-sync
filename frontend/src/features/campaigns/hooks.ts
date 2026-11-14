@@ -85,9 +85,10 @@ export function useCampaignRecipients(
         : false,
   })
 }
-export function useMarketingConsent(id: string) {
+export function useMarketingConsent(id: string | null) {
   return useQuery({
     queryKey: ['marketing-consent', id],
+    enabled: id !== null,
     queryFn: async () =>
       (
         await apiClient.get<ConsentResponse>(

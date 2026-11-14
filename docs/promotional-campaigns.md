@@ -39,15 +39,18 @@ independently and never sends messages.
 
 ## Consent
 
-On an existing customer's edit page, use the **WhatsApp promotions** checkbox and
-**Save preference**. The checkbox defaults on when no preference has been saved;
-recorded opt-outs remain off. Opening the form makes no change to eligibility:
-the selected preference takes effect only when saved. Existing customers are
-not automatically enrolled or backfilled. Staff do not need to enter a reason
-or date: the server records the saving staff member, current time and checkbox
-source in the consent history. A saved default is a staff preference action,
-not evidence that the customer explicitly opted in. This action saves separately
-from customer details and applies to the displayed saved mobile.
+On the customer create/edit form, **Receive promotional offers via WhatsApp**
+sits alongside invoice/pickup updates. The main **Save** action saves customer
+details and preferences in one transaction. The checkbox defaults on when no
+preference exists; saved opt-outs remain off. Opening the form makes no change
+to eligibility, and existing customers are not backfilled. New customers and
+changed phone numbers do not override an existing opt-out on a shared number.
+Unchanged preferences are not re-recorded during routine customer edits, and
+changed preferences check the reviewed phone and version before saving.
+Only staff authorized to manage marketing preferences see or can save this field.
+Staff do not enter a reason/date: the server records the staff member, current
+time and checkbox source automatically. A saved default is a staff preference
+action, not evidence that the customer explicitly opted in.
 Consent is shared by all customers using that normalized number. New numbers do
 not inherit consent from old numbers. Invoice-update preferences are independent.
 

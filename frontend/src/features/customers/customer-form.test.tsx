@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
+import type { ConsentResponse } from '@/features/campaigns/types'
 import type * as ApiModule from '@/lib/api'
 import { CustomerFormPage } from './customer-form'
 import type { Customer } from './types/customers'
@@ -15,6 +17,17 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 }))
 
 const preferenceLabel = 'Receive invoice and pickup updates via WhatsApp'
+const marketingLabel = 'Receive promotional offers via WhatsApp'
+const consent: ConsentResponse = {
+  mobile: '+97333112233',
+  consent: {
+    granted: true,
+    version: 'consent-version',
+    observedAt: '2026-11-14T09:00:00Z',
+    source: 'Customer preference',
+    recordedBy: 'sales',
+  },
+}
 const customer: Customer = {
   id: 'customer-1',
   customerNumber: 23,
@@ -25,21 +38,37 @@ const customer: Customer = {
   invoices: [],
 }
 
-function mount(existing?: Customer) {
+function mount(
+  existing?: Customer,
+  preference = consent,
+  cachePreference = true,
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   if (existing) client.setQueryData(['customers', existing.id], existing)
+  if (existing && cachePreference)
+    client.setQueryData(['marketing-consent', existing.id], preference)
   render(
     <QueryClientProvider client={client}>
       <CustomerFormPage customerId={existing?.id} />
     </QueryClientProvider>,
   )
+  return client
 }
 
 describe('saving the customer WhatsApp preference', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(useAuth).mockReturnValue({
+      ...useAuth(),
+      user: {
+        id: 'admin',
+        name: 'Admin',
+        email: 'admin@example.test',
+        roles: ['admin'],
+      },
+    })
     vi.mocked(apiClient.get).mockResolvedValue({ data: customer })
     vi.mocked(apiClient.patch).mockResolvedValue({
       data: { ...customer, whatsappNotificationsEnabled: false },
@@ -139,9 +168,161 @@ describe('saving the customer WhatsApp preference', () => {
         whatsappNotificationsEnabled: false,
         address: '',
         measurement: null,
+        marketingPreference: {
+          granted: true,
+          expectedMobile: null,
+          expectedVersion: null,
+        },
       }),
     )
     expect(apiClient.post).toHaveBeenCalledTimes(1)
     expect(apiClient.patch).not.toHaveBeenCalled()
+  })
+
+  it('places both preferences in the same form and saves them in one request', async () => {
+    mount(customer)
+    const updates = screen.getByRole('checkbox', { name: preferenceLabel })
+    const promotions = screen.getByRole('checkbox', { name: marketingLabel })
+    expect(updates.closest('form')).toBe(promotions.closest('form'))
+    expect(screen.queryByRole('button', { name: 'Save preference' })).toBeNull()
+    fireEvent.click(updates)
+    fireEvent.click(promotions)
+    expect(apiClient.patch).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(apiClient.patch).toHaveBeenCalledWith(
+        '/customers/customer-1',
+        expect.objectContaining({
+          whatsappNotificationsEnabled: false,
+          marketingPreference: {
+            granted: false,
+            expectedMobile: consent.mobile,
+            expectedVersion: 'consent-version',
+          },
+        }),
+      ),
+    )
+    expect(apiClient.patch).toHaveBeenCalledTimes(1)
+    expect(apiClient.post).not.toHaveBeenCalled()
+  })
+
+  it('preserves a saved marketing opt-out when saving unrelated customer details', async () => {
+    mount(customer, {
+      ...consent,
+      consent: { ...consent.consent!, granted: false },
+    })
+    expect(
+      screen
+        .getByRole('checkbox', { name: marketingLabel })
+        .getAttribute('aria-checked'),
+    ).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled())
+    expect(vi.mocked(apiClient.patch).mock.calls[0][1]).not.toHaveProperty(
+      'marketingPreference',
+    )
+  })
+
+  it('defaults an unsaved preference on and records it only with the main Save', async () => {
+    mount(customer, { mobile: consent.mobile, consent: null })
+    expect(
+      screen
+        .getByRole('checkbox', { name: marketingLabel })
+        .getAttribute('aria-checked'),
+    ).toBe('true')
+    expect(apiClient.patch).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(apiClient.patch).toHaveBeenCalledWith(
+        '/customers/customer-1',
+        expect.objectContaining({
+          marketingPreference: {
+            granted: true,
+            expectedMobile: consent.mobile,
+            expectedVersion: null,
+          },
+        }),
+      ),
+    )
+  })
+
+  it('keeps a changed marketing choice after a failed save for retry', async () => {
+    vi.mocked(apiClient.patch).mockRejectedValueOnce(new Error('Save failed'))
+    mount(customer)
+    fireEvent.click(screen.getByRole('checkbox', { name: marketingLabel }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>('button', {
+          name: 'Save',
+        }).disabled,
+      ).toBe(false),
+    )
+    expect(navigate).not.toHaveBeenCalled()
+    expect(
+      screen
+        .getByRole('checkbox', { name: marketingLabel })
+        .getAttribute('aria-checked'),
+    ).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(2))
+    expect(apiClient.patch).toHaveBeenLastCalledWith(
+      '/customers/customer-1',
+      expect.objectContaining({
+        marketingPreference: {
+          granted: false,
+          expectedMobile: consent.mobile,
+          expectedVersion: 'consent-version',
+        },
+      }),
+    )
+  })
+
+  it('does not expose or submit marketing preferences for production-only staff', async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      ...useAuth(),
+      user: {
+        id: 'production',
+        name: 'Production',
+        email: 'production@example.test',
+        roles: ['production'],
+      },
+    })
+    mount(customer)
+    expect(screen.queryByRole('checkbox', { name: marketingLabel })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled())
+    expect(vi.mocked(apiClient.patch).mock.calls[0][1]).not.toHaveProperty(
+      'marketingPreference',
+    )
+  })
+
+  it('waits for saved preferences instead of allowing the checked default to overwrite a failed lookup', async () => {
+    vi.mocked(apiClient.get).mockRejectedValue(new Error('Lookup failed'))
+    mount(customer, consent, false)
+    await screen.findByText('Could not load WhatsApp preferences.')
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
+    expect(apiClient.patch).not.toHaveBeenCalled()
+  })
+
+  it('does not re-enable promotions when the cache refreshes to an opt-out during a routine edit', async () => {
+    const client = mount(customer)
+    await act(async () => {
+      client.setQueryData(['marketing-consent', customer.id], {
+        ...consent,
+        consent: {
+          ...consent.consent!,
+          granted: false,
+          version: 'withdrawn-version',
+        },
+      })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled())
+    expect(vi.mocked(apiClient.patch).mock.calls[0][1]).not.toHaveProperty(
+      'marketingPreference',
+    )
   })
 })

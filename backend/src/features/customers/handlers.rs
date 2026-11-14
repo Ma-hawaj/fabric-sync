@@ -38,19 +38,27 @@ pub async fn get_customer(
 
 pub async fn create_customer(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(input): Json<CreateCustomerInput>,
 ) -> Result<Json<Customer>, AppError> {
-    Ok(Json(service::create_customer(&state, input).await?))
+    Ok(Json(
+        service::create_customer(&state, input, marketing_actor(&user)).await?,
+    ))
 }
 
 pub async fn update_customer(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(customer_id): Path<Uuid>,
     Json(input): Json<UpdateCustomerInput>,
 ) -> Result<Json<Customer>, AppError> {
     Ok(Json(
-        service::update_customer(&state, customer_id, input).await?,
+        service::update_customer(&state, customer_id, input, marketing_actor(&user)).await?,
     ))
+}
+
+fn marketing_actor(user: &AuthenticatedUser) -> Option<&str> {
+    crate::authorization::authorize(user.roles(), "PUT", "/customers/customer/marketing-consent")
+        .ok()
+        .map(|_| user.subject().unwrap_or("staff"))
 }

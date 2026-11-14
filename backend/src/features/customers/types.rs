@@ -158,6 +158,8 @@ pub struct CreateCustomerInput {
     pub mobile_no: String,
     #[serde(default = "default_whatsapp_notifications_enabled")]
     pub whatsapp_notifications_enabled: bool,
+    pub marketing_preference:
+        Option<crate::features::campaigns::types::CustomerMarketingPreference>,
     pub address: Option<String>,
     #[serde(default)]
     pub measurement: Option<CreateMeasurementInput>,
@@ -167,14 +169,16 @@ fn default_whatsapp_notifications_enabled() -> bool {
     true
 }
 
-/// Every field is optional so a partial update (e.g. just `mobileNo`) stays a
-/// single statement rather than a read-modify-write.
+/// Every field is optional. Marketing changes join the customer transaction
+/// and check the phone/preference version reviewed in the form.
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateCustomerInput {
     pub name: Option<String>,
     pub mobile_no: Option<String>,
     pub whatsapp_notifications_enabled: Option<bool>,
+    pub marketing_preference:
+        Option<crate::features::campaigns::types::CustomerMarketingPreference>,
     /// Omitted leaves it unchanged; an empty string clears the address.
     pub address: Option<String>,
 }
