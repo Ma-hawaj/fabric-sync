@@ -63,39 +63,67 @@ CREATE TABLE campaigns (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX campaigns_due ON campaigns(send_at) WHERE state IN ('scheduled','sending','blocked');
-CREATE TABLE campaign_recipients (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    campaign_id UUID NOT NULL REFERENCES campaigns(id),
-    mobile TEXT NOT NULL,
-    customers JSONB NOT NULL,
-    consent_version UUID NOT NULL,
-    state TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued','submitting','accepted','delivered','read','failed','uncertain','skipped','cancelled','expired')),
-    provider_message_id TEXT UNIQUE,
-    attempt_count INTEGER NOT NULL DEFAULT 0,
-    delivery_attempts INTEGER NOT NULL DEFAULT 0,
-    available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    lease_until TIMESTAMPTZ,
-    request_started BOOLEAN NOT NULL DEFAULT false,
-    error_message TEXT,
-    unsubscribed_at TIMESTAMPTZ,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(campaign_id, mobile)
-);
-CREATE INDEX campaign_queue ON campaign_recipients(available_at) WHERE state = 'queued';
-CREATE TABLE campaign_attempts (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
-    recipient_id UUID NOT NULL REFERENCES campaign_recipients(id),
-    attempt_number INTEGER NOT NULL,
-    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    finished_at TIMESTAMPTZ,
-    outcome TEXT,
-    provider_message_id TEXT,
-    error_message TEXT,
-    UNIQUE(recipient_id, attempt_number)
-);
 -- A single row serializes campaign claims and rate-limit reservations across replicas.
 CREATE TABLE campaign_dispatch_clock (
     id BOOLEAN PRIMARY KEY DEFAULT true CHECK (id),
     next_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 INSERT INTO campaign_dispatch_clock DEFAULT VALUES;
+
+
+-- Campaign approvals use the same request -> send -> recipient -> attempt model.
+ALTER TABLE notification_requests ADD COLUMN campaign_id UUID REFERENCES campaigns(id);
+ALTER TABLE notification_requests DROP CONSTRAINT notification_requests_kind_check;
+ALTER TABLE notification_requests DROP CONSTRAINT notification_requests_check;
+ALTER TABLE notification_requests ADD CONSTRAINT notification_requests_kind_check
+    CHECK (kind IN ('invoice','invoice_ready','repair_ready','gift_card','campaign'));
+ALTER TABLE notification_requests ADD CONSTRAINT notification_requests_check CHECK (
+    (kind IN ('invoice','invoice_ready') AND invoice_id IS NOT NULL AND repair_id IS NULL AND gift_card_id IS NULL AND campaign_id IS NULL)
+    OR (kind='repair_ready' AND invoice_id IS NOT NULL AND repair_id IS NOT NULL AND gift_card_id IS NULL AND campaign_id IS NULL)
+    OR (kind='gift_card' AND invoice_id IS NULL AND repair_id IS NULL AND gift_card_id IS NOT NULL AND campaign_id IS NULL)
+    OR (kind='campaign' AND invoice_id IS NULL AND repair_id IS NULL AND gift_card_id IS NULL AND campaign_id IS NOT NULL)
+);
+ALTER TABLE notification_requests ADD UNIQUE(id,campaign_id);
+CREATE UNIQUE INDEX notification_request_campaign ON notification_requests(campaign_id) WHERE campaign_id IS NOT NULL;
+
+ALTER TABLE notifications ADD COLUMN campaign_id UUID REFERENCES campaigns(id);
+ALTER TABLE notifications DROP CONSTRAINT notifications_kind_check;
+ALTER TABLE notifications DROP CONSTRAINT notifications_check;
+ALTER TABLE notifications ADD CONSTRAINT notifications_kind_check
+    CHECK (kind IN ('invoice_created','invoice_updated','invoice_ready','manual_resend','gift_card','campaign'));
+ALTER TABLE notifications ADD CONSTRAINT notifications_check CHECK (
+    (kind='campaign' AND campaign_id IS NOT NULL AND invoice_id IS NULL AND gift_card_id IS NULL)
+    OR (kind='gift_card' AND gift_card_id IS NOT NULL AND invoice_id IS NULL AND campaign_id IS NULL)
+    OR (kind NOT IN ('gift_card','campaign') AND invoice_id IS NOT NULL AND gift_card_id IS NULL AND campaign_id IS NULL)
+);
+ALTER TABLE notifications ADD FOREIGN KEY(notification_request_id,campaign_id) REFERENCES notification_requests(id,campaign_id);
+CREATE UNIQUE INDEX notifications_campaign_send ON notifications(campaign_id) WHERE campaign_id IS NOT NULL;
+
+ALTER TABLE document_artifacts ADD COLUMN campaign_id UUID REFERENCES campaigns(id);
+ALTER TABLE document_artifacts DROP CONSTRAINT document_artifacts_mime_type_check;
+ALTER TABLE document_artifacts DROP CONSTRAINT document_artifacts_check;
+ALTER TABLE document_artifacts DROP CONSTRAINT document_artifacts_check1;
+ALTER TABLE document_artifacts ADD CONSTRAINT document_artifacts_mime_type_check CHECK (mime_type IN ('application/pdf','image/png','image/jpeg'));
+ALTER TABLE document_artifacts ADD CONSTRAINT document_artifacts_target_check CHECK (
+    num_nonnulls(invoice_id,gift_card_id,campaign_id)=1 AND (
+        (invoice_id IS NOT NULL AND mime_type='application/pdf')
+        OR (gift_card_id IS NOT NULL AND mime_type='image/png')
+        OR (campaign_id IS NOT NULL AND mime_type IN ('image/png','image/jpeg') AND byte_length <= 5242880)
+    )
+);
+
+ALTER TABLE notification_recipients ADD COLUMN marketing_consent_version UUID;
+ALTER TABLE notification_recipients ADD COLUMN unsubscribed_at TIMESTAMPTZ;
+ALTER TABLE notification_recipients DROP CONSTRAINT notification_recipients_status_check;
+ALTER TABLE notification_recipients ADD CONSTRAINT notification_recipients_status_check CHECK (
+    status IN ('draft','queued','submitting','accepted','delivered','read','failed','uncertain','cancelled','skipped','expired')
+);
+
+-- Marketing stays in campaign reporting, outside the critical attention queue.
+CREATE OR REPLACE VIEW notification_current_requests AS
+SELECT DISTINCT ON (r.kind,r.invoice_id,r.repair_id,r.gift_card_id)
+    r.id,r.invoice_id,r.kind,r.repair_id,r.gift_card_id,r.origin,r.requested_at
+FROM notification_requests r
+WHERE r.kind <> 'campaign' AND (r.origin='business'
+    OR EXISTS(SELECT 1 FROM notifications n WHERE n.notification_request_id=r.id AND n.approved_at IS NOT NULL))
+ORDER BY r.kind,r.invoice_id,r.repair_id,r.gift_card_id,r.requested_at DESC,r.id DESC;

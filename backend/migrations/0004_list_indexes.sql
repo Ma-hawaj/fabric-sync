@@ -26,6 +26,10 @@ CREATE INDEX orders_material_id_idx ON orders (material_id);
 CREATE INDEX orders_production_branch_id_idx ON orders (production_branch_id);
 CREATE INDEX measurements_customer_id_idx ON measurements (customer_id);
 CREATE INDEX invoice_items_invoice_id_idx ON invoice_items (invoice_id);
+-- Resolve a card's original sale without scanning every invoice line and
+-- repeatedly traversing replacement history for each candidate line.
+CREATE INDEX invoice_items_gift_card_idx
+    ON invoice_items (gift_card_id) WHERE kind = 'gift_card';
 CREATE INDEX invoices_customer_id_idx ON invoices (customer_id);
 CREATE INDEX invoices_issuing_branch_id_idx ON invoices (issuing_branch_id);
 -- The per-invoice ledger aggregates (`SUM(amount)`, the latest method) run

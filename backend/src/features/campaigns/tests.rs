@@ -133,7 +133,7 @@ async fn approval_is_atomic_idempotent_and_freezes_unique_destinations(pool: PgP
         assert_eq!(result.state, "scheduled");
     }
     let count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM campaign_recipients WHERE campaign_id=$1")
+        sqlx::query_scalar("SELECT count(*) FROM notification_recipients WHERE notification_id IN (SELECT id FROM notifications WHERE campaign_id=$1)")
             .bind(c.id)
             .fetch_one(&pool)
             .await
@@ -176,44 +176,41 @@ async fn stale_consent_rejects_approval_and_unsubscribe_suppresses_queue(pool: P
     assert_eq!(events, 1);
 }
 #[sqlx::test]
-async fn claim_exclusive_cancellation_deadline_and_lease_recovery(pool: PgPool) {
-    let (state, _, template) = setup(&pool).await;
-    let c = store::save_campaign(&pool, None, &input(template), "sales")
+async fn shared_worker_claims_a_campaign_once_and_recovers_uncertain_submissions(pool: PgPool) {
+    let (_, _, template) = setup(&pool).await;
+    let mock = MetaMock::new();
+    let (url, server) = meta_server(mock.clone()).await;
+    let state = test_support::state(pool.clone(), None, Some(url)).await;
+    let _ = approved_campaign(&pool, &state, template).await;
+    let (a, b) = tokio::join!(
+        crate::features::notifications::worker::tick(&state),
+        crate::features::notifications::worker::tick(&state)
+    );
+    a.unwrap();
+    b.unwrap();
+    assert_eq!(mock.messages.lock().unwrap().len(), 1);
+    let c = approved_campaign(&pool, &state, template).await;
+    let recipient:Uuid=sqlx::query_scalar("UPDATE notification_recipients SET status='submitting',attempt_count=1,claimed_at=now()-interval '4 minutes' WHERE notification_id IN (SELECT id FROM notifications WHERE campaign_id=$1) RETURNING id").bind(c.id).fetch_one(&pool).await.unwrap();
+    sqlx::query("INSERT INTO notification_attempts(recipient_id,attempt_number,outcome) VALUES($1,1,'request_started')").bind(recipient).execute(&pool).await.unwrap();
+    crate::features::notifications::repository::recover_leases(&pool)
         .await
         .unwrap();
-    let p = service::preview(&state, c.id).await.unwrap();
-    service::approve(
-        &state,
+    let r = store::recipients(
+        &pool,
         c.id,
-        ApproveInput {
-            expected_revision: c.revision,
-            preview_version: p.version,
-            request_id: Uuid::new_v4(),
+        &Pagination {
+            page: 1,
+            per_page: 50,
         },
-        "manager",
     )
     .await
     .unwrap();
-    let (a, b) = tokio::join!(store::claim(&pool, 1000), store::claim(&pool, 1000));
-    assert_eq!(
-        usize::from(a.unwrap().is_some()) + usize::from(b.unwrap().is_some()),
-        1
-    );
-    sqlx::query(
-        "UPDATE campaign_recipients SET request_started=true,lease_until=now()-interval '1 second'",
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-    store::maintenance(&pool).await.unwrap();
-    let status: String =
-        sqlx::query_scalar("SELECT state FROM campaign_recipients WHERE campaign_id=$1")
-            .bind(c.id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(status, "uncertain");
-    assert!(store::claim(&pool, 1000).await.unwrap().is_none());
+    assert_eq!(r["counts"]["uncertain"], 1);
+    assert!(crate::features::notifications::repository::next_job(&pool)
+        .await
+        .unwrap()
+        .is_none());
+    server.abort();
 }
 #[sqlx::test]
 async fn segmentation_deduplicates_associated_invoices_and_credits(pool: PgPool) {
@@ -254,6 +251,7 @@ struct MetaMock {
     status: std::sync::Arc<std::sync::Mutex<String>>,
     messages: std::sync::Arc<std::sync::Mutex<Vec<Value>>>,
     mode: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    withdraw_on_upload: std::sync::Arc<std::sync::Mutex<Option<PgPool>>>,
 }
 impl MetaMock {
     fn new() -> Self {
@@ -262,6 +260,7 @@ impl MetaMock {
             status: std::sync::Arc::new(std::sync::Mutex::new("APPROVED".into())),
             messages: Default::default(),
             mode: Default::default(),
+            withdraw_on_upload: Default::default(),
         }
     }
     fn value(&self) -> Value {
@@ -308,6 +307,26 @@ async fn meta_send(
         ),
     }
 }
+async fn meta_upload(axum::extract::State(m): axum::extract::State<MetaMock>) -> axum::Json<Value> {
+    let withdraw = m.withdraw_on_upload.lock().unwrap().take();
+    if let Some(pool) = withdraw {
+        let mut tx = pool.begin().await.unwrap();
+        store::consent_lock(&mut tx).await.unwrap();
+        store::record_consent(
+            &mut tx,
+            "+97333112233",
+            false,
+            Utc::now(),
+            "Withdrawn during upload",
+            "whatsapp",
+            Some("upload-opt-out"),
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+    }
+    axum::Json(json!({"id":"image-media"}))
+}
 async fn meta_server(mock: MetaMock) -> (String, tokio::task::JoinHandle<()>) {
     let router = axum::Router::new()
         .route("/template-id", axum::routing::get(meta_template))
@@ -315,11 +334,8 @@ async fn meta_server(mock: MetaMock) -> (String, tokio::task::JoinHandle<()>) {
             "/test-waba/message_templates",
             axum::routing::get(meta_list).post(meta_submit),
         )
-        .route("/test-phone/messages", axum::routing::post(meta_send))
-        .route(
-            "/test-phone/media",
-            axum::routing::post(|| async { axum::Json(json!({"id":"image-media"})) }),
-        )
+        .route("/messages", axum::routing::post(meta_send))
+        .route("/media", axum::routing::post(meta_upload))
         .route(
             "/test-app/uploads",
             axum::routing::post(|| async { axum::Json(json!({"id":"upload:sample"})) }),
@@ -366,7 +382,9 @@ async fn exact_provider_payload_and_monotonic_status_webhooks(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, Some(url)).await;
     let c = approved_campaign(&pool, &state, template).await;
     assert_eq!(mock.messages.lock().unwrap().len(), 0);
-    super::worker::tick(&state).await.unwrap();
+    crate::features::notifications::worker::tick(&state)
+        .await
+        .unwrap();
     let payload = mock.messages.lock().unwrap()[0].clone();
     assert_eq!(payload["to"], "97333112233");
     assert_eq!(payload["template"]["name"], "promotion_v1");
@@ -398,7 +416,9 @@ async fn exact_provider_payload_and_monotonic_status_webhooks(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(r["counts"]["read"], 1);
-    super::worker::tick(&state).await.unwrap();
+    crate::features::notifications::worker::tick(&state)
+        .await
+        .unwrap();
     assert_eq!(mock.messages.lock().unwrap().len(), 1);
     server.abort();
 }
@@ -410,10 +430,12 @@ async fn rate_limits_retry_but_ambiguous_results_never_replay(pool: PgPool) {
     let (url, server) = meta_server(mock.clone()).await;
     let state = test_support::state(pool.clone(), None, Some(url)).await;
     let c = approved_campaign(&pool, &state, template).await;
-    super::worker::tick(&state).await.unwrap();
-    let row:(String,bool)=sqlx::query_as("SELECT state,available_at >= now()+interval '590 seconds' FROM campaign_recipients WHERE campaign_id=$1").bind(c.id).fetch_one(&pool).await.unwrap();
+    crate::features::notifications::worker::tick(&state)
+        .await
+        .unwrap();
+    let row:(String,bool)=sqlx::query_as("SELECT status,next_attempt_at >= now()+interval '590 seconds' FROM notification_recipients WHERE notification_id IN (SELECT id FROM notifications WHERE campaign_id=$1)").bind(c.id).fetch_one(&pool).await.unwrap();
     assert_eq!(row, ("queued".into(), true));
-    sqlx::query("UPDATE campaign_recipients SET available_at=now()")
+    sqlx::query("UPDATE notification_recipients SET next_attempt_at=now()")
         .execute(&pool)
         .await
         .unwrap();
@@ -422,7 +444,9 @@ async fn rate_limits_retry_but_ambiguous_results_never_replay(pool: PgPool) {
         .await
         .unwrap();
     mock.mode.store(2, std::sync::atomic::Ordering::SeqCst);
-    super::worker::tick(&state).await.unwrap();
+    crate::features::notifications::worker::tick(&state)
+        .await
+        .unwrap();
     let result = store::recipients(
         &pool,
         c.id,
@@ -434,7 +458,9 @@ async fn rate_limits_retry_but_ambiguous_results_never_replay(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(result["counts"]["uncertain"], 1);
-    super::worker::tick(&state).await.unwrap();
+    crate::features::notifications::worker::tick(&state)
+        .await
+        .unwrap();
     assert_eq!(mock.messages.lock().unwrap().len(), 2);
     server.abort();
 }
@@ -448,7 +474,9 @@ async fn paused_templates_block_and_external_content_changes_invalidate_frozen_v
     let state = test_support::state(pool.clone(), None, Some(url)).await;
     let c = approved_campaign(&pool, &state, template).await;
     *mock.status.lock().unwrap() = "PAUSED".into();
-    super::worker::tick(&state).await.unwrap();
+    crate::features::notifications::worker::tick(&state)
+        .await
+        .unwrap();
     assert!(mock.messages.lock().unwrap().is_empty());
     assert_eq!(
         store::campaign(&mut *pool.acquire().await.unwrap(), c.id, false)
@@ -459,7 +487,7 @@ async fn paused_templates_block_and_external_content_changes_invalidate_frozen_v
     );
     *mock.status.lock().unwrap() = "APPROVED".into();
     mock.definition.lock().unwrap().body = "Changed {{1}}".into();
-    sqlx::query("UPDATE campaign_recipients SET available_at=now()")
+    sqlx::query("UPDATE notification_recipients SET next_attempt_at=now()")
         .execute(&pool)
         .await
         .unwrap();
@@ -467,7 +495,9 @@ async fn paused_templates_block_and_external_content_changes_invalidate_frozen_v
         .execute(&pool)
         .await
         .unwrap();
-    super::worker::tick(&state).await.unwrap();
+    crate::features::notifications::worker::tick(&state)
+        .await
+        .unwrap();
     assert!(mock.messages.lock().unwrap().is_empty());
     server.abort();
 }
@@ -537,7 +567,9 @@ async fn template_submission_sync_and_image_payload(pool: PgPool) {
     )
     .await
     .unwrap();
-    super::worker::tick(&state).await.unwrap();
+    crate::features::notifications::worker::tick(&state)
+        .await
+        .unwrap();
     let sent = mock.messages.lock().unwrap();
     assert_eq!(sent.len(), 1);
     assert!(sent[0]["template"]["components"]
@@ -556,7 +588,9 @@ async fn withdrawal_after_approval_and_phone_changes_prevent_submission(pool: Pg
         .execute(&pool)
         .await
         .unwrap();
-    assert!(store::claim(&pool, 1000).await.unwrap().is_none());
+    crate::features::notifications::worker::tick(&state)
+        .await
+        .unwrap();
     let r = store::recipients(
         &pool,
         c.id,
@@ -620,7 +654,10 @@ async fn scheduled_jobs_wait_and_deadlines_and_cancellation_are_durable(pool: Pg
     )
     .await
     .unwrap();
-    assert!(store::claim(&pool, 1000).await.unwrap().is_none());
+    assert!(crate::features::notifications::repository::next_job(&pool)
+        .await
+        .unwrap()
+        .is_none());
     store::cancel(&pool, c.id).await.unwrap();
     assert_eq!(
         store::recipients(
@@ -779,13 +816,15 @@ async fn corrupted_approved_images_are_never_submitted(pool: PgPool) {
     )
     .await
     .unwrap();
-    sqlx::query("UPDATE campaign_assets SET content=$2 WHERE id=$1")
-        .bind(image.id)
+    sqlx::query("UPDATE document_artifacts SET content=$2 WHERE campaign_id=$1")
+        .bind(c.id)
         .bind(b"corrupted-image".as_slice())
         .execute(&pool)
         .await
         .unwrap();
-    super::worker::tick(&state).await.unwrap();
+    crate::features::notifications::worker::tick(&state)
+        .await
+        .unwrap();
     assert!(mock.messages.lock().unwrap().is_empty());
     assert_eq!(
         store::recipients(
@@ -862,4 +901,339 @@ async fn audience_count_uses_filters_consent_and_unique_mobiles_without_a_draft(
         .await
         .unwrap();
     assert_eq!(drafts, 0);
+}
+
+#[sqlx::test]
+async fn marketing_uses_shared_audits_but_never_enters_critical_attention(pool: PgPool) {
+    use crate::features::notifications::{attention, repository as queue};
+    let (_, _, template) = setup(&pool).await;
+    let mock = MetaMock::new();
+    let (url, server) = meta_server(mock.clone()).await;
+    let state = test_support::state(pool.clone(), None, Some(url)).await;
+    let c = approved_campaign(&pool, &state, template).await;
+    crate::features::notifications::worker::tick(&state)
+        .await
+        .unwrap();
+    let audit:(String,String,String)=sqlx::query_as("SELECT req.kind,n.kind,a.outcome FROM notification_requests req JOIN notifications n ON n.notification_request_id=req.id JOIN notification_recipients r ON r.notification_id=n.id JOIN notification_attempts a ON a.recipient_id=r.id WHERE n.campaign_id=$1").bind(c.id).fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        audit,
+        ("campaign".into(), "campaign".into(), "accepted".into())
+    );
+    for status in ["failed", "uncertain", "queued", "skipped", "expired"] {
+        sqlx::query("UPDATE notification_recipients SET status=$1,updated_at=now()-interval '40 minutes' WHERE notification_id IN (SELECT id FROM notifications WHERE campaign_id=$2)").bind(status).bind(c.id).execute(&pool).await.unwrap();
+        assert_eq!(attention::summary(&pool).await.unwrap().total, 0);
+        assert!(attention::list(&pool, &crate::list::ListParams::default())
+            .await
+            .unwrap()
+            .data
+            .is_empty());
+    }
+    let _ = test_support::invoice(&pool, 1, false).await;
+    assert_eq!(attention::summary(&pool).await.unwrap().total, 1);
+    let rows = attention::list(&pool, &crate::list::ListParams::default())
+        .await
+        .unwrap()
+        .data;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].kind, "invoice");
+    let sends: i64 = sqlx::query_scalar("SELECT count(*) FROM notifications WHERE campaign_id=$1")
+        .bind(c.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(sends, 1);
+    assert!(queue::next_job_for_channels(&pool, false)
+        .await
+        .unwrap()
+        .is_none());
+    server.abort();
+}
+
+#[sqlx::test]
+async fn marketing_flag_and_throttle_do_not_block_critical_delivery(pool: PgPool) {
+    use crate::features::notifications::{repository as queue, types as notification};
+    let (state, _, template) = setup(&pool).await;
+    let c = approved_campaign(&pool, &state, template).await;
+    assert!(queue::next_job_for_channels(&pool, false)
+        .await
+        .unwrap()
+        .is_none());
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let mut tx = pool.begin().await.unwrap();
+    let request = queue::ensure_request(&mut tx, invoice, "invoice", None)
+        .await
+        .unwrap();
+    let snapshot:notification::Snapshot=serde_json::from_value(json!({"invoiceNumber":1,"sourceHash":"test","revision":0,"body":"Test","templateName":"invoice","language":"en_US","parameters":[],"exclusions":[]})).unwrap();
+    let n = queue::insert_send(
+        &mut tx,
+        queue::NewSend {
+            request,
+            kind: "invoice_created",
+            event_key: "test-critical",
+            command: None,
+            snapshot: &snapshot,
+            artifact: None,
+            actor: "sales",
+            resend_of: None,
+        },
+    )
+    .await
+    .unwrap();
+    queue::insert_recipient(
+        &mut tx,
+        n,
+        &notification::Destination {
+            mobile: "+97333112233".into(),
+            customers: vec![],
+            excluded_reason: None,
+        },
+    )
+    .await
+    .unwrap();
+    queue::select_recipients(&mut tx, n, &["+97333112233".into()], true)
+        .await
+        .unwrap();
+    queue::approve(&mut tx, n, "sales").await.unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(
+        queue::next_job_for_channels(&pool, true)
+            .await
+            .unwrap()
+            .unwrap()
+            .1,
+        request
+    );
+    sqlx::query("UPDATE campaign_dispatch_clock SET next_at=now()+interval '1 hour'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        queue::next_job_for_channels(&pool, false)
+            .await
+            .unwrap()
+            .unwrap()
+            .1,
+        request
+    );
+    let mut tx = pool.begin().await.unwrap();
+    store::record_consent(
+        &mut tx,
+        "+97333112233",
+        false,
+        Utc::now(),
+        "Withdrawal",
+        "sales",
+        None,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM notification_recipients WHERE notification_id=$1")
+            .bind(n)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "queued");
+    assert_eq!(
+        store::recipients(
+            &pool,
+            c.id,
+            &Pagination {
+                page: 1,
+                per_page: 50
+            }
+        )
+        .await
+        .unwrap()["counts"]["skipped"],
+        1
+    );
+}
+
+#[sqlx::test]
+async fn campaign_shared_records_cannot_bypass_manager_approval_or_target_ownership(pool: PgPool) {
+    use crate::features::notifications::{
+        repository as queue, service as notification, types as t,
+    };
+    let (state, _, template) = setup(&pool).await;
+    let c = approved_campaign(&pool, &state, template).await;
+    let (id, request, version): (Uuid, Uuid, Uuid) = sqlx::query_as(
+        "SELECT id,notification_request_id,preview_version FROM notifications WHERE campaign_id=$1",
+    )
+    .bind(c.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(notification::approve(
+        &state,
+        id,
+        t::SendInput {
+            preview_version: version,
+            selected_mobiles: vec!["+97333112233".into()]
+        },
+        "sales",
+        true
+    )
+    .await
+    .is_err());
+    assert!(notification::cancel(&state, id).await.is_err());
+    let other = store::save_campaign(&pool, None, &input(template), "sales")
+        .await
+        .unwrap();
+    let mismatch=sqlx::query("INSERT INTO notifications(campaign_id,notification_request_id,kind,event_key,source_hash,preview_version,snapshot,created_by) SELECT $1,$2,'campaign','cross-target',source_hash,$3,snapshot,'sales' FROM notifications WHERE id=$4").bind(other.id).bind(request).bind(Uuid::new_v4()).bind(id).execute(&pool).await;
+    assert!(mismatch.is_err());
+    assert_eq!(
+        queue::recipients(&pool, id).await.unwrap()[0].status,
+        "queued"
+    );
+}
+
+#[sqlx::test]
+async fn jpeg_campaign_uses_shared_transport_and_unsubscribe_button(pool: PgPool) {
+    let (initial, _, template) = setup(&pool).await;
+    let image = service::upload(
+        &initial,
+        AssetInput {
+            filename: "offer.jpg".into(),
+            mime_type: "image/jpeg".into(),
+            data_base64: base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10],
+            ),
+        },
+        "sales",
+    )
+    .await
+    .unwrap();
+    let mock = MetaMock::new();
+    {
+        let mut d = mock.definition.lock().unwrap();
+        d.image_header = true;
+        d.sample_asset_id = Some(image.id);
+        d.website_label = Some("Shop".into());
+        d.website_url = Some("https://thobx.bh".into());
+    }
+    let definition = mock.definition.lock().unwrap().clone();
+    sqlx::query("UPDATE campaign_templates SET definition=$2,provider_components=$3 WHERE id=$1")
+        .bind(template)
+        .bind(json!(definition))
+        .bind(provider::canonical(&provider::components(
+            &definition,
+            None,
+        )))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (url, server) = meta_server(mock.clone()).await;
+    let state = test_support::state(pool.clone(), None, Some(url)).await;
+    let mut i = input(template);
+    i.asset_id = Some(image.id);
+    let c = store::save_campaign(&pool, None, &i, "sales")
+        .await
+        .unwrap();
+    let p = service::preview(&state, c.id).await.unwrap();
+    service::approve(
+        &state,
+        c.id,
+        ApproveInput {
+            expected_revision: c.revision,
+            preview_version: p.version,
+            request_id: Uuid::new_v4(),
+        },
+        "manager",
+    )
+    .await
+    .unwrap();
+    crate::features::notifications::worker::tick(&state)
+        .await
+        .unwrap();
+    let sent = mock.messages.lock().unwrap();
+    assert_eq!(sent.len(), 1);
+    let parts = sent[0]["template"]["components"].as_array().unwrap();
+    assert!(parts.iter().any(|c| c["type"] == "header"));
+    assert!(parts.iter().any(|c| c["type"] == "button"
+        && c["index"] == "1"
+        && c["parameters"][0]["payload"] == "MARKETING_UNSUBSCRIBE"));
+    server.abort();
+}
+
+#[sqlx::test]
+async fn consent_withdrawn_during_shared_upload_prevents_message_submission(pool: PgPool) {
+    let (initial, _, template) = setup(&pool).await;
+    let image = service::upload(
+        &initial,
+        AssetInput {
+            filename: "offer.png".into(),
+            mime_type: "image/png".into(),
+            data_base64: base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                b"\x89PNG\r\n\x1a\nimage",
+            ),
+        },
+        "sales",
+    )
+    .await
+    .unwrap();
+    let one = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(pool.connect_options().as_ref().clone())
+        .await
+        .unwrap();
+    let mock = MetaMock::new();
+    {
+        let mut d = mock.definition.lock().unwrap();
+        d.image_header = true;
+        d.sample_asset_id = Some(image.id);
+    }
+    *mock.withdraw_on_upload.lock().unwrap() = Some(one.clone());
+    let d = mock.definition.lock().unwrap().clone();
+    sqlx::query("UPDATE campaign_templates SET definition=$2,provider_components=$3 WHERE id=$1")
+        .bind(template)
+        .bind(json!(d))
+        .bind(provider::canonical(&provider::components(&d, None)))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (url, server) = meta_server(mock.clone()).await;
+    let state = test_support::state(one, None, Some(url)).await;
+    let mut i = input(template);
+    i.asset_id = Some(image.id);
+    let c = store::save_campaign(&pool, None, &i, "sales")
+        .await
+        .unwrap();
+    let p = service::preview(&state, c.id).await.unwrap();
+    service::approve(
+        &state,
+        c.id,
+        ApproveInput {
+            expected_revision: c.revision,
+            preview_version: p.version,
+            request_id: Uuid::new_v4(),
+        },
+        "manager",
+    )
+    .await
+    .unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        crate::features::notifications::worker::tick(&state),
+    )
+    .await
+    .expect("Upload must not hold a database transaction")
+    .unwrap();
+    assert!(mock.messages.lock().unwrap().is_empty());
+    assert_eq!(
+        store::recipients(
+            &pool,
+            c.id,
+            &Pagination {
+                page: 1,
+                per_page: 50
+            }
+        )
+        .await
+        .unwrap()["counts"]["skipped"],
+        1
+    );
+    server.abort();
 }

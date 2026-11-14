@@ -1,17 +1,22 @@
 import * as React from 'react'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { PlusIcon } from 'lucide-react'
+import { PermissionGuard } from '@/components/permission-guard'
+import { Button } from '@/components/ui/button'
 import { useListParams } from '@/hooks/use-list-params'
 import { useDataTable } from '@/hooks/use-data-table'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { getRepairColumns } from './components/repair-columns'
 import { ReceiveRepairDialog } from './components/receive-repair-dialog'
+import { CreateRepairDialog } from './components/create-repair-dialog'
 import { useRepairs } from './hooks/use-repairs'
 import { printRepairDocument } from './lib/print-repair'
 import type { RepairListItem } from './types/orders'
 
 export function RepairsPage() {
+  const [createOpen, setCreateOpen] = useState(false)
   const [receiveRepair, setReceiveRepair] = useState<RepairListItem | null>(
     null,
   )
@@ -52,20 +57,31 @@ export function RepairsPage() {
       data-slot="list-page"
       className="flex h-full min-h-0 min-w-0 flex-col gap-5 [&>:first-child]:shrink-0"
     >
-      <div>
-        <h1 className="text-2xl font-semibold leading-tight tracking-tight">
-          Repairs
-        </h1>
-        <p className="mt-1.5 text-sm text-muted-foreground">
-          Every garment brought back for rework — collect ready repairs, record
-          measurement fixes, and print receipts.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold leading-tight tracking-tight">
+            Repairs
+          </h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Every garment brought back for rework — collect ready repairs,
+            record measurement fixes, and print receipts.
+          </p>
+        </div>
+        <PermissionGuard method="POST" path="/orders/:id/repairs">
+          <Button onClick={() => setCreateOpen(true)}>
+            <PlusIcon className="size-4" />
+            Create Repair
+          </Button>
+        </PermissionGuard>
       </div>
 
       <DataTable table={table} isLoading={isLoading} isFetching={isFetching}>
         <DataTableToolbar table={table} />
       </DataTable>
 
+      <PermissionGuard method="POST" path="/orders/:id/repairs">
+        {createOpen && <CreateRepairDialog onOpenChange={setCreateOpen} />}
+      </PermissionGuard>
       <ReceiveRepairDialog
         repair={receiveRepair}
         onOpenChange={(open) => !open && setReceiveRepair(null)}

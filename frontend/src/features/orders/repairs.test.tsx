@@ -1,8 +1,9 @@
-import { render, cleanup } from '@testing-library/react'
+import { render, cleanup, fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import { RepairsPage } from './repairs'
 import { printRepairDocument } from './lib/print-repair'
+import { useAuth } from '@/lib/auth'
 import type { RepairListItem } from './types/orders'
 
 const callbacks = vi.hoisted(() => ({ print: (_repair: RepairListItem) => {} }))
@@ -30,6 +31,17 @@ vi.mock('@/components/data-table/data-table-toolbar', () => ({
 vi.mock('./components/receive-repair-dialog', () => ({
   ReceiveRepairDialog: () => null,
 }))
+vi.mock('./components/create-repair-dialog', () => ({
+  CreateRepairDialog: ({
+    onOpenChange,
+  }: {
+    onOpenChange: (open: boolean) => void
+  }) => (
+    <div role="dialog">
+      <button onClick={() => onOpenChange(false)}>Cancel</button>
+    </div>
+  ),
+}))
 afterEach(cleanup)
 
 describe('repair receipt errors', () => {
@@ -44,5 +56,26 @@ describe('repair receipt errors', () => {
     expect(messages?.error).toBe(
       'Could not prepare this receipt. Please try again.',
     )
+  })
+})
+
+describe('create repair access', () => {
+  it('opens creation from the repairs page and closes on cancel', () => {
+    render(<RepairsPage />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Create Repair' }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('hides creation from production staff', () => {
+    const auth = vi.mocked(useAuth).getMockImplementation()!()
+    vi.mocked(useAuth).mockReturnValue({
+      ...auth,
+      user: { ...auth.user!, roles: ['production'] },
+    })
+    render(<RepairsPage />)
+    expect(screen.queryByRole('button', { name: 'Create Repair' })).toBeNull()
   })
 })

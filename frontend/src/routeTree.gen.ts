@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
+import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedProductsRouteRouteImport } from './routes/_authenticated/products/route'
 import { Route as AuthenticatedOrdersRouteRouteImport } from './routes/_authenticated/orders/route'
 import { Route as AuthenticatedOrderStagesRouteRouteImport } from './routes/_authenticated/order-stages/route'
@@ -69,6 +70,12 @@ const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedNotificationsRoute =
+  AuthenticatedNotificationsRouteImport.update({
+    id: '/notifications',
+    path: '/notifications',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedProductsRouteRoute =
   AuthenticatedProductsRouteRouteImport.update({
     id: '/products',
@@ -334,6 +341,7 @@ export interface FileRoutesByFullPath {
   '/order-stages': typeof AuthenticatedOrderStagesRouteRouteWithChildren
   '/orders': typeof AuthenticatedOrdersRouteRouteWithChildren
   '/products': typeof AuthenticatedProductsRouteRouteWithChildren
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/users': typeof AuthenticatedUsersRoute
   '/invoices/$invoiceId': typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
   '/campaigns/$campaignId': typeof AuthenticatedCampaignsCampaignIdRoute
@@ -370,6 +378,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/users': typeof AuthenticatedUsersRoute
   '/campaigns/$campaignId': typeof AuthenticatedCampaignsCampaignIdRoute
   '/campaigns/new': typeof AuthenticatedCampaignsNewRoute
@@ -417,6 +426,7 @@ export interface FileRoutesById {
   '/_authenticated/order-stages': typeof AuthenticatedOrderStagesRouteRouteWithChildren
   '/_authenticated/orders': typeof AuthenticatedOrdersRouteRouteWithChildren
   '/_authenticated/products': typeof AuthenticatedProductsRouteRouteWithChildren
+  '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/invoices/$invoiceId': typeof AuthenticatedInvoicesInvoiceIdRouteRouteWithChildren
   '/_authenticated/campaigns/$campaignId': typeof AuthenticatedCampaignsCampaignIdRoute
@@ -465,6 +475,7 @@ export interface FileRouteTypes {
     | '/order-stages'
     | '/orders'
     | '/products'
+    | '/notifications'
     | '/users'
     | '/invoices/$invoiceId'
     | '/campaigns/$campaignId'
@@ -501,6 +512,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/notifications'
     | '/users'
     | '/campaigns/$campaignId'
     | '/campaigns/new'
@@ -547,6 +559,7 @@ export interface FileRouteTypes {
     | '/_authenticated/order-stages'
     | '/_authenticated/orders'
     | '/_authenticated/products'
+    | '/_authenticated/notifications'
     | '/_authenticated/users'
     | '/_authenticated/invoices/$invoiceId'
     | '/_authenticated/campaigns/$campaignId'
@@ -608,6 +621,13 @@ declare module '@tanstack/react-router' {
       path: '/users'
       fullPath: '/users'
       preLoaderRoute: typeof AuthenticatedUsersRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/notifications': {
+      id: '/_authenticated/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AuthenticatedNotificationsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/products': {
@@ -1119,6 +1139,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedOrderStagesRouteRoute: typeof AuthenticatedOrderStagesRouteRouteWithChildren
   AuthenticatedOrdersRouteRoute: typeof AuthenticatedOrdersRouteRouteWithChildren
   AuthenticatedProductsRouteRoute: typeof AuthenticatedProductsRouteRouteWithChildren
+  AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
   AuthenticatedCampaignTemplatesIndexRoute: typeof AuthenticatedCampaignTemplatesIndexRoute
   AuthenticatedRepairsIndexRoute: typeof AuthenticatedRepairsIndexRoute
@@ -1142,6 +1163,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
     AuthenticatedOrderStagesRouteRouteWithChildren,
   AuthenticatedOrdersRouteRoute: AuthenticatedOrdersRouteRouteWithChildren,
   AuthenticatedProductsRouteRoute: AuthenticatedProductsRouteRouteWithChildren,
+  AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
   AuthenticatedCampaignTemplatesIndexRoute:
     AuthenticatedCampaignTemplatesIndexRoute,

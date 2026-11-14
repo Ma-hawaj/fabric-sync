@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            COALESCE(g.issued_by, (\n                SELECT i.created_by FROM invoice_items item\n                JOIN invoices i ON i.id = item.invoice_id\n                WHERE item.gift_card_id = g.id AND item.kind = 'gift_card'\n                ORDER BY item.id LIMIT 1\n            )) AS \"issued_by?\",\n            EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=gift_card_original_id(g.id) AND kind='gift_card') AS \"taxed_at_issue!\",\n            g.replaces_card_id,\n            original.code AS \"replaces_card_code?\",\n            replacement.id AS \"replaced_by_card_id?\",\n            replacement.code AS \"replaced_by_card_code?\",\n            g.id,\n            g.code,\n            g.initial_amount::float8 AS \"initial_amount!\",\n            g.balance::float8 AS \"balance!\",\n            g.customer_id,\n            c.name AS \"customer_name?\",\n            g.bought_for,\n            g.recipient_phone,\n            delivery.state AS \"delivery_status?\",\n            delivery.last_error AS \"delivery_error?\",\n            g.expires_on,\n            g.is_active\n        FROM gift_cards g\n        LEFT JOIN gift_cards original ON original.id = g.replaces_card_id\n        LEFT JOIN gift_cards replacement ON replacement.replaces_card_id = g.id\n        LEFT JOIN customers c ON c.id = g.customer_id\n        LEFT JOIN LATERAL (\n            SELECT state, last_error FROM gift_card_deliveries\n            WHERE gift_card_id = g.id ORDER BY created_at DESC, id DESC LIMIT 1\n        ) delivery ON TRUE\n        WHERE g.code = $1\n        ",
+  "query": "\n        SELECT\n            COALESCE(g.issued_by, (\n                SELECT i.created_by FROM invoice_items item\n                JOIN invoices i ON i.id = item.invoice_id\n                WHERE item.gift_card_id = g.id AND item.kind = 'gift_card'\n                ORDER BY item.id LIMIT 1\n            )) AS \"issued_by?\",\n            EXISTS(SELECT 1 FROM invoice_items WHERE gift_card_id=gift_card_original_id(g.id) AND kind='gift_card') AS \"taxed_at_issue!\",\n            g.replaces_card_id,\n            original.code AS \"replaces_card_code?\",\n            replacement.id AS \"replaced_by_card_id?\",\n            replacement.code AS \"replaced_by_card_code?\",\n            g.id,\n            g.code,\n            g.initial_amount::float8 AS \"initial_amount!\",\n            g.balance::float8 AS \"balance!\",\n            g.customer_id,\n            c.name AS \"customer_name?\",\n            g.bought_for,\n            g.recipient_phone,\n            delivery.state AS \"delivery_status?\",\n            delivery.last_error AS \"delivery_error?\",\n            g.expires_on,\n            g.is_active\n        FROM gift_cards g\n        LEFT JOIN gift_cards original ON original.id = g.replaces_card_id\n        LEFT JOIN gift_cards replacement ON replacement.replaces_card_id = g.id\n        LEFT JOIN customers c ON c.id = g.customer_id\n        LEFT JOIN LATERAL (\n            SELECT CASE WHEN recipient.status = 'submitting' THEN 'sending' ELSE recipient.status END AS state,\n                   recipient.error_message AS last_error\n            FROM notifications send JOIN notification_recipients recipient ON recipient.notification_id = send.id\n            WHERE send.gift_card_id = g.id AND send.approved_at IS NOT NULL\n            ORDER BY send.approved_at DESC, send.id DESC LIMIT 1\n        ) delivery ON TRUE\n        WHERE g.code = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -114,11 +114,11 @@
       false,
       true,
       true,
-      false,
+      null,
       true,
       true,
       false
     ]
   },
-  "hash": "942e7c82e5df2c8f2940e44c94a6d3645298a650c7a9b65cb6e4bedfdabe1e92"
+  "hash": "1389bda08f6b660cae2db10fb9393fcfe9ad2bcb3eb45dc8e1f58062b365c628"
 }

@@ -451,25 +451,6 @@ pub async fn upload(state: &AppState, input: AssetInput, actor: &str) -> Result<
     )
     .await
 }
-pub async fn delivery_event(
-    db: &mut PgConnection,
-    id: &str,
-    incoming: &str,
-    status: &Value,
-) -> Result<bool, AppError> {
-    store::delivery_event(
-        db,
-        id,
-        incoming,
-        if incoming == "failed" {
-            Some(status["errors"].to_string())
-        } else {
-            None
-        }
-        .as_deref(),
-    )
-    .await
-}
 pub fn is_unsubscribe(message: &Value) -> bool {
     message["button"]["payload"].as_str() == Some("MARKETING_UNSUBSCRIBE")
         || message["interactive"]["button_reply"]["id"].as_str() == Some("MARKETING_UNSUBSCRIBE")
@@ -542,4 +523,39 @@ pub async fn webhook(db: &PgPool, payload: &Value) -> Result<(), AppError> {
         }
     }
     Ok(())
+}
+
+/// Template catalog eligibility is domain-specific; claiming and delivery are shared.
+pub(crate) async fn template_ready(
+    state: &AppState,
+    id: Uuid,
+    recipient: Uuid,
+) -> Result<bool, AppError> {
+    let mut tx = state.db().begin().await?;
+    store::consent_lock(&mut tx).await?;
+    let c = store::campaign(&mut tx, id, true).await?;
+    if let Some(status) = store::eligible(&mut tx, id, recipient).await? {
+        store::exclude_queued(&mut tx, recipient, status).await?;
+        tx.commit().await?;
+        return Ok(false);
+    }
+    tx.commit().await?;
+    let p: Preview = serde_json::from_value(
+        c.preview
+            .ok_or_else(|| AppError::Conflict("Campaign has no approved snapshot.".into()))?,
+    )
+    .map_err(|e| AppError::Config(e.to_string()))?;
+    let ready = super::provider::refresh(state, &p.template).await;
+    match ready {
+        Ok(true) => Ok(true),
+        result => {
+            let reason = if result.is_err() {
+                "Could not verify template eligibility with Meta."
+            } else {
+                "Approved template is paused, archived, or changed. Cancel and prepare a new campaign if its content changed."
+            };
+            store::block(state.db(), id, reason).await?;
+            Ok(false)
+        }
+    }
 }

@@ -30,8 +30,12 @@ approve or dispatch a campaign. Missing credentials leave drafts usable. Meta
 connections also need outbound access to `graph.facebook.com` in the deployed
 runtime. The minimum dispatch interval is shared by all application replicas;
 it defaults to one second and is configurable from 100 to 60000 milliseconds.
-The campaign worker is separate from the invoice worker and uses PostgreSQL;
-there is no additional queue service.
+Campaigns use the same PostgreSQL request, send, recipient, attempt and attachment
+records and delivery worker as invoices, pickup notices, repairs and gift cards.
+There is no separate campaign queue or delivery service. Critical notifications
+are claimed ahead of marketing; a paused, rate-limited or disabled marketing
+campaign cannot block critical sends. Template catalog synchronization runs
+independently and never sends messages.
 
 ## Consent
 
@@ -115,12 +119,15 @@ message submission or expired lease after submission is **uncertain** and is
 never replayed automatically. Reconcile provider delivery before any intentional
 new campaign. Image-upload retries alone do not send messages.
 
-The delivery page reports recipient outcomes and unsubscribe counts. Accepted
+The Campaigns delivery page reports recipient outcomes and unsubscribe counts.
+Marketing requests and delivery history are deliberately excluded from the
+critical Notifications attention list and sidebar badge. Accepted
 means Meta accepted the message; delivered/read depend on provider receipts and
 may arrive later. Late or duplicate webhooks cannot downgrade delivery state.
 Cancellation and opt-out cannot recall messages already submitted to Meta.
 
-Back up campaign/consent/asset tables with PostgreSQL. Monitor blocked campaigns,
+Back up campaign/consent/asset tables and the shared notification delivery tables
+with PostgreSQL. Monitor blocked campaigns,
 uncertain outcomes, queue age relative to deadlines, and provider errors.
 Disabling marketing pauses dispatch while retaining approvals and history;
 deadlines still expire. Routine logs should contain IDs and error codes, never

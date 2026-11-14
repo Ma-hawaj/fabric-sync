@@ -29,6 +29,7 @@ import { useAuth } from '@/lib/auth'
 import { accountSettingsUrl } from '@/lib/account-settings'
 import { usePreferences } from '@/features/locations/hooks/use-default-location'
 import { DefaultLocationMenu } from '@/features/locations/components/default-location-menu'
+import { NotificationAttentionBadge } from '@/features/notifications/attention-badge'
 import {
   MegaphoneIcon,
   UsersIcon,
@@ -47,6 +48,7 @@ import {
   PaletteIcon,
   SunIcon,
   WrenchIcon,
+  BellIcon,
 } from 'lucide-react'
 
 const navItems = [
@@ -57,6 +59,7 @@ const navItems = [
     icon: MegaphoneIcon,
   },
   { to: '/invoices', label: 'Invoices', icon: ReceiptText },
+  { to: '/notifications', label: 'Notifications', icon: BellIcon },
   { to: '/orders', label: 'Orders', icon: ShoppingCart },
   { to: '/repairs', label: 'Repairs', icon: WrenchIcon },
   { to: '/customers', label: 'Customers', icon: ContactIcon },
@@ -200,6 +203,7 @@ export function AppSidebar() {
             label: 'Workspace',
             paths: [
               '/invoices',
+              '/notifications',
               '/orders',
               '/repairs',
               '/customers',
@@ -242,6 +246,9 @@ export function AppSidebar() {
                       >
                         <Icon />
                         <span>{label}</span>
+                        {to === '/notifications' && (
+                          <NotificationAttentionBadge />
+                        )}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   )

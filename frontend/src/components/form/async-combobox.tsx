@@ -52,7 +52,7 @@ interface AsyncComboboxProps<T> {
 
 /**
  * A combobox whose options are paginated and searched on the server instead of
- * downloaded whole: typing debounces into an `iLike` filter and scrolling to
+ * downloaded whole: typing debounces into server filters and scrolling to
  * the bottom of the list pages through with `useInfiniteListQuery`.
  *
  * The current selection is re-injected on top of the loaded rows so a stored

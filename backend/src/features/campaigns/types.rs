@@ -191,13 +191,6 @@ pub struct Asset {
     pub mime_type: String,
     pub sha256: String,
 }
-#[derive(Clone, FromRow)]
-pub struct Job {
-    pub id: Uuid,
-    pub campaign_id: Uuid,
-    pub mobile: String,
-    pub attempt_count: i32,
-}
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Pagination {

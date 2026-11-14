@@ -1,10 +1,6 @@
 use super::{repository as store, types::*};
-use crate::features::notifications::{
-    service::http_client,
-    worker::{graph_response, Failure},
-};
+use crate::features::notifications::{service::http_client, transport::graph_response};
 use crate::{error::AppError, state::AppState};
-use reqwest::{Client, Method};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -343,91 +339,20 @@ pub async fn refresh(state: &AppState, snapshot: &TemplateSnapshot) -> Result<bo
         && t.revision == snapshot.revision
         && canonical(&components(&snapshot.definition, None)) == canonical(&value["components"]))
 }
-fn failure(message: &str, retry: bool, uncertain: bool) -> Failure {
-    Failure {
-        message: message.into(),
-        retry,
-        uncertain,
-        retry_after: 0,
-    }
-}
-pub async fn send(state: &AppState, job: &Job, p: &Preview) -> Result<String, Failure> {
-    let cfg = state.notifications();
-    let client: Client =
-        http_client().map_err(|_| failure("Could not initialize Meta client.", true, false))?;
-    let token = cfg
-        .access_token
-        .as_deref()
-        .ok_or_else(|| failure("WhatsApp is not configured.", false, false))?;
-    let phone = cfg.phone_number_id.as_deref().unwrap_or_default();
-    let mut c = Vec::new();
-    if !p.parameters.is_empty() {
-        c.push(json!({"type":"body","parameters":p.parameters.iter().map(|s|json!({"type":"text","text":s})).collect::<Vec<_>>()}));
-    }
-    if let Some(asset_id) = p.asset_id {
-        let (asset, bytes) = store::asset(
-            &mut *state
-                .db()
-                .acquire()
-                .await
-                .map_err(|_| failure("Image storage unavailable.", true, false))?,
-            asset_id,
-        )
-        .await
-        .map_err(|_| failure("Approved image unavailable.", true, false))?;
-        if Some(&asset.sha256) != p.asset_sha256.as_ref()
-            || crate::features::notifications::service::hash(&bytes) != asset.sha256
-        {
-            return Err(failure("Approved image changed.", false, false));
+
+// Template catalog synchronization never dispatches customer messages.
+pub fn start_sync(state: AppState) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+        loop {
+            interval.tick().await;
+            if state.notifications().waba_id.is_some()
+                && state.notifications().access_token.is_some()
+            {
+                if let Err(error) = sync(&state).await {
+                    tracing::warn!(error=?error,"marketing template sync failed");
+                }
+            }
         }
-        let part = reqwest::multipart::Part::bytes(bytes)
-            .file_name(asset.filename)
-            .mime_str(&asset.mime_type)
-            .map_err(|_| failure("Invalid image type.", false, false))?;
-        let upload = client
-            .post(format!("{}/{phone}/media", base(state)))
-            .bearer_auth(token)
-            .multipart(
-                reqwest::multipart::Form::new()
-                    .part("file", part)
-                    .text("messaging_product", "whatsapp"),
-            )
-            .send()
-            .await
-            .map_err(|_| failure("Image upload interrupted.", true, false))?;
-        let media = graph_response(upload, false).await?;
-        let id = media["id"]
-            .as_str()
-            .ok_or_else(|| failure("Meta returned no media ID.", true, false))?;
-        c.push(json!({"type":"header","parameters":[{"type":"image","image":{"id":id}}]}));
-    }
-    let button_index = if p.template.definition.website_url.is_some() {
-        "1"
-    } else {
-        "0"
-    };
-    c.push(json!({"type":"button","sub_type":"quick_reply","index":button_index,"parameters":[{"type":"payload","payload":"MARKETING_UNSUBSCRIBE"}]}));
-    if !store::request_started(state.db(), job)
-        .await
-        .map_err(|_| failure("Could not authorize message submission.", true, false))?
-    {
-        return Err(failure(
-            "Campaign cancelled, expired, or consent withdrawn before submission.",
-            false,
-            false,
-        ));
-    }
-    let response=client.request(Method::POST,format!("{}/{phone}/messages",base(state))).bearer_auth(token).json(&json!({"messaging_product":"whatsapp","to":job.mobile.trim_start_matches('+'),"type":"template","template":{"name":p.template.name,"language":{"code":p.template.language},"components":c}})).send().await.map_err(|_|failure("Message submission result is unknown. Reconcile before resending.",false,true))?;
-    let value = graph_response(response, true).await?;
-    value["messages"][0]["id"]
-        .as_str()
-        .filter(|v| !v.is_empty())
-        .map(str::to_owned)
-        .ok_or_else(|| {
-            failure(
-                "Meta returned no message ID. Reconcile before resending.",
-                false,
-                true,
-            )
-        })
+    });
 }

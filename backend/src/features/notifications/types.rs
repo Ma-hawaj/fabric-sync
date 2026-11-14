@@ -22,9 +22,20 @@ pub struct Destination {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuickReply {
+    pub index: u8,
+    pub payload: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
-    pub invoice_number: i64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub quick_replies: Vec<QuickReply>,
+    #[serde(default)]
+    pub repair_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invoice_number: Option<i64>,
     pub source_hash: String,
     pub revision: i64,
     pub body: String,
@@ -37,6 +48,7 @@ pub struct Snapshot {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrepareInput {
+    pub repair_id: Option<Uuid>,
     pub kind: String,
     pub request_id: Uuid,
     pub resend_of: Option<Uuid>,
@@ -71,7 +83,8 @@ pub struct Recipient {
 #[derive(Clone, Debug, FromRow)]
 pub struct NotificationRow {
     pub id: Uuid,
-    pub invoice_id: Uuid,
+    pub invoice_id: Option<Uuid>,
+    pub notification_request_id: Uuid,
     pub kind: String,
     pub state: String,
     pub source_hash: String,
@@ -81,6 +94,19 @@ pub struct NotificationRow {
     pub artifact_id: Option<Uuid>,
     pub resend_of: Option<Uuid>,
     pub created_at: DateTime<Utc>,
+}
+
+impl NotificationRow {
+    pub fn invoice_id(&self) -> Result<Uuid, crate::error::AppError> {
+        self.invoice_id.ok_or_else(|| {
+            crate::error::AppError::BadRequest(if self.kind == "campaign" {
+                "Use the campaign preview and manager approval endpoints for this notification."
+                    .into()
+            } else {
+                "Use the gift card preview and send endpoints for this notification.".into()
+            })
+        })
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -102,6 +128,7 @@ pub struct Notification {
 #[serde(rename_all = "camelCase")]
 pub struct History {
     pub id: Uuid,
+    pub repair_id: Option<Uuid>,
     pub kind: String,
     pub state: String,
     pub created_at: DateTime<Utc>,
@@ -113,6 +140,42 @@ pub struct History {
     pub failed_count: i64,
     pub uncertain_count: i64,
     pub cancelled_count: i64,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct AttentionRow {
+    pub entity_id: Uuid,
+    pub reference: String,
+    pub invoice_id: Option<Uuid>,
+    pub invoice_number: Option<i64>,
+    pub gift_card_id: Option<Uuid>,
+    pub gift_card_code: Option<String>,
+    pub repair_id: Option<Uuid>,
+    pub order_id: Option<Uuid>,
+    pub repair_reason: Option<String>,
+    pub branch_name: Option<String>,
+    #[sqlx(json)]
+    pub customers: Value,
+    pub kind: String,
+    pub status: String,
+    pub eligible: bool,
+    pub needs_attention: bool,
+    pub waiting_since: DateTime<Utc>,
+    pub last_attempt_at: Option<DateTime<Utc>>,
+    pub notification_id: Option<Uuid>,
+    pub recipient_count: i64,
+    pub queued_count: i64,
+    pub accepted_count: i64,
+    pub delivered_count: i64,
+    pub failed_count: i64,
+    pub uncertain_count: i64,
+    pub cancelled_count: i64,
+    #[sqlx(json)]
+    pub recipients: Value,
+    pub error_message: Option<String>,
+    #[sqlx(json)]
+    pub previous_version: Value,
 }
 
 #[derive(Debug, Serialize, FromRow)]

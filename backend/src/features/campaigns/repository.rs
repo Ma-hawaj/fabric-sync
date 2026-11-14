@@ -88,12 +88,56 @@ pub async fn approve(
     input: &ApproveInput,
     actor: &str,
 ) -> Result<(), AppError> {
+    use crate::features::notifications::{
+        repository as queue,
+        types::{QuickReply, Snapshot},
+    };
+    let request:Uuid=sqlx::query_scalar("INSERT INTO notification_requests(kind,campaign_id,origin) VALUES('campaign',$1,'manual') RETURNING id").bind(c.id).fetch_one(&mut *db).await?;
+    let hash = crate::features::notifications::service::hash(
+        &serde_json::to_vec(p).map_err(|e| AppError::Config(e.to_string()))?,
+    );
+    let artifact = if let Some(asset) = p.asset_id {
+        Some(sqlx::query_scalar::<_,Uuid>("INSERT INTO document_artifacts(campaign_id,source_hash,filename,mime_type,sha256,byte_length,content) SELECT $1,$2,filename,mime_type,sha256,octet_length(content),content FROM campaign_assets WHERE id=$3 RETURNING id").bind(c.id).bind(&hash).bind(asset).fetch_one(&mut *db).await?)
+    } else {
+        None
+    };
+    let snapshot = Snapshot {
+        repair_id: None,
+        invoice_number: None,
+        source_hash: hash,
+        revision: 0,
+        body: p.body.clone(),
+        template_name: p.template.name.clone(),
+        language: p.template.language.clone(),
+        parameters: p.parameters.clone(),
+        exclusions: vec![],
+        quick_replies: vec![QuickReply {
+            index: u8::from(p.template.definition.website_url.is_some()),
+            payload: "MARKETING_UNSUBSCRIBE".into(),
+        }],
+    };
+    let notification = queue::insert_send(
+        db,
+        queue::NewSend {
+            request,
+            kind: "campaign",
+            event_key: &format!("campaign:{}", c.id),
+            command: Some(input.request_id),
+            snapshot: &snapshot,
+            artifact,
+            actor,
+            resend_of: None,
+        },
+    )
+    .await?;
     for d in &p.destinations {
-        sqlx::query("INSERT INTO campaign_recipients(campaign_id,mobile,customers,consent_version) VALUES($1,$2,$3,$4)").bind(c.id).bind(&d.mobile).bind(json!(d.customers)).bind(d.consent_version).execute(&mut *db).await?;
+        sqlx::query("INSERT INTO notification_recipients(notification_id,normalized_mobile,customers,marketing_consent_version,status,next_attempt_at) VALUES($1,$2,$3,$4,'queued',COALESCE($5,now()))").bind(notification).bind(&d.mobile).bind(json!(d.customers)).bind(d.consent_version).bind(p.send_at).execute(&mut *db).await?;
     }
+    queue::approve(db, notification, actor).await?;
     sqlx::query("UPDATE campaigns SET state='scheduled',approved_by=$2,approved_at=now(),approval_request_id=$3,send_at=COALESCE($4,now()),expires_at=$5 WHERE id=$1").bind(c.id).bind(actor).bind(input.request_id).bind(p.send_at).bind(p.expires_at).execute(db).await?;
     Ok(())
 }
+
 pub async fn approval_request(db: &mut PgConnection, id: Uuid) -> Result<Option<Uuid>, AppError> {
     Ok(
         sqlx::query_scalar("SELECT id FROM campaigns WHERE approval_request_id=$1")
@@ -111,12 +155,20 @@ pub async fn cancel(db: &PgPool, id: Uuid) -> Result<Campaign, AppError> {
             .bind(id)
             .execute(&mut *tx)
             .await?;
-        sqlx::query("UPDATE campaign_recipients SET state='cancelled',updated_at=now() WHERE campaign_id=$1 AND state='queued'").bind(id).execute(&mut *tx).await?;
+        let sends: Vec<Uuid> =
+            sqlx::query_scalar("SELECT id FROM notifications WHERE campaign_id=$1")
+                .bind(id)
+                .fetch_all(&mut *tx)
+                .await?;
+        for send in sends {
+            crate::features::notifications::repository::cancel(&mut tx, send).await?;
+        }
     }
     let c = campaign(&mut tx, id, false).await?;
     tx.commit().await?;
     Ok(c)
 }
+
 pub async fn template(db: &mut PgConnection, id: Uuid) -> Result<Template, AppError> {
     sqlx::query_as("SELECT * FROM campaign_templates WHERE id=$1")
         .bind(id)
@@ -240,7 +292,7 @@ pub async fn record_consent(
     // Old provider events must never undo a later explicit opt-in/withdrawal.
     let changed=sqlx::query("INSERT INTO marketing_consent(mobile,granted,observed_at,source,recorded_by) VALUES($1,$2,$3,$4,$5) ON CONFLICT(mobile) DO UPDATE SET granted=$2,observed_at=$3,source=$4,recorded_by=$5,version=$6,updated_at=now() WHERE marketing_consent.observed_at <= $3 OR (NOT $2 AND date_trunc('second',marketing_consent.observed_at)=date_trunc('second',$3::timestamptz))").bind(mobile).bind(granted).bind(observed_at).bind(source).bind(actor).bind(Uuid::new_v4()).execute(&mut *db).await?;
     if !granted && changed.rows_affected() > 0 {
-        sqlx::query("UPDATE campaign_recipients SET state='skipped',error_message='Marketing consent withdrawn.',updated_at=now() WHERE mobile=$1 AND state='queued'").bind(mobile).execute(&mut *db).await?;
+        sqlx::query("UPDATE notification_recipients r SET status='skipped',error_message='Marketing consent withdrawn.',updated_at=now() FROM notifications n WHERE n.id=r.notification_id AND n.kind='campaign' AND r.normalized_mobile=$1 AND r.status='queued'").bind(mobile).execute(&mut *db).await?;
     }
     Ok(())
 }
@@ -298,124 +350,43 @@ pub async fn audience(
     "#).bind(f.never_purchased).bind(f.last_purchase_from).bind(f.last_purchase_to).bind(f.min_purchases).bind(f.max_purchases).bind(&f.min_spend).bind(&f.max_spend).bind(f.branch_id).bind(timezone).fetch_all(db).await?)
 }
 pub async fn recipients(db: &PgPool, id: Uuid, p: &Pagination) -> Result<Value, AppError> {
-    let rows:Vec<Value>=sqlx::query_scalar("SELECT to_jsonb(r) - 'consent_version' - 'request_started' FROM campaign_recipients r WHERE campaign_id=$1 ORDER BY mobile LIMIT $2 OFFSET $3").bind(id).bind(p.limit()).bind(p.offset()).fetch_all(db).await?;
-    let counts:Value=sqlx::query_scalar("SELECT COALESCE(jsonb_object_agg(state,n),'{}') FROM (SELECT state,count(*) AS n FROM campaign_recipients WHERE campaign_id=$1 GROUP BY state) s").bind(id).fetch_one(db).await?;
-    let total: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM campaign_recipients WHERE campaign_id=$1")
-            .bind(id)
-            .fetch_one(db)
-            .await?;
-    let unsubscribes:i64=sqlx::query_scalar("SELECT count(*) FROM campaign_recipients WHERE campaign_id=$1 AND unsubscribed_at IS NOT NULL").bind(id).fetch_one(db).await?;
+    let rows:Vec<Value>=sqlx::query_scalar("SELECT (to_jsonb(r) - 'marketing_consent_version') || jsonb_build_object('mobile',r.normalized_mobile,'state',r.status) FROM notification_recipients r JOIN notifications n ON n.id=r.notification_id WHERE n.campaign_id=$1 ORDER BY r.normalized_mobile LIMIT $2 OFFSET $3").bind(id).bind(p.limit()).bind(p.offset()).fetch_all(db).await?;
+    let counts:Value=sqlx::query_scalar("SELECT COALESCE(jsonb_object_agg(status,n),'{}') FROM (SELECT r.status,count(*) AS n FROM notification_recipients r JOIN notifications n ON n.id=r.notification_id WHERE n.campaign_id=$1 GROUP BY r.status) s").bind(id).fetch_one(db).await?;
+    let (total,unsubscribes):(i64,i64)=sqlx::query_as("SELECT count(*),count(*) FILTER(WHERE r.unsubscribed_at IS NOT NULL) FROM notification_recipients r JOIN notifications n ON n.id=r.notification_id WHERE n.campaign_id=$1").bind(id).fetch_one(db).await?;
     Ok(json!({"items":rows,"total":total,"counts":counts,"unsubscribes":unsubscribes}))
 }
+
 pub async fn maintenance(db: &PgPool) -> Result<(), AppError> {
     let mut tx = db.begin().await?;
     consent_lock(&mut tx).await?;
-    // Only attempts that reached the message boundary become uncertain.
-    sqlx::query("UPDATE campaign_recipients SET state=CASE WHEN request_started THEN 'uncertain' ELSE 'queued' END,lease_until=NULL,error_message='Worker lease expired; submission may need reconciliation.',updated_at=now() WHERE state='submitting' AND lease_until < now()").execute(&mut *tx).await?;
-    sqlx::query("UPDATE campaign_attempts a SET finished_at=now(),outcome=r.state,error_message=r.error_message FROM campaign_recipients r WHERE a.recipient_id=r.id AND a.attempt_number=r.attempt_count AND a.finished_at IS NULL AND r.state <> 'submitting'").execute(&mut *tx).await?;
-    sqlx::query("UPDATE campaign_recipients r SET state='expired',updated_at=now() FROM campaigns c WHERE c.id=r.campaign_id AND c.expires_at <= now() AND r.state='queued'").execute(&mut *tx).await?;
-    sqlx::query("UPDATE campaigns c SET state=CASE WHEN expires_at <= now() THEN 'expired' ELSE 'completed' END WHERE state IN ('scheduled','sending','blocked') AND NOT EXISTS(SELECT 1 FROM campaign_recipients r WHERE r.campaign_id=c.id AND r.state IN ('queued','submitting'))").execute(&mut *tx).await?;
+    // Follow the dispatch/approval lock order: campaign, send, recipient.
+    sqlx::query("SELECT id FROM campaigns WHERE state IN ('scheduled','sending','blocked') ORDER BY id FOR UPDATE").execute(&mut *tx).await?;
+    sqlx::query("UPDATE notification_recipients r SET status='expired',updated_at=now() FROM notifications n JOIN campaigns c ON c.id=n.campaign_id WHERE n.id=r.notification_id AND c.expires_at <= now() AND r.status='queued'").execute(&mut *tx).await?;
+    sqlx::query("UPDATE campaigns c SET state=CASE WHEN expires_at <= now() THEN 'expired' ELSE 'completed' END WHERE state IN ('scheduled','sending','blocked') AND NOT EXISTS(SELECT 1 FROM notifications n JOIN notification_recipients r ON r.notification_id=n.id WHERE n.campaign_id=c.id AND r.status IN ('queued','submitting'))").execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(())
 }
-pub async fn claim(db: &PgPool, interval_ms: i64) -> Result<Option<Job>, AppError> {
-    let mut tx = db.begin().await?;
-    consent_lock(&mut tx).await?;
-    let clock: bool = sqlx::query_scalar(
-        "SELECT next_at <= now() FROM campaign_dispatch_clock WHERE id=true FOR UPDATE",
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-    if !clock {
-        return Ok(None);
-    }
-    let job:Option<Job>=sqlx::query_as("SELECT r.id,r.campaign_id,r.mobile,r.attempt_count FROM campaign_recipients r JOIN campaigns c ON c.id=r.campaign_id WHERE r.state='queued' AND r.available_at <= now() AND c.state IN ('scheduled','sending','blocked') AND c.send_at <= now() AND c.expires_at > now() ORDER BY c.send_at,r.id FOR UPDATE OF r SKIP LOCKED LIMIT 1").fetch_optional(&mut *tx).await?;
-    let Some(mut job) = job else { return Ok(None) };
-    // Phone-scoped consent and source identities are rechecked on every attempt.
-    let eligible:bool=sqlx::query_scalar(r#"SELECT EXISTS(SELECT 1 FROM marketing_consent WHERE mobile=r.mobile AND granted AND version=r.consent_version) AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(r.customers) e LEFT JOIN customers c ON c.id=(e->>'id')::uuid WHERE c.id IS NULL OR c.mobile_no <> e->>'mobileNo') FROM campaign_recipients r WHERE id=$1"#).bind(job.id).fetch_one(&mut *tx).await?;
-    if !eligible {
-        sqlx::query("UPDATE campaign_recipients SET state='skipped',error_message='Consent or customer phone changed.',updated_at=now() WHERE id=$1").bind(job.id).execute(&mut *tx).await?;
-        tx.commit().await?;
-        return Ok(None);
-    }
-    sqlx::query("UPDATE campaign_dispatch_clock SET next_at=clock_timestamp()+make_interval(secs=>$1::double precision / 1000) WHERE id=true").bind(interval_ms as f64).execute(&mut *tx).await?;
-    sqlx::query("UPDATE campaign_recipients SET state='submitting',attempt_count=attempt_count+1,lease_until=now()+interval '3 minutes',request_started=false,updated_at=now() WHERE id=$1").bind(job.id).execute(&mut *tx).await?;
-    job.attempt_count += 1;
-    sqlx::query("INSERT INTO campaign_attempts(recipient_id,attempt_number) VALUES($1,$2)")
-        .bind(job.id)
-        .bind(job.attempt_count)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("UPDATE campaigns SET state='sending',blocked_reason=NULL WHERE id=$1")
-        .bind(job.campaign_id)
-        .execute(&mut *tx)
-        .await?;
-    tx.commit().await?;
-    Ok(Some(job))
-}
-pub async fn request_started(db: &PgPool, job: &Job) -> Result<bool, AppError> {
-    let mut tx = db.begin().await?;
-    consent_lock(&mut tx).await?;
-    let valid:bool=sqlx::query_scalar("SELECT r.state='submitting' AND r.lease_until > now() AND c.state NOT IN ('cancelled','expired') AND c.expires_at > now() AND COALESCE(m.granted AND m.version=r.consent_version,false) AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(r.customers) e LEFT JOIN customers source ON source.id=(e->>'id')::uuid WHERE source.id IS NULL OR source.mobile_no <> e->>'mobileNo') FROM campaign_recipients r JOIN campaigns c ON c.id=r.campaign_id LEFT JOIN marketing_consent m ON m.mobile=r.mobile WHERE r.id=$1 FOR UPDATE OF r").bind(job.id).fetch_one(&mut *tx).await?;
-    if valid {
-        sqlx::query("UPDATE campaign_recipients SET request_started=true WHERE id=$1")
-            .bind(job.id)
-            .execute(&mut *tx)
-            .await?;
-    }
-    tx.commit().await?;
-    Ok(valid)
-}
-pub async fn finish(
-    db: &PgPool,
-    job: &Job,
-    state: &str,
-    message_id: Option<&str>,
-    error: Option<&str>,
-    delay: i64,
-) -> Result<(), AppError> {
-    let mut tx = db.begin().await?;
-    sqlx::query("UPDATE campaign_recipients SET state=$2,provider_message_id=COALESCE($3,provider_message_id),error_message=$4,available_at=now()+make_interval(secs=>$5::double precision),lease_until=NULL,updated_at=now() WHERE id=$1 AND attempt_count=$6 AND (state='submitting' OR (state='uncertain' AND $3::text IS NOT NULL))").bind(job.id).bind(state).bind(message_id).bind(error).bind(delay as f64).bind(job.attempt_count).execute(&mut *tx).await?;
-    sqlx::query("UPDATE campaign_attempts SET finished_at=now(),outcome=$3,provider_message_id=$4,error_message=$5 WHERE recipient_id=$1 AND attempt_number=$2").bind(job.id).bind(job.attempt_count).bind(state).bind(message_id).bind(error).execute(&mut *tx).await?;
-    tx.commit().await?;
-    Ok(())
-}
+
 pub async fn block(db: &PgPool, id: Uuid, reason: &str) -> Result<(), AppError> {
-    sqlx::query("UPDATE campaigns SET state='blocked',blocked_reason=$2 WHERE id=$1 AND state NOT IN ('cancelled','completed','expired')").bind(id).bind(reason).execute(db).await?;
+    let mut tx = db.begin().await?;
+    consent_lock(&mut tx).await?;
+    campaign(&mut tx, id, true).await?;
+    sqlx::query("UPDATE campaigns SET state='blocked',blocked_reason=$2 WHERE id=$1 AND state IN ('scheduled','sending','blocked')").bind(id).bind(reason).execute(&mut *tx).await?;
+    sqlx::query("UPDATE notification_recipients r SET next_attempt_at=now()+interval '60 seconds',error_message=$2 FROM notifications n WHERE n.id=r.notification_id AND n.campaign_id=$1 AND r.status='queued'").bind(id).bind(reason).execute(&mut *tx).await?;
+    tx.commit().await?;
     Ok(())
 }
-pub async fn delivery_event(
-    db: &mut PgConnection,
-    id: &str,
-    incoming: &str,
-    error: Option<&str>,
-) -> Result<bool, AppError> {
-    let existing: Option<(Uuid, String)> = sqlx::query_as(
-        "SELECT id,state FROM campaign_recipients WHERE provider_message_id=$1 FOR UPDATE",
-    )
-    .bind(id)
-    .fetch_optional(&mut *db)
-    .await?;
-    if let Some((recipient, current)) = existing {
-        if let Some(next) = crate::features::notifications::worker::next_status(&current, incoming)
-        {
-            sqlx::query("UPDATE campaign_recipients SET state=$2,error_message=$3,updated_at=now() WHERE id=$1").bind(recipient).bind(next).bind(error).execute(db).await?;
-        }
-        return Ok(true);
-    }
-    Ok(false)
-}
+
 pub async fn attribute_unsubscribe(
     db: &mut PgConnection,
     mobile: &str,
     context: Option<&str>,
     at: DateTime<Utc>,
 ) -> Result<(), AppError> {
-    // Attribute to the button's referenced message, or the most recent prior campaign.
-    sqlx::query("UPDATE campaign_recipients SET unsubscribed_at=$3 WHERE id=(SELECT id FROM campaign_recipients WHERE mobile=$1 AND provider_message_id IS NOT NULL AND updated_at < $3 + interval '1 second' AND ($2::text IS NULL OR provider_message_id=$2) ORDER BY updated_at DESC LIMIT 1)").bind(mobile).bind(context).bind(at).execute(db).await?;
+    sqlx::query("UPDATE notification_recipients SET unsubscribed_at=$3 WHERE id=(SELECT r.id FROM notification_recipients r JOIN notifications n ON n.id=r.notification_id WHERE n.kind='campaign' AND r.normalized_mobile=$1 AND r.provider_message_id IS NOT NULL AND r.updated_at < $3 + interval '1 second' AND ($2::text IS NULL OR r.provider_message_id=$2) ORDER BY r.updated_at DESC LIMIT 1)").bind(mobile).bind(context).bind(at).execute(db).await?;
     Ok(())
 }
+
 pub async fn sync_template(
     db: &PgPool,
     name: &str,
@@ -459,19 +430,39 @@ pub async fn excluded_mobiles(
     )
 }
 
-pub async fn dispatch_rejection(db: &PgPool, job: &Job) -> Result<&'static str, AppError> {
-    let campaign_state: String = sqlx::query_scalar("SELECT CASE WHEN state='cancelled' THEN state WHEN expires_at <= now() THEN 'expired' ELSE state END FROM campaigns WHERE id=$1")
-        .bind(job.campaign_id)
-        .fetch_one(db)
-        .await?;
-    Ok(match campaign_state.as_str() {
-        "cancelled" => "cancelled",
-        "expired" => "expired",
-        _ => "skipped",
+pub async fn eligible(
+    db: &mut PgConnection,
+    campaign: Uuid,
+    recipient: Uuid,
+) -> Result<Option<&'static str>, AppError> {
+    let (state,expired,eligible):(String,bool,bool)=sqlx::query_as("SELECT c.state,c.expires_at <= now(),COALESCE(m.granted AND m.version=r.marketing_consent_version,false) AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(r.customers) e LEFT JOIN customers source ON source.id=(e->>'id')::uuid WHERE source.id IS NULL OR source.mobile_no <> e->>'mobileNo') FROM notification_recipients r JOIN notifications n ON n.id=r.notification_id JOIN campaigns c ON c.id=n.campaign_id LEFT JOIN marketing_consent m ON m.mobile=r.normalized_mobile WHERE r.id=$1 AND c.id=$2").bind(recipient).bind(campaign).fetch_one(db).await?;
+    Ok(if state == "cancelled" {
+        Some("cancelled")
+    } else if expired {
+        Some("expired")
+    } else if !eligible {
+        Some("skipped")
+    } else {
+        None
     })
 }
+pub async fn reserve(db: &mut PgConnection, id: Uuid, interval_ms: i64) -> Result<bool, AppError> {
+    let ready: bool = sqlx::query_scalar(
+        "SELECT next_at<=now() FROM campaign_dispatch_clock WHERE id=true FOR UPDATE",
+    )
+    .fetch_one(&mut *db)
+    .await?;
+    if ready {
+        sqlx::query("UPDATE campaign_dispatch_clock SET next_at=clock_timestamp()+make_interval(secs=>$1::double precision/1000) WHERE id=true").bind(interval_ms as f64).execute(&mut *db).await?;
+        sqlx::query("UPDATE campaigns SET state='sending',blocked_reason=NULL WHERE id=$1")
+            .bind(id)
+            .execute(db)
+            .await?;
+    }
+    Ok(ready)
+}
 
-pub async fn begin_delivery(db: &PgPool, job: &Job) -> Result<i32, AppError> {
-    // Template availability checks do not consume the bounded delivery budget.
-    Ok(sqlx::query_scalar("UPDATE campaign_recipients SET delivery_attempts=delivery_attempts+1 WHERE id=$1 AND state='submitting' AND attempt_count=$2 RETURNING delivery_attempts").bind(job.id).bind(job.attempt_count).fetch_one(db).await?)
+pub async fn exclude_queued(db: &mut PgConnection, id: Uuid, status: &str) -> Result<(), AppError> {
+    sqlx::query("UPDATE notification_recipients SET status=$2,error_message='Campaign expired, cancelled, or recipient consent/phone changed.',updated_at=now() WHERE id=$1 AND status='queued'").bind(id).bind(status).execute(db).await?;
+    Ok(())
 }
