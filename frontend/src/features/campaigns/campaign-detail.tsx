@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CampaignCostEstimate } from './cost-estimate'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -228,6 +229,12 @@ function CampaignDetail({
               <br />
               Sending deadline: {displayTime(preview.expiresAt)}
             </p>
+          </section>
+          <section
+            className="rounded-xl border bg-card p-5"
+            aria-label="Campaign cost estimate"
+          >
+            <CampaignCostEstimate estimate={preview.costEstimate} />
           </section>
           <section className="space-y-4 rounded-xl border bg-card p-5">
             <h2 className="text-lg font-medium">

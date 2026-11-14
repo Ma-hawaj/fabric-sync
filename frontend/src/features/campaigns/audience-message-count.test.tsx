@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api'
 import { AudienceMessageCount } from './audience-message-count'
 import type { AudienceFormValues } from './lib/audience'
+import type { CostEstimate } from './types'
 
 vi.mock('@/lib/api', () => ({
   apiClient: { post: vi.fn() },
@@ -19,6 +20,24 @@ const values: AudienceFormValues = {
   minSpend: '',
   maxSpend: '',
   branchId: '',
+}
+const costEstimate: CostEstimate = {
+  currency: 'USD',
+  total: '0.0392',
+  pricedSubtotal: '0.0392',
+  unpricedMessageCount: 0,
+  rateCardEffectiveFrom: '2026-10-01',
+  rateCardVerifiedOn: '2026-11-14',
+  sourceUrl:
+    'https://developers.facebook.com/docs/whatsapp/pricing/#rate-cards',
+  breakdown: [
+    {
+      market: 'Rest of Middle East',
+      messageCount: 1,
+      unitPrice: '0.0392',
+      subtotal: '0.0392',
+    },
+  ],
 }
 function mount(initial = values, excludedCustomerIds: string[] = []) {
   const client = new QueryClient({
@@ -48,13 +67,19 @@ function mount(initial = values, excludedCustomerIds: string[] = []) {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(apiClient.post).mockResolvedValue({
-    data: { messageCount: 1, matchingCustomers: 3, excludedCustomers: 1 },
+    data: {
+      messageCount: 1,
+      matchingCustomers: 3,
+      excludedCustomers: 1,
+      costEstimate,
+    },
   })
 })
 it('shows eligible unique-message count before any draft or template is saved', async () => {
   mount(values, ['excluded-customer'])
   await screen.findByText('1 WhatsApp message')
   expect(screen.getByText('3 matching customers · 1 excluded')).toBeTruthy()
+  expect(screen.getByText(/USD\s+0\.0392/)).toBeTruthy()
   expect(apiClient.post).toHaveBeenCalledWith(
     '/campaigns/audience-count',
     expect.objectContaining({
@@ -68,12 +93,24 @@ it('updates after filter changes, hides the previous total, and shows zero accur
   const view = mount()
   await screen.findByText('1 WhatsApp message')
   vi.mocked(apiClient.post).mockResolvedValue({
-    data: { messageCount: 0, matchingCustomers: 0, excludedCustomers: 0 },
+    data: {
+      messageCount: 0,
+      matchingCustomers: 0,
+      excludedCustomers: 0,
+      costEstimate: {
+        ...costEstimate,
+        total: '0.0000',
+        pricedSubtotal: '0.0000',
+        breakdown: [],
+      },
+    },
   })
   view.change({ ...values, minPurchases: '5' })
   expect(screen.queryByText('1 WhatsApp message')).toBeNull()
+  expect(screen.queryByText(/USD\s+0\.0392/)).toBeNull()
   expect(screen.getByText('Updating message count…')).toBeTruthy()
   await screen.findByText('0 WhatsApp messages')
+  expect(screen.getByText(/USD\s+0\.00/)).toBeTruthy()
   expect(apiClient.post).toHaveBeenLastCalledWith(
     '/campaigns/audience-count',
     expect.objectContaining({ minPurchases: 5 }),

@@ -10,6 +10,30 @@ pub struct AudienceCount {
     pub message_count: usize,
     pub matching_customers: usize,
     pub excluded_customers: usize,
+    pub cost_estimate: CostEstimate,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CostEstimate {
+    pub currency: String,
+    // No complete total when even one destination could not be priced.
+    pub total: Option<String>,
+    pub priced_subtotal: String,
+    pub unpriced_message_count: usize,
+    pub rate_card_effective_from: String,
+    pub rate_card_verified_on: String,
+    pub source_url: String,
+    pub breakdown: Vec<CostBreakdown>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CostBreakdown {
+    pub market: String,
+    pub message_count: usize,
+    pub unit_price: String,
+    pub subtotal: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -128,6 +152,9 @@ pub struct Preview {
     pub expires_at: DateTime<Utc>,
     pub destinations: Vec<Destination>,
     pub excluded: Vec<Destination>,
+    // Existing approved snapshots remain readable after estimates are introduced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_estimate: Option<CostEstimate>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

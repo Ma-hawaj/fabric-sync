@@ -266,6 +266,7 @@ pub async fn audience_count(
     let (destinations, excluded) = audience(state, &mut db, filter).await?;
     let excluded_customers: usize = excluded.iter().map(|d| d.customers.len()).sum();
     Ok(AudienceCount {
+        cost_estimate: super::pricing::estimate(destinations.iter().map(|d| d.mobile.as_str())),
         message_count: destinations.len(),
         matching_customers: destinations
             .iter()
@@ -301,6 +302,9 @@ pub async fn build_preview(
     };
     let (destinations, excluded) = audience(state, db, &c.definition.audience).await?;
     Ok(Preview {
+        cost_estimate: Some(super::pricing::estimate(
+            destinations.iter().map(|d| d.mobile.as_str()),
+        )),
         version,
         revision: c.revision,
         template: template.into(),
@@ -356,7 +360,7 @@ pub async fn approve(
     let p = build_preview(state, &mut tx, &c, input.preview_version).await?;
     if c.preview.as_ref() != Some(&json!(p)) {
         return Err(AppError::Conflict(
-            "Audience, consent, template or image changed. Review a fresh preview.".into(),
+            "Audience, consent, template, image or pricing changed. Review a fresh preview.".into(),
         ));
     }
     if p.destinations.is_empty() {

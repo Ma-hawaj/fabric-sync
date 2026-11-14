@@ -2,6 +2,22 @@ export interface AudienceCount {
   messageCount: number
   matchingCustomers: number
   excludedCustomers: number
+  costEstimate: CostEstimate
+}
+export interface CostEstimate {
+  currency: 'USD'
+  total: string | null
+  pricedSubtotal: string
+  unpricedMessageCount: number
+  rateCardEffectiveFrom: string
+  rateCardVerifiedOn: string
+  sourceUrl: string
+  breakdown: {
+    market: string
+    messageCount: number
+    unitPrice: string
+    subtotal: string
+  }[]
 }
 export interface AudienceFilter {
   lastPurchaseFrom?: string | null
@@ -70,6 +86,7 @@ export interface CampaignPreview {
   expiresAt: string
   destinations: Destination[]
   excluded: Destination[]
+  costEstimate?: CostEstimate | null
 }
 export interface Campaign {
   id: string

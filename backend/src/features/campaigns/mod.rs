@@ -1,4 +1,5 @@
 mod handlers;
+mod pricing;
 pub(crate) mod provider;
 pub(crate) mod repository;
 mod routes;

@@ -62,6 +62,24 @@ function fixture(): Campaign {
       expiresAt: '2026-12-02T09:00:00Z',
     },
     preview: {
+      costEstimate: {
+        currency: 'USD',
+        total: '0.0392',
+        pricedSubtotal: '0.0392',
+        unpricedMessageCount: 0,
+        rateCardEffectiveFrom: '2026-10-01',
+        rateCardVerifiedOn: '2026-11-14',
+        sourceUrl:
+          'https://developers.facebook.com/docs/whatsapp/pricing/#rate-cards',
+        breakdown: [
+          {
+            market: 'Rest of Middle East',
+            messageCount: 1,
+            unitPrice: '0.0392',
+            subtotal: '0.0392',
+          },
+        ],
+      },
       version: 'preview-1',
       revision: 'revision-1',
       template,
@@ -173,6 +191,8 @@ describe('campaign review and manager approval', () => {
     ).toBe('https://thobx.bh')
     expect(screen.getByText('Unsubscribe')).toBeTruthy()
     expect(screen.getByText('Ahmed, Ali')).toBeTruthy()
+    expect(screen.getByText('Estimated Meta cost')).toBeTruthy()
+    expect(screen.getByText(/USD\s+0\.0392/)).toBeTruthy()
     expect(screen.getByText(/2026-12-01 12:00/)).toBeTruthy()
     expect(apiClient.post).not.toHaveBeenCalled()
   })

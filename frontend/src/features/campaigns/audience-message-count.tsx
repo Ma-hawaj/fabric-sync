@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { useCampaignAudienceCount } from './hooks'
 import { errorMessage } from './components'
+import { CampaignCostEstimate } from './cost-estimate'
 import { audienceFromForm } from './lib/audience'
 import type { AudienceFormValues } from './lib/audience'
 import type { AudienceFilter } from './types'
@@ -60,6 +61,9 @@ export function AudienceMessageCount({
             {count.data.matchingCustomers === 1 ? 'customer' : 'customers'} ·{' '}
             {count.data.excludedCustomers.toLocaleString()} excluded
           </p>
+          <div className="mt-4 border-t pt-4">
+            <CampaignCostEstimate estimate={count.data.costEstimate} />
+          </div>
         </>
       )}
       <p className="mt-2 text-xs text-muted-foreground">

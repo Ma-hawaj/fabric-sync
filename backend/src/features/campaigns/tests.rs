@@ -116,6 +116,9 @@ async fn approval_is_atomic_idempotent_and_freezes_unique_destinations(pool: PgP
     let p = service::preview(&state, c.id).await.unwrap();
     assert_eq!(p.destinations.len(), 1);
     assert_eq!(p.destinations[0].customers.len(), 2);
+    let estimate = p.cost_estimate.as_ref().unwrap();
+    assert_eq!(estimate.total.as_deref(), Some("0.0392"));
+    assert_eq!(estimate.breakdown[0].message_count, 1);
     let request = Uuid::new_v4();
     for _ in 0..2 {
         let result = service::approve(
@@ -131,6 +134,10 @@ async fn approval_is_atomic_idempotent_and_freezes_unique_destinations(pool: PgP
         .await
         .unwrap();
         assert_eq!(result.state, "scheduled");
+        assert_eq!(
+            result.preview.as_ref().unwrap()["costEstimate"],
+            json!(estimate)
+        );
     }
     let count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM notification_recipients WHERE notification_id IN (SELECT id FROM notifications WHERE campaign_id=$1)")
@@ -870,6 +877,8 @@ async fn audience_count_uses_filters_consent_and_unique_mobiles_without_a_draft(
         ),
         (1, 4, 2)
     );
+    assert_eq!(count.cost_estimate.total.as_deref(), Some("0.0392"));
+    assert_eq!(count.cost_estimate.breakdown[0].message_count, 1);
     let count = service::audience_count(
         &state,
         &AudienceFilter {
@@ -880,6 +889,7 @@ async fn audience_count_uses_filters_consent_and_unique_mobiles_without_a_draft(
     .await
     .unwrap();
     assert_eq!((count.message_count, count.matching_customers), (0, 0));
+    assert_eq!(count.cost_estimate.total.as_deref(), Some("0.0000"));
     let count = service::audience_count(
         &state,
         &AudienceFilter {
@@ -890,6 +900,7 @@ async fn audience_count_uses_filters_consent_and_unique_mobiles_without_a_draft(
     .await
     .unwrap();
     assert_eq!((count.message_count, count.excluded_customers), (0, 4));
+    assert_eq!(count.cost_estimate.total.as_deref(), Some("0.0000"));
     let invalid = AudienceFilter {
         min_purchases: Some(2),
         max_purchases: Some(1),
@@ -901,6 +912,103 @@ async fn audience_count_uses_filters_consent_and_unique_mobiles_without_a_draft(
         .await
         .unwrap();
     assert_eq!(drafts, 0);
+}
+
+#[sqlx::test]
+async fn mixed_country_estimate_rechecks_consent_and_manual_exclusions(pool: PgPool) {
+    let (state, _, _) = setup(&pool).await;
+    let kuwait: Uuid = sqlx::query_scalar(
+        "INSERT INTO customers(name,mobile_no) VALUES('Kuwait','+96550012345') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    store::record_consent(
+        &mut tx,
+        "+96550012345",
+        true,
+        Utc::now(),
+        "Written request",
+        "sales",
+        None,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let count = service::audience_count(&state, &AudienceFilter::default())
+        .await
+        .unwrap();
+    assert_eq!(count.message_count, 2);
+    assert_eq!(count.cost_estimate.total.as_deref(), Some("0.1184"));
+    assert_eq!(count.cost_estimate.breakdown.len(), 2);
+    let count = service::audience_count(
+        &state,
+        &AudienceFilter {
+            excluded_customer_ids: vec![kuwait],
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(count.message_count, 1);
+    assert_eq!(count.cost_estimate.total.as_deref(), Some("0.0392"));
+    let mut tx = pool.begin().await.unwrap();
+    store::record_consent(
+        &mut tx,
+        "+96550012345",
+        false,
+        Utc::now(),
+        "Withdrawal",
+        "sales",
+        None,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let count = service::audience_count(&state, &AudienceFilter::default())
+        .await
+        .unwrap();
+    assert_eq!(count.message_count, 1);
+    assert_eq!(count.cost_estimate.total.as_deref(), Some("0.0392"));
+}
+
+#[sqlx::test]
+async fn changed_pricing_requires_a_fresh_approval_preview(pool: PgPool) {
+    let (state, _, template) = setup(&pool).await;
+    let c = store::save_campaign(&pool, None, &input(template), "sales")
+        .await
+        .unwrap();
+    let p = service::preview(&state, c.id).await.unwrap();
+    sqlx::query(
+        "UPDATE campaigns SET preview=jsonb_set(preview,'{costEstimate,total}',$2) WHERE id=$1",
+    )
+    .bind(c.id)
+    .bind(json!("0.0000"))
+    .execute(&pool)
+    .await
+    .unwrap();
+    let error = service::approve(
+        &state,
+        c.id,
+        ApproveInput {
+            expected_revision: c.revision,
+            preview_version: p.version,
+            request_id: Uuid::new_v4(),
+        },
+        "manager",
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(error, crate::error::AppError::Conflict(message) if message.contains("pricing changed"))
+    );
+    let mut historical = json!(p);
+    historical.as_object_mut().unwrap().remove("costEstimate");
+    assert!(serde_json::from_value::<Preview>(historical)
+        .unwrap()
+        .cost_estimate
+        .is_none());
 }
 
 #[sqlx::test]

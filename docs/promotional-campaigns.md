@@ -91,6 +91,29 @@ unique mobile destinations after consent checks and exclusions; it also shows
 matching and excluded customer counts. This estimate is available before saving
 a draft or choosing a template, and approval confirms the final audience.
 
+The same audience count includes an **estimated Meta cost in USD**, with a
+per-market breakdown. It uses Meta's Cloud API marketing list rates effective
+October 1, 2026, verified November 14, 2026, and the recipient number's country
+mapping. Bahrain uses Rest of Middle East ($0.0392 per message): 1,000 eligible
+Bahrain numbers estimate $39.20. Shared mobiles count once; customers without
+consent and manual exclusions do not contribute to the estimate. Sub-cent
+prices are summed exactly before display. Unknown/non-geographic destinations
+remain explicitly unpriced; a partial subtotal is never shown as a full total.
+
+The estimate assumes all eligible messages are delivered, excludes provider fees
+and taxes, and does not deduct free entry point windows. Meta bills delivered
+messages; this is a planning estimate, not billing reconciliation or a spending
+cap. Scheduled deliveries use the latest included rate card and show that rates
+can change before delivery. The approval snapshot saves the reviewed estimate;
+a pricing change before approval requires a fresh preview. Existing approved
+snapshots without pricing remain readable and show no saved estimate.
+
+Pricing is local reference data in `backend/src/features/campaigns/pricing.rs`;
+there are no live pricing requests or new configuration requirements. When Meta
+publishes changes, update rates, country mapping, effective date and verification
+date together. Sources: [Meta pricing and country mapping](https://developers.facebook.com/docs/whatsapp/pricing/)
+and the [Meta-authored USD rate card, page 1 (provider-hosted copy)](https://www.gupshup.ai/resources/wp-content/uploads/2026/11/USD_Oct2026.pdf).
+
 Purchase metrics count distinct associated invoices, including tailoring and
 retail purchases. Net invoice totals after credits determine value; fully
 credited invoices are excluded. A shared invoice counts once for each associated
