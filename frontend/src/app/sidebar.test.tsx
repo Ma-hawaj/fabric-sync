@@ -59,8 +59,11 @@ function openUserMenu() {
 }
 
 describe('sidebar account settings', () => {
-  it('links to outstanding notifications with their attention count', () => {
+  it('links to branch closing and outstanding notifications with their attention count', () => {
     openUserMenu()
+    expect(
+      screen.getByRole('link', { name: 'Branch Closing' }).getAttribute('href'),
+    ).toBe('/sales-closing')
     expect(
       screen.getByRole('link', { name: /Notifications/ }).getAttribute('href'),
     ).toBe('/notifications')

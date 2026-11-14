@@ -386,9 +386,8 @@ pub struct InvoicePayment {
 /// as a printed document. `GET /invoices/:id` keeps serving the display shape
 /// — names without ids — which is why this is a separate type and endpoint.
 ///
-/// An invoice with payments cannot be edited at all (see
-/// service::update_invoice), so `payments` is informational here: the form
-/// maps it back to its `payments` input only when it is empty.
+/// Payments are informational: invoice edits retain the recorded ledger.
+/// Additional payments use the dedicated payment and collection endpoints.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceEdit {
@@ -662,6 +661,7 @@ pub struct InvoiceRecord {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvoiceDetail {
+    pub financial_branch: FinancialBranch,
     pub document_kind: String,
     pub issuing_branch_name: Option<String>,
     pub created_by: Option<String>,
@@ -700,6 +700,26 @@ pub struct InvoiceDetail {
     pub payments: Vec<InvoicePayment>,
     pub has_adjustments: bool,
     pub totals: InvoiceTotalsBreakdown,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FinancialBranch {
+    pub branch_id: Option<Uuid>,
+    pub branch_name: Option<String>,
+    pub assigned_at: Option<DateTime<Utc>>,
+    pub assigned_by: Option<String>,
+    pub reason: Option<String>,
+    #[serde(skip)]
+    pub request_id: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssignFinancialBranchInput {
+    pub request_id: Uuid,
+    pub branch_id: Uuid,
+    pub reason: String,
 }
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]

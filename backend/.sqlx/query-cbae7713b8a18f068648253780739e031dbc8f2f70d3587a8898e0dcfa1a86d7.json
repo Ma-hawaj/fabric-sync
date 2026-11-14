@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE invoices SET issuing_branch_id=$2,\n        issuing_branch_name=(SELECT name FROM branch WHERE id=$2),\n        financial_branch_assigned_at=clock_timestamp(),financial_branch_assigned_by=$3,\n        financial_branch_assignment_reason=$4,financial_branch_assignment_request_id=$5\n        WHERE id=$1 AND issuing_branch_id IS NULL AND branch_id IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cbae7713b8a18f068648253780739e031dbc8f2f70d3587a8898e0dcfa1a86d7"
+}

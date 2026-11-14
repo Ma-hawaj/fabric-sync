@@ -377,6 +377,7 @@ async fn untracked_gift_cards_stay_hidden_until_a_manual_send_creates_a_request(
 
 #[sqlx::test]
 async fn invoice_create_and_explicit_edit_record_their_own_notification_actions(pool: PgPool) {
+    let branch = test_support::trading_branch(&pool).await;
     let customer: Uuid = sqlx::query_scalar(
         "INSERT INTO customers(name,mobile_no) VALUES('Invoice buyer','33112233') RETURNING id",
     )
@@ -386,6 +387,7 @@ async fn invoice_create_and_explicit_edit_record_their_own_notification_actions(
     let state = test_support::state(pool.clone(), None, None).await;
     let mut input: crate::features::invoices::types::CreateInvoiceInput =
         serde_json::from_value(json!({
+        "issuingBranchId":branch,"branchId":branch,
         "expectedVatRate":0.1,"discountUnit":"amount","customerId":customer,
             "giftCards":[{"amount":25,"boughtFor":"Recipient","recipientPhone":"33991122"}]
         }))

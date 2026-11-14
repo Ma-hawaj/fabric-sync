@@ -341,7 +341,7 @@ export function mapInvoiceEditToForm(edit: InvoiceEdit): {
     targetDate: edit.targetDate ?? '',
     collectionMethod: edit.collectionMethod,
     receivingBranch: edit.branchId ?? '',
-    issuingBranch: edit.issuingBranchId ?? '',
+    issuingBranch: edit.issuingBranchId ?? edit.branchId ?? '',
     customerId: edit.customerId ?? '',
     productBranch,
     // A zero discount reads as blank, the way a fresh form does — the payload

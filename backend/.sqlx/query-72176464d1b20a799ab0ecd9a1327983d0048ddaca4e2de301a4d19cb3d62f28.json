@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT daily_check_required AS required, daily_check_changed_at AS changed_at, daily_check_changed_by AS changed_by FROM branch WHERE id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "required",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "changed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "changed_by",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "72176464d1b20a799ab0ecd9a1327983d0048ddaca4e2de301a4d19cb3d62f28"
+}

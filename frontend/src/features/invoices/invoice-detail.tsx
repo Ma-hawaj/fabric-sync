@@ -32,6 +32,7 @@ import { CollectInvoiceDialog } from './components/collect-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
 import { InvoicePaymentHistory } from './components/invoice-payment-history'
 import { InvoicePriceSummary } from './components/invoice-price-summary'
+import { FinancialBranchPanel } from './components/financial-branch-panel'
 import {
   ReturnsPanel,
   RefundPendingCreditAction,
@@ -189,6 +190,10 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
         </div>
       </div>
 
+      <FinancialBranchPanel
+        invoiceId={invoiceId}
+        branch={detail.financialBranch}
+      />
       <NotificationHistory invoiceId={invoiceId} />
       <div>
         <SectionHeading icon={<Users className="h-3.5 w-3.5" />}>

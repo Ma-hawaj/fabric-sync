@@ -1,5 +1,6 @@
 pub(crate) mod designs;
 pub(crate) mod document;
+pub(crate) mod financial_branch_service;
 mod handlers;
 mod routes;
 pub(crate) mod service;
