@@ -4,6 +4,28 @@ ALTER TABLE branch
     ADD COLUMN daily_check_changed_at TIMESTAMPTZ,
     ADD COLUMN daily_check_changed_by TEXT;
 
+-- A manager may recover a legacy invoice with no known financial branch once.
+-- Activity before this timestamp stays unassigned in all closing reports.
+ALTER TABLE invoices
+    ADD COLUMN financial_branch_assigned_at TIMESTAMPTZ,
+    ADD COLUMN financial_branch_assigned_by TEXT,
+    ADD COLUMN financial_branch_assignment_reason TEXT,
+    ADD COLUMN financial_branch_assignment_request_id UUID UNIQUE,
+    ADD CONSTRAINT financial_branch_assignment_complete CHECK (
+        (financial_branch_assigned_at IS NULL
+         AND financial_branch_assigned_by IS NULL
+         AND financial_branch_assignment_reason IS NULL
+         AND financial_branch_assignment_request_id IS NULL)
+        OR
+        (financial_branch_assigned_at IS NOT NULL
+         AND financial_branch_assigned_by IS NOT NULL
+         AND length(btrim(financial_branch_assigned_by)) > 0
+         AND financial_branch_assignment_reason IS NOT NULL
+         AND length(btrim(financial_branch_assignment_reason)) BETWEEN 1 AND 1000
+         AND financial_branch_assignment_request_id IS NOT NULL
+         AND issuing_branch_id IS NOT NULL)
+    );
+
 CREATE TABLE branch_cash_openings (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
     branch_id UUID NOT NULL REFERENCES branch(id),

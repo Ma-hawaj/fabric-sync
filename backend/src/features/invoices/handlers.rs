@@ -136,3 +136,15 @@ pub async fn mark_ready(
         .await?,
     ))
 }
+
+pub async fn assign_financial_branch(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(invoice_id): Path<Uuid>,
+    Json(input): Json<super::types::AssignFinancialBranchInput>,
+) -> Result<Json<super::types::FinancialBranch>, AppError> {
+    Ok(Json(
+        super::financial_branch_service::assign(&state, invoice_id, input, financial_actor(&user)?)
+            .await?,
+    ))
+}

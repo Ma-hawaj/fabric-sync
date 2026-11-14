@@ -2,6 +2,8 @@ use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::PgConnection;
 use uuid::Uuid;
 
+use crate::error::AppError;
+
 use super::types::*;
 
 // Original openings are append-only, so the first date cannot move when
@@ -9,9 +11,9 @@ use super::types::*;
 pub async fn tracking_start(
     db: &mut PgConnection,
     branch: Uuid,
-) -> Result<Option<NaiveDate>, sqlx::Error> {
+) -> Result<Option<NaiveDate>, AppError> {
     sqlx::query_scalar!("SELECT MIN(business_date) FROM branch_cash_openings WHERE branch_id=$1 AND supersedes_id IS NULL", branch)
-        .fetch_one(db).await
+        .fetch_one(db).await.map_err(Into::into)
 }
 
 pub struct OpeningRow {
@@ -42,7 +44,7 @@ pub async fn opening(
     branch: Uuid,
     date: NaiveDate,
     request: Option<Uuid>,
-) -> Result<Option<OpeningRow>, sqlx::Error> {
+) -> Result<Option<OpeningRow>, AppError> {
     sqlx::query_as!(
         OpeningRow,
         r#"
@@ -59,6 +61,7 @@ pub async fn opening(
     )
     .fetch_optional(db)
     .await
+    .map_err(Into::into)
 }
 
 pub async fn insert_opening(
@@ -67,7 +70,7 @@ pub async fn insert_opening(
     hash: &[u8],
     actor: &str,
     previous: Option<Uuid>,
-) -> Result<CashOpening, sqlx::Error> {
+) -> Result<CashOpening, AppError> {
     let row = sqlx::query_as!(OpeningRow, r#"
         INSERT INTO branch_cash_openings(branch_id,business_date,amount,notes,supersedes_id,request_id,request_hash,recorded_by)
         VALUES($1,$2,$3::float8,$4,$5,$6,$7,$8)
@@ -119,7 +122,7 @@ pub async fn expenses(
     date: Option<NaiveDate>,
     request: Option<Uuid>,
     id: Option<Uuid>,
-) -> Result<Vec<ExpenseRow>, sqlx::Error> {
+) -> Result<Vec<ExpenseRow>, AppError> {
     sqlx::query_file_as!(
         ExpenseRow,
         "src/features/reports/sql/expenses.sql",
@@ -130,6 +133,7 @@ pub async fn expenses(
     )
     .fetch_all(db)
     .await
+    .map_err(Into::into)
 }
 
 pub async fn insert_expense(
@@ -137,11 +141,11 @@ pub async fn insert_expense(
     input: &RecordExpenseInput,
     hash: &[u8],
     actor: &str,
-) -> Result<Uuid, sqlx::Error> {
+) -> Result<Uuid, AppError> {
     sqlx::query_scalar!(r#"
         INSERT INTO branch_expenses(branch_id,business_date,amount,payment_type,reason,paid_to,reference,request_id,request_hash,recorded_by)
         VALUES($1,$2,$3::float8,$4,$5,$6,$7,$8,$9,$10) RETURNING id
-    "#, input.branch_id, input.date, input.amount, input.payment_type.as_str(), input.reason, input.paid_to, input.reference, input.request_id, hash, actor).fetch_one(db).await
+    "#, input.branch_id, input.date, input.amount, input.payment_type.as_str(), input.reason, input.paid_to, input.reference, input.request_id, hash, actor).fetch_one(db).await.map_err(Into::into)
 }
 
 pub async fn insert_void(
@@ -150,7 +154,7 @@ pub async fn insert_void(
     input: &VoidExpenseInput,
     hash: &[u8],
     actor: &str,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), AppError> {
     sqlx::query!(
         r#"
         INSERT INTO branch_expense_voids(expense_id,reason,request_id,request_hash,recorded_by)

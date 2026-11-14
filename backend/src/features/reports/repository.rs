@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use sqlx::PgConnection;
 use uuid::Uuid;
 
+use crate::error::AppError;
+
 use super::types::*;
 
 // One statement gives every ledger the same PostgreSQL snapshot. Never join
@@ -12,11 +14,11 @@ pub async fn activity(
     start: DateTime<Utc>,
     end: DateTime<Utc>,
     branch_id: Uuid,
-) -> Result<Vec<ActivityRow>, sqlx::Error> {
+) -> Result<Vec<ActivityRow>, AppError> {
     sqlx::query_as!(
         ActivityRow,
         r#"
-        SELECT COALESCE(i.issuing_branch_id, i.branch_id) AS "branch_id?", e.id AS "id!", e.invoice_id AS "invoice_id!",
+        SELECT owner.branch_id AS "branch_id?", e.id AS "id!", e.invoice_id AS "invoice_id!",
                i.invoice_number AS "invoice_number!", e.occurred_at AS "occurred_at!",
                e.kind AS "kind!", e.method AS "method?",
                (e.amount * 100)::bigint AS "amount_cents!",
@@ -49,8 +51,14 @@ pub async fn activity(
             WHERE r.received_amount > 0 AND r.received_at IS NOT NULL
         ) e
         JOIN invoices i ON i.id = e.invoice_id
+        CROSS JOIN LATERAL (
+            SELECT CASE
+                WHEN i.financial_branch_assigned_at IS NOT NULL AND e.occurred_at < i.financial_branch_assigned_at THEN NULL
+                ELSE COALESCE(i.issuing_branch_id, i.branch_id)
+            END AS branch_id
+        ) owner
         WHERE e.occurred_at >= $1 AND e.occurred_at < $2
-          AND (COALESCE(i.issuing_branch_id, i.branch_id) = $3 OR COALESCE(i.issuing_branch_id, i.branch_id) IS NULL)
+          AND (owner.branch_id = $3 OR owner.branch_id IS NULL)
         ORDER BY e.occurred_at, e.kind, e.id
         "#,
         start,
@@ -58,14 +66,15 @@ pub async fn activity(
         branch_id,
     )
     .fetch_all(db)
-    .await
+    .await.map_err(Into::into)
 }
 
 pub async fn branch_name(
     db: &mut PgConnection,
     branch_id: Uuid,
-) -> Result<Option<String>, sqlx::Error> {
+) -> Result<Option<String>, AppError> {
     sqlx::query_scalar!("SELECT name FROM branch WHERE id = $1", branch_id)
         .fetch_optional(db)
         .await
+        .map_err(Into::into)
 }

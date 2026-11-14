@@ -79,6 +79,10 @@ describe('sales closing exports', () => {
     expect(salesClosingHtml(report)).not.toContain('<script>')
     expect(salesClosingHtml(report)).toContain('&lt;script&gt;')
     expect(salesClosingCsv(report)).toContain("'=HYPERLINK")
+    for (const prefix of ['＝', '＋', '－', '＠', '=', '+', '-', '@']) {
+      report.branchName = `${prefix}SUM(1,1)`
+      expect(salesClosingCsv(report)).toContain(`"'${prefix}SUM(1,1)"`)
+    }
     report.activity = []
     expect(salesClosingHtml(report)).toContain('No activity for this day.')
   })
@@ -125,8 +129,23 @@ describe('sales closing exports', () => {
     expect(csv).toContain('"Saved opening cash",20.000')
     expect(csv).toContain('"Cash expenses from drawer",5.005')
     expect(csv).toContain('"Delivery fee","Cash",5.005,"Courier","D100"')
+    expect(csv).toContain('"Opening recorded by","test-staff"')
+    expect(csv).toContain(
+      '"Recorded at","Recorded by","Status","Void reason","Voided at","Voided by"',
+    )
+    expect(csv).toContain('"2026-11-02T09:02:00Z","manager"')
     const html = salesClosingHtml(report)
     expect(html).toContain('Delivery fee')
     expect(html).toContain('Voided: Duplicate entry')
+    expect(html).toContain('Recorded by test-staff')
+    expect(html).toContain('2026-11-02T09:00:00Z · staff')
+    expect(html).toContain('2026-11-02T09:02:00Z · manager')
+    report.opening!.recordedBy = '<script>opening</script>'
+    report.expenses[0].recordedBy = '<script>expense</script>'
+    report.expenses[1].voidedBy = '<script>void</script>'
+    const escaped = salesClosingHtml(report)
+    expect(escaped).not.toContain('<script>')
+    for (const name of ['opening', 'expense', 'void'])
+      expect(escaped).toContain(`&lt;script&gt;${name}&lt;/script&gt;`)
   })
 })

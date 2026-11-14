@@ -50,6 +50,9 @@ SQLx applies the files in version order:
    Late closing adds counts to an eligible previous day once, before the next
    opening or trading. Its submission business date is captured in the existing
    report snapshot; it requires no extra table, column or migration.
+   Four nullable audit columns on `invoices` support one manager-attributed
+   financial-branch assignment for branchless legacy invoices. Activity before
+   assignment remains unassigned; subsequent writes use normal branch checks.
 
 The closing migration consolidates the unmerged feature's development migrations.
 Recreate disposable development databases that applied those intermediate versions;

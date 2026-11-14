@@ -198,9 +198,11 @@ function OpeningForm({
 export function ExpenseForm({
   report,
   disabled,
+  dailyCheckRequired,
 }: {
   report: SalesClosing
   disabled: boolean
+  dailyCheckRequired: boolean
 }) {
   const [requestId, setRequestId] = useState(() => crypto.randomUUID())
   const mutation = useTillAction()
@@ -250,7 +252,11 @@ export function ExpenseForm({
       }}
     >
       <fieldset
-        disabled={disabled || mutation.isPending || !report.opening}
+        disabled={
+          disabled ||
+          mutation.isPending ||
+          (dailyCheckRequired && !report.opening)
+        }
         className="space-y-4"
       >
         <div className="grid gap-4 sm:grid-cols-2">

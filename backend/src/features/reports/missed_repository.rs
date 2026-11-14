@@ -2,6 +2,8 @@ use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::PgConnection;
 use uuid::Uuid;
 
+use crate::error::AppError;
+
 use super::types::*;
 
 pub struct MissedRow {
@@ -30,7 +32,7 @@ pub async fn missed(
     db: &mut PgConnection,
     branch: Uuid,
     date: NaiveDate,
-) -> Result<Option<MissedRow>, sqlx::Error> {
+) -> Result<Option<MissedRow>, AppError> {
     sqlx::query_as!(
         MissedRow,
         r#"SELECT id, reason, resolved_at, resolved_by, request_id, request_hash,
@@ -41,6 +43,7 @@ pub async fn missed(
     )
     .fetch_optional(db)
     .await
+    .map_err(Into::into)
 }
 pub async fn insert_missed(
     db: &mut PgConnection,
@@ -48,7 +51,7 @@ pub async fn insert_missed(
     hash: &[u8],
     actor: &str,
     report: &SalesClosing,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), AppError> {
     let snapshot = sqlx::types::Json(report);
     sqlx::query!("INSERT INTO branch_missed_closings(branch_id,business_date,reason,resolved_by,request_id,request_hash,report_snapshot) VALUES($1,$2,$3,$4,$5,$6,$7)", input.branch_id,input.date,input.reason,actor,input.request_id,hash,snapshot as _)
         .execute(db).await?;

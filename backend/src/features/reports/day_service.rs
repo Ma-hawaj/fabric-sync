@@ -9,7 +9,7 @@ use crate::{error::AppError, state::AppState};
 
 // Every operation that changes a branch's financial report takes this lock.
 // Closing never locks invoices, so invoice -> branch lock ordering cannot cycle.
-pub(crate) async fn lock_branch(db: &mut PgConnection, branch: Uuid) -> Result<(), sqlx::Error> {
+pub(crate) async fn lock_branch(db: &mut PgConnection, branch: Uuid) -> Result<(), AppError> {
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
         .bind(format!("branch-business:{branch}"))
         .execute(db)
@@ -219,10 +219,16 @@ pub(crate) async fn require_invoice_trading(
     state: &AppState,
     db: &mut PgConnection,
     invoice: Uuid,
-) -> Result<(), AppError> {
+) -> Result<NaiveDate, AppError> {
     let branch = storage::invoice_branch(db, invoice).await?;
-    require_trading(state, db, branch).await?;
-    Ok(())
+    let started = transaction_time(db).await?;
+    if branch
+        .assigned_at
+        .is_some_and(|assigned| started < assigned)
+    {
+        return Err(AppError::Conflict("The invoice's financial branch was assigned while this save was waiting. Refresh and try again.".into()));
+    }
+    require_trading(state, db, branch.branch_id).await
 }
 
 pub async fn close_day(

@@ -169,9 +169,18 @@ branch only for legacy invoices without an issuer. Pickup changes cannot move
 financial history. Payments, refunds and repair receipts have no separate physical
 handling location, so staff must verify the listed activity was handled here.
 Supporting receipts at other branches requires a separate transaction-location
-workflow. Branchless invoices remain excluded and flagged; assigning them a branch
-retroactively would change historical totals, so ordinary edits cannot do this.
-A separate audited recovery design is needed for their outstanding balances.
+workflow. Ordinary edits cannot assign or change financial ownership.
+
+When both invoice branch IDs are missing, a manager/admin can choose **Assign
+financial branch** on the invoice and enter a reason. The chosen branch must be
+active and meet its current trading requirements. Assignment is permanent and
+records its manager, timestamp, reason and retry identity. Existing pickup or
+issuing ownership cannot be replaced. Earlier activity stays unassigned, including
+on live historical reports; closed/skipped snapshots stay unchanged. Subsequent
+payments, refunds and adjustments use the recovered branch's ordinary checks.
+Transactions already waiting when assignment occurs must refresh before writing,
+so their transaction-start timestamps cannot backdate new money across recovery.
+Recorded gift-card tender on recovered invoices remains unchanged during edits.
 
 Invoice taxable/VAT values use saved snapshots, including current gift-card
 accounting. This operational report is not a VAT return. Sales, manager and admin
@@ -214,11 +223,19 @@ comparison, frozen report, staff/time and retry identity. There is no check tabl
 check ID or draft-write endpoint. API responses expose these values together
 under `closure`; open and missed days have no closing count.
 
+The same migration adds four nullable assignment-audit columns on `invoices`;
+it adds no extra table or migration. `POST /api/invoices/:id/financial-branch`
+accepts `requestId`, `branchId` and a required `reason`, with manager access.
+Invoice details expose `financialBranch`, including saved assignment attribution.
+
 The screen resolves saved staff IDs through the existing staff directory for
 openings (including the latest correction), expense recording/voiding, closing
 and skipped days. Missing users or directory failures show an unavailable-staff
 label. Names reflect the current directory; stored IDs and frozen figures do
 not change.
+CSV and print/PDF exports include opening and expense recorder IDs, expense
+voiding actor/time and reasons. Failed refreshes keep unsaved counts and notes
+mounted, but require a successful refresh and renewed review before closing.
 
 This migration consolidates the feature's unmerged development migrations.
 Disposable development databases that already applied those earlier versions

@@ -30,6 +30,7 @@ export function ClosingCountsForm({
     },
     validators: { onSubmit: countsSchema(report) },
     onSubmit: async ({ value }) => {
+      if (disabled || mutation.isPending) return
       const pending = mutation.mutateAsync({
         requestId,
         branchId: report.branchId,
@@ -59,6 +60,9 @@ export function ClosingCountsForm({
     form.setFieldValue('openingCash', report.opening?.amount ?? '')
     form.setFieldValue('branchActivityConfirmed', false)
   }, [form, report.fingerprint, report.opening?.amount])
+  useEffect(() => {
+    if (disabled) form.setFieldValue('branchActivityConfirmed', false)
+  }, [form, disabled])
   const amountField = (
     name:
       | 'cashAdded'

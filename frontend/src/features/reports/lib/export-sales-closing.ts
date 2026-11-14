@@ -15,7 +15,7 @@ import type { SalesClosing } from '../types/sales-closing'
 
 function csvCell(value: string | number): string {
   if (typeof value === 'number') return value.toFixed(3)
-  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
+  const safe = /^[=+\-@\t\r＝＋－＠]/.test(value) ? `'${value}` : value
   return `"${safe.replaceAll('"', '""')}"`
 }
 
@@ -53,6 +53,7 @@ export function salesClosingCsv(report: SalesClosing): string {
       ? [
           ['Saved opening cash', report.opening.amount],
           ['Opening recorded at', report.opening.recordedAt],
+          ['Opening recorded by', report.opening.recordedBy],
           ['Opening notes', report.opening.notes],
         ]
       : []),
@@ -94,8 +95,11 @@ export function salesClosingCsv(report: SalesClosing): string {
       'Paid to',
       'Receipt / reference',
       'Recorded at',
+      'Recorded by',
       'Status',
       'Void reason',
+      'Voided at',
+      'Voided by',
     ],
     ...report.expenses.map((expense) => [
       expense.reason,
@@ -104,8 +108,11 @@ export function salesClosingCsv(report: SalesClosing): string {
       expense.paidTo,
       expense.reference,
       expense.recordedAt,
+      expense.recordedBy,
       expense.voidedAt ? 'Voided' : 'Paid',
       expense.voidReason ?? '',
+      expense.voidedAt ?? '',
+      expense.voidedBy ?? '',
     ]),
     [],
     ['Time', 'Activity', 'Invoice', 'Method', 'Amount (BHD)', 'Record ID'],
@@ -160,7 +167,7 @@ export function salesClosingHtml(report: SalesClosing): string {
     ${report.trackingStartDate ? `<p>Tracking started: ${escapeHtml(report.trackingStartDate)}</p>` : ''}
     ${report.missedClosing ? `<p>Day skipped — unreconciled. Figures unchanged.<br>Reason: ${escapeHtml(report.missedClosing.reason)}<br>Skipped ${escapeHtml(report.missedClosing.resolvedAt)} · By ${escapeHtml(report.missedClosing.resolvedBy)} · Reference ${escapeHtml(report.missedClosing.id)}</p>` : ''}
     <p>Closing count status: ${escapeHtml(comparisonStatus(report))}. Unassigned activities excluded: ${report.unassignedActivityCount}.</p>
-    ${report.opening ? `<p>Saved opening cash: ${formatBhd(report.opening.amount)} BHD · Recorded ${escapeHtml(new Date(report.opening.recordedAt).toLocaleString('en-GB', { timeZone: report.timezone }))}${report.opening.supersedesId ? ' · Corrected opening' : ''}<br>Opening notes: ${escapeHtml(report.opening.notes)}</p>` : ''}
+    ${report.opening ? `<p>Saved opening cash: ${formatBhd(report.opening.amount)} BHD · Recorded ${escapeHtml(new Date(report.opening.recordedAt).toLocaleString('en-GB', { timeZone: report.timezone }))} · Recorded by ${escapeHtml(report.opening.recordedBy)}${report.opening.supersedesId ? ' · Corrected opening' : ''}<br>Opening notes: ${escapeHtml(report.opening.notes)}</p>` : ''}
     ${
       report.closure
         ? `<h2>Recorded vs actual — saved closing count</h2><table><thead><tr>${comparisonHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${comparisonRows(
@@ -185,7 +192,7 @@ export function salesClosingHtml(report: SalesClosing): string {
       )
       .join('')}</tbody></table>
     <h2>External receipts by method</h2><table><thead><tr><th>Method</th><th>Invoice</th><th>Repair</th><th>Refunds</th><th>Net</th></tr></thead><tbody>${report.tenders.map((t) => cells([methodLabel(t.method), formatBhd(t.invoicePayments), formatBhd(t.repairPayments), formatBhd(t.refunds), formatBhd(t.net)])).join('')}</tbody></table>
-    <h2>Paid expenses</h2><table><thead><tr><th>Reason</th><th>Paid by</th><th>Payee / reference</th><th>Status</th><th>BHD</th></tr></thead><tbody>${report.expenses.map((expense) => cells([expense.reason, methodLabel(expense.paymentType), [expense.paidTo, expense.reference].filter(Boolean).join(' · ') || '—', expense.voidedAt ? `Voided: ${expense.voidReason}` : 'Paid', formatBhd(expense.amount)])).join('') || '<tr><td colspan="5">No expenses recorded for this day.</td></tr>'}</tbody></table>
+    <h2>Paid expenses</h2><table><thead><tr><th>Reason</th><th>Method</th><th>Payee / reference</th><th>Recorded at / by</th><th>Status</th><th>Voided at / by</th><th>BHD</th></tr></thead><tbody>${report.expenses.map((expense) => cells([expense.reason, methodLabel(expense.paymentType), [expense.paidTo, expense.reference].filter(Boolean).join(' · ') || '—', `${expense.recordedAt} · ${expense.recordedBy}`, expense.voidedAt ? `Voided: ${expense.voidReason}` : 'Paid', expense.voidedAt ? `${expense.voidedAt} · ${expense.voidedBy ?? 'Staff not recorded'}` : '—', formatBhd(expense.amount)])).join('') || '<tr><td colspan="7">No expenses recorded for this day.</td></tr>'}</tbody></table>
     <h2>Activity (${report.activity.length})</h2><table><thead><tr><th>Time</th><th>Activity</th><th>Invoice</th><th>Method</th><th>BHD</th></tr></thead><tbody>${report.activity.map((e) => cells([activityTime(e.occurredAt, report.timezone), activityLabels[e.kind], String(e.invoiceNumber), e.method ? methodLabel(e.method) : e.kind === 'payment' || e.kind === 'repair_payment' ? methodLabel(null) : '—', formatBhd(e.amount)])).join('') || '<tr><td colspan="5">No activity for this day.</td></tr>'}</tbody></table>
     <ul class="notes">${reportNotes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul></body></html>`
 }

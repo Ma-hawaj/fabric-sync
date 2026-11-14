@@ -27,3 +27,6 @@ mod opening_tests;
 mod tests;
 #[cfg(test)]
 mod till_tests;
+
+#[cfg(test)]
+mod financial_branch_tests;

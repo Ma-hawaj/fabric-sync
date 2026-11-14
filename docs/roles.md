@@ -98,6 +98,7 @@ all protected routes have exactly one policy entry per method.
 | Invoice create/edit/read, pricing, payments and collection | sales |
 | Branch closing, opening cash, paid expenses, final close and exports | sales |
 | Opening corrections, expense voids, daily-check setting and missed-day skips | manager |
+| One-time financial-branch assignment for branchless legacy invoices | manager |
 | Orders, repair lookup and slips | sales, production |
 | Production location | sales, production (the order PATCH accepts only this field) |
 | Stage progress | production |

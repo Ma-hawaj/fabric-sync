@@ -12,9 +12,11 @@ import { ExpenseForm, VoidExpenseForm } from './till-forms'
 export function BranchExpenses({
   report,
   disabled,
+  dailyCheckRequired,
 }: {
   report: SalesClosing
   disabled: boolean
+  dailyCheckRequired: boolean
 }) {
   const readOnly = isClosingReadOnly(report)
   const paid = report.expenses.filter((expense) => !expense.voidedAt)
@@ -41,12 +43,16 @@ export function BranchExpenses({
         <p className="text-xs text-muted-foreground">
           Expenses for this day are read-only.
         </p>
-      ) : report.opening ? (
+      ) : report.opening || !dailyCheckRequired ? (
         <details>
           <summary className="cursor-pointer text-sm font-medium">
             Add paid expense
           </summary>
-          <ExpenseForm report={report} disabled={disabled} />
+          <ExpenseForm
+            report={report}
+            disabled={disabled}
+            dailyCheckRequired={dailyCheckRequired}
+          />
         </details>
       ) : (
         <p className="text-sm text-muted-foreground">

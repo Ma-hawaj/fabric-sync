@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(i.issuing_branch_id,i.branch_id) AS \"branch_id?\",\n        COALESCE(i.issuing_branch_name,b.name) AS \"branch_name?\",\n        i.financial_branch_assigned_at AS assigned_at,\n        i.financial_branch_assigned_by AS assigned_by,\n        i.financial_branch_assignment_reason AS reason,\n        i.financial_branch_assignment_request_id AS request_id\n        FROM invoices i LEFT JOIN branch b ON b.id=COALESCE(i.issuing_branch_id,i.branch_id)\n        WHERE i.id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "branch_id?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "branch_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "assigned_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "assigned_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "request_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "99370915e155358cb00ffd11c8aeb7c7ebb34cc72c4785647dd838e0f2852925"
+}

@@ -50,14 +50,14 @@ export function BranchDayNotice({
     >
       <p>
         {status.closed
-          ? 'This branch is closed for today. New orders are blocked until the next business day.'
+          ? `This branch is closed for today. ${editing ? 'Saving this invoice edit is' : 'New orders are'} blocked until the next business day.`
           : status.dailyCheckRequired && status.lateClosingDate
-            ? `Close the previous active day ${status.lateClosingDate}, then save today's opening before new orders. A saved opening requires closing even with no sales.`
+            ? `Close the previous active day ${status.lateClosingDate}, then save today's opening before ${editing ? 'saving this invoice edit' : 'new orders'}. A saved opening requires closing even with no sales.`
             : status.dailyCheckRequired && status.previousUnclosedDate
-              ? `A manager must skip the missed day ${status.previousUnclosedDate} before saving new orders.`
+              ? `A manager must skip the missed day ${status.previousUnclosedDate} before saving ${editing ? 'this invoice edit' : 'new orders'}.`
               : status.canTrade
                 ? 'This branch is inactive. New orders cannot be created here.'
-                : 'Record today’s opening cash before saving new orders. The first opening starts tracking automatically.'}
+                : `Record today’s opening cash before saving ${editing ? 'this invoice edit' : 'new orders'}. The first opening starts tracking automatically.`}
       </p>
       <a
         className="underline underline-offset-4"

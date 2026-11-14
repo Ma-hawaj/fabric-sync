@@ -2,6 +2,8 @@ use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::PgConnection;
 use uuid::Uuid;
 
+use crate::error::AppError;
+
 use super::types::*;
 
 pub struct DailyCheckSettings {
@@ -13,10 +15,10 @@ pub struct DailyCheckSettings {
 pub async fn daily_check_settings(
     db: &mut PgConnection,
     branch: Uuid,
-) -> Result<DailyCheckSettings, sqlx::Error> {
+) -> Result<DailyCheckSettings, AppError> {
     sqlx::query_as!(DailyCheckSettings,
         "SELECT daily_check_required AS required, daily_check_changed_at AS changed_at, daily_check_changed_by AS changed_by FROM branch WHERE id=$1", branch)
-        .fetch_one(db).await
+        .fetch_one(db).await.map_err(Into::into)
 }
 
 pub async fn update_daily_check(
@@ -24,7 +26,7 @@ pub async fn update_daily_check(
     branch: Uuid,
     required: bool,
     actor: &str,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), AppError> {
     sqlx::query!("UPDATE branch SET daily_check_required=$2, daily_check_changed_at=clock_timestamp(), daily_check_changed_by=$3 WHERE id=$1 AND daily_check_required IS DISTINCT FROM $2",branch,required,actor)
         .execute(db).await?;
     Ok(())
@@ -32,7 +34,7 @@ pub async fn update_daily_check(
 
 pub async fn transaction_times(
     db: &mut PgConnection,
-) -> Result<(DateTime<Utc>, DateTime<Utc>), sqlx::Error> {
+) -> Result<(DateTime<Utc>, DateTime<Utc>), AppError> {
     let times = sqlx::query!(
         "SELECT transaction_timestamp() AS \"started!\", clock_timestamp() AS \"now!\""
     )
@@ -41,22 +43,28 @@ pub async fn transaction_times(
     Ok((times.started, times.now))
 }
 
-pub async fn active_branch(db: &mut PgConnection, branch: Uuid) -> Result<bool, sqlx::Error> {
+pub async fn active_branch(db: &mut PgConnection, branch: Uuid) -> Result<bool, AppError> {
     sqlx::query_scalar!("SELECT is_active FROM branch WHERE id = $1", branch)
         .fetch_one(db)
         .await
+        .map_err(Into::into)
+}
+
+pub struct InvoiceBranch {
+    pub branch_id: Option<Uuid>,
+    pub assigned_at: Option<DateTime<Utc>>,
 }
 
 pub async fn invoice_branch(
     db: &mut PgConnection,
     invoice: Uuid,
-) -> Result<Option<Uuid>, sqlx::Error> {
-    sqlx::query_scalar!(
-        "SELECT COALESCE(issuing_branch_id, branch_id) FROM invoices WHERE id = $1",
+) -> Result<InvoiceBranch, AppError> {
+    sqlx::query_as!(InvoiceBranch,
+        "SELECT COALESCE(issuing_branch_id, branch_id) AS \"branch_id?\", financial_branch_assigned_at AS assigned_at FROM invoices WHERE id = $1",
         invoice
     )
     .fetch_one(db)
-    .await
+    .await.map_err(Into::into)
 }
 
 pub struct ActiveDays {
@@ -70,7 +78,7 @@ pub async fn active_days(
     branch: Uuid,
     zone: &str,
     before: NaiveDate,
-) -> Result<ActiveDays, sqlx::Error> {
+) -> Result<ActiveDays, AppError> {
     sqlx::query_file_as!(
         ActiveDays,
         "src/features/reports/sql/active_days.sql",
@@ -80,6 +88,7 @@ pub async fn active_days(
     )
     .fetch_one(db)
     .await
+    .map_err(Into::into)
 }
 
 pub async fn previous_unclosed(
@@ -87,7 +96,7 @@ pub async fn previous_unclosed(
     branch: Uuid,
     zone: &str,
     before: NaiveDate,
-) -> Result<Option<NaiveDate>, sqlx::Error> {
+) -> Result<Option<NaiveDate>, AppError> {
     Ok(active_days(db, branch, zone, before)
         .await?
         .previous_unclosed_date)
@@ -122,7 +131,7 @@ pub async fn closure(
     db: &mut PgConnection,
     branch: Uuid,
     date: NaiveDate,
-) -> Result<Option<ClosureRow>, sqlx::Error> {
+) -> Result<Option<ClosureRow>, AppError> {
     sqlx::query_as!(
         ClosureRow,
         r#"
@@ -138,6 +147,7 @@ pub async fn closure(
     )
     .fetch_optional(db)
     .await
+    .map_err(Into::into)
 }
 pub async fn insert_closure(
     db: &mut PgConnection,
@@ -146,7 +156,7 @@ pub async fn insert_closure(
     report: &SalesClosing,
     hash: &[u8],
     actor: &str,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), AppError> {
     let counts = sqlx::types::Json(&input.counts);
     let comparison = sqlx::types::Json(comparison);
     let snapshot = sqlx::types::Json(report);

@@ -135,6 +135,129 @@ beforeEach(() => {
 })
 
 describe('branch closing workflow', () => {
+  it('retains counted cash and notes after a failed refresh and blocks closing until refresh succeeds', async () => {
+    const report = closingFixture()
+    let failed = false
+    vi.mocked(apiClient.get).mockImplementation(async () => {
+      if (failed) throw new Error('Offline')
+      return { data: structuredClone(report) }
+    })
+    const client = setup(`?branchId=${branch}&date=2026-11-02`)
+    await screen.findByLabelText('Cash physically counted (BHD)')
+    enterCounts('71')
+    fireEvent.change(screen.getByLabelText('Closing notes'), {
+      target: { value: 'Counted twice; one dinar short.' },
+    })
+    failed = true
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await screen.findByText(/Could not refresh the closing report/)
+    expect(
+      screen.getByLabelText<HTMLInputElement>('Cash physically counted (BHD)')
+        .value,
+    ).toBe('71')
+    expect(
+      screen.getByLabelText<HTMLTextAreaElement>('Closing notes').value,
+    ).toBe('Counted twice; one dinar short.')
+    const close = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Review and close day',
+    })
+    expect(close.matches(':disabled')).toBe(true)
+    fireEvent.click(close)
+    expect(apiClient.post).not.toHaveBeenCalled()
+    failed = false
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/Could not refresh the closing report/),
+      ).toBeNull(),
+    )
+    expect(close.matches(':disabled')).toBe(false)
+    expect(
+      screen.getByLabelText<HTMLInputElement>('Cash physically counted (BHD)')
+        .value,
+    ).toBe('71')
+    expect(
+      screen.getByRole<HTMLInputElement>('checkbox', { name: /I verified/ })
+        .checked,
+    ).toBe(false)
+    client.clear()
+  })
+
+  it('records an expense without an opening when daily checks are disabled', async () => {
+    const report = closingFixture()
+    report.opening = null
+    vi.mocked(apiClient.get).mockResolvedValue({ data: report })
+    vi.mocked(apiClient.post).mockResolvedValue({ data: {} })
+    const client = setup(`?branchId=${branch}`, {
+      dailyCheckRequired: false,
+      openingRecorded: false,
+    })
+    fireEvent.click(await screen.findByText('Add paid expense'))
+    fireEvent.change(screen.getByLabelText('Expense amount (BHD)'), {
+      target: { value: '5' },
+    })
+    fireEvent.change(
+      screen.getByLabelText('Reason (for example, delivery fee)'),
+      { target: { value: 'Delivery fee' } },
+    )
+    const record = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Record paid expense',
+    })
+    expect(record.matches(':disabled')).toBe(false)
+    fireEvent.click(record)
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/sales-closing/expenses',
+        expect.objectContaining({
+          amount: 5,
+          reason: 'Delivery fee',
+          branchId: branch,
+        }),
+      ),
+    )
+    client.clear()
+  })
+
+  it('starts the next branch on expense page one instead of retaining an empty second page', async () => {
+    vi.mocked(apiClient.get).mockImplementation(async (_url, options) => {
+      const report = closingFixture()
+      const selected = (options?.params as { branchId: string }).branchId
+      report.branchId = selected
+      report.branchName =
+        selected === secondBranch ? 'Second Branch' : 'Main Branch'
+      report.expenses = Array.from(
+        { length: selected === secondBranch ? 2 : 15 },
+        (_, index) => ({
+          id: `expense-${index}`,
+          amount: 1,
+          paymentType: 'cash',
+          reason: `Fee ${index + 1}`,
+          paidTo: '',
+          reference: '',
+          recordedAt: '2026-11-02T09:00:00Z',
+          recordedBy: STAFF_USER.id,
+          voidedAt: null,
+          voidedBy: null,
+          voidReason: null,
+        }),
+      )
+      return { data: report }
+    })
+    const client = setup(`?branchId=${branch}&expensePage=2`)
+    await screen.findByText('Fee 11')
+    expect(screen.queryByText('Fee 1')).toBeNull()
+    fireEvent.click(screen.getByRole('combobox', { name: 'Branch' }))
+    const option = await screen.findByRole('option', {
+      name: 'Second Branch (inactive)',
+    })
+    fireEvent.pointerDown(option, { pointerType: 'mouse' })
+    fireEvent.click(option)
+    await screen.findByText('Second Branch · 2026-11-02')
+    expect(screen.getByText('Fee 1')).toBeTruthy()
+    expect(screen.queryByText('Fee 11')).toBeNull()
+    client.clear()
+  })
+
   it('identifies an expense recorder separately from the manager who voided it', async () => {
     const report = closingFixture()
     report.expenses = [

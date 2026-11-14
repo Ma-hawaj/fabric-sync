@@ -79,8 +79,11 @@ pub async fn get_invoice(state: &AppState, invoice_id: Uuid) -> Result<InvoiceDe
     );
 
     let payments = repository::list_payments(state, invoice_id).await?;
+    let financial_branch =
+        repository::financial_branch(&mut *state.db().acquire().await?, invoice_id).await?;
 
     Ok(InvoiceDetail {
+        financial_branch,
         document_kind: accounting.document_kind,
         readiness: crate::features::orders::readiness::summary(state.db(), invoice_id).await?,
         collection_method: invoice.collection_method,
@@ -1626,6 +1629,7 @@ mod tests {
         assert_eq!(totals.taxable, 84.55);
         assert_eq!(totals.vat, 8.45);
         let saved = repository::LockedInvoice {
+            financial_branch_assigned_at: None,
             issuing_branch_id: None,
             branch_id: None,
             delivery_charge: 3.0,
@@ -2537,13 +2541,14 @@ pub async fn update_invoice(
         ));
     }
     let today =
-        crate::features::reports::day_service::require_trading(state, &mut tx, financial_branch)
+        crate::features::reports::day_service::require_invoice_trading(state, &mut tx, invoice_id)
             .await?;
-    let cross_day = locked
+    let preserve_redemptions = locked
         .invoice_date
         .with_timezone(&state.timezone()?)
         .date_naive()
-        != today;
+        != today
+        || locked.financial_branch_assigned_at.is_some();
     let saved: HashMap<_, _> = repository::saved_order_prices(&mut tx, invoice_id)
         .await?
         .into_iter()
@@ -2601,7 +2606,7 @@ pub async fn update_invoice(
     let material_lines = repository::old_material_lines(&mut tx, invoice_id).await?;
     let gift_sales = repository::old_gift_card_sales(&mut tx, invoice_id).await?;
     let redemptions = repository::old_redemptions(&mut tx, invoice_id).await?;
-    if cross_day {
+    if preserve_redemptions {
         // An older draft may change, but its recorded tender is not a new
         // payment today. Compare as a multiset so input order is immaterial.
         let mut saved: Vec<_> = redemptions
@@ -2622,7 +2627,8 @@ pub async fn update_invoice(
         requested.sort_unstable();
         if saved != requested {
             return Err(AppError::Conflict(
-                "Recorded gift-card payments on older invoices must stay unchanged.".into(),
+                "Recorded gift-card payments on older or recovered invoices must stay unchanged."
+                    .into(),
             ));
         }
     }
@@ -2655,7 +2661,7 @@ pub async fn update_invoice(
             )));
         }
     }
-    if !cross_day {
+    if !preserve_redemptions {
         for redemption in &redemptions {
             repository::refund_gift_card(&mut tx, redemption.gift_card_id, redemption.amount)
                 .await?;
@@ -2693,7 +2699,7 @@ pub async fn update_invoice(
 
     // Rebuild order and retail lines, retaining all measurement history.
     // Sold gift cards go once the spent-check above has cleared them.
-    if !cross_day {
+    if !preserve_redemptions {
         repository::delete_redemptions(&mut tx, invoice_id).await?;
     }
     repository::delete_orders(&mut tx, invoice_id).await?;
@@ -2738,7 +2744,7 @@ pub async fn update_invoice(
     )
     .await?;
 
-    let prepaid_amount = if cross_day {
+    let prepaid_amount = if preserve_redemptions {
         let mut prepaid = 0.0;
         for redemption in &redemptions {
             if repository::voucher_has_sale_invoice(&mut tx, redemption.gift_card_id).await? {

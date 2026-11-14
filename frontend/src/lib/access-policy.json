@@ -433,5 +433,10 @@
     "method": "GET",
     "path": "/users",
     "roles": ["sales", "production"]
+  },
+  {
+    "method": "POST",
+    "path": "/invoices/:id/financial-branch",
+    "roles": ["manager"]
   }
 ]

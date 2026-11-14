@@ -644,6 +644,7 @@ pub async fn insert_invoice(
 /// That later read observes any changes committed while lock acquisition
 /// waited. `None` means the invoice does not exist.
 pub struct LockedInvoice {
+    pub financial_branch_assigned_at: Option<chrono::DateTime<chrono::Utc>>,
     pub issuing_branch_id: Option<Uuid>,
     pub branch_id: Option<Uuid>,
     pub delivery_charge: f64,
@@ -660,7 +661,7 @@ pub async fn lock_invoice(
 ) -> Result<Option<LockedInvoice>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT issuing_branch_id, branch_id, invoice_date, vat_rate::float8 AS "vat_rate!", delivery_charge::float8 AS "delivery_charge!", collection_method
+        SELECT financial_branch_assigned_at, issuing_branch_id, branch_id, invoice_date, vat_rate::float8 AS "vat_rate!", delivery_charge::float8 AS "delivery_charge!", collection_method
         FROM invoices
         WHERE id = $1
         FOR UPDATE
@@ -671,6 +672,7 @@ pub async fn lock_invoice(
     .await?;
 
     Ok(row.map(|row| LockedInvoice {
+        financial_branch_assigned_at: row.financial_branch_assigned_at,
         issuing_branch_id: row.issuing_branch_id,
         branch_id: row.branch_id,
         delivery_charge: row.delivery_charge,
@@ -1818,4 +1820,47 @@ pub async fn original_item_ids(
     .into_iter()
     .map(|row| (row.id, row.kind))
     .collect())
+}
+
+pub async fn financial_branch(
+    db: &mut sqlx::PgConnection,
+    invoice: Uuid,
+) -> Result<super::types::FinancialBranch, AppError> {
+    Ok(sqlx::query_as!(
+        super::types::FinancialBranch,
+        r#"SELECT COALESCE(i.issuing_branch_id,i.branch_id) AS "branch_id?",
+        COALESCE(i.issuing_branch_name,b.name) AS "branch_name?",
+        i.financial_branch_assigned_at AS assigned_at,
+        i.financial_branch_assigned_by AS assigned_by,
+        i.financial_branch_assignment_reason AS reason,
+        i.financial_branch_assignment_request_id AS request_id
+        FROM invoices i LEFT JOIN branch b ON b.id=COALESCE(i.issuing_branch_id,i.branch_id)
+        WHERE i.id=$1"#,
+        invoice
+    )
+    .fetch_one(db)
+    .await?)
+}
+
+pub async fn assign_financial_branch(
+    db: &mut sqlx::PgConnection,
+    invoice: Uuid,
+    input: &super::types::AssignFinancialBranchInput,
+    actor: &str,
+) -> Result<(), AppError> {
+    sqlx::query!(
+        r#"UPDATE invoices SET issuing_branch_id=$2,
+        issuing_branch_name=(SELECT name FROM branch WHERE id=$2),
+        financial_branch_assigned_at=clock_timestamp(),financial_branch_assigned_by=$3,
+        financial_branch_assignment_reason=$4,financial_branch_assignment_request_id=$5
+        WHERE id=$1 AND issuing_branch_id IS NULL AND branch_id IS NULL"#,
+        invoice,
+        input.branch_id,
+        actor,
+        input.reason,
+        input.request_id
+    )
+    .execute(db)
+    .await?;
+    Ok(())
 }

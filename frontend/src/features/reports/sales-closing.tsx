@@ -118,6 +118,7 @@ export function SalesClosingPage() {
     date: parseAsString.withDefault(''),
     branchId: parseAsString.withDefault(''),
     page: parseAsInteger.withDefault(1),
+    expensePage: parseAsInteger.withDefault(1),
   })
   const locations = useAllLocations()
   const preferences = usePreferences()
@@ -160,7 +161,11 @@ export function SalesClosingPage() {
             items={branchOptions}
             value={selectedBranch}
             onValueChange={(value) =>
-              void setFilters({ branchId: value ?? '', page: 1 })
+              void setFilters({
+                branchId: value ?? '',
+                page: 1,
+                expensePage: 1,
+              })
             }
           >
             <SelectTrigger id="closing-branch" className="min-w-52">
@@ -184,13 +189,15 @@ export function SalesClosingPage() {
             label="Report date"
             className="w-52"
             value={date || report?.date || ''}
-            onValueChange={(value) => void setFilters({ date: value, page: 1 })}
+            onValueChange={(value) =>
+              void setFilters({ date: value, page: 1, expensePage: 1 })
+            }
           />
         </div>
         <Button
           variant="outline"
           onClick={() => {
-            void setFilters({ date: '', page: 1 })
+            void setFilters({ date: '', page: 1, expensePage: 1 })
             if (!date && selectedBranch) void query.refetch()
           }}
         >
@@ -221,13 +228,22 @@ export function SalesClosingPage() {
           Could not load branches. Refresh the page to try again.
         </p>
       )}
+      {query.isError && report && (
+        <p
+          role="alert"
+          className="rounded-xl border border-destructive/40 p-4 text-sm"
+        >
+          Could not refresh the closing report. Your counts and notes are kept.
+          Refresh successfully before closing or recording changes.
+        </p>
+      )}
       {!valid ? (
         <p role="alert">Choose a valid branch and report date.</p>
       ) : !selectedBranch ? (
         <p className="rounded-xl border p-8 text-center text-muted-foreground">
           Choose the branch you are closing.
         </p>
-      ) : query.isError ? (
+      ) : query.isError && !report ? (
         <div role="alert" className="rounded-xl border p-6">
           Could not load the closing report. Please try Refresh.
         </div>
@@ -241,6 +257,7 @@ export function SalesClosingPage() {
           report={report}
           queryDate={date}
           refreshing={query.isFetching}
+          failed={query.isError}
           dailyCheckRequired={dayStatus.data?.dailyCheckRequired ?? true}
         />
       )}
@@ -252,11 +269,13 @@ function ReportContent({
   report,
   queryDate,
   refreshing,
+  failed,
   dailyCheckRequired,
 }: {
   report: SalesClosing
   queryDate: string
   refreshing: boolean
+  failed: boolean
   dailyCheckRequired: boolean
 }) {
   const readOnly = isClosingReadOnly(report)
@@ -389,7 +408,7 @@ function ReportContent({
                 <SkipMissedDay
                   key={report.previousUnclosedDate}
                   report={report}
-                  disabled={refreshing}
+                  disabled={refreshing || failed}
                 />
               </div>
             </details>
@@ -440,15 +459,23 @@ function ReportContent({
           </div>
         ))}
       </div>
-      <OpeningCashSection report={report} disabled={refreshing} />
-      <BranchExpenses report={report} disabled={refreshing} />
+      <OpeningCashSection report={report} disabled={refreshing || failed} />
+      <BranchExpenses
+        report={report}
+        disabled={refreshing || failed}
+        dailyCheckRequired={dailyCheckRequired}
+      />
       {readOnly && !late ? (
         <ClosedDayCounts report={report} />
       ) : report.opening ? (
         <ClosingCountsForm
           report={report}
           queryDate={queryDate}
-          disabled={refreshing || Boolean(report.previousUnclosedDate && !late)}
+          disabled={
+            refreshing ||
+            failed ||
+            Boolean(report.previousUnclosedDate && !late)
+          }
         />
       ) : (
         <p className="rounded-xl border p-5 text-sm text-muted-foreground">

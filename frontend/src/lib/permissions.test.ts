@@ -14,6 +14,19 @@ import type { Role } from './permissions'
 
 const principal = (...roles: Role[]) => ({ roles })
 
+describe('legacy invoice financial branch recovery', () => {
+  it('restricts permanent assignment to managers and admins', () => {
+    for (const role of ['manager', 'admin'] as const)
+      expect(
+        canAccess(principal(role), 'POST', '/invoices/ID/financial-branch'),
+      ).toBe(true)
+    for (const role of ['sales', 'production', 'inventory'] as const)
+      expect(
+        canAccess(principal(role), 'POST', '/invoices/ID/financial-branch'),
+      ).toBe(false)
+  })
+})
+
 describe('notification attention access', () => {
   it('permits sales staff and operational managers without granting production or inventory access', () => {
     for (const role of ['sales', 'manager', 'admin'] as const) {

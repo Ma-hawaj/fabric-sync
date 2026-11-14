@@ -10,7 +10,9 @@ WITH events AS (
     WHERE r.received_amount > 0 AND r.received_at IS NOT NULL
 ), days AS (
     SELECT (e.occurred_at AT TIME ZONE $2)::date AS day
-    FROM events e JOIN invoices i ON i.id = e.invoice_id WHERE COALESCE(i.issuing_branch_id, i.branch_id) = $1
+    FROM events e JOIN invoices i ON i.id = e.invoice_id
+    WHERE COALESCE(i.issuing_branch_id, i.branch_id) = $1
+      AND (i.financial_branch_assigned_at IS NULL OR e.occurred_at >= i.financial_branch_assigned_at)
     UNION SELECT business_date FROM branch_cash_openings WHERE branch_id = $1
     UNION SELECT business_date FROM branch_expenses WHERE branch_id = $1
 )

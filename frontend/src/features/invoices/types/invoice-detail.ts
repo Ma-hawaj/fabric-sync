@@ -82,6 +82,7 @@ export interface InvoicePayment {
 
 /** Shape of GET /invoices/:id. */
 export interface InvoiceDetail extends ReadinessFields {
+  financialBranch?: FinancialBranch
   documentKind?: 'tax_invoice' | 'redemption_receipt'
   issuingBranchName?: string | null
   createdBy: string | null
@@ -114,4 +115,12 @@ export interface InvoiceDetail extends ReadinessFields {
   payments: InvoicePayment[]
   hasAdjustments: boolean
   totals: InvoiceTotals
+}
+
+export interface FinancialBranch {
+  branchId: string | null
+  branchName: string | null
+  assignedAt: string | null
+  assignedBy: string | null
+  reason: string | null
 }
