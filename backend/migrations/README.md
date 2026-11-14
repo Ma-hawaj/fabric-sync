@@ -33,7 +33,8 @@ SQLx applies the files in version order:
    triggers that serialize related writes and invalidate outdated previews.
    Readiness excludes closed orders, and credits/refunds invalidate previews.
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
-   return-line lookups and the unique index allowing one closure per garment.
+   gift-card sale and return-line lookups, and the unique index allowing one
+   closure per garment.
 
 The core schema defines readable customer IDs (`C-6216`) and permanent
 per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.

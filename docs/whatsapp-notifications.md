@@ -269,6 +269,12 @@ sends. It does not infer notification work from invoices, repairs, or gift cards
 that happen to exist. A current request without a send remains outstanding;
 an earlier request's delivery result is shown separately as previous history.
 
+The query selects the latest sent request for each notification context as a
+set, then joins its recipient results. Customer aggregates are computed once,
+and current-request filters can reach the source view. This avoids rebuilding
+delivery history for each outstanding request. A partial index on gift-card
+invoice lines supports the original-sale lookup without scanning all lines.
+
 ```mermaid
 flowchart LR
   Request[Notification request] --> Notification[Approved send]

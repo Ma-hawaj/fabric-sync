@@ -1,6 +1,8 @@
-WITH current_requests AS (
+-- Let kind/target filters reach the source view, while computing the shared
+-- customer aggregates once instead of rebuilding them inside nested loops.
+WITH current_requests AS NOT MATERIALIZED (
     SELECT * FROM notification_current_requests
-), customers_by_invoice AS (
+), customers_by_invoice AS MATERIALIZED (
     SELECT invoice_id,
            jsonb_agg(jsonb_build_object('id', id, 'name', name, 'mobileNo', mobile_no) ORDER BY name, id) AS customers,
            string_agg(name, ', ' ORDER BY name, id) AS customer_name,
@@ -111,18 +113,26 @@ WITH current_requests AS (
         WHEN delivered_count > 0 THEN 'delivered'
         ELSE 'not_sent' END AS status
     FROM request_results
+), latest_sent_requests AS (
+    -- Choose the latest request with an approved send once for every scope.
+    -- Current requests are already the latest actionable ones, so this picks
+    -- the current request when sent, or its latest sent predecessor otherwise.
+    SELECT DISTINCT ON (r.kind, r.invoice_id, r.repair_id, r.gift_card_id)
+           r.id AS request_id, r.kind, r.invoice_id, r.gift_card_id,
+           coalesce(r.repair_id, r.gift_card_id, r.invoice_id) AS target_id
+    FROM notification_requests r JOIN latest_sends s ON s.request_id = r.id
+    ORDER BY r.kind, r.invoice_id, r.repair_id, r.gift_card_id, r.requested_at DESC, r.id DESC
 ), chosen_results AS (
-    SELECT current.id AS current_request_id, chosen.*
+    -- This join is one row per current request. Make that bound explicit so
+    -- generic prepared plans do not estimate a many-to-many history join.
+    SELECT DISTINCT ON (current.id) current.id AS current_request_id, result.*
     FROM current_requests current
-    LEFT JOIN LATERAL (
-        SELECT result.* FROM outcomes result
-        JOIN notification_requests earlier ON earlier.id = result.request_id
-        WHERE earlier.kind = current.kind
-          AND earlier.invoice_id IS NOT DISTINCT FROM current.invoice_id
-          AND earlier.repair_id IS NOT DISTINCT FROM current.repair_id
-          AND earlier.gift_card_id IS NOT DISTINCT FROM current.gift_card_id
-        ORDER BY (earlier.id = current.id) DESC, earlier.requested_at DESC, earlier.id DESC LIMIT 1
-    ) chosen ON true
+    LEFT JOIN latest_sent_requests chosen ON chosen.kind = current.kind
+        AND chosen.target_id = coalesce(current.repair_id, current.gift_card_id, current.invoice_id)
+        -- Repairs belong to an invoice as well as a repair. These non-null
+        -- equality keys preserve the complete scope and allow a hash join.
+        AND coalesce(chosen.invoice_id, chosen.gift_card_id) = coalesce(current.invoice_id, current.gift_card_id)
+    LEFT JOIN outcomes result ON result.request_id = chosen.request_id
 ), attention AS (
     SELECT c.entity_id, c.reference, c.invoice_id, c.invoice_number, c.branch_name,
            c.gift_card_id, c.gift_card_code, c.repair_id, c.order_id, c.repair_reason,

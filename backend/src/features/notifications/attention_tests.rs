@@ -275,6 +275,42 @@ async fn request_history_is_immutable_and_separates_identical_content_from_new_a
 }
 
 #[sqlx::test]
+async fn attention_uses_request_order_even_when_an_older_send_was_approved_later(pool: PgPool) {
+    let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
+    let old = approved(&pool, invoice, "invoice_created", 0).await;
+    recipient(&pool, old, "+97333112233", "failed").await;
+    request(&pool, invoice, "invoice", None).await;
+    let current = approved(&pool, invoice, "invoice_updated", 0).await;
+    recipient(&pool, current, "+97333112233", "delivered").await;
+    sqlx::query("UPDATE notifications SET approved_at=now()+interval '1 hour' WHERE id=$1")
+        .bind(old)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let result = rows(&pool).await;
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].notification_id, Some(current));
+    assert_eq!(result[0].status, "delivered");
+    assert_eq!(result[0].failed_count, 0);
+    assert!(result[0].previous_version.is_null());
+
+    // A subsequent unsent action must also use the newer request's results
+    // for previous-version details, regardless of the older approval time.
+    request(&pool, invoice, "invoice", None).await;
+    let result = rows(&pool).await;
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].status, "not_sent");
+    assert_eq!(result[0].notification_id, Some(current));
+    assert_eq!(result[0].previous_version["status"], "delivered");
+    assert_eq!(
+        result[0].previous_version["recipients"][0]["status"],
+        "delivered"
+    );
+    assert_eq!(attention::summary(&pool).await.unwrap().not_sent, 1);
+}
+
+#[sqlx::test]
 async fn database_request_links_are_required_and_cannot_cross_targets(pool: PgPool) {
     let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
     let parent = request_id(&pool, invoice, "invoice", None).await.unwrap();
