@@ -257,4 +257,71 @@ describe('notification preview and approval', () => {
     ).toBe(true)
     expect(screen.getByRole('button', { name: 'Refresh preview' })).toBeTruthy()
   })
+  it('passes repair identity through preparation and refresh', async () => {
+    draft.artifactId = null
+    draft.snapshot.repairId = 'repair-1'
+    mount('invoice_ready', vi.fn(), 'repair-1')
+    await screen.findByRole('heading', {
+      name: 'Repair ready for pickup — notify customer',
+    })
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/invoices/invoice-1/notifications',
+      expect.objectContaining({ kind: 'invoice_ready', repairId: 'repair-1' }),
+    )
+    expect(
+      screen
+        .getByRole('button', { name: 'Send via WhatsApp' })
+        .hasAttribute('disabled'),
+    ).toBe(false)
+  })
+
+  it.each([undefined, 'other-repair'])(
+    'refreshes a mismatched repair preview (%s) with the selected repair identity',
+    async (returnedRepairId) => {
+      draft.artifactId = null
+      draft.snapshot.repairId = returnedRepairId
+      mount('invoice_ready', vi.fn(), 'repair-1')
+      await screen.findByText(
+        'This preview does not match the selected repair. Refresh it before sending.',
+      )
+      expect(
+        screen
+          .getByRole('button', { name: 'Send via WhatsApp' })
+          .hasAttribute('disabled'),
+      ).toBe(true)
+      const initialRequest = vi.mocked(apiClient.post).mock.calls[0][1]
+      draft = {
+        ...draft,
+        id: 'repair-draft',
+        snapshot: { ...draft.snapshot, repairId: 'repair-1' },
+      }
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh preview' }))
+      await waitFor(() => {
+        expect(apiClient.post).toHaveBeenNthCalledWith(
+          2,
+          '/invoices/invoice-1/notifications',
+          initialRequest,
+        )
+        expect(
+          screen.getByRole<HTMLButtonElement>('button', {
+            name: 'Send via WhatsApp',
+          }).disabled,
+        ).toBe(false)
+      })
+      expect(initialRequest).toEqual(
+        expect.objectContaining({
+          kind: 'invoice_ready',
+          repairId: 'repair-1',
+        }),
+      )
+      expect(
+        screen.queryByText(/does not match the selected repair/),
+      ).toBeNull()
+      expect(
+        vi
+          .mocked(apiClient.post)
+          .mock.calls.some(([path]) => String(path).endsWith('/send')),
+      ).toBe(false)
+    },
+  )
 })

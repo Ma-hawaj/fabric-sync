@@ -50,8 +50,11 @@ const SPEC: ListSpec = ListSpec {
         LEFT JOIN gift_cards replacement ON replacement.replaces_card_id = g.id
         LEFT JOIN customers c ON c.id = g.customer_id
         LEFT JOIN LATERAL (
-            SELECT state, last_error FROM gift_card_deliveries
-            WHERE gift_card_id = g.id ORDER BY created_at DESC, id DESC LIMIT 1
+            SELECT CASE WHEN recipient.status = 'submitting' THEN 'sending' ELSE recipient.status END AS state,
+                   recipient.error_message AS last_error
+            FROM notifications send JOIN notification_recipients recipient ON recipient.notification_id = send.id
+            WHERE send.gift_card_id = g.id AND send.approved_at IS NOT NULL
+            ORDER BY send.approved_at DESC, send.id DESC LIMIT 1
         ) delivery ON TRUE
     "#,
     columns: &[
@@ -147,8 +150,11 @@ pub async fn get_gift_card_by_code(
         LEFT JOIN gift_cards replacement ON replacement.replaces_card_id = g.id
         LEFT JOIN customers c ON c.id = g.customer_id
         LEFT JOIN LATERAL (
-            SELECT state, last_error FROM gift_card_deliveries
-            WHERE gift_card_id = g.id ORDER BY created_at DESC, id DESC LIMIT 1
+            SELECT CASE WHEN recipient.status = 'submitting' THEN 'sending' ELSE recipient.status END AS state,
+                   recipient.error_message AS last_error
+            FROM notifications send JOIN notification_recipients recipient ON recipient.notification_id = send.id
+            WHERE send.gift_card_id = g.id AND send.approved_at IS NOT NULL
+            ORDER BY send.approved_at DESC, send.id DESC LIMIT 1
         ) delivery ON TRUE
         WHERE g.code = $1
         "#,

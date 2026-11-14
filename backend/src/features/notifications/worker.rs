@@ -11,11 +11,11 @@ use super::{
 use crate::{error::AppError, state::AppState};
 
 #[derive(Debug)]
-pub(crate) struct Failure {
-    pub message: String,
-    pub retry: bool,
-    pub uncertain: bool,
-    pub retry_after: i64,
+struct Failure {
+    message: String,
+    retry: bool,
+    uncertain: bool,
+    retry_after: i64,
 }
 
 pub fn start(state: AppState) {
@@ -24,9 +24,6 @@ pub fn start(state: AppState) {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(3));
         loop {
             interval.tick().await;
-            if let Err(error) = crate::features::gift_cards::delivery::tick(&state).await {
-                tracing::error!(error=?error, "gift card delivery worker failed");
-            }
             if tokio::time::Instant::now() >= maintenance {
                 if let Err(error) = repository::cleanup(state.db(), state.notifications()).await {
                     tracing::warn!(error=?error, "notification cleanup failed");
@@ -40,7 +37,7 @@ pub fn start(state: AppState) {
     });
 }
 
-pub(super) async fn tick(state: &AppState) -> Result<(), AppError> {
+pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
     // A dead worker may have submitted externally without persisting the ID.
     // Never replay an expired submission lease automatically.
     repository::recover_leases(state.db()).await?;
@@ -48,63 +45,77 @@ pub(super) async fn tick(state: &AppState) -> Result<(), AppError> {
     if !state.notifications().can_send() {
         return Ok(());
     }
-    // Read a candidate first, then acquire the invoice before notification and
-    // recipient locks, matching readiness and approval transactions.
-    let candidate = repository::next_job(state.db()).await?;
-    let Some((id, invoice_id)) = candidate else {
+    // Lock the business target before its send and recipient, matching approval.
+    let Some((id, request)) = repository::next_job(state.db()).await? else {
         return Ok(());
     };
     let mut tx = state.db().begin().await?;
-    repository::lock_invoice(&mut tx, invoice_id).await?;
-    let job = repository::lock_job(&mut tx, id).await?;
-    let Some(mut job) = job else {
+    let target = repository::lock_target(&mut tx, request).await?;
+    let Some(mut job) = repository::lock_job(&mut tx, id).await? else {
         return Ok(());
+    };
+    let notification = repository::get_in(&mut tx, job.notification_id).await?;
+    let current_request = repository::is_current_request(&mut tx, request).await?;
+    let gift_validation = if let Some(card) = target.gift_card_id {
+        Some(
+            crate::features::gift_cards::delivery::validate(
+                state,
+                &mut tx,
+                card,
+                &notification.source_hash,
+            )
+            .await,
+        )
+    } else {
+        None
     };
     job.attempt_count += 1;
     repository::start_attempt(&mut tx, &job).await?;
     tx.commit().await?;
-    let notification = repository::get(state.db(), job.notification_id).await?;
-    match service::source(
-        state,
-        notification.invoice_id,
-        &notification.kind,
-        notification.snapshot.repair_id,
-    )
-    .await
-    {
-        Ok(source) if source.snapshot.source_hash == notification.source_hash => {}
-        Ok(_) | Err(AppError::Conflict(_)) => {
-            let mut tx = state.db().begin().await?;
-            repository::lock_invoice(&mut tx, notification.invoice_id).await?;
-            repository::lock_notification(&mut tx, notification.id).await?;
-            repository::mark_stale(&mut tx, notification.id).await?;
-            tx.commit().await?;
-            finish(
-                state,
-                &job,
-                "cancelled",
-                None,
-                Some("Invoice or recipients changed. Prepare and approve a fresh preview."),
-                false,
-                0,
-            )
-            .await?;
-            return Ok(());
+    let validation = if let Some(result) = gift_validation {
+        result
+    } else {
+        service::source(
+            state,
+            notification.invoice_id()?,
+            &notification.kind,
+            notification.snapshot.repair_id,
+        )
+        .await
+        .map(|source| source.snapshot.source_hash == notification.source_hash)
+    };
+    let invalid = match validation {
+        Ok(true) if current_request => None,
+        Ok(_) | Err(AppError::Conflict(_)) => Some((
+            "cancelled",
+            "The notification or recipient changed. Prepare and approve a fresh preview."
+                .to_string(),
+            false,
+        )),
+        Err(AppError::BadRequest(reason)) | Err(AppError::Unavailable(reason))
+            if target.gift_card_id.is_some() =>
+        {
+            Some(("failed", reason, false))
         }
         Err(error) => {
             tracing::warn!(notification_id=%notification.id,error=?error,"notification preflight failed");
-            finish(
-                state,
-                &job,
+            Some((
                 "failed",
-                None,
-                Some("Could not revalidate the invoice before sending."),
+                "Could not revalidate the notification before sending.".to_string(),
                 true,
-                0,
-            )
-            .await?;
-            return Ok(());
+            ))
         }
+    };
+    if let Some((status, message, retry)) = invalid {
+        if status == "cancelled" {
+            let mut tx = state.db().begin().await?;
+            repository::lock_target(&mut tx, request).await?;
+            repository::lock_notification(&mut tx, notification.id).await?;
+            repository::mark_stale(&mut tx, notification.id).await?;
+            tx.commit().await?;
+        }
+        finish(state, &job, status, None, Some(&message), retry, 0).await?;
+        return Ok(());
     }
     // The claim is the cancellation cutoff. Only frozen data is used from here.
     let result = send(state, &job, &notification).await;
@@ -183,13 +194,25 @@ async fn send(
         json!({"type":"body","parameters":notification.snapshot.parameters.iter().map(|value|json!({"type":"text","text":value})).collect::<Vec<_>>()}),
     ];
     if let Some(artifact_id) = notification.artifact_id {
-        let artifact = repository::artifact_content(state.db(), artifact_id)
+        let artifact = repository::attachment(state.db(), artifact_id)
             .await
             .map_err(|_| failure("The approved attachment could not be loaded", true, false))?;
-        let part = reqwest::multipart::Part::bytes(artifact.1)
-            .file_name(artifact.0.clone())
-            .mime_str("application/pdf")
-            .map_err(|_| failure("Invalid document type", false, false))?;
+        if service::hash(&artifact.content) != artifact.sha256 {
+            return Err(failure(
+                "The approved attachment failed its integrity check. Preview and send again.",
+                false,
+                false,
+            ));
+        }
+        let header = match artifact.mime_type.as_str() {
+            "application/pdf" => "document",
+            "image/png" => "image",
+            _ => return Err(failure("Invalid attachment type", false, false)),
+        };
+        let part = reqwest::multipart::Part::bytes(artifact.content)
+            .file_name(artifact.filename.clone())
+            .mime_str(&artifact.mime_type)
+            .map_err(|_| failure("Invalid attachment type", false, false))?;
         let response = client
             .post(format!("{root}/media"))
             .bearer_auth(token)
@@ -197,16 +220,25 @@ async fn send(
                 reqwest::multipart::Form::new()
                     .part("file", part)
                     .text("messaging_product", "whatsapp")
-                    .text("type", "application/pdf"),
+                    .text("type", artifact.mime_type),
             )
             .send()
             .await
-            .map_err(|_| failure("The document upload was interrupted", true, false))?;
+            .map_err(|_| failure("The attachment upload was interrupted", true, false))?;
         let value = graph_response(response, false).await?;
         let media_id = value["id"]
             .as_str()
+            .filter(|id| !id.is_empty())
             .ok_or_else(|| failure("WhatsApp did not return a media ID", true, false))?;
-        components.insert(0,json!({"type":"header","parameters":[{"type":"document","document":{"id":media_id,"filename":artifact.0}}]}));
+        let media = if header == "document" {
+            json!({"id":media_id,"filename":artifact.filename})
+        } else {
+            json!({"id":media_id})
+        };
+        components.insert(
+            0,
+            json!({"type":"header","parameters":[{"type":header,header:media}]}),
+        );
     }
     repository::request_started(state.db(), job)
         .await
@@ -234,70 +266,6 @@ fn failure(message: &str, retry: bool, uncertain: bool) -> Failure {
         uncertain,
         retry_after: 0,
     }
-}
-
-pub(crate) async fn send_image_template(
-    state: &AppState,
-    mobile: &str,
-    template: &str,
-    language: &str,
-    parameters: &[String],
-    image_filename: &str,
-    image_png: Vec<u8>,
-) -> Result<String, Failure> {
-    let config = state.notifications();
-    let client = service::http_client()
-        .map_err(|_| failure("Could not initialize the sender", true, false))?;
-    let root = format!(
-        "https://graph.facebook.com/{}/{}",
-        config.api_version,
-        config.phone_number_id.as_deref().unwrap_or_default()
-    );
-    #[cfg(test)]
-    let root = config.test_graph_url.clone().unwrap_or(root);
-    let token = config
-        .access_token
-        .as_deref()
-        .ok_or_else(|| failure("WhatsApp is not configured", false, false))?;
-    let part = reqwest::multipart::Part::bytes(image_png)
-        .file_name(image_filename.to_string())
-        .mime_str("image/png")
-        .map_err(|_| failure("Invalid gift card image type", false, false))?;
-    let upload = client
-        .post(format!("{root}/media"))
-        .bearer_auth(token)
-        .multipart(
-            reqwest::multipart::Form::new()
-                .part("file", part)
-                .text("messaging_product", "whatsapp")
-                .text("type", "image/png"),
-        )
-        .send()
-        .await
-        .map_err(|_| failure("The gift card image upload was interrupted", true, false))?;
-    let upload = graph_response(upload, false).await?;
-    let media_id = upload["id"]
-        .as_str()
-        .filter(|id| !id.is_empty())
-        .ok_or_else(|| failure("WhatsApp did not return an image media ID", true, false))?;
-    let response = client.post(format!("{root}/messages"))
-        .bearer_auth(config.access_token.as_deref().unwrap_or_default())
-        .json(&json!({"messaging_product":"whatsapp","to":mobile.trim_start_matches('+'),"type":"template",
-            "template":{"name":template,"language":{"code":language},"components":[{"type":"header","parameters":[{"type":"image","image":{"id":media_id}}]},{"type":"body",
-                "parameters":parameters.iter().map(|text|json!({"type":"text","text":text})).collect::<Vec<_>>()}]}}))
-        .send().await.map_err(|_|failure("The send result is unknown. Check delivery before resending.",false,true))?;
-    let value = graph_response(response, true).await?;
-    value["messages"][0]["id"]
-        .as_str()
-        .filter(|id| !id.is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| {
-            failure(
-                "WhatsApp returned no message ID. Check delivery before resending.",
-                false,
-                true,
-            )
-        })
 }
 
 async fn graph_response(
@@ -359,7 +327,7 @@ pub fn valid_signature(secret: &str, body: &[u8], signature: &str) -> bool {
     mac.verify_slice(&bytes).is_ok()
 }
 
-pub(crate) fn next_status(current: &str, incoming: &str) -> Option<&'static str> {
+fn next_status(current: &str, incoming: &str) -> Option<&'static str> {
     match incoming {
         "read" => Some("read"),
         "delivered" if current != "read" => Some("delivered"),
@@ -401,13 +369,7 @@ async fn process_webhooks(db: &PgPool) -> Result<(), AppError> {
                                 .await?;
                         }
                     } else {
-                        if !crate::features::gift_cards::delivery::webhook(
-                            &mut tx, message_id, incoming, status,
-                        )
-                        .await?
-                        {
-                            matched = false;
-                        }
+                        matched = false;
                     }
                     tx.commit().await?;
                 }

@@ -42,6 +42,7 @@ export interface NotificationDraft {
 }
 export interface NotificationHistoryRow {
   id: string
+  repairId?: string | null
   kind: NotificationKind
   state: string
   createdAt: string
@@ -53,4 +54,56 @@ export interface NotificationHistoryRow {
   failedCount: number
   uncertainCount: number
   cancelledCount: number
+}
+
+export type AttentionStatus =
+  | 'not_sent'
+  | 'failed'
+  | 'uncertain'
+  | 'delayed'
+  | 'queued'
+  | 'accepted'
+  | 'delivered'
+
+export interface NotificationAttentionRow {
+  entityId: string
+  reference: string
+  invoiceId: string | null
+  invoiceNumber: number | null
+  giftCardId: string | null
+  giftCardCode: string | null
+  repairId: string | null
+  orderId: string | null
+  repairReason: string | null
+  branchName: string | null
+  customers: { id: string; name: string; mobileNo: string }[]
+  kind: 'invoice' | 'invoice_ready' | 'repair_ready' | 'gift_card'
+  status: AttentionStatus
+  eligible: boolean
+  needsAttention: boolean
+  waitingSince: string
+  lastAttemptAt: string | null
+  notificationId: string | null
+  recipientCount: number
+  queuedCount: number
+  acceptedCount: number
+  deliveredCount: number
+  failedCount: number
+  uncertainCount: number
+  cancelledCount: number
+  recipients: Recipient[]
+  errorMessage: string | null
+  previousVersion: {
+    status: AttentionStatus
+    recipients: Recipient[]
+    errorMessage: string | null
+  } | null
+}
+
+export interface NotificationAttentionSummary {
+  total: number
+  notSent: number
+  failed: number
+  uncertain: number
+  delayed: number
 }

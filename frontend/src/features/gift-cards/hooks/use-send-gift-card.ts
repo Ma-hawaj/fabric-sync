@@ -16,6 +16,10 @@ export function useSendGiftCard() {
         .data,
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ['gift-cards'] })
+      void client.invalidateQueries({ queryKey: ['notification-attention'] })
+      void client.invalidateQueries({
+        queryKey: ['notification-attention-summary'],
+      })
     },
   })
 }

@@ -49,6 +49,27 @@ function mount(rows: NotificationHistoryRow[]) {
 }
 
 describe('compact notification history', () => {
+  it('keeps each repair separate from the invoice pickup summary', () => {
+    mount([
+      row('repair-two', {
+        kind: 'invoice_ready',
+        repairId: 'repair-2',
+        failedCount: 1,
+      }),
+      row('repair-one', {
+        kind: 'invoice_ready',
+        repairId: 'repair-1',
+        queuedCount: 1,
+      }),
+      row('pickup', { kind: 'invoice_ready', deliveredCount: 1 }),
+    ])
+    const pickup = screen.getByText('Ready for pickup').parentElement!
+    expect(within(pickup).getByText('1 delivered')).toBeTruthy()
+    expect(within(pickup).queryByText('1 failed')).toBeNull()
+    expect(screen.getAllByText('Repair ready')).toHaveLength(2)
+    expect(screen.getByText('1 failed')).toBeTruthy()
+    expect(screen.getByText('1 queued')).toBeTruthy()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(apiClient.delete).mockResolvedValue({})

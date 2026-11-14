@@ -25,6 +25,10 @@ export function useSendNotification() {
         queryKey: ['notifications', input.invoiceId],
       })
       void client.invalidateQueries({ queryKey: ['notification-sends'] })
+      void client.invalidateQueries({ queryKey: ['notification-attention'] })
+      void client.invalidateQueries({
+        queryKey: ['notification-attention-summary'],
+      })
     },
   })
 }

@@ -1,5 +1,4 @@
 pub(crate) mod delivery;
-mod delivery_repository;
 mod handlers;
 pub(crate) mod image;
 pub mod repository;

@@ -81,6 +81,16 @@ pub async fn invoice(
         let order:Uuid=sqlx::query_scalar("INSERT INTO orders(invoice_id,measurement_id,material_source,customer_material_description,material_amount,price,production_branch_id) VALUES($1,$2,'customer','Customer cotton',3,100,$3) RETURNING id").bind(invoice).bind(measurement).bind(production).fetch_one(db).await.unwrap();
         orders.push(order);
     }
+    // This fixture represents an application-created sale. Import fixtures
+    // deliberately omit notification_requests instead of inventing old work.
+    crate::features::notifications::repository::request_notification(
+        &mut *db.acquire().await.unwrap(),
+        invoice,
+        "invoice",
+        None,
+    )
+    .await
+    .unwrap();
     (invoice, orders, production, pickup)
 }
 

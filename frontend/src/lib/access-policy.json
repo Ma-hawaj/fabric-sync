@@ -331,6 +331,16 @@
   },
   {
     "method": "GET",
+    "path": "/notifications",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
+    "path": "/notifications/summary",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
     "path": "/notifications/capabilities",
     "roles": ["sales"]
   },

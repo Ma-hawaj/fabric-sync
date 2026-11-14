@@ -34,6 +34,12 @@ export function useUpdateRepair() {
       void queryClient.invalidateQueries({ queryKey: ['orders'] })
       void queryClient.invalidateQueries({ queryKey: ['invoices'] })
       void queryClient.invalidateQueries({ queryKey: ['repairs'] })
+      void queryClient.invalidateQueries({
+        queryKey: ['notification-attention'],
+      })
+      void queryClient.invalidateQueries({
+        queryKey: ['notification-attention-summary'],
+      })
     },
   })
 }

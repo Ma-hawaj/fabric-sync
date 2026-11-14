@@ -1774,7 +1774,7 @@ pub async fn sold_card_has_deliveries(
     id: Uuid,
 ) -> Result<bool, AppError> {
     Ok(sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM gift_card_deliveries WHERE gift_card_id=$1)",
+        "SELECT EXISTS(SELECT 1 FROM notifications WHERE gift_card_id=$1 AND approved_at IS NOT NULL)",
     )
     .bind(id)
     .fetch_one(&mut **tx)

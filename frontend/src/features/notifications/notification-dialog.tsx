@@ -109,7 +109,10 @@ function Preview({
   const recipientsDisabled =
     selection.isPending || send.isPending || draft?.state !== 'draft'
   const ready =
-    draft && (!draft.artifactId || pdfUrl) && draft.state === 'draft'
+    draft &&
+    (!repairId || draft.snapshot.repairId === repairId) &&
+    (!draft.artifactId || pdfUrl) &&
+    draft.state === 'draft'
   const title =
     kind === 'invoice_updated'
       ? 'Invoice saved. Send the updated invoice?'
@@ -148,6 +151,12 @@ function Preview({
         )}
         {draft && (
           <div className="space-y-4">
+            {repairId && draft.snapshot.repairId !== repairId && (
+              <p role="alert" className="text-destructive">
+                This preview does not match the selected repair. Refresh it
+                before sending.
+              </p>
+            )}
             <p className="text-sm font-medium">
               INV-{draft.snapshot.invoiceNumber} · {selectedCount} unique mobile
               {selectedCount === 1 ? '' : 's'} selected
@@ -278,6 +287,7 @@ function Preview({
           {(prepareError ||
             problem ||
             draft?.state === 'stale' ||
+            (draft && repairId && draft.snapshot.repairId !== repairId) ||
             pdf.isError) && (
             <Button
               variant="outline"
@@ -285,7 +295,7 @@ function Preview({
               onClick={() => {
                 setProblem('')
                 if (draft?.artifactId) void pdf.refetch()
-                prepare({ invoiceId, kind, requestId, resendOf })
+                prepare({ invoiceId, kind, requestId, resendOf, repairId })
               }}
             >
               Refresh preview
