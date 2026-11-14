@@ -27,9 +27,34 @@ pub async fn state(db: PgPool, renderer: Option<String>, provider: Option<String
     config.notifications.test_graph_url = provider;
     config.notifications.app_secret = Some("test-webhook-secret".into());
     config.notifications.verification_token = Some("test-verify-token".into());
+    crate::features::notifications::preferences::initialize(
+        &db,
+        &config.notifications.default_region,
+    )
+    .await
+    .unwrap();
     let auth = TokenIntrospection::discover(&config).await.unwrap();
     let users = ZitadelUserDirectory::discover(&config).await.unwrap();
     AppState::new(config, db, auth, users)
+}
+
+pub async fn set_invoice_updates(db: &PgPool, enabled: bool) {
+    use crate::features::notifications::preferences;
+    preferences::initialize(db, "BH").await.unwrap();
+    let mut tx = db.begin().await.unwrap();
+    preferences::lock(&mut tx).await.unwrap();
+    let mobiles: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT whatsapp_mobile FROM customers WHERE whatsapp_mobile IS NOT NULL",
+    )
+    .fetch_all(&mut *tx)
+    .await
+    .unwrap();
+    for mobile in mobiles {
+        preferences::save_invoice(&mut tx, &mobile, enabled, false, "Test operator")
+            .await
+            .unwrap();
+    }
+    tx.commit().await.unwrap();
 }
 
 pub async fn invoice(
@@ -60,7 +85,7 @@ pub async fn invoice(
         production
     };
     let customer: Uuid = sqlx::query_scalar(
-        "INSERT INTO customers(name,mobile_no) VALUES('First Customer','33112233') RETURNING id",
+        "INSERT INTO customers(name,mobile_no,whatsapp_mobile) VALUES('First Customer','33112233','+97333112233') RETURNING id",
     )
     .fetch_one(db)
     .await

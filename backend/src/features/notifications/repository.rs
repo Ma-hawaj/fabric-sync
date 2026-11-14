@@ -27,13 +27,14 @@ pub async fn repair_ready_context(
         "SELECT o.order_number, i.invoice_number, r.status, oc.outcome, r.completed_at,
                 GREATEST(r.charge - r.received_amount, 0)::float8 AS balance,
                 b.name AS branch_name, c.id AS customer_id, c.name, c.mobile_no,
-                c.whatsapp_notifications_enabled AS enabled
+                COALESCE(wp.invoice_updates_enabled,true) AS enabled
          FROM order_repairs r
          JOIN orders o ON o.id = r.order_id
          JOIN order_outcomes oc ON oc.order_id = o.id
          JOIN invoices i ON i.id = o.invoice_id
          JOIN measurements m ON m.id = o.measurement_id
          JOIN customers c ON c.id = m.customer_id
+         LEFT JOIN whatsapp_preferences wp ON wp.mobile=c.whatsapp_mobile
          LEFT JOIN branch b ON b.id = i.branch_id
          WHERE r.id = $1 AND i.id = $2",
     )
@@ -50,8 +51,9 @@ pub async fn customers(db: &PgPool, invoice_id: Uuid) -> Result<Vec<Customer>, A
         SELECT DISTINCT c.id,
                c.name,
                c.mobile_no,
-               c.whatsapp_notifications_enabled AS enabled
+               COALESCE(wp.invoice_updates_enabled,true) AS enabled
           FROM customers c
+          LEFT JOIN whatsapp_preferences wp ON wp.mobile=c.whatsapp_mobile
          WHERE c.id = (
                 SELECT customer_id
                   FROM invoices
@@ -372,6 +374,7 @@ pub async fn event(
 }
 
 pub async fn lock_invoice(conn: &mut PgConnection, id: Uuid) -> Result<i64, AppError> {
+    super::preferences::lock(conn).await?;
     sqlx::query_scalar(
         r#"
         SELECT notification_revision

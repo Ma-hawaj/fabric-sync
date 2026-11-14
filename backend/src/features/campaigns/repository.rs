@@ -8,10 +8,7 @@ use uuid::Uuid;
 // Consent writes, approvals and dispatch claims share one short lock. No HTTP
 // request is made while holding it. The submitting claim is the opt-out cutoff.
 pub async fn consent_lock(db: &mut PgConnection) -> Result<(), AppError> {
-    sqlx::query("SELECT pg_advisory_xact_lock(842101)")
-        .execute(db)
-        .await?;
-    Ok(())
+    crate::features::notifications::preferences::lock(db).await
 }
 pub async fn campaign(db: &mut PgConnection, id: Uuid, lock: bool) -> Result<Campaign, AppError> {
     let sql = format!(
@@ -285,12 +282,12 @@ pub async fn record_consent(
     actor: &str,
     event: Option<&str>,
 ) -> Result<(), AppError> {
-    let inserted:Option<Uuid>=sqlx::query_scalar("INSERT INTO marketing_consent_events(mobile,granted,observed_at,source,recorded_by,provider_event_id) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(provider_event_id) DO NOTHING RETURNING id").bind(mobile).bind(granted).bind(observed_at).bind(source).bind(actor).bind(event).fetch_optional(&mut *db).await?;
+    let inserted:Option<Uuid>=sqlx::query_scalar("INSERT INTO whatsapp_preference_events(mobile,enabled,observed_at,source,recorded_by,provider_event_id,category) VALUES($1,$2,$3,$4,$5,$6,'marketing') ON CONFLICT(provider_event_id) DO NOTHING RETURNING id").bind(mobile).bind(granted).bind(observed_at).bind(source).bind(actor).bind(event).fetch_optional(&mut *db).await?;
     if inserted.is_none() {
         return Ok(());
     }
     // Old provider events must never undo a later explicit opt-in/withdrawal.
-    let changed=sqlx::query("INSERT INTO marketing_consent(mobile,granted,observed_at,source,recorded_by) VALUES($1,$2,$3,$4,$5) ON CONFLICT(mobile) DO UPDATE SET granted=$2,observed_at=$3,source=$4,recorded_by=$5,version=$6,updated_at=now() WHERE marketing_consent.observed_at <= $3 OR (NOT $2 AND date_trunc('second',marketing_consent.observed_at)=date_trunc('second',$3::timestamptz))").bind(mobile).bind(granted).bind(observed_at).bind(source).bind(actor).bind(Uuid::new_v4()).execute(&mut *db).await?;
+    let changed=sqlx::query("INSERT INTO whatsapp_preferences(mobile,marketing_enabled,marketing_observed_at,marketing_source,marketing_recorded_by,marketing_version) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(mobile) DO UPDATE SET marketing_enabled=$2,marketing_observed_at=$3,marketing_source=$4,marketing_recorded_by=$5,marketing_version=$6,updated_at=now() WHERE whatsapp_preferences.marketing_version IS NULL OR whatsapp_preferences.marketing_observed_at <= $3 OR (NOT $2 AND date_trunc('second',whatsapp_preferences.marketing_observed_at)=date_trunc('second',$3::timestamptz))").bind(mobile).bind(granted).bind(observed_at).bind(source).bind(actor).bind(Uuid::new_v4()).execute(&mut *db).await?;
     if !granted && changed.rows_affected() > 0 {
         sqlx::query("UPDATE notification_recipients r SET status='skipped',error_message='Marketing consent withdrawn.',updated_at=now() FROM notifications n WHERE n.id=r.notification_id AND n.kind='campaign' AND r.normalized_mobile=$1 AND r.status='queued'").bind(mobile).execute(&mut *db).await?;
     }

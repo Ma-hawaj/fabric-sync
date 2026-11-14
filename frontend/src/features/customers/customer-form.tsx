@@ -76,7 +76,7 @@ export function CustomerFormPage({ customerId }: { customerId?: string }) {
 }
 
 function CustomerForm({
-  existing,
+  existing: loadedCustomer,
   marketing: loadedMarketing,
   canEditMarketing,
 }: {
@@ -87,6 +87,7 @@ function CustomerForm({
   // Keep the version paired with the values originally loaded into this form.
   // Background refreshes must not turn a routine edit into a re-subscription.
   const [marketing] = useState(loadedMarketing)
+  const [existing] = useState(loadedCustomer)
   const navigate = useNavigate()
   const createCustomer = useCreateCustomer()
   const updateCustomer = useUpdateCustomer()
@@ -115,7 +116,14 @@ function CustomerForm({
             id: existing.id,
             name: value.name,
             mobileNo: value.mobileNo,
-            whatsappNotificationsEnabled: value.whatsappNotificationsEnabled,
+            ...(value.whatsappNotificationsEnabled !==
+              (existing.whatsappNotificationsEnabled ?? true) ||
+            value.mobileNo !== existing.mobileNo
+              ? {
+                  whatsappNotificationsEnabled:
+                    value.whatsappNotificationsEnabled,
+                }
+              : {}),
             ...(marketingPreference ? { marketingPreference } : {}),
             address: value.address,
           })

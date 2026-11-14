@@ -24,7 +24,7 @@ const SPEC: ListSpec = ListSpec {
             c.customer_number,
             c.name,
             c.mobile_no,
-            c.whatsapp_notifications_enabled,
+            COALESCE(wp.invoice_updates_enabled, true) AS whatsapp_notifications_enabled,
             c.address,
             max(m.measurement_date) AS last_measured_on,
             count(m.id) AS measurement_count,
@@ -75,8 +75,9 @@ const SPEC: ListSpec = ListSpec {
                 '[]'
             ) AS invoices
         FROM customers c
+        LEFT JOIN whatsapp_preferences wp ON wp.mobile = c.whatsapp_mobile
         LEFT JOIN measurements m ON m.customer_id = c.id
-        GROUP BY c.id, c.name, c.mobile_no
+        GROUP BY c.id, c.name, c.mobile_no, wp.invoice_updates_enabled
     "#,
     columns: &[
         ("id", ColumnDef::new("id", ColumnKind::Uuid)),
@@ -299,19 +300,20 @@ pub async fn insert_customer(
     tx: &mut sqlx::PgTransaction<'_>,
     name: &str,
     mobile_no: &str,
-    whatsapp_notifications_enabled: bool,
+    phone_region: &str,
     address: Option<&str>,
 ) -> Result<Uuid, sqlx::Error> {
     let address = address.map(str::trim);
+    let normalized = crate::features::notifications::phone::normalize(mobile_no, phone_region);
     sqlx::query_scalar!(
         r#"
-        INSERT INTO customers (name, mobile_no, whatsapp_notifications_enabled, address)
+        INSERT INTO customers (name, mobile_no, whatsapp_mobile, address)
         VALUES ($1, $2, $3, NULLIF(BTRIM($4), ''))
         RETURNING id
         "#,
         name,
         mobile_no,
-        whatsapp_notifications_enabled,
+        normalized,
         address,
     )
     .fetch_one(&mut **tx)
@@ -339,7 +341,7 @@ pub async fn update_customer(
     customer_id: Uuid,
     name: Option<&str>,
     mobile_no: Option<&str>,
-    whatsapp_notifications_enabled: Option<bool>,
+    whatsapp_mobile: Option<&str>,
     address: Option<&str>,
 ) -> Result<bool, sqlx::Error> {
     let address = address.map(str::trim);
@@ -348,7 +350,7 @@ pub async fn update_customer(
         UPDATE customers
         SET name = COALESCE($2, name),
             mobile_no = COALESCE($3, mobile_no),
-            whatsapp_notifications_enabled = COALESCE($4, whatsapp_notifications_enabled),
+            whatsapp_mobile = $4,
             address = NULLIF(BTRIM(COALESCE($5, address)), '')
         WHERE id = $1
         RETURNING id
@@ -356,7 +358,7 @@ pub async fn update_customer(
         customer_id,
         name,
         mobile_no,
-        whatsapp_notifications_enabled,
+        whatsapp_mobile,
         address,
     )
     .fetch_optional(&mut **tx)

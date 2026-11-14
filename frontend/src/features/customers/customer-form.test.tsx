@@ -306,6 +306,22 @@ describe('saving the customer WhatsApp preference', () => {
     expect(apiClient.patch).not.toHaveBeenCalled()
   })
 
+  it('does not re-enable invoice updates when another shared profile changes the preference', async () => {
+    const client = mount(customer)
+    await act(async () => {
+      client.setQueryData(['customers', customer.id], {
+        ...customer,
+        whatsappNotificationsEnabled: false,
+      })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled())
+    expect(vi.mocked(apiClient.patch).mock.calls[0][1]).not.toHaveProperty(
+      'whatsappNotificationsEnabled',
+    )
+  })
+
   it('does not re-enable promotions when the cache refreshes to an opt-out during a routine edit', async () => {
     const client = mount(customer)
     await act(async () => {

@@ -12,6 +12,61 @@ fn preference(granted: bool, reviewed: Option<&Value>) -> Value {
 }
 
 #[sqlx::test]
+async fn invoice_preferences_are_shared_across_profiles_and_preserve_existing_opt_outs(
+    pool: PgPool,
+) {
+    let state = test_support::state(pool.clone(), None, None).await;
+    let first=service::create_customer(&state,serde_json::from_value(json!({"name":"First profile","mobileNo":"33112233","whatsappNotificationsEnabled":false,"marketingPreference":preference(false,None)})).unwrap(),Some("sales")).await.unwrap();
+    let original = campaigns::service::get_consent(&state, first.id)
+        .await
+        .unwrap();
+    let second = service::create_customer(
+        &state,
+        serde_json::from_value(json!({"name":"Other profile","mobileNo":"+973 3311 2233"}))
+            .unwrap(),
+        Some("sales"),
+    )
+    .await
+    .unwrap();
+    assert!(!second.whatsapp_notifications_enabled);
+    service::update_customer(
+        &state,
+        second.id,
+        serde_json::from_value(json!({"whatsappNotificationsEnabled":true})).unwrap(),
+        Some("production-user"),
+    )
+    .await
+    .unwrap();
+    assert!(
+        service::get_customer(&state, first.id)
+            .await
+            .unwrap()
+            .whatsapp_notifications_enabled
+    );
+    assert!(
+        service::get_customer(&state, second.id)
+            .await
+            .unwrap()
+            .whatsapp_notifications_enabled
+    );
+    let unchanged = campaigns::service::get_consent(&state, first.id)
+        .await
+        .unwrap();
+    assert_eq!(
+        unchanged["consent"]["version"],
+        original["consent"]["version"]
+    );
+    assert_eq!(unchanged["consent"]["granted"], false);
+    let last_actor: String = sqlx::query_scalar(
+        "SELECT invoice_recorded_by FROM whatsapp_preferences WHERE mobile='+97333112233'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(last_actor, "production-user");
+}
+
+#[sqlx::test]
 async fn one_customer_save_persists_both_preferences_and_automatic_audit(pool: PgPool) {
     let state = test_support::state(pool.clone(), None, None).await;
     let customer = service::create_customer(

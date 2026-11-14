@@ -164,7 +164,7 @@ async fn checkbox_preference_uses_server_audit_metadata_only_after_saving(pool: 
     .unwrap();
     assert_eq!(events, 2);
     let invoice_updates: bool =
-        sqlx::query_scalar("SELECT whatsapp_notifications_enabled FROM customers WHERE id=$1")
+        sqlx::query_scalar("SELECT coalesce(p.invoice_updates_enabled,true) FROM customers c LEFT JOIN whatsapp_preferences p ON p.mobile=c.whatsapp_mobile WHERE c.id=$1")
             .bind(customer)
             .fetch_one(&pool)
             .await

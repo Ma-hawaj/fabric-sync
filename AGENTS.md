@@ -83,6 +83,14 @@ local HTTP mocks and Chromium verification uses a dedicated test database.
 
 Marketing campaigns live in `features/campaigns` with phone-scoped consent, immutable approved snapshots, the shared notification delivery pipeline and a shared marketing dispatch clock. Operational setup is in `docs/promotional-campaigns.md`. Promotions require both delivery flags and separate marketing consent; never infer it from invoice-update preferences. Marketing is excluded from the critical Notifications attention list and sidebar count.
 
+Both WhatsApp checkboxes are phone-scoped settings in `whatsapp_preferences`, with
+categorized `whatsapp_preference_events` history. `customers.whatsapp_mobile`
+stores the normalized destination; the API's `whatsappNotificationsEnabled` is
+derived from the shared invoice/pickup setting. Startup completes the configured
+region backfill before serving or dispatching. Keep invoice and marketing values
+independent, preserve shared-number opt-outs, and take the preferences lock before
+invoice locks in notification paths.
+
 ## Frontend architecture
 
 - **Feature-module layout** mirrors the backend: `src/features/<name>/` contains `<name>.tsx` (list page), `components/`, `hooks/`, `types/`, and — where the feature needs them — `lib/` (zod schemas, pricing helpers) and `data/` (static option lists). Form pages sit at the feature root next to the list page (`customer-form.tsx`, `invoice-form.tsx`, `inventory-form.tsx`, `location-form.tsx`). Routes in `src/routes` are thin — they wire a route path to a feature page component.

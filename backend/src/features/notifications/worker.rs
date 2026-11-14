@@ -231,6 +231,25 @@ async fn send(
             error.terminal_status = Some(status);
             return Err(error);
         }
+    } else if let Some(invoice) = notification
+        .invoice_id
+        .filter(|_| notification.kind != "gift_card")
+    {
+        let revision = repository::lock_invoice(&mut tx, invoice)
+            .await
+            .map_err(|_| transport::failure("Could not lock invoice preferences", true, false))?;
+        let enabled = super::preferences::invoice_enabled(&mut tx, &job.normalized_mobile)
+            .await
+            .map_err(|_| transport::failure("Could not check invoice preferences", true, false))?;
+        if !enabled || revision != notification.snapshot.revision {
+            let mut error = transport::failure(
+                "Invoice, phone or WhatsApp preferences changed before submission.",
+                false,
+                false,
+            );
+            error.terminal_status = Some("cancelled");
+            return Err(error);
+        }
     }
     repository::request_started(&mut tx, job)
         .await

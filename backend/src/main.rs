@@ -74,6 +74,8 @@ async fn run() -> Result<(), error::AppError> {
     if config.seed_dev_data {
         seed::run(&db).await?;
     }
+    features::notifications::preferences::initialize(&db, &config.notifications.default_region)
+        .await?;
 
     let token_introspection = auth::TokenIntrospection::discover(&config)
         .await

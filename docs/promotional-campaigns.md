@@ -6,8 +6,13 @@ approve sending or scheduling, cancel pending deliveries and archive templates.
 
 ## Setup
 
-Apply the normal migrations, including `0005_marketing_campaigns.sql`. It is an
-additive migration for existing databases. It grants no marketing consent.
+Apply the normal migrations, including `0005_marketing_campaigns.sql` and
+`0006_phone_whatsapp_preferences.sql`. The latter moves both customer checkboxes
+into `whatsapp_preferences`, keyed by normalized mobile. Startup completes the
+legacy invoice-preference backfill with the configured `WHATSAPP_DEFAULT_REGION`
+before serving requests or starting delivery. Shared-number opt-outs win when
+old records disagree. Existing marketing preferences and history are preserved;
+neither migration grants marketing consent.
 
 Configure the existing WhatsApp Cloud API sender and signed webhook, then add:
 
@@ -51,8 +56,12 @@ Only staff authorized to manage marketing preferences see or can save this field
 Staff do not enter a reason/date: the server records the staff member, current
 time and checkbox source automatically. A saved default is a staff preference
 action, not evidence that the customer explicitly opted in.
-Consent is shared by all customers using that normalized number. New numbers do
-not inherit consent from old numbers. Invoice-update preferences are independent.
+Both checkboxes are shared by all customers using the same normalized number.
+Their values and versions are independent columns in `whatsapp_preferences`;
+`whatsapp_preference_events` records changes by category. The customer table
+stores the normalized destination, not notification preference flags. New numbers
+do not inherit an old number's preferences. Compatibility views retain the prior
+marketing consent/history projection without duplicating data.
 
 Signed inbound unsubscribe button replies, or exact trimmed replies `STOP`,
 `UNSUBSCRIBE`, `إلغاء`, or `الغاء`, withdraw marketing consent. Other conversational
@@ -158,7 +167,8 @@ means Meta accepted the message; delivered/read depend on provider receipts and
 may arrive later. Late or duplicate webhooks cannot downgrade delivery state.
 Cancellation and opt-out cannot recall messages already submitted to Meta.
 
-Back up campaign/consent/asset tables and the shared notification delivery tables
+Back up campaign/template/asset tables, `whatsapp_preferences`,
+`whatsapp_preference_events` and the shared notification delivery tables
 with PostgreSQL. Monitor blocked campaigns,
 uncertain outcomes, queue age relative to deadlines, and provider errors.
 Disabling marketing pauses dispatch while retaining approvals and history;

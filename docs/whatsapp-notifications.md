@@ -44,12 +44,24 @@ All invoice customers are selected by default. The server parses numbers using
 `WHATSAPP_DEFAULT_REGION` and groups them by E.164 mobile, so local and
 international representations of a shared number receive one notification.
 The preview lists the customers sharing each destination. Invalid numbers and
-disabled WhatsApp update preferences appear as exclusions; a disabled customer
-sharing a mobile blocks that destination. Preferences can be changed on the
+disabled WhatsApp update preferences appear as exclusions. Invoice/pickup and
+marketing settings live in one `whatsapp_preferences` record per normalized
+mobile and have independent values and versions. An invoice/pickup opt-out
+applies to every customer sharing that number. Preferences can be changed on the
 customer form and saved with the name and mobile number using **Save**.
 Changing the checkbox or cancelling the form does not persist the preference.
 The preference defaults to enabled for new customers and is independent of
 marketing messages.
+
+Migration `0006_phone_whatsapp_preferences.sql` removes the stored customer
+preference flag. Before serving or dispatching, startup normalizes legacy
+customers with `WHATSAPP_DEFAULT_REGION` and combines their old invoice/pickup
+settings; an opt-out wins when shared records disagree. Existing marketing
+choices are preserved. The API still returns `whatsappNotificationsEnabled`,
+derived from the shared phone setting. Re-run startup after direct database
+imports so imported raw phones acquire their normalized destination links.
+Unparseable legacy contacts remain uncontactable, and their prior setting is
+retained in the categorized history rather than assigned to a guessed number.
 
 ## PDF rendering
 

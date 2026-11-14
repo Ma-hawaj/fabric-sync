@@ -3,6 +3,9 @@ pub(crate) mod attention;
 mod attention_tests;
 mod handlers;
 pub(crate) mod phone;
+pub(crate) mod preferences;
+#[cfg(test)]
+mod preferences_tests;
 pub(crate) mod repository;
 mod routes;
 pub(crate) mod service;
