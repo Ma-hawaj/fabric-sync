@@ -141,8 +141,7 @@ pub struct Config {
     /// an explicit deployment choice and never part of a schema migration.
     pub seed_design_options: bool,
     pub invoice_branding: InvoiceBranding,
-    /// Optional complete gift-card PNG. Blank uses assets/gift-card/artwork.png
-    /// when present, otherwise the existing vector template.
+    /// Optional replacement gift-card PNG. Blank uses the bundled designer artwork.
     pub gift_card_artwork_path: Option<String>,
     /// Directory the built frontend (`vite build` output) is served from.
     /// Unset means `./static` next to the server binary — the Dockerfile

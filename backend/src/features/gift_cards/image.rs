@@ -7,18 +7,14 @@ use qrcode::{Color, QrCode};
 use resvg::{tiny_skia, usvg};
 
 use super::{repository, types::GiftCard};
-use crate::{
-    config::InvoiceBranding, document, error::AppError, features::notifications::service::hash,
-    state::AppState,
-};
+use crate::{document, error::AppError, features::notifications::service::hash, state::AppState};
 
 pub const MIME: &str = "image/png";
 pub const WIDTH: u32 = 1080;
 pub const HEIGHT: u32 = 1920;
 pub const MAX_BYTES: usize = 5 * 1024 * 1024;
 const TEMPLATE: &str = include_str!("../../../templates/gift-card.svg");
-const OVERLAY_TEMPLATE: &str = include_str!("../../../templates/gift-card-overlay.svg");
-const DEFAULT_ARTWORK_PATH: &str = "assets/gift-card/artwork.png";
+const BUNDLED_ARTWORK: &[u8] = include_bytes!("../../../assets/gift-card/artwork.png");
 
 struct Artwork {
     data_url: String,
@@ -34,18 +30,17 @@ impl Artwork {
         })
     }
 
-    fn load(configured_path: Option<&str>) -> Result<Option<Self>, AppError> {
-        let path = configured_path.unwrap_or(DEFAULT_ARTWORK_PATH);
-        match std::fs::read(path) {
-            Ok(bytes) => Self::from_png(&bytes).map(Some),
-            Err(error)
-                if configured_path.is_none() && error.kind() == std::io::ErrorKind::NotFound =>
-            {
-                Ok(None)
+    fn load(configured_path: Option<&str>) -> Result<Self, AppError> {
+        match configured_path {
+            None => Self::from_png(BUNDLED_ARTWORK),
+            Some(path) => {
+                let bytes = std::fs::read(path).map_err(|error| {
+                    AppError::Image(format!(
+                        "Could not read gift card artwork at {path}: {error}"
+                    ))
+                })?;
+                Self::from_png(&bytes)
             }
-            Err(error) => Err(AppError::Image(format!(
-                "Could not read gift card artwork at {path}: {error}"
-            ))),
         }
     }
 }
@@ -71,9 +66,7 @@ fn fonts() -> Arc<usvg::fontdb::Database> {
                 include_bytes!("../../../assets/fonts/DejaVuSans.ttf").as_slice(),
                 include_bytes!("../../../assets/fonts/DejaVuSans-Bold.ttf").as_slice(),
                 include_bytes!("../../../assets/fonts/DejaVuSansMono.ttf").as_slice(),
-                include_bytes!("../../../assets/fonts/thmanyahserifdisplay-Regular.otf").as_slice(),
                 include_bytes!("../../../assets/fonts/thmanyahserifdisplay-Bold.otf").as_slice(),
-                include_bytes!("../../../assets/fonts/thmanyahserifdisplay-Black.otf").as_slice(),
                 include_bytes!("../../../assets/fonts/SpaceGrotesk-Medium.otf").as_slice(),
             ] {
                 db.load_font_data(data.to_vec());
@@ -94,20 +87,7 @@ fn display_line(raw: &str, limit: usize) -> String {
     }
 }
 
-pub(super) fn svg(
-    branding: &InvoiceBranding,
-    card: &GiftCard,
-    on: NaiveDate,
-) -> Result<String, AppError> {
-    svg_for_artwork(branding, card, on, None)
-}
-
-fn svg_for_artwork(
-    branding: &InvoiceBranding,
-    card: &GiftCard,
-    on: NaiveDate,
-    artwork: Option<&Artwork>,
-) -> Result<String, AppError> {
+fn svg(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<String, AppError> {
     let qr = QrCode::new(card.code.as_bytes())
         .map_err(|_| AppError::Image("The gift card code could not be encoded.".into()))?;
     let qr_size = qr.width() + 8;
@@ -119,15 +99,12 @@ fn svg_for_artwork(
             }
         }
     }
-    let brand = display_line(&branding.name_en, 44);
-    let brand_ar = display_line(&branding.name_ar, 44);
-    let phone = display_line(&branding.phone, 24);
     let balance = document::format_amount(card.balance);
     let recipient = display_line(
         card.bought_for
             .as_deref()
             .filter(|n| !n.trim().is_empty())
-            .unwrap_or("Someone special"),
+            .unwrap_or_default(),
         48,
     );
     let rtl = recipient
@@ -143,22 +120,10 @@ fn svg_for_artwork(
     } else {
         ""
     };
-    let logo = branding.logo_data_url.as_deref().filter(|s| {
-        s.starts_with("data:image/png;base64,")
-            || s.starts_with("data:image/jpeg;base64,")
-            || s.starts_with("data:image/webp;base64,")
-    });
     let expiry = card
         .expires_on
         .map(|d| document::format_date(&d))
         .unwrap_or_else(|| "No expiry date".into());
-    let background = match artwork {
-        Some(artwork) => artwork.data_url.clone(),
-        None => format!(
-            "data:image/jpeg;base64,{}",
-            STANDARD.encode(include_bytes!("../../../assets/gift-card/background.jpg"))
-        ),
-    };
     // Split at a hyphen near the middle to fit the designer's narrow code field.
     // Keep the hyphen so the two displayed lines retain every code character.
     let split = (card.code.chars().count() > 10)
@@ -179,38 +144,25 @@ fn svg_for_artwork(
         .map(|line| line.chars().count())
         .max()
         .unwrap_or(1);
-    let template = if artwork.is_some() {
-        OVERLAY_TEMPLATE
-    } else {
-        TEMPLATE
-    };
     let mut env = Environment::new();
     env.set_auto_escape_callback(|_| AutoEscape::Html);
-    env.add_template("gift-card.svg", template)?;
+    env.add_template("gift-card.svg", TEMPLATE)?;
     Ok(env.get_template("gift-card.svg")?.render(context! {
-        brand_size => (840.0 / (brand.chars().count().max(1) as f64 * 0.65)).min(48.0),
-        brand_ar_size => (840.0 / (brand_ar.chars().count().max(1) as f64 * 0.65)).min(40.0),
-        brand, brand_ar, logo, background,
+        background => artwork.data_url.as_str(),
         balance_size => (420.0 / (balance.chars().count().max(1) as f64 * 0.65)).min(94.0),
         balance, currency => document::CURRENCY,
         recipient_size => (840.0 / (recipient.chars().count().max(1) as f64 * 0.65)).min(32.0),
         recipient, recipient_direction => if rtl {"rtl"} else {"ltr"},
         has_recipient => card.bought_for.as_deref().is_some_and(|name| !name.trim().is_empty()),
-        code => card.code, code_size => (480.0 / (card.code.chars().count().max(1) as f64 * 0.61)).min(36.0),
+        code => card.code,
         overlay_code_size => (200.0 / (longest_code_line.max(1) as f64 * 0.61)).min(22.0),
         code_start_y => if code_lines.len() > 1 {1244} else {1262}, code_lines,
-        expiry_size => (290.0 / (expiry.chars().count().max(1) as f64 * 0.6)).min(32.0),
-        phone_size => (440.0 / (phone.chars().count().max(1) as f64 * 0.65)).min(38.0),
-        phone, qr_size, qr_path, expiry, status,
+        qr_size, qr_path, expiry, status,
     })?)
 }
 
-pub(super) fn render(
-    branding: &InvoiceBranding,
-    card: &GiftCard,
-    on: NaiveDate,
-) -> Result<GiftCardImage, AppError> {
-    let svg = svg(branding, card, on)?;
+fn render(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<GiftCardImage, AppError> {
+    let svg = svg(card, on, artwork)?;
     render_svg(card, &svg)
 }
 
@@ -243,18 +195,14 @@ fn render_svg(card: &GiftCard, svg: &str) -> Result<GiftCardImage, AppError> {
 }
 
 pub async fn for_card(state: &AppState, card: &GiftCard) -> Result<GiftCardImage, AppError> {
-    let branding = state.invoice_branding().clone();
     let artwork_path = state.gift_card_artwork_path().map(str::to_owned);
     let card = card.clone();
     let on = chrono::Utc::now()
         .with_timezone(&state.timezone()?)
         .date_naive();
-    tokio::task::spawn_blocking(move || match Artwork::load(artwork_path.as_deref())? {
-        Some(artwork) => render_svg(
-            &card,
-            &svg_for_artwork(&branding, &card, on, Some(&artwork))?,
-        ),
-        None => render(&branding, &card, on),
+    tokio::task::spawn_blocking(move || {
+        let artwork = Artwork::load(artwork_path.as_deref())?;
+        render(&card, on, &artwork)
     })
     .await
     .map_err(|e| AppError::Image(e.to_string()))?
@@ -271,19 +219,8 @@ pub async fn get(state: &AppState, id: uuid::Uuid) -> Result<GiftCardImage, AppE
 mod tests {
     use super::*;
 
-    fn branding() -> InvoiceBranding {
-        InvoiceBranding {
-            name_en: "Fabric Sync".into(),
-            name_ar: "فابريك سينك".into(),
-            vat_number: String::new(),
-            cr_number: String::new(),
-            address_en: String::new(),
-            address_ar: String::new(),
-            phone: String::new(),
-            email: String::new(),
-            logo_data_url: None,
-            template_dir: None,
-        }
+    fn artwork() -> Artwork {
+        Artwork::load(None).unwrap()
     }
     fn card() -> GiftCard {
         GiftCard {
@@ -314,14 +251,14 @@ mod tests {
     #[test]
     fn png_is_deterministic_and_readable_without_system_fonts() {
         let card = card();
-        let first = render(&branding(), &card, today()).unwrap();
-        let second = render(&branding(), &card, today()).unwrap();
+        let first = render(&card, today(), &artwork()).unwrap();
+        let second = render(&card, today(), &artwork()).unwrap();
         let decoded = tiny_skia::Pixmap::decode_png(&first.png).unwrap();
         assert_eq!((decoded.width(), decoded.height()), (WIDTH, HEIGHT));
         assert!(first.png.len() < MAX_BYTES);
         assert_eq!(first.png, second.png);
         assert_eq!(first.sha256, hash(&first.png));
-        let source = svg(&branding(), &card, today()).unwrap();
+        let source = svg(&card, today(), &artwork()).unwrap();
         assert!(source.contains("50.000"));
         assert!(source.contains("أحمد المنصوري"));
         assert!(source.contains(&card.code));
@@ -335,38 +272,34 @@ mod tests {
     fn recipient_markup_is_escaped_and_unusable_cards_are_labelled() {
         let mut card = card();
         card.bought_for = Some("<script>alert(1)</script> & Co".into());
-        let source = svg(&branding(), &card, today()).unwrap();
+        let source = svg(&card, today(), &artwork()).unwrap();
         assert!(!source.contains("<script>"));
         assert!(source.contains("&lt;script&gt;"));
         card.is_active = false;
-        assert!(svg(&branding(), &card, today()).unwrap().contains("VOIDED"));
+        assert!(svg(&card, today(), &artwork()).unwrap().contains("VOIDED"));
         card.is_active = true;
         card.balance = 0.0;
-        assert!(svg(&branding(), &card, today())
+        assert!(svg(&card, today(), &artwork())
             .unwrap()
             .contains("FULLY REDEEMED"));
         card.balance = 50.0;
         card.expires_on = Some("2026-10-23".parse().unwrap());
-        assert!(svg(&branding(), &card, today())
-            .unwrap()
-            .contains("EXPIRED"));
+        assert!(svg(&card, today(), &artwork()).unwrap().contains("EXPIRED"));
     }
 
     #[test]
-    fn image_version_changes_with_branding_and_remaining_balance() {
+    fn image_version_changes_with_artwork_and_remaining_balance() {
         let mut card = card();
-        let original = render(&branding(), &card, today()).unwrap().sha256;
+        let original = render(&card, today(), &artwork()).unwrap().sha256;
         card.balance = 40.0;
-        assert_ne!(
-            original,
-            render(&branding(), &card, today()).unwrap().sha256
-        );
+        assert_ne!(original, render(&card, today(), &artwork()).unwrap().sha256);
         card.balance = 50.0;
-        let mut changed_brand = branding();
-        changed_brand.name_en = "Another tailor".into();
+        let mut changed_pixels = tiny_skia::Pixmap::new(WIDTH, HEIGHT).unwrap();
+        changed_pixels.fill(tiny_skia::Color::WHITE);
+        let changed_artwork = Artwork::from_png(&changed_pixels.encode_png().unwrap()).unwrap();
         assert_ne!(
             original,
-            render(&changed_brand, &card, today()).unwrap().sha256
+            render(&card, today(), &changed_artwork).unwrap().sha256
         );
     }
 
@@ -375,12 +308,7 @@ mod tests {
         use usvg::fontdb::{Family, Query, Weight};
 
         let db = fonts();
-        for (family, weight) in [
-            ("thmanyah serif display", 400),
-            ("thmanyah serif display", 700),
-            ("thmanyah serif display", 900),
-            ("Space Grotesk", 500),
-        ] {
+        for (family, weight) in [("thmanyah serif display", 700), ("Space Grotesk", 500)] {
             let id = db
                 .query(&Query {
                     families: &[Family::Name(family)],
@@ -402,7 +330,7 @@ mod tests {
             "عبدالرحمن عبدالله محمد عبدالعزيز المنصوري الطويل",
         ] {
             card.bought_for = Some(name.into());
-            let source = svg(&branding(), &card, today()).unwrap();
+            let source = svg(&card, today(), &artwork()).unwrap();
             assert!(source.contains("No expiry date"));
             let tree = usvg::Tree::from_str(
                 &source,
@@ -415,8 +343,8 @@ mod tests {
             for (id, left, right) in [
                 ("recipient", 64.0, 1016.0),
                 ("balance", 110.0, 590.0),
-                ("code", 110.0, 590.0),
-                ("expiry", 650.0, 970.0),
+                ("code", 260.0, 470.0),
+                ("expiry", 595.0, 835.0),
                 ("redemption-qr", 64.0, 1016.0),
             ] {
                 let bounds = tree.node_by_id(id).unwrap().abs_bounding_box();
@@ -429,9 +357,9 @@ mod tests {
             }
         }
         card.bought_for = None;
-        assert!(svg(&branding(), &card, today())
+        assert!(!svg(&card, today(), &artwork())
             .unwrap()
-            .contains("Someone special"));
+            .contains("id=\"recipient\""));
     }
 
     #[test]
@@ -449,7 +377,7 @@ mod tests {
         let mut card = card();
         card.balance = 99_999_999.99;
         card.expires_on = None;
-        let source = svg_for_artwork(&branding(), &card, today(), Some(&artwork)).unwrap();
+        let source = svg(&card, today(), &artwork).unwrap();
         assert!(!source.contains("<mask"));
         assert!(!source.contains("Fabric Sync"));
         assert!(!source.contains("Gift Value"));
@@ -505,20 +433,18 @@ mod tests {
         let mut card = card();
         card.bought_for = None;
         card.is_active = false;
-        let source = svg_for_artwork(&branding(), &card, today(), Some(&artwork)).unwrap();
+        let source = svg(&card, today(), &artwork).unwrap();
         assert!(!source.contains("id=\"recipient\""));
         assert!(!source.contains("Someone special"));
         assert!(source.contains("VOIDED"));
         card.is_active = true;
         card.balance = 0.0;
-        assert!(svg_for_artwork(&branding(), &card, today(), Some(&artwork))
+        assert!(svg(&card, today(), &artwork)
             .unwrap()
             .contains("FULLY REDEEMED"));
         card.balance = 50.0;
         card.expires_on = Some("2026-01-01".parse().unwrap());
-        assert!(svg_for_artwork(&branding(), &card, today(), Some(&artwork))
-            .unwrap()
-            .contains("EXPIRED"));
+        assert!(svg(&card, today(), &artwork).unwrap().contains("EXPIRED"));
     }
 
     #[test]

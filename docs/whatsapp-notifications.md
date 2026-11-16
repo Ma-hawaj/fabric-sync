@@ -130,22 +130,21 @@ current preview open for retry; it does not create the invoice again. Skipped
 cards remain available to send later from Gift Cards. Editing an invoice keeps
 the updated-invoice notification flow and does not prompt to resend its cards.
 
-To use a complete designer PNG, add it as
-`backend/assets/gift-card/artwork.png`, or set `GIFT_CARD_ARTWORK_PATH` to a local
-PNG path available to the server. The Docker image includes that artwork
-directory. The PNG contains all fixed artwork, branding, words, and labels;
-`backend/templates/gift-card-overlay.svg` adds only live values, an optional
-recipient, code, expiry, QR, and status. Static image pixels receive no added
-mask, fade, crop, or branding override. See `backend/assets/gift-card/README.md`.
+Gift cards use one rendering path: the complete designer PNG at
+`backend/assets/gift-card/artwork.png`, embedded in the backend binary, with live
+values overlaid by `backend/templates/gift-card.svg`. The PNG supplies all fixed
+artwork, branding, wording, labels, and footer. Only the balance/currency,
+optional recipient, code, expiry, QR, and status are drawn on top. The entire
+source image is fitted to the portrait canvas, with no added mask, fade, crop,
+or branding override. See `backend/assets/gift-card/README.md`.
 
-When no complete artwork file is configured or present, the existing THOBX
-vector design remains active. That mode uses company name, optional
-PNG/JPEG/WebP logo, and phone from the same `COMPANY_*` settings as invoices;
-its footer website is part of `backend/templates/gift-card.svg`. Both modes
-render locally with bundled fonts and require no system fonts, PDF renderer,
-or external image service. `COMPANY_*` settings continue to supply invoice and
-notification-message branding in either mode. Previously approved deliveries
-retain their original immutable PNG bytes.
+`GIFT_CARD_ARTWORK_PATH` optionally selects a replacement PNG available to the
+server; an explicitly configured missing or invalid file reports an error.
+Blank uses the bundled designer PNG. The renderer needs no system fonts, PDF
+renderer, or external image service. `COMPANY_*` settings continue to supply
+invoice and notification-message branding; the gift card's fixed branding comes
+from its image. Previously approved deliveries retain their original immutable
+PNG bytes.
 
 The PNG is attached as the WhatsApp template's image header; the code also stays
 in the message body for copying. It does not attach the buyer's invoice. The

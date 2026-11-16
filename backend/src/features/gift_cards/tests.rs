@@ -7,7 +7,13 @@ use crate::{
     features::{invoices, notifications::worker},
     test_support,
 };
-use axum::{body::Bytes, extract::State, http::StatusCode, routing::post, Json, Router};
+use axum::{
+    body::Bytes,
+    extract::{DefaultBodyLimit, State},
+    http::StatusCode,
+    routing::post,
+    Json, Router,
+};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::sync::{
@@ -57,7 +63,12 @@ async fn mock_server() -> (String, Mock) {
     let mock = Mock::default();
     let app = Router::new()
         .route("/messages", post(send))
-        .route("/media", post(upload))
+        .route(
+            "/media",
+            // Allow the supported PNG size plus multipart headers, rather than
+            // Axum's default 2 MiB limit.
+            post(upload).layer(DefaultBodyLimit::max(image::MAX_BYTES + 16 * 1024)),
+        )
         .route(
             "/forms/chromium/convert/html",
             post(|| async {
