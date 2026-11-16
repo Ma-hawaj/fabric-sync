@@ -6,7 +6,7 @@
   <text id="balance" x="350" y="984" text-anchor="middle" font-family="thmanyah serif display" font-size="{{ balance_size }}" font-weight="700" fill="#907b29">{{ balance }}</text>
   <text x="350" y="1024" text-anchor="middle" font-family="Space Grotesk" font-size="28" font-weight="500" fill="#907b29">{{ currency }}</text>
 
-  <text id="code" x="365" y="1296" font-family="DejaVu Sans Mono" font-size="{{ code_size }}" text-anchor="middle" fill="#1a1a1a">{{ code }}</text>
+  <text id="code" x="365" y="1296" font-family="Space Grotesk" font-size="{{ code_size }}" font-weight="500" text-anchor="middle" fill="#1a1a1a">{{ code }}</text>
   <text id="expiry" x="715" y="1296" text-anchor="middle" font-family="Space Grotesk" font-size="38" font-weight="500" fill="#1a1a1a">{{ expiry }}</text>
 
   {% if status %}

@@ -106,13 +106,32 @@ fn svg(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<String, AppE
         .unwrap_or_else(|| "No expiry date".into());
     let mut env = Environment::new();
     env.set_auto_escape_callback(|_| AutoEscape::Html);
+    // This proportional font needs its actual text width to keep wide codes
+    // on one line without shrinking every code to the widest possible letters.
+    let code_measurement = env.render_str(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920"><text id="code" font-family="Space Grotesk" font-size="38" font-weight="500">{{ code }}</text></svg>"#,
+        context! {code => card.code},
+    )?;
+    let code_tree = usvg::Tree::from_str(
+        &code_measurement,
+        &usvg::Options {
+            fontdb: fonts(),
+            ..Default::default()
+        },
+    )
+    .map_err(|e| AppError::Image(e.to_string()))?;
+    let code_width = code_tree
+        .node_by_id("code")
+        .map(|node| node.abs_bounding_box().width())
+        .unwrap_or(1.0);
+    let code_size = 38.0 * (400.0 / code_width.max(1.0)).min(1.0);
     env.add_template("gift-card.svg", TEMPLATE)?;
     Ok(env.get_template("gift-card.svg")?.render(context! {
         background => artwork.data_url.as_str(),
         balance_size => (420.0 / (balance.chars().count().max(1) as f64 * 0.65)).min(94.0),
         balance, currency => document::CURRENCY,
         code => card.code,
-        code_size => (400.0 / (card.code.chars().count().max(1) as f64 * 0.61)).min(38.0),
+        code_size,
         qr_size, qr_path, expiry, status,
     })?)
 }
@@ -286,6 +305,8 @@ mod tests {
         card.expires_on = None;
         for code in [
             "GC-7KMP-4RWT-9DXH",
+            "GC-WWWW-WWWW-WWWW",
+            "GC-MMMM-MMMM-MMMM",
             "GC-1",
             "GC-7KMP-4RWT-9DXH-7KMP-4RWT-9DXH",
         ] {

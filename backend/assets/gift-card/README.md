@@ -23,10 +23,11 @@ reports an error. Blank uses the bundled artwork. Updating the bundled PNG
 requires a rebuild; changing a mounted replacement affects new previews and
 downloads. Approved deliveries retain their immutable attachment bytes.
 
-The code and expiry are shown in larger text below their labels, without guide
-lines. The complete code stays on one line and scales down for unusually long
-codes. Customer and recipient names do not appear on the image. The QR sits
-beside the wax seal. Thmanyah Serif Display Bold (supplied with the design),
+The code and expiry use Space Grotesk Medium in larger text below their labels,
+without guide lines. The complete code stays on one line and scales down to fit
+when its measured text width exceeds the field. Customer and recipient names
+do not appear on the image. The QR sits beside the wax seal.
+Thmanyah Serif Display Bold (supplied with the design),
 Space Grotesk Medium, and the existing DejaVu fonts are bundled for variable
 text. Space Grotesk's source details and SIL Open Font License are alongside
 its font.
