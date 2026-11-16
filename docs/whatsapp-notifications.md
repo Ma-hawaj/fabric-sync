@@ -114,7 +114,7 @@ optional and separate from the buyer. Staff can correct these details through
 cannot be changed there.
 
 Choose **Send via WhatsApp** on a gift card to preview the destination and exact
-message, then approve Send. A branded 1200×720 PNG shows the recipient, available
+message, then approve Send. A branded 1080×1920 portrait PNG shows the recipient, available
 balance, expiry, redeemable code, and a QR code containing the same code. The
 preview includes the exact image to approve and a PNG download link. **Download
 image** on the Gift Cards list also works independently of WhatsApp setup and
@@ -130,10 +130,22 @@ current preview open for retry; it does not create the invoice again. Skipped
 cards remain available to send later from Gift Cards. Editing an invoice keeps
 the updated-invoice notification flow and does not prompt to resend its cards.
 
-The server renders PNGs locally from the bundled SVG and licensed DejaVu fonts,
-including Arabic text shaping, without requiring the PDF renderer or an external
-image service. Company name and optional PNG/JPEG/WebP logo come from the same
-`COMPANY_*` branding settings used for invoices.
+To use a complete designer PNG, add it as
+`backend/assets/gift-card/artwork.png`, or set `GIFT_CARD_ARTWORK_PATH` to a local
+PNG path available to the server. The Docker image includes that artwork
+directory. The PNG contains all fixed artwork, branding, words, and labels;
+`backend/templates/gift-card-overlay.svg` adds only live values, an optional
+recipient, code, expiry, QR, and status. Static image pixels receive no added
+mask, fade, crop, or branding override. See `backend/assets/gift-card/README.md`.
+
+When no complete artwork file is configured or present, the existing THOBX
+vector design remains active. That mode uses company name, optional
+PNG/JPEG/WebP logo, and phone from the same `COMPANY_*` settings as invoices;
+its footer website is part of `backend/templates/gift-card.svg`. Both modes
+render locally with bundled fonts and require no system fonts, PDF renderer,
+or external image service. `COMPANY_*` settings continue to supply invoice and
+notification-message branding in either mode. Previously approved deliveries
+retain their original immutable PNG bytes.
 
 The PNG is attached as the WhatsApp template's image header; the code also stays
 in the message body for copying. It does not attach the buyer's invoice. The

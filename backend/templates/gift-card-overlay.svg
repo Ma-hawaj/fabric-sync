@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+  <!-- The complete designer PNG is authoritative for all fixed artwork and text. -->
+  <image id="artwork" x="0" y="0" width="1080" height="1920" href="{{ background }}" preserveAspectRatio="xMidYMid meet"/>
+
+  {% if has_recipient %}
+  <text id="recipient" x="540" y="858" text-anchor="middle" direction="{{ recipient_direction }}" font-family="thmanyah serif display" font-size="{{ recipient_size }}" font-weight="700" fill="#907b29">{{ recipient }}</text>
+  {% endif %}
+  <text id="balance" x="350" y="984" text-anchor="middle" font-family="thmanyah serif display" font-size="{{ balance_size }}" font-weight="700" fill="#907b29">{{ balance }}</text>
+  <text x="350" y="1024" text-anchor="middle" font-family="Space Grotesk" font-size="28" font-weight="500" fill="#907b29">{{ currency }}</text>
+
+  <g id="code" aria-label="{{ code }}" font-family="DejaVu Sans Mono" font-size="{{ overlay_code_size }}" text-anchor="middle" fill="#1a1a1a">
+    {% for line in code_lines %}
+    <text x="365" y="{{ code_start_y + loop.index0 * 24 }}">{{ line }}</text>
+    {% endfor %}
+  </g>
+  <text id="expiry" x="715" y="1262" text-anchor="middle" font-family="Space Grotesk" font-size="26" font-weight="500" fill="#1a1a1a">{{ expiry }}</text>
+
+  {% if status %}
+  <g id="card-status">
+    <rect x="180" y="1330" width="720" height="64" rx="12" fill="#fff7ee" stroke="#9c2e24" stroke-width="2"/>
+    <text x="540" y="1373" text-anchor="middle" font-family="DejaVu Sans" font-size="32" font-weight="bold" fill="#9c2e24">{{ status }}</text>
+  </g>
+  {% endif %}
+
+  <g id="redemption-qr">
+    <rect x="786" y="1440" width="216" height="216" rx="12" fill="#fff"/>
+    <svg x="792" y="1446" width="204" height="204" viewBox="0 0 {{ qr_size }} {{ qr_size }}">
+      <rect width="{{ qr_size }}" height="{{ qr_size }}" fill="#fff"/>
+      <path d="{{ qr_path }}" fill="#1a1a1a"/>
+    </svg>
+  </g>
+</svg>

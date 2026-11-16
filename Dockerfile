@@ -82,6 +82,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && rm -rf /var/lib/apt/lists/
 COPY --from=backend /src/backend/target/release/fabric_sync /app/fabric-sync
 COPY --from=backend /src/backend/assets/fonts/LICENSE.txt /app/licenses/DejaVu-fonts.txt
+COPY --from=backend /src/backend/assets/fonts/SpaceGrotesk-OFL.txt /app/licenses/SpaceGrotesk-OFL.txt
+COPY --from=backend /src/backend/assets/gift-card /app/assets/gift-card
 COPY --from=frontend /app/frontend/dist /app/static
 
 ENV PORT=8000 \
