@@ -1,18 +1,18 @@
 # THOBX gift card artwork
 
-`artwork.png` is the complete designer PNG supplied as `thobx - gift - lower.png`
+`artwork.png` is the complete designer PNG supplied as `thobx - gift - no lines.png`
 in the uploaded RAR archive. The extracted bytes are preserved unchanged:
 
 - Original size: 1082 × 1922 px, RGB PNG.
-- SHA-256: `72bb920bddb45f7726b013911e415ac40942bbdcbe774e783a8a5a88e253c573`.
+- SHA-256: `aa5e6b06c0e95d6e0e94153bd925620f448611e4e19811010934275ee8660434`.
 
 The image includes the logo, fade, Arabic and English wording, labels, seal, and
 footer. It is embedded in the backend binary and used by default in every
 working directory. There is one artwork rendering path: the PNG plus variable
 overlays in `backend/templates/gift-card.svg`.
 
-Only balance/currency, an optional recipient, the full card code, expiry, QR,
-and unusable-card status are rendered on top. The complete source image is
+Only balance/currency, the full card code, expiry, QR, and unusable-card status
+are rendered on top. The complete source image is
 fitted to a 1080 × 1920 output with no crop, mask, additional fade, or fixed-text
 replacement. The gift card's static company branding comes from the PNG;
 `COMPANY_*` settings still govern invoices and notification messages.
@@ -23,8 +23,10 @@ reports an error. Blank uses the bundled artwork. Updating the bundled PNG
 requires a rebuild; changing a mounted replacement affects new previews and
 downloads. Approved deliveries retain their immutable attachment bytes.
 
-Codes wrap at a hyphen into two lines inside the narrow Gift # field, retaining
-every code character. The QR sits beside the wax seal. Thmanyah Serif Display
-Bold (supplied with the design), Space Grotesk Medium, and the existing DejaVu
-fonts are bundled for variable text and Arabic names. Space Grotesk's source
-details and SIL Open Font License are alongside its font.
+The code and expiry are shown in larger text below their labels, without guide
+lines. The complete code stays on one line and scales down for unusually long
+codes. Customer and recipient names do not appear on the image. The QR sits
+beside the wax seal. Thmanyah Serif Display Bold (supplied with the design),
+Space Grotesk Medium, and the existing DejaVu fonts are bundled for variable
+text. Space Grotesk's source details and SIL Open Font License are alongside
+its font.

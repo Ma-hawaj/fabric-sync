@@ -114,7 +114,7 @@ optional and separate from the buyer. Staff can correct these details through
 cannot be changed there.
 
 Choose **Send via WhatsApp** on a gift card to preview the destination and exact
-message, then approve Send. A branded 1080×1920 portrait PNG shows the recipient, available
+message, then approve Send. A branded 1080×1920 portrait PNG shows the available
 balance, expiry, redeemable code, and a QR code containing the same code. The
 preview includes the exact image to approve and a PNG download link. **Download
 image** on the Gift Cards list also works independently of WhatsApp setup and
@@ -134,9 +134,11 @@ Gift cards use one rendering path: the complete designer PNG at
 `backend/assets/gift-card/artwork.png`, embedded in the backend binary, with live
 values overlaid by `backend/templates/gift-card.svg`. The PNG supplies all fixed
 artwork, branding, wording, labels, and footer. Only the balance/currency,
-optional recipient, code, expiry, QR, and status are drawn on top. The entire
-source image is fitted to the portrait canvas, with no added mask, fade, crop,
-or branding override. See `backend/assets/gift-card/README.md`.
+code, expiry, QR, and status are drawn on top. Customer and recipient names do
+not appear on the image. The larger code and expiry sit below their labels,
+with the full code on one line. The entire source image is fitted to the
+portrait canvas, with no added mask, fade, crop, or branding override. See
+`backend/assets/gift-card/README.md`.
 
 `GIFT_CARD_ARTWORK_PATH` optionally selects a replacement PNG available to the
 server; an explicitly configured missing or invalid file reports an error.

@@ -78,15 +78,6 @@ fn fonts() -> Arc<usvg::fontdb::Database> {
         .clone()
 }
 
-fn display_line(raw: &str, limit: usize) -> String {
-    let text = raw.split_whitespace().collect::<Vec<_>>().join(" ");
-    if text.chars().count() > limit {
-        format!("{}…", text.chars().take(limit - 1).collect::<String>())
-    } else {
-        text
-    }
-}
-
 fn svg(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<String, AppError> {
     let qr = QrCode::new(card.code.as_bytes())
         .map_err(|_| AppError::Image("The gift card code could not be encoded.".into()))?;
@@ -100,17 +91,6 @@ fn svg(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<String, AppE
         }
     }
     let balance = document::format_amount(card.balance);
-    let recipient = display_line(
-        card.bought_for
-            .as_deref()
-            .filter(|n| !n.trim().is_empty())
-            .unwrap_or_default(),
-        48,
-    );
-    let rtl = recipient
-        .chars()
-        .find(|c| c.is_alphabetic())
-        .is_some_and(|c| matches!(c as u32, 0x0590..=0x08ff | 0xfb1d..=0xfdff | 0xfe70..=0xfeff));
     let status = if !card.is_active {
         "VOIDED"
     } else if card.balance <= 0.0 {
@@ -124,26 +104,6 @@ fn svg(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<String, AppE
         .expires_on
         .map(|d| document::format_date(&d))
         .unwrap_or_else(|| "No expiry date".into());
-    // Split at a hyphen near the middle to fit the designer's narrow code field.
-    // Keep the hyphen so the two displayed lines retain every code character.
-    let split = (card.code.chars().count() > 10)
-        .then(|| {
-            card.code
-                .match_indices('-')
-                .map(|(index, _)| index + 1)
-                .filter(|index| *index < card.code.len())
-                .min_by_key(|index| index.abs_diff(card.code.len() / 2))
-        })
-        .flatten();
-    let code_lines = match split {
-        Some(index) => vec![&card.code[..index], &card.code[index..]],
-        None => vec![card.code.as_str()],
-    };
-    let longest_code_line = code_lines
-        .iter()
-        .map(|line| line.chars().count())
-        .max()
-        .unwrap_or(1);
     let mut env = Environment::new();
     env.set_auto_escape_callback(|_| AutoEscape::Html);
     env.add_template("gift-card.svg", TEMPLATE)?;
@@ -151,12 +111,8 @@ fn svg(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<String, AppE
         background => artwork.data_url.as_str(),
         balance_size => (420.0 / (balance.chars().count().max(1) as f64 * 0.65)).min(94.0),
         balance, currency => document::CURRENCY,
-        recipient_size => (840.0 / (recipient.chars().count().max(1) as f64 * 0.65)).min(32.0),
-        recipient, recipient_direction => if rtl {"rtl"} else {"ltr"},
-        has_recipient => card.bought_for.as_deref().is_some_and(|name| !name.trim().is_empty()),
         code => card.code,
-        overlay_code_size => (200.0 / (longest_code_line.max(1) as f64 * 0.61)).min(22.0),
-        code_start_y => if code_lines.len() > 1 {1244} else {1262}, code_lines,
+        code_size => (400.0 / (card.code.chars().count().max(1) as f64 * 0.61)).min(38.0),
         qr_size, qr_path, expiry, status,
     })?)
 }
@@ -260,7 +216,7 @@ mod tests {
         assert_eq!(first.sha256, hash(&first.png));
         let source = svg(&card, today(), &artwork()).unwrap();
         assert!(source.contains("50.000"));
-        assert!(source.contains("أحمد المنصوري"));
+        assert!(!source.contains("أحمد المنصوري"));
         assert!(source.contains(&card.code));
         assert!(source.contains("31-12-2026"));
         if let Ok(output) = std::env::var("GIFT_CARD_IMAGE_TEST_OUTPUT") {
@@ -269,12 +225,15 @@ mod tests {
     }
 
     #[test]
-    fn recipient_markup_is_escaped_and_unusable_cards_are_labelled() {
+    fn customer_names_are_not_printed_and_unusable_cards_are_labelled() {
         let mut card = card();
+        let original = svg(&card, today(), &artwork()).unwrap();
         card.bought_for = Some("<script>alert(1)</script> & Co".into());
+        card.customer_name = Some("Private buyer name".into());
         let source = svg(&card, today(), &artwork()).unwrap();
+        assert_eq!(source, original);
         assert!(!source.contains("<script>"));
-        assert!(source.contains("&lt;script&gt;"));
+        assert!(!source.contains("Private buyer name"));
         card.is_active = false;
         assert!(svg(&card, today(), &artwork()).unwrap().contains("VOIDED"));
         card.is_active = true;
@@ -321,17 +280,19 @@ mod tests {
     }
 
     #[test]
-    fn long_recipients_and_large_balances_fit_the_portrait_fields() {
+    fn single_line_codes_and_large_balances_fit_the_portrait_fields() {
         let mut card = card();
         card.balance = 99_999_999.99;
         card.expires_on = None;
-        for name in [
-            "Alexander Christopher Montgomery-Worthington III",
-            "عبدالرحمن عبدالله محمد عبدالعزيز المنصوري الطويل",
+        for code in [
+            "GC-7KMP-4RWT-9DXH",
+            "GC-1",
+            "GC-7KMP-4RWT-9DXH-7KMP-4RWT-9DXH",
         ] {
-            card.bought_for = Some(name.into());
+            card.code = code.into();
             let source = svg(&card, today(), &artwork()).unwrap();
             assert!(source.contains("No expiry date"));
+            assert!(source.contains(&format!(">{code}</text>")));
             let tree = usvg::Tree::from_str(
                 &source,
                 &usvg::Options {
@@ -341,25 +302,20 @@ mod tests {
             )
             .unwrap();
             for (id, left, right) in [
-                ("recipient", 64.0, 1016.0),
                 ("balance", 110.0, 590.0),
-                ("code", 260.0, 470.0),
-                ("expiry", 595.0, 835.0),
+                ("code", 145.0, 585.0),
+                ("expiry", 575.0, 855.0),
                 ("redemption-qr", 64.0, 1016.0),
             ] {
                 let bounds = tree.node_by_id(id).unwrap().abs_bounding_box();
                 assert!(bounds.width() > 0.0, "Empty {id}");
                 assert!(
                     bounds.left() >= left && bounds.right() <= right,
-                    "{id} exceeds its field for {name}: {bounds:?}"
+                    "{id} exceeds its field for {code}: {bounds:?}"
                 );
                 assert!(bounds.top() >= 0.0 && bounds.bottom() <= HEIGHT as f32);
             }
         }
-        card.bought_for = None;
-        assert!(!svg(&card, today(), &artwork())
-            .unwrap()
-            .contains("id=\"recipient\""));
     }
 
     #[test]
@@ -383,8 +339,7 @@ mod tests {
         assert!(!source.contains("Gift Value"));
         assert!(source.contains("No expiry date"));
         assert!(source.contains(&card.code));
-        assert!(source.contains("GC-7KMP-"));
-        assert!(source.contains("4RWT-9DXH"));
+        assert!(source.contains(&format!(">{}</text>", card.code)));
         let tree = usvg::Tree::from_str(
             &source,
             &usvg::Options {
@@ -393,11 +348,10 @@ mod tests {
             },
         )
         .unwrap();
-        for (id, left, right, bottom) in [
-            ("recipient", 64.0, 1016.0, 900.0),
-            ("balance", 110.0, 590.0, 1058.0),
-            ("code", 260.0, 470.0, 1274.0),
-            ("expiry", 595.0, 835.0, 1274.0),
+        for (id, left, right, top, bottom) in [
+            ("balance", 110.0, 590.0, 900.0, 1058.0),
+            ("code", 145.0, 585.0, 1250.0, 1310.0),
+            ("expiry", 575.0, 855.0, 1250.0, 1310.0),
         ] {
             let bounds = tree.node_by_id(id).unwrap().abs_bounding_box();
             assert!(bounds.width() > 0.0, "Empty {id}");
@@ -405,7 +359,13 @@ mod tests {
                 bounds.left() >= left && bounds.right() <= right,
                 "{id}: {bounds:?}"
             );
-            assert!(bounds.bottom() <= bottom, "{id}: {bounds:?}");
+            assert!(
+                bounds.top() >= top && bounds.bottom() <= bottom,
+                "{id}: {bounds:?}"
+            );
+            if id != "balance" {
+                assert!(bounds.height() > 24.0, "{id} is too small: {bounds:?}");
+            }
         }
         let rendered = render_svg(&card, &source).unwrap();
         let decoded = tiny_skia::Pixmap::decode_png(&rendered.png).unwrap();
@@ -426,12 +386,15 @@ mod tests {
     }
 
     #[test]
-    fn fixed_png_omits_missing_recipient_and_labels_unusable_cards() {
+    fn fixed_png_omits_recipient_details_and_labels_unusable_cards() {
         let mut pixels = tiny_skia::Pixmap::new(9, 16).unwrap();
         pixels.fill(tiny_skia::Color::WHITE);
         let artwork = Artwork::from_png(&pixels.encode_png().unwrap()).unwrap();
         let mut card = card();
+        let with_recipient = svg(&card, today(), &artwork).unwrap();
+        assert!(!with_recipient.contains("أحمد المنصوري"));
         card.bought_for = None;
+        assert_eq!(svg(&card, today(), &artwork).unwrap(), with_recipient);
         card.is_active = false;
         let source = svg(&card, today(), &artwork).unwrap();
         assert!(!source.contains("id=\"recipient\""));
