@@ -495,20 +495,6 @@ mod tests {
                 "Artwork changed at {x},{y}"
             );
         }
-
-        if let (Ok(input), Ok(output)) = (
-            std::env::var("GIFT_CARD_SAMPLE_ARTWORK"),
-            std::env::var("GIFT_CARD_SAMPLE_OUTPUT"),
-        ) {
-            let artwork = Artwork::load(Some(&input)).unwrap().unwrap();
-            let mut sample = self::card();
-            sample.code = "GC-DEMO-0000-0000".into();
-            sample.initial_amount = 50.0;
-            sample.balance = 50.0;
-            sample.expires_on = Some("2027-12-31".parse().unwrap());
-            let source = svg_for_artwork(&branding(), &sample, today(), Some(&artwork)).unwrap();
-            std::fs::write(output, render_svg(&sample, &source).unwrap().png).unwrap();
-        }
     }
 
     #[test]
