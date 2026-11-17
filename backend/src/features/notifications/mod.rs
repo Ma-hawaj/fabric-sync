@@ -103,5 +103,7 @@ impl Config {
     }
 }
 
+pub mod auto_reply;
+mod auto_reply_repository;
 #[cfg(test)]
 mod tests;

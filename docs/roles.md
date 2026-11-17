@@ -111,6 +111,7 @@ all protected routes have exactly one policy entry per method.
 | Gift card create/read/send | sales |
 | Gift card recipient changes, void/restore | manager |
 | Invoice notifications and stored documents | sales |
+| Automatic WhatsApp reply settings | manager only (also admin) |
 | Staff lookup | sales, production; email and role/group details removed |
 | Full staff directory | manager |
 | Own preferences | any authenticated identity |

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { parseAsInteger, parseAsStringLiteral, useQueryStates } from 'nuqs'
 import { RefreshCwIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { PermissionGuard } from '@/components/permission-guard'
+import { AutoReplySettingsButton } from './auto-reply-settings'
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { useDataTable } from '@/hooks/use-data-table'
@@ -117,17 +119,24 @@ export function NotificationsPage() {
               notification type.
             </p>
           </div>
-          <Button
-            variant="outline"
-            disabled={query.isFetching || summary.isFetching}
-            onClick={() => {
-              void query.refetch()
-              void summary.refetch()
-            }}
-          >
-            <RefreshCwIcon className={query.isFetching ? 'animate-spin' : ''} />
-            Refresh
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <PermissionGuard method="PUT" path="/notifications/auto-reply">
+              <AutoReplySettingsButton />
+            </PermissionGuard>
+            <Button
+              variant="outline"
+              disabled={query.isFetching || summary.isFetching}
+              onClick={() => {
+                void query.refetch()
+                void summary.refetch()
+              }}
+            >
+              <RefreshCwIcon
+                className={query.isFetching ? 'animate-spin' : ''}
+              />
+              Refresh
+            </Button>
+          </div>
         </div>
         <div
           className="flex flex-wrap gap-2"

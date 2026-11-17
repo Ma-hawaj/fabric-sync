@@ -346,6 +346,16 @@
   },
   {
     "method": "GET",
+    "path": "/notifications/auto-reply",
+    "roles": ["manager"]
+  },
+  {
+    "method": "PUT",
+    "path": "/notifications/auto-reply",
+    "roles": ["manager"]
+  },
+  {
+    "method": "GET",
     "path": "/invoices/:id/notifications",
     "roles": ["sales"]
   },

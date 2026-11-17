@@ -225,6 +225,68 @@ Configure Meta's webhook at `https://YOUR_APP/api/webhooks/whatsapp`, with
 `WHATSAPP_APP_SECRET` for raw-body HMAC verification. Subscribe to message
 statuses. These routes authenticate Meta rather than staff OAuth tokens.
 
+## Automatic replies on a separate notification number
+
+A dedicated Cloud API number can send notifications while staff keep using the
+shop's main WhatsApp Business number. Coexistence is not needed for that setup.
+Customers can still reply to the notification number.
+
+Managers and admins can open **Notifications → Automatic reply** to configure:
+
+- **Enable automatic replies**, initially off.
+- **Reply message**, up to 4,096 characters. Include the shop's main number or a
+  contact link; no number or business-specific wording is inserted automatically.
+- **Add button**, optionally attach a link with an editable label and destination.
+  Use a complete HTTP/HTTPS URL, such as `https://wa.me/97333112233` for the shop's
+  main WhatsApp number, or a website URL. **Remove button** returns to a text-only
+  reply. WhatsApp's free-form CTA URL format supports one link button per message,
+  labels up to 20 characters, and body text up to 1,024 characters when a button
+  is attached. Invalid settings are rejected before saving; text is never truncated.
+- **Hours between replies per customer**, initially 24; allowed range 1–168.
+- **Maximum replies per minute**, initially 10 across all workers; allowed range 1–60.
+
+For example: “This number sends automated notifications. For assistance, please
+WhatsApp our shop at +973 YOUR_NUMBER.” Replace the example before enabling it.
+The saved text and optional button are sent as a single free-form response to an
+incoming customer message; it does not require a template. Existing invoice and gift-card sends still use
+approved previews and templates. Automatic replies are separately authorized by
+the enabled settings and do not create invoice notifications or change invoices.
+Adding a button does not send an extra message or bypass the cooldown or overall
+rate limit. Button settings are frozen when the worker claims a reply, along with
+the message text. **Turn off now** preserves the saved button configuration.
+
+Settings are stored in PostgreSQL and take effect without a restart. **Turn off
+now** works even with unsaved form edits and cancels every waiting reply. A reply
+whose submission has already started may still arrive. The existing
+`WHATSAPP_DELIVERY_ENABLED=false` also disables all sending (restart required for
+environment-variable changes). Configure the sender, access token, signed webhook,
+and delivery before enabling automatic replies. Subscribe to Meta's **messages**
+webhook field, which carries incoming messages and delivery statuses.
+
+Replies run in a durable queue outside the webhook request. Message IDs prevent
+duplicates even if Meta retries the same message in a different webhook envelope.
+Per-customer cooldowns and the rolling one-minute cap count submission attempts,
+including failed or uncertain attempts, and survive restarts and multiple workers.
+Only one reply per customer can wait or submit at once. Excess customers wait
+behind the overall limit; excess messages from the same customer are suppressed.
+Increasing a cooldown also applies to waiting replies.
+
+Only supported incoming customer messages for the configured sender trigger a
+reply. Status events, reactions, system messages, unsupported messages, messages
+from the sender itself, and coexistence/history echoes do not. Username-only
+customers can receive replies using Meta's business-scoped user ID. Messages older
+than 23 hours are ignored, and waiting replies expire at the same age to leave a
+margin inside Meta's 24-hour service window. Messages seen while disabled are
+remembered and are not replayed when re-enabled.
+
+Each automatic reply is submitted at most once. Timeouts, missing message IDs,
+and interrupted workers are marked **uncertain** and never retried automatically,
+because Meta may have received the message. Failed attempts also retain the
+cooldown. Failures are logged without message contents. Queue/attempt records
+are kept for `WHATSAPP_WEBHOOK_RETENTION_DAYS` (at least eight days); inactive
+cooldown records expire after eight days. This feature redirects replies; it
+does not provide an inbox or forward customer messages to the shop's main number.
+
 ## Delivery and resending
 
 ### Notifications attention queue

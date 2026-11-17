@@ -1083,6 +1083,7 @@ pub async fn cleanup(db: &PgPool, config: &super::Config) -> Result<(), AppError
     .bind(config.webhook_retention_days)
     .execute(&mut *tx)
     .await?;
+    super::auto_reply_repository::cleanup(&mut tx, config.webhook_retention_days).await?;
     tx.commit().await?;
     Ok(())
 }
