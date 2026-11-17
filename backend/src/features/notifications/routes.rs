@@ -11,6 +11,10 @@ pub fn router() -> Router<AppState> {
         .route("/notifications/summary", get(handlers::attention_summary))
         .route("/notifications/capabilities", get(handlers::capabilities))
         .route(
+            "/notifications/auto-reply",
+            get(handlers::auto_reply_settings).put(handlers::update_auto_reply),
+        )
+        .route(
             "/invoices/:id/notifications",
             get(handlers::history).post(handlers::prepare),
         )

@@ -614,7 +614,7 @@ async fn webhooks_arriving_before_message_id_persistence_are_retained_and_order_
     let event = |status: &str| {
         serde_json::to_vec(&json!({"entry":[{"changes":[{"value":{"statuses":[{"id":"wamid.test.1","status":status}]}}]}]})).unwrap()
     };
-    worker::receive_webhook(&pool, &event("delivered"))
+    worker::receive_webhook(&state, &event("delivered"))
         .await
         .unwrap();
     worker::tick(&state).await.unwrap();
@@ -622,10 +622,10 @@ async fn webhooks_arriving_before_message_id_persistence_are_retained_and_order_
         service::get(&state, draft.id).await.unwrap().recipients[0].status,
         "delivered"
     );
-    worker::receive_webhook(&pool, &event("delivered"))
+    worker::receive_webhook(&state, &event("delivered"))
         .await
         .unwrap();
-    worker::receive_webhook(&pool, &event("sent"))
+    worker::receive_webhook(&state, &event("sent"))
         .await
         .unwrap();
     assert_eq!(

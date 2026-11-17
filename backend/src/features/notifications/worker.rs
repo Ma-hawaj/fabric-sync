@@ -1,7 +1,6 @@
 use hmac::{Hmac, Mac};
 use serde_json::{json, Value};
 use sha2::Sha256;
-use sqlx::PgPool;
 use subtle::ConstantTimeEq;
 
 use super::{
@@ -11,10 +10,10 @@ use super::{
 use crate::{error::AppError, state::AppState};
 
 #[derive(Debug)]
-struct Failure {
-    message: String,
+pub(super) struct Failure {
+    pub(super) message: String,
     retry: bool,
-    uncertain: bool,
+    pub(super) uncertain: bool,
     retry_after: i64,
 }
 
@@ -30,6 +29,9 @@ pub fn start(state: AppState) {
                 }
                 maintenance = tokio::time::Instant::now() + std::time::Duration::from_secs(3600);
             }
+            if let Err(error) = super::auto_reply::tick(&state).await {
+                tracing::error!(error=?error, "WhatsApp automatic reply worker failed");
+            }
             if let Err(error) = tick(&state).await {
                 tracing::error!(error=?error,"notification worker failed");
             }
@@ -41,7 +43,7 @@ pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
     // A dead worker may have submitted externally without persisting the ID.
     // Never replay an expired submission lease automatically.
     repository::recover_leases(state.db()).await?;
-    process_webhooks(state.db()).await?;
+    process_webhooks(state).await?;
     if !state.notifications().can_send() {
         return Ok(());
     }
@@ -140,7 +142,7 @@ pub(crate) async fn tick(state: &AppState) -> Result<(), AppError> {
             .await?
         }
     }
-    process_webhooks(state.db()).await?;
+    process_webhooks(state).await?;
     Ok(())
 }
 
@@ -183,13 +185,7 @@ async fn send(
         .access_token
         .as_deref()
         .ok_or_else(|| failure("WhatsApp is not configured", false, false))?;
-    let root = format!(
-        "https://graph.facebook.com/{}/{}",
-        config.api_version,
-        config.phone_number_id.as_deref().unwrap_or_default()
-    );
-    #[cfg(test)]
-    let root = config.test_graph_url.clone().unwrap_or(root);
+    let root = graph_root(config);
     let mut components = vec![
         json!({"type":"body","parameters":notification.snapshot.parameters.iter().map(|value|json!({"type":"text","text":value})).collect::<Vec<_>>()}),
     ];
@@ -268,7 +264,18 @@ fn failure(message: &str, retry: bool, uncertain: bool) -> Failure {
     }
 }
 
-async fn graph_response(
+pub(super) fn graph_root(config: &super::Config) -> String {
+    let root = format!(
+        "https://graph.facebook.com/{}/{}",
+        config.api_version,
+        config.phone_number_id.as_deref().unwrap_or_default()
+    );
+    #[cfg(test)]
+    let root = config.test_graph_url.clone().unwrap_or(root);
+    root
+}
+
+pub(super) async fn graph_response(
     response: reqwest::Response,
     message_request: bool,
 ) -> Result<Value, Failure> {
@@ -337,16 +344,18 @@ fn next_status(current: &str, incoming: &str) -> Option<&'static str> {
     }
 }
 
-pub async fn receive_webhook(db: &PgPool, body: &[u8]) -> Result<(), AppError> {
+pub async fn receive_webhook(state: &AppState, body: &[u8]) -> Result<(), AppError> {
     let payload: Value = serde_json::from_slice(body)
         .map_err(|_| AppError::BadRequest("Invalid webhook JSON.".into()))?;
-    repository::store_webhook(db, &service::hash(body), payload).await?;
-    process_webhooks(db).await
+    repository::store_webhook(state.db(), &service::hash(body), payload).await?;
+    process_webhooks(state).await
 }
 
-async fn process_webhooks(db: &PgPool) -> Result<(), AppError> {
+async fn process_webhooks(state: &AppState) -> Result<(), AppError> {
+    let db = state.db();
     let events = repository::pending_webhooks(db).await?;
     for (id, sqlx::types::Json(payload)) in events {
+        super::auto_reply::enqueue(state, &payload).await?;
         let mut matched = true;
         for entry in payload["entry"].as_array().into_iter().flatten() {
             for change in entry["changes"].as_array().into_iter().flatten() {
@@ -368,7 +377,9 @@ async fn process_webhooks(db: &PgPool) -> Result<(), AppError> {
                             repository::delivery_status(&mut tx, recipient, next, error.as_deref())
                                 .await?;
                         }
-                    } else {
+                    } else if !super::auto_reply_repository::known_message(&mut tx, message_id)
+                        .await?
+                    {
                         matched = false;
                     }
                     tx.commit().await?;

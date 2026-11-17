@@ -200,6 +200,22 @@ pub async fn webhook(
     if !worker::valid_signature(secret, &body, signature) {
         return Err(AppError::Unauthorized("Invalid webhook signature.".into()));
     }
-    worker::receive_webhook(state.db(), &body).await?;
+    worker::receive_webhook(&state, &body).await?;
     Ok(StatusCode::OK)
+}
+
+pub async fn auto_reply_settings(
+    State(state): State<AppState>,
+) -> Result<Json<super::auto_reply::Settings>, AppError> {
+    Ok(Json(super::auto_reply::settings(&state).await?))
+}
+
+pub async fn update_auto_reply(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Json(input): Json<super::auto_reply::Update>,
+) -> Result<Json<super::auto_reply::Settings>, AppError> {
+    Ok(Json(
+        super::auto_reply::update(&state, input, user.subject().unwrap_or("staff")).await?,
+    ))
 }

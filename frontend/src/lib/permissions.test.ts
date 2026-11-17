@@ -106,6 +106,18 @@ describe('external project role assignments', () => {
 })
 
 describe('role policy', () => {
+  it('allows only managers and admins to configure automatic WhatsApp replies', () => {
+    for (const method of ['GET', 'PUT']) {
+      for (const role of ['manager', 'admin'] as const)
+        expect(
+          canAccess(principal(role), method, '/notifications/auto-reply'),
+        ).toBe(true)
+      for (const role of ['sales', 'production', 'inventory'] as const)
+        expect(
+          canAccess(principal(role), method, '/notifications/auto-reply'),
+        ).toBe(false)
+    }
+  })
   it('allows only managers and admins to replace a stored-value card', () => {
     for (const role of ['manager', 'admin'] as const)
       expect(

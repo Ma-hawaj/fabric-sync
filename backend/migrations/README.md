@@ -35,6 +35,11 @@ SQLx applies the files in version order:
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
    gift-card sale and return-line lookups, and the unique index allowing one
    closure per garment.
+5. `0005_whatsapp_auto_reply.sql` adds disabled-by-default automatic reply
+   settings, durable per-customer cooldowns, and a message-ID-deduplicated reply
+   queue independent of approved business notifications.
+6. `0006_whatsapp_auto_reply_button.sql` adds an optional link button to automatic
+   replies, with the shorter interactive-message body limit.
 
 The core schema defines readable customer IDs (`C-6216`) and permanent
 per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.

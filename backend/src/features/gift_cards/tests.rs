@@ -395,7 +395,7 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
         Err(AppError::Conflict(_))
     ));
     let early = json!({"entry":[{"changes":[{"value":{"statuses":[{"id":"wamid.gift-test","status":"delivered"}]}}]}]}).to_string();
-    worker::receive_webhook(&pool, early.as_bytes())
+    worker::receive_webhook(&state, early.as_bytes())
         .await
         .unwrap();
     let (a, b) = tokio::join!(worker::tick(&state), worker::tick(&state));
@@ -437,7 +437,7 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
     );
     for status in ["read", "delivered", "sent", "failed"] {
         let body=json!({"entry":[{"changes":[{"value":{"statuses":[{"id":"wamid.gift-test","status":status}]}}]}]}).to_string();
-        worker::receive_webhook(&pool, body.as_bytes())
+        worker::receive_webhook(&state, body.as_bytes())
             .await
             .unwrap();
     }
