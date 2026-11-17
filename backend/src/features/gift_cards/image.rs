@@ -253,7 +253,8 @@ mod tests {
         assert_eq!(first.png, second.png);
         assert_eq!(first.sha256, hash(&first.png));
         let source = svg(&card, today(), &artwork()).unwrap();
-        assert!(source.contains("50.000"));
+        assert!(source.contains(">Premium</text>"));
+        assert!(!source.contains("50.000"));
         assert!(!source.contains("أحمد المنصوري"));
         assert!(source.contains(&card.code));
         assert!(source.contains("31-12-2026"));
@@ -285,8 +286,9 @@ mod tests {
     }
 
     #[test]
-    fn image_version_changes_with_artwork_and_remaining_balance() {
+    fn image_version_tracks_displayed_balance_artwork_and_original_tier() {
         let mut card = card();
+        card.initial_amount = 35.0;
         let original = render(&card, today(), &artwork()).unwrap().sha256;
         card.balance = 40.0;
         assert_ne!(original, render(&card, today(), &artwork()).unwrap().sha256);
@@ -298,6 +300,13 @@ mod tests {
             original,
             render(&card, today(), &changed_artwork).unwrap().sha256
         );
+
+        card.initial_amount = 40.0;
+        let premium = render(&card, today(), &artwork()).unwrap().sha256;
+        card.balance = 30.0;
+        assert_eq!(premium, render(&card, today(), &artwork()).unwrap().sha256);
+        card.initial_amount = 30.0;
+        assert_ne!(premium, render(&card, today(), &artwork()).unwrap().sha256);
     }
 
     #[test]
@@ -320,6 +329,7 @@ mod tests {
     #[test]
     fn single_line_codes_and_large_balances_fit_the_portrait_fields() {
         let mut card = card();
+        card.initial_amount = 35.0;
         card.balance = 99_999_999.99;
         card.expires_on = None;
         for code in [
@@ -371,6 +381,7 @@ mod tests {
         assert_eq!(STANDARD.decode(embedded).unwrap(), png);
 
         let mut card = card();
+        card.initial_amount = 35.0;
         card.balance = 99_999_999.99;
         card.expires_on = None;
         let source = svg(&card, today(), &artwork).unwrap();
