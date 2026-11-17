@@ -16,6 +16,18 @@ pub const MAX_BYTES: usize = 5 * 1024 * 1024;
 const TEMPLATE: &str = include_str!("../../../templates/gift-card.svg");
 const BUNDLED_ARTWORK: &[u8] = include_bytes!("../../../assets/gift-card/artwork.png");
 
+fn denomination_label(initial_amount: f64) -> Option<&'static str> {
+    if !initial_amount.is_finite() {
+        return None;
+    }
+    match (initial_amount * 100.0).round() as i64 {
+        2_000 => Some("Bronze"),
+        3_000 => Some("Silver"),
+        4_000.. => Some("Premium"),
+        _ => None,
+    }
+}
+
 struct Artwork {
     data_url: String,
 }
@@ -90,7 +102,14 @@ fn svg(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<String, AppE
             }
         }
     }
-    let balance = document::format_amount(card.balance);
+    let balance = denomination_label(card.initial_amount)
+        .map(str::to_owned)
+        .unwrap_or_else(|| document::format_amount(card.balance));
+    let currency = if denomination_label(card.initial_amount).is_some() {
+        ""
+    } else {
+        document::CURRENCY
+    };
     let status = if !card.is_active {
         "VOIDED"
     } else if card.balance <= 0.0 {
@@ -129,7 +148,7 @@ fn svg(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<String, AppE
     Ok(env.get_template("gift-card.svg")?.render(context! {
         background => artwork.data_url.as_str(),
         balance_size => (420.0 / (balance.chars().count().max(1) as f64 * 0.65)).min(94.0),
-        balance, currency => document::CURRENCY,
+        balance, currency,
         code => card.code,
         code_size,
         qr_size, qr_path, expiry, status,

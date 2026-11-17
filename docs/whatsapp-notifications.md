@@ -133,8 +133,11 @@ the updated-invoice notification flow and does not prompt to resend its cards.
 Gift cards use one rendering path: the complete designer PNG at
 `backend/assets/gift-card/artwork.png`, embedded in the backend binary, with live
 values overlaid by `backend/templates/gift-card.svg`. The PNG supplies all fixed
-artwork, branding, wording, labels, and footer. Only the balance/currency,
-code, expiry, QR, and status are drawn on top. Customer and recipient names do
+artwork, branding, wording, labels, and footer. Only the balance/currency or
+denomination name, code, expiry, QR, and status are drawn on top. Gift cards
+issued for 20, 30, and 40 or more display Bronze, Silver, and Premium
+respectively, based on their original amount. Other amounts show the remaining
+numeric balance. Customer and recipient names do
 not appear on the image. The larger code and expiry sit below their labels,
 with the full code on one line. The entire source image is fitted to the
 portrait canvas, with no added mask, fade, crop, or branding override. See

@@ -11,8 +11,11 @@ footer. It is embedded in the backend binary and used by default in every
 working directory. There is one artwork rendering path: the PNG plus variable
 overlays in `backend/templates/gift-card.svg`.
 
-Only balance/currency, the full card code, expiry, QR, and unusable-card status
-are rendered on top. The complete source image is
+Only balance/currency or a denomination name, the full card code, expiry, QR,
+and unusable-card status are rendered on top. Cards originally issued for 20
+show Bronze, 30 show Silver, and 40 or more show Premium in place of the
+numeric amount. The tier follows the original amount after redemption. Other
+amounts continue to show the remaining numeric balance. The complete source image is
 fitted to a 1080 × 1920 output with no crop, mask, additional fade, or fixed-text
 replacement. The gift card's static company branding comes from the PNG;
 `COMPANY_*` settings still govern invoices and notification messages.
