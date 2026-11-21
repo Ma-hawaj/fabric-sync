@@ -114,7 +114,7 @@ optional and separate from the buyer. Staff can correct these details through
 cannot be changed there.
 
 Choose **Send via WhatsApp** on a gift card to preview the destination and exact
-message, then approve Send. A branded 1200×720 PNG shows the recipient, available
+message, then approve Send. A branded 1080×1920 portrait PNG shows the available
 balance, expiry, redeemable code, and a QR code containing the same code. The
 preview includes the exact image to approve and a PNG download link. **Download
 image** on the Gift Cards list also works independently of WhatsApp setup and
@@ -130,10 +130,26 @@ current preview open for retry; it does not create the invoice again. Skipped
 cards remain available to send later from Gift Cards. Editing an invoice keeps
 the updated-invoice notification flow and does not prompt to resend its cards.
 
-The server renders PNGs locally from the bundled SVG and licensed DejaVu fonts,
-including Arabic text shaping, without requiring the PDF renderer or an external
-image service. Company name and optional PNG/JPEG/WebP logo come from the same
-`COMPANY_*` branding settings used for invoices.
+Gift cards use one rendering path: the complete designer PNG at
+`backend/assets/gift-card/artwork.png`, embedded in the backend binary, with live
+values overlaid by `backend/templates/gift-card.svg`. The PNG supplies all fixed
+artwork, branding, wording, labels, and footer. Only the balance/currency or
+denomination name, code, expiry, QR, and status are drawn on top. Gift cards
+issued for 20, 30, and 40 or more display Bronze, Silver, and Premium
+respectively, based on their original amount. Other amounts show the remaining
+numeric balance. Customer and recipient names do
+not appear on the image. The larger code and expiry sit below their labels,
+with the full code on one line. The entire source image is fitted to the
+portrait canvas, with no added mask, fade, crop, or branding override. See
+`backend/assets/gift-card/README.md`.
+
+`GIFT_CARD_ARTWORK_PATH` optionally selects a replacement PNG available to the
+server; an explicitly configured missing or invalid file reports an error.
+Blank uses the bundled designer PNG. The renderer needs no system fonts, PDF
+renderer, or external image service. `COMPANY_*` settings continue to supply
+invoice and notification-message branding; the gift card's fixed branding comes
+from its image. Previously approved deliveries retain their original immutable
+PNG bytes.
 
 The PNG is attached as the WhatsApp template's image header; the code also stays
 in the message body for copying. It does not attach the buyer's invoice. The

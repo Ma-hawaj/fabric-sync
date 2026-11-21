@@ -72,6 +72,10 @@ impl AppState {
         &self.config.invoice_branding
     }
 
+    pub fn gift_card_artwork_path(&self) -> Option<&str> {
+        self.config.gift_card_artwork_path.as_deref()
+    }
+
     pub fn customer_material_base_price(&self) -> Result<Option<f64>, crate::error::AppError> {
         self.config
             .customer_material_base_price()

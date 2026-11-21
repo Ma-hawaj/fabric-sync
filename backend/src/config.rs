@@ -141,6 +141,8 @@ pub struct Config {
     /// an explicit deployment choice and never part of a schema migration.
     pub seed_design_options: bool,
     pub invoice_branding: InvoiceBranding,
+    /// Optional replacement gift-card PNG. Blank uses the bundled designer artwork.
+    pub gift_card_artwork_path: Option<String>,
     /// Directory the built frontend (`vite build` output) is served from.
     /// Unset means `./static` next to the server binary — the Dockerfile
     /// copies the frontend `dist/` there. Missing directory is not an error:
@@ -347,6 +349,9 @@ impl Config {
             timezone,
             static_dir,
             invoice_branding: InvoiceBranding::from_env(),
+            gift_card_artwork_path: env::var("GIFT_CARD_ARTWORK_PATH")
+                .ok()
+                .filter(|value| !value.trim().is_empty()),
             notifications: crate::features::notifications::Config::from_env(),
         }
     }

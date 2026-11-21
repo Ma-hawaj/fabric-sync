@@ -79,9 +79,9 @@ export function SendGiftCardDialog({
               <img
                 src={preview.data.imageDataUrl}
                 alt={`Gift card ${card.code}`}
-                width={1200}
-                height={720}
-                className="w-full rounded-lg"
+                width={1080}
+                height={1920}
+                className="mx-auto h-auto max-h-[60vh] w-auto max-w-full rounded-lg"
               />
               <figcaption>
                 <a
