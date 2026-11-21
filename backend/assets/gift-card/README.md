@@ -11,7 +11,7 @@ footer. It is embedded in the backend binary and used by default in every
 working directory. There is one artwork rendering path: the PNG plus variable
 overlays in `backend/templates/gift-card.svg`.
 
-Only balance/currency or a denomination name, the full card code, expiry, QR,
+Only balance/currency or a denomination name, the full card code, expiry,
 and unusable-card status are rendered on top. Cards originally issued for 20
 show Bronze, 30 show Silver, and 40 or more show Premium in place of the
 numeric amount. The tier follows the original amount after redemption. Other
@@ -29,7 +29,7 @@ downloads. Approved deliveries retain their immutable attachment bytes.
 The code and expiry use Space Grotesk Medium in larger text below their labels,
 without guide lines. The complete code stays on one line and scales down to fit
 when its measured text width exceeds the field. Customer and recipient names
-do not appear on the image. The QR sits beside the wax seal.
+do not appear on the image.
 Thmanyah Serif Display Bold (supplied with the design),
 Space Grotesk Medium, and the existing DejaVu fonts are bundled for variable
 text. Space Grotesk's source details and SIL Open Font License are alongside
