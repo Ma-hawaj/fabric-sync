@@ -15,12 +15,4 @@
     <text x="540" y="1373" text-anchor="middle" font-family="DejaVu Sans" font-size="32" font-weight="bold" fill="#9c2e24">{{ status }}</text>
   </g>
   {% endif %}
-
-  <g id="redemption-qr">
-    <rect x="786" y="1440" width="216" height="216" rx="12" fill="#fff"/>
-    <svg x="792" y="1446" width="204" height="204" viewBox="0 0 {{ qr_size }} {{ qr_size }}">
-      <rect width="{{ qr_size }}" height="{{ qr_size }}" fill="#fff"/>
-      <path d="{{ qr_path }}" fill="#1a1a1a"/>
-    </svg>
-  </g>
 </svg>

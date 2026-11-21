@@ -3,7 +3,6 @@ use std::sync::{Arc, OnceLock};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use chrono::NaiveDate;
 use minijinja::{context, AutoEscape, Environment};
-use qrcode::{Color, QrCode};
 use resvg::{tiny_skia, usvg};
 
 use super::{repository, types::GiftCard};
@@ -91,17 +90,6 @@ fn fonts() -> Arc<usvg::fontdb::Database> {
 }
 
 fn svg(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<String, AppError> {
-    let qr = QrCode::new(card.code.as_bytes())
-        .map_err(|_| AppError::Image("The gift card code could not be encoded.".into()))?;
-    let qr_size = qr.width() + 8;
-    let mut qr_path = String::new();
-    for y in 0..qr.width() {
-        for x in 0..qr.width() {
-            if qr[(x, y)] == Color::Dark {
-                qr_path.push_str(&format!("M{} {}h1v1h-1z", x + 4, y + 4));
-            }
-        }
-    }
     let balance = denomination_label(card.initial_amount)
         .map(str::to_owned)
         .unwrap_or_else(|| document::format_amount(card.balance));
@@ -151,7 +139,7 @@ fn svg(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<String, AppE
         balance, currency,
         code => card.code,
         code_size,
-        qr_size, qr_path, expiry, status,
+        expiry, status,
     })?)
 }
 
@@ -355,7 +343,6 @@ mod tests {
                 ("balance", 110.0, 590.0),
                 ("code", 145.0, 585.0),
                 ("expiry", 575.0, 855.0),
-                ("redemption-qr", 64.0, 1016.0),
             ] {
                 let bounds = tree.node_by_id(id).unwrap().abs_bounding_box();
                 assert!(bounds.width() > 0.0, "Empty {id}");
