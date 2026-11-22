@@ -566,11 +566,16 @@ mod tests {
             .unwrap()
             .render(context! {
                 invoice => minijinja::Value::from_serialize(detail),
+                invoice_date_time => format_datetime(&detail.date, chrono_tz::Asia::Bahrain),
+                target_date => detail.target_date.as_ref().map(crate::document::format_date),
                 customers => minijinja::Value::from_serialize(billed_customers(detail)),
                 company => minijinja::Value::from_serialize(branding()),
                 currency => CURRENCY,
                 amounts => minijinja::Value::from_serialize(formatted_amounts(detail)),
+                qr_svg => qr_svg(&qr_payload(detail, &branding())).unwrap(),
                 vat_percent => "10",
+                line_designs => Vec::<Vec<DesignChip>>::new(),
+                line_notes => vec![None::<String>; detail.lines.len()],
             })
             .unwrap()
     }
@@ -655,27 +660,14 @@ mod tests {
             mobile_no: "12345".to_string(),
             address: Some("Building 1 <Road 2>".to_string()),
         });
-        let env = environment(&branding()).unwrap();
-        let template = env.get_template(TEMPLATE_NAME).unwrap();
-        let render = |detail: &InvoiceDetail| {
-            template
-                .render(context! {
-                    invoice => minijinja::Value::from_serialize(detail),
-                    customers => minijinja::Value::from_serialize(billed_customers(detail)),
-                    company => minijinja::Value::from_serialize(branding()),
-                    currency => CURRENCY,
-                    amounts => minijinja::Value::from_serialize(formatted_amounts(detail)),
-                })
-                .unwrap()
-        };
-        let html = render(&detail);
+        let html = render_test_document(&detail);
         assert!(html.contains("Delivery"));
         assert!(html.contains("Urgent charges (incl. VAT)"));
         assert!(html.contains("10.000"));
         assert!(html.contains("Building 1 &lt;Road 2&gt;"));
         detail.totals.urgent_charge = 0.0;
         detail.collection_method = "pickup".to_string();
-        let html = render(&detail);
+        let html = render_test_document(&detail);
         assert!(html.contains("Pickup"));
         assert!(!html.contains("Urgent"));
     }
