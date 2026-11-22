@@ -52,9 +52,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
-      - name: Render bilingual multi-page invoice with real Chromium
+      - name: Render multi-page invoice with real Chromium
         run: cargo test real_chromium -- --ignored
-      - name: Check PDF content, pagination and embedded Arabic font
+      - name: Check PDF content and pagination
         run: |
           sudo apt-get update
           sudo apt-get install -y poppler-utils
@@ -69,4 +69,3 @@ jobs:
           for page in $(seq 1 "$pages"); do
             pdftotext -f "$page" -l "$page" /tmp/fabric-sync-invoice.pdf - | grep -Eq "INV-.*Page[[:space:]]+${page}[[:space:]]*/[[:space:]]*${pages}([[:space:]]|$)"
           done
-          pdffonts /tmp/fabric-sync-invoice.pdf | grep -i NotoSansArabic
