@@ -114,6 +114,7 @@ services:
       COMPANY_EMAIL: ${COMPANY_EMAIL:-}
       # Custom templates require a matching read-only volume mount override.
       INVOICE_TEMPLATE_DIR: ${INVOICE_TEMPLATE_DIR:-}
+      GIFT_CARD_ARTWORK_PATH: ${GIFT_CARD_ARTWORK_PATH:-}
       COMPANY_LOGO_DATA_URL: ${COMPANY_LOGO_DATA_URL:-}
     # Liveness comes from the image's own HEALTHCHECK
     # (wget localhost:8000/health expecting {"status":"ok"}).

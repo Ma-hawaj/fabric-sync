@@ -1,0 +1,5 @@
+Space Grotesk Medium
+Official repository: https://github.com/floriankarsten/space-grotesk
+Font: https://github.com/floriankarsten/space-grotesk/blob/master/fonts/otf/SpaceGrotesk-Medium.otf
+Git blob SHA-1: dedd82f5f73fd83090f2a277769546239c4e20e4
+License: SIL Open Font License 1.1 (SpaceGrotesk-OFL.txt)
