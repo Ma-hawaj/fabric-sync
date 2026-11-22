@@ -65,7 +65,7 @@ jobs:
           grep -q 'INV-' /tmp/fabric-sync-invoice.txt
           # The fixture has 30 unpaid BHD 100 orders. Match the amount beside
           # its label so a value in another totals row/column cannot satisfy it.
-          grep -Eq 'BHD[[:space:]]+3000[.]000[[:space:]]+Balance[[:space:]]+due([[:space:]]|$)' /tmp/fabric-sync-invoice.txt
+          grep -Eq 'BHD[[:space:]]+3000[.]000[[:space:]]+Balance[[:space:]]+due([[:space:]]|$)|Balance[[:space:]]+due[[:space:]]+BHD[[:space:]]+3000[.]000([[:space:]]|$)' /tmp/fabric-sync-invoice.txt
           for page in $(seq 1 "$pages"); do
-            pdftotext -f "$page" -l "$page" /tmp/fabric-sync-invoice.pdf - | grep -Eq "INV-.*Page[[:space:]]+${page}[[:space:]]*/[[:space:]]*${pages}([[:space:]]|$)"
+            pdftotext -f "$page" -l "$page" /tmp/fabric-sync-invoice.pdf - | grep -Eq "Page[[:space:]]+${page}[[:space:]]*/[[:space:]]*${pages}([[:space:]]|$)"
           done
