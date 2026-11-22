@@ -2,8 +2,8 @@
 """Ingest the cloth storage count (``Storage(cloth ).csv``) into fabric-sync.
 
 Reads the storage spreadsheet — one row per fabric colour (``c. no.``) with
-its length in meters (``MATERS``) and code — and loads it into the Postgres
-schema defined by ``backend/migrations/``:
+its length in meters (``MATERS``), VAT-inclusive price, and code — and loads
+it into the Postgres schema defined by ``backend/migrations/``:
 
   Storage(cloth ).csv  -> materials + material_stock
 
@@ -19,10 +19,12 @@ Mapping decisions worth knowing:
    such as code ``801`` + colour ``1`` always append, giving ``801-1``).
  * ``materials.family`` is the whitespace-collapsed Name (``Zabrjad``), so
    the inventory table can cluster a fabric's colours behind one filter.
-   ``unit`` is ``'meters'``. ``Yard`` is ignored (25 yards = 22.86 meters
-   is already baked into the ``MATERS`` figure) and so are the two
-   ``Stock`` piece-count columns — piece counts have no schema home; meters
-   are what ``material_stock`` tracks.
+   ``unit`` is ``'meters'``. ``PRICE INC. VAT`` populates garment prices:
+   ``normal_price`` and ``large_price`` use the sheet price, and
+   ``junior_price`` is 70% of that price rounded up to whole BHD.
+   ``Yard`` is ignored (25 yards = 22.86 meters is already baked into the
+   ``MATERS`` figure) and so are the two ``Stock`` piece-count columns —
+   piece counts have no schema home; meters are what ``material_stock`` tracks.
  * No branch is named in the sheet. All stock lands on one branch:
    ``--branch`` if given (created when missing), else the first active
    ``holds_stock`` branch, else a created 'Main Warehouse'. Existing branches must
@@ -30,7 +32,7 @@ Mapping decisions worth knowing:
    and pickup capabilities are not inferred from inventory.
  * Re-runs add again: ``materials`` has no UNIQUE key, so an existing
    (name, sku) row is reused but its stock grows a second time (its family
-   is backfilled when still NULL). Use ``--mode set`` to overwrite the
+   and prices are backfilled when still NULL). Use ``--mode set`` to overwrite the
    branch quantity instead, or ingest once into a fresh database. The whole
    write happens in one transaction and rolls back on error.
 
@@ -52,7 +54,7 @@ import collections
 import os
 import re
 import sys
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 from pathlib import Path
 
 import psycopg2
@@ -108,15 +110,34 @@ def parse_meters(value: object) -> Decimal | None:
         return None
 
 
+def parse_price(value: object) -> Decimal | None:
+    if value is None:
+        return None
+    s = str(value).strip().replace(",", "")
+    if not s:
+        return None
+    try:
+        price = Decimal(s).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except Exception:
+        return None
+    if price < 0:
+        return None
+    return price
+
+
+def kids_price(normal_price: Decimal) -> Decimal:
+    return (normal_price * Decimal("0.7")).to_integral_value(rounding=ROUND_CEILING)
+
+
 def read_storage_rows(path: Path, report: Report) -> list[dict]:
-    """Read the sheet into per-row dicts: name, code (None when blank), meters.
+    """Read the sheet into per-row dicts with name, code, meters, and prices.
 
     The file is decoded as UTF-8 with a cp1256 fallback — the sheet carries
     non-UTF-8 bytes (e.g. 0x85 in the ``STC Maroon`` colour cell). The first
     two rows are the title (``Materails ... Stock ... Date``) and the column
-    header (``Name, c. no., Yard, MATERS, code``); everything after is data
-    followed by zero-filled padding rows, which are skipped like any other
-    row without a name.
+    header (``Name, c. no., Yard, MATERS, PRICE INC. VAT, code``); everything
+    after is data followed by zero-filled padding rows, which are skipped like
+    any other row without a name.
     """
     try:
         text = path.read_text(encoding="utf-8-sig")
@@ -129,12 +150,13 @@ def read_storage_rows(path: Path, report: Report) -> list[dict]:
     rows = []
     for lineno, line in enumerate(lines[2:], start=3):
         cells = [c.strip() for c in line.split(",")]
-        while len(cells) < 5:
+        while len(cells) < 6:
             cells.append("")
         name = collapse(cells[0])
         colour = collapse(cells[1])
         meters = parse_meters(cells[3])
-        code = collapse(cells[4])
+        normal_price = parse_price(cells[4])
+        code = collapse(cells[5])
         if name is None:
             report.count("storage: padding/blank rows skipped")
             continue
@@ -142,8 +164,20 @@ def read_storage_rows(path: Path, report: Report) -> list[dict]:
             report.anomaly("storage: row without meters skipped",
                            f"line {lineno} ({name}/{colour})")
             continue
-        rows.append({"name": name, "colour": colour, "meters": meters,
-                     "code": code, "lineno": lineno})
+        if normal_price is None:
+            report.anomaly("storage: row without price skipped",
+                           f"line {lineno} ({name}/{colour})")
+            continue
+        rows.append({
+            "name": name,
+            "colour": colour,
+            "meters": meters,
+            "junior_price": kids_price(normal_price),
+            "normal_price": normal_price,
+            "large_price": normal_price,
+            "code": code,
+            "lineno": lineno,
+        })
     report.count("storage: data rows", len(rows))
     return rows
 
@@ -175,10 +209,11 @@ def material_sku(name: str, code: str | None, colour: str | None) -> str | None:
 
 
 def group_materials(rows: list[dict]) -> dict[tuple[str, str | None], dict]:
-    """Key sheet rows by (name, sku), carrying the family and meters.
+    """Key sheet rows by (name, sku), carrying family, meters, and prices.
 
     The sheet holds one row per colour, so this is normally 1:1 — the
-    summing stays as a guard for a duplicated (Name, c. no.) pair.
+    summing stays as a guard for a duplicated (Name, c. no.) pair. Prices
+    come from the first row; conflicting duplicate prices are reported.
     """
     groups: dict[tuple[str, str | None], dict] = {}
     for row in rows:
@@ -187,9 +222,25 @@ def group_materials(rows: list[dict]) -> dict[tuple[str, str | None], dict]:
         key = (name, sku)
         group = groups.get(key)
         if group is None:
-            group = {"name": name, "sku": sku, "family": row["name"],
-                     "meters": Decimal("0.00"), "rows": 0}
+            group = {
+                "name": name,
+                "sku": sku,
+                "family": row["name"],
+                "meters": Decimal("0.00"),
+                "junior_price": row["junior_price"],
+                "normal_price": row["normal_price"],
+                "large_price": row["large_price"],
+                "rows": 0,
+            }
             groups[key] = group
+        elif (
+            group["normal_price"] != row["normal_price"]
+            or group["large_price"] != row["large_price"]
+            or group["junior_price"] != row["junior_price"]
+        ):
+            raise ValueError(
+                f"conflicting prices for {name} [{sku}] at line {row['lineno']}"
+            )
         group["meters"] += row["meters"]
         group["rows"] += 1
     return groups
@@ -216,9 +267,17 @@ def perform_insert(conn, groups: dict, branch_id: object, branch_label: str,
             row = cur.fetchone()
             if row is None:
                 cur.execute(
-                    "INSERT INTO materials (name, sku, unit, family) "
-                    "VALUES (%s, %s, 'meters', %s) RETURNING id",
-                    (name, sku, group["family"]),
+                    "INSERT INTO materials "
+                    "(name, sku, unit, family, junior_price, normal_price, large_price) "
+                    "VALUES (%s, %s, 'meters', %s, %s, %s, %s) RETURNING id",
+                    (
+                        name,
+                        sku,
+                        group["family"],
+                        group["junior_price"],
+                        group["normal_price"],
+                        group["large_price"],
+                    ),
                 )
                 material_id = cur.fetchone()[0]
                 report.count("materials created")
@@ -230,6 +289,22 @@ def perform_insert(conn, groups: dict, branch_id: object, branch_label: str,
                         (group["family"], material_id),
                     )
                     report.count("materials backfilled with family")
+                cur.execute(
+                    "UPDATE materials SET "
+                    "junior_price = COALESCE(junior_price, %s), "
+                    "normal_price = COALESCE(normal_price, %s), "
+                    "large_price = COALESCE(large_price, %s) "
+                    "WHERE id = %s "
+                    "AND (junior_price IS NULL OR normal_price IS NULL OR large_price IS NULL)",
+                    (
+                        group["junior_price"],
+                        group["normal_price"],
+                        group["large_price"],
+                        material_id,
+                    ),
+                )
+                if cur.rowcount:
+                    report.count("materials backfilled with prices")
                 report.count("materials reused")
             if mode == "set":
                 cur.execute(
