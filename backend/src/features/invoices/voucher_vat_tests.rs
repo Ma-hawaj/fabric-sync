@@ -162,7 +162,7 @@ async fn issue_partial_redemption_and_final_redemption_tax_value_exactly_once(po
         .await
         .unwrap();
     assert!(html.contains("Gift Card Redemption Receipt"));
-    assert!(!html.contains("<span class=\"en\">Tax Invoice</span>"));
+    assert!(!html.contains(">Tax Invoice<"));
     // 110 voucher funding + 132 merchandise transactions produce only 120 net sales.
     let sales: f64 =
         sqlx::query_scalar("SELECT SUM(sales_amount)::float8 FROM invoice_voucher_accounting")
@@ -222,7 +222,7 @@ async fn uninvoiced_credit_settles_the_purchase_without_removing_vat(pool: PgPoo
     let html = document::render_invoice_document(&state, created.id)
         .await
         .unwrap();
-    assert!(html.contains("<span class=\"en\">Tax Invoice</span>"));
+    assert!(html.contains("Tax Invoice"));
     assert!(!html.contains("Gift Card Redemption Receipt"));
     assert!(!html.contains("Gift-card value already taxed at issue"));
 

@@ -672,14 +672,10 @@ async fn reopened_ready_orders_and_opted_out_destinations_are_not_sent(pool: PgP
 
 #[sqlx::test]
 #[ignore = "requires the pinned Gotenberg test service"]
-async fn real_chromium_renders_the_bilingual_multipage_invoice(pool: PgPool) {
+async fn real_chromium_renders_the_multipage_invoice(pool: PgPool) {
     let url = std::env::var("DOCUMENT_RENDERER_TEST_URL")
         .expect("Set DOCUMENT_RENDERER_TEST_URL to the dedicated test renderer");
     let (invoice, _, _, _) = test_support::invoice(&pool, 30, false).await;
-    sqlx::query("UPDATE customers SET name='أحمد المنصوري' WHERE mobile_no='33112233'")
-        .execute(&pool)
-        .await
-        .unwrap();
     let state = test_support::state(pool.clone(), Some(url), None).await;
     let draft = service::prepare(&state, invoice, prepare("invoice_created"), "staff")
         .await
