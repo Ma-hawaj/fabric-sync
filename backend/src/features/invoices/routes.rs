@@ -29,4 +29,8 @@ pub fn router() -> Router<AppState> {
         // or the remainder after everything was collected. Separate from
         // collect because no order changes state.
         .route("/invoices/:id/payments", post(handlers::record_payment))
+        .route(
+            "/invoices/:id/financial-branch",
+            post(handlers::assign_financial_branch),
+        )
 }

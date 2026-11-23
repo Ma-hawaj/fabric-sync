@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE branch SET daily_check_required=$2, daily_check_changed_at=clock_timestamp(), daily_check_changed_by=$3 WHERE id=$1 AND daily_check_required IS DISTINCT FROM $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "28a98e2e2cacf142c7f32437908cb266d692f281b6aaf54b4ee2dd933eae7a11"
+}

@@ -924,6 +924,14 @@ mod tests_support {
 
     pub fn detail() -> InvoiceDetail {
         InvoiceDetail {
+            financial_branch: super::super::types::FinancialBranch {
+                branch_id: None,
+                branch_name: None,
+                assigned_at: None,
+                assigned_by: None,
+                reason: None,
+                request_id: None,
+            },
             document_kind: "tax_invoice".into(),
             created_by: None,
             readiness: Default::default(),

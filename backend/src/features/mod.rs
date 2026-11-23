@@ -11,5 +11,6 @@ pub mod orders;
 pub mod preferences;
 pub mod pricing;
 pub mod products;
+pub mod reports;
 pub mod returns;
 pub mod users;

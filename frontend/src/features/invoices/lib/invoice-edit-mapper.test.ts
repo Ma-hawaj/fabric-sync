@@ -236,6 +236,22 @@ describe('mapInvoiceEditToForm', () => {
     ).toBe('Building 2, Road 3')
     expect(seeds.locationLabels.get('issuer')).toBe('Issuing office')
   })
+  it('uses a legacy pickup branch as financial owner without replacing a saved issuer', () => {
+    const edit = editFixture()
+    const legacy = mapInvoiceEditToForm(edit)
+    expect(legacy.values.issuingBranch).toBe(edit.branchId)
+    expect(invoicePayload(legacy.values).issuingBranchId).toBe(edit.branchId)
+    expect(legacy.seeds.locationLabels.get(edit.branchId!)).toBe(
+      edit.branchName,
+    )
+    expect(
+      mapInvoiceEditToForm({ ...edit, issuingBranchId: 'original-issuer' })
+        .values.issuingBranch,
+    ).toBe('original-issuer')
+    expect(
+      mapInvoiceEditToForm({ ...edit, branchId: null }).values.issuingBranch,
+    ).toBe('')
+  })
   it('restores urgency, collection method, and customer addresses when editing', () => {
     const edit = editFixture()
     edit.customers[0].orders[0].isUrgent = true
