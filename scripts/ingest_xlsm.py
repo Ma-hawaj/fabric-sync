@@ -1501,7 +1501,8 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             is_done = inv["status"] in ("done", "pending payment", "pending", "payment", "repairing")
             is_ready = inv["status"] == "ready"
             is_not_pay = inv["status"] == "not pay"
-            if is_done or is_ready or is_not_pay:
+            is_urgent = inv["status"] == "urgent"
+            if is_done or is_ready or is_not_pay or is_urgent:
                 for d in (inv["delivery"], inv["approval"]):
                     if isinstance(d, dt.datetime):
                         collected_at = d
@@ -1514,8 +1515,9 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                     INSERT INTO orders (
                         measurement_id, material_id, material_amount, invoice_id, price, material_source,
                         thobe_type, f_pocket, collar, sleeve, patti, emd, more_details,
-                        status, collected_at, ready_at, ready_location_id, production_branch_id, material_stock_branch_id
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
+                        status, collected_at, ready_at, ready_location_id, is_urgent, urgent_charge,
+                        production_branch_id, material_stock_branch_id
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
                     RETURNING id
                     """,
                     (
@@ -1536,6 +1538,8 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                         collected_at,
                         collected_at if is_ready or is_done else None,
                         branch_id if is_ready else None,
+                        is_urgent,
+                        Decimal("0.01") if is_urgent else Decimal("0"),
                         production_branch_id,
                     ),
                 )
