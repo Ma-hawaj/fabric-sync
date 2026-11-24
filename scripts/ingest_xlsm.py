@@ -1449,7 +1449,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                     """,
                     (invoice_id, advance, inv["pay1"]),
                 )
-            if inv["status"] in ("done", "pending payment"):
+            if inv["status"] in ("done", "pending payment") or inv.get("pay2"):
                 remainder = total - advance
                 if remainder > 0:
                     cur.execute(
