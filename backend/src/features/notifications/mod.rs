@@ -3,6 +3,7 @@ mod attention;
 mod attention_tests;
 mod handlers;
 pub(crate) mod phone;
+pub(crate) mod ready_image;
 pub(crate) mod repository;
 mod routes;
 pub(crate) mod service;
@@ -66,7 +67,7 @@ impl Config {
             default_region: value("WHATSAPP_DEFAULT_REGION", "BH"),
             language: value("WHATSAPP_TEMPLATE_LANGUAGE", "en_US"),
             invoice_template: value("WHATSAPP_INVOICE_TEMPLATE", "invoice_document_v1"),
-            ready_template: value("WHATSAPP_READY_TEMPLATE", "invoice_ready_v1"),
+            ready_template: value("WHATSAPP_READY_TEMPLATE", "invoice_ready_image_v1"),
             invoice_body: value(
                 "WHATSAPP_INVOICE_BODY",
                 "Your invoice {{1}} from {{2}} is attached. Total: {{3}}. Balance due: {{4}}.",

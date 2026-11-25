@@ -16,6 +16,7 @@ pub struct RepairReadyContext {
     pub name: String,
     pub mobile_no: String,
     pub enabled: bool,
+    pub measurement: Option<String>,
 }
 
 pub async fn repair_ready_context(
@@ -27,7 +28,8 @@ pub async fn repair_ready_context(
         "SELECT o.order_number, i.invoice_number, r.status, oc.outcome, r.completed_at,
                 GREATEST(r.charge - r.received_amount, 0)::float8 AS balance,
                 b.name AS branch_name, c.id AS customer_id, c.name, c.mobile_no,
-                c.whatsapp_notifications_enabled AS enabled
+                c.whatsapp_notifications_enabled AS enabled,
+                readable_measurement_id(c.customer_number, m.measurement_number) AS measurement
          FROM order_repairs r
          JOIN orders o ON o.id = r.order_id
          JOIN order_outcomes oc ON oc.order_id = o.id
@@ -42,6 +44,40 @@ pub async fn repair_ready_context(
     .fetch_optional(db)
     .await?
     .ok_or_else(|| AppError::NotFound("Repair not found on this invoice.".into()))
+}
+
+#[derive(sqlx::FromRow)]
+pub struct ReadyCardCustomer {
+    pub name: String,
+    pub measurement: Option<String>,
+}
+
+pub async fn ready_card_customers(
+    db: &PgPool,
+    invoice_id: Uuid,
+) -> Result<Vec<ReadyCardCustomer>, AppError> {
+    Ok(sqlx::query_as(
+        r#"
+        SELECT name, measurement
+          FROM (
+                SELECT c.name AS name,
+                       readable_measurement_id(c.customer_number, m.measurement_number) AS measurement
+                  FROM orders o
+                  JOIN measurements m ON m.id = o.measurement_id
+                  JOIN customers c ON c.id = m.customer_id
+                 WHERE o.invoice_id = $1
+                UNION
+                SELECT c.name, NULL::text
+                  FROM invoices i
+                  JOIN customers c ON c.id = i.customer_id
+                 WHERE i.id = $1
+               ) AS entries
+         ORDER BY measurement NULLS FIRST, name
+        "#,
+    )
+    .bind(invoice_id)
+    .fetch_all(db)
+    .await?)
 }
 
 pub async fn customers(db: &PgPool, invoice_id: Uuid) -> Result<Vec<Customer>, AppError> {
@@ -306,10 +342,14 @@ pub async fn store_artifact(
     .await?)
 }
 
-pub async fn artifact_content(db: &PgPool, id: Uuid) -> Result<(String, Vec<u8>), AppError> {
+pub async fn artifact_content(
+    db: &PgPool,
+    id: Uuid,
+) -> Result<(String, String, Vec<u8>), AppError> {
     sqlx::query_as(
         r#"
         SELECT filename,
+               mime_type,
                content
           FROM document_artifacts
          WHERE id = $1 AND invoice_id IS NOT NULL
@@ -583,6 +623,32 @@ pub async fn gift_card_send_by_command(
 pub async fn gift_card_pending(conn: &mut PgConnection, card: Uuid) -> Result<bool, AppError> {
     Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM notifications n JOIN notification_recipients r ON r.notification_id=n.id WHERE n.gift_card_id=$1 AND r.status IN ('queued','submitting'))")
         .bind(card).fetch_one(conn).await?)
+}
+
+pub async fn store_invoice_image(
+    db: &PgPool,
+    invoice: Uuid,
+    source_hash: &str,
+    filename: &str,
+    sha256: &str,
+    content: &[u8],
+) -> Result<Uuid, AppError> {
+    Ok(sqlx::query_scalar(
+        r#"
+        INSERT INTO document_artifacts(invoice_id,source_hash,filename,mime_type,sha256,byte_length,content)
+        VALUES($1,$2,$3,'image/jpeg',$4,$5,$6)
+            ON CONFLICT(invoice_id,source_hash) DO UPDATE
+           SET source_hash = EXCLUDED.source_hash RETURNING id
+        "#,
+    )
+    .bind(invoice)
+    .bind(source_hash)
+    .bind(filename)
+    .bind(sha256)
+    .bind(content.len() as i64)
+    .bind(content)
+    .fetch_one(db)
+    .await?)
 }
 
 pub async fn store_image(

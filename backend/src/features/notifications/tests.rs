@@ -256,7 +256,18 @@ async fn repair_ready_notifies_only_its_customer_after_approval_even_after_colle
     assert_eq!(draft.snapshot.repair_id, Some(repair));
     assert!(draft.snapshot.body.contains("repair ORD-"));
     assert!(draft.snapshot.body.contains("2.500 BHD"));
-    assert_eq!(draft.artifact_id, None);
+    let attachment = repository::attachment(&pool, draft.artifact_id.unwrap())
+        .await
+        .unwrap();
+    assert_eq!(attachment.mime_type, "image/jpeg");
+    assert_eq!(attachment.filename, "ready-card.jpg");
+    assert_eq!(
+        image::load_from_memory(&attachment.content)
+            .unwrap()
+            .to_rgb8()
+            .dimensions(),
+        (1080, 2486)
+    );
     assert_eq!(draft.recipients.len(), 1);
     assert_eq!(draft.recipients[0].normalized_mobile, "+97333112233");
     worker::tick(&state).await.unwrap();
@@ -280,7 +291,7 @@ async fn repair_ready_notifies_only_its_customer_after_approval_even_after_colle
     worker::tick(&state).await.unwrap();
     worker::tick(&state).await.unwrap();
     assert_eq!(mock.messages.lock().unwrap().len(), 1);
-    assert!(mock.uploads.lock().unwrap().is_empty());
+    assert_eq!(mock.uploads.lock().unwrap().len(), 1);
     let resend = service::resend(&state, draft.id, Uuid::new_v4(), "staff")
         .await
         .unwrap();
@@ -646,7 +657,10 @@ async fn reopened_ready_orders_and_opted_out_destinations_are_not_sent(pool: PgP
     let draft = service::prepare(&state, invoice, prepare("invoice_ready"), "staff")
         .await
         .unwrap();
-    assert!(draft.artifact_id.is_none());
+    let attachment = repository::attachment(&pool, draft.artifact_id.unwrap())
+        .await
+        .unwrap();
+    assert_eq!(attachment.mime_type, "image/jpeg");
     service::approve(&state, draft.id, send(&draft), "staff", true)
         .await
         .unwrap();
@@ -668,6 +682,75 @@ async fn reopened_ready_orders_and_opted_out_destinations_are_not_sent(pool: PgP
         .unwrap();
     assert!(updated.recipients.is_empty());
     assert_eq!(updated.snapshot.exclusions.len(), 1);
+}
+
+#[sqlx::test]
+async fn ready_notices_upload_a_filled_jpeg_card_as_the_message_header(pool: PgPool) {
+    let (invoice, orders, _, pickup) = test_support::invoice(&pool, 1, false).await;
+    test_support::finish_stages(&pool, orders[0], pickup).await;
+    crate::features::orders::readiness::confirm(&pool, invoice, None, "staff", true)
+        .await
+        .unwrap();
+    let (url, mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), Some(url.clone()), Some(url)).await;
+    let draft = service::prepare(&state, invoice, prepare("invoice_ready"), "staff")
+        .await
+        .unwrap();
+    let artifact = repository::attachment(&pool, draft.artifact_id.unwrap())
+        .await
+        .unwrap();
+    assert_eq!(artifact.mime_type, "image/jpeg");
+    assert_eq!(artifact.filename, "ready-card.jpg");
+    assert_eq!(
+        image::load_from_memory(&artifact.content)
+            .unwrap()
+            .to_rgb8()
+            .dimensions(),
+        (1080, 2486)
+    );
+    service::approve(&state, draft.id, send(&draft), "staff", true)
+        .await
+        .unwrap();
+    worker::tick(&state).await.unwrap();
+    let messages = mock.messages.lock().unwrap();
+    assert_eq!(messages.len(), 1);
+    let components = &messages[0]["template"]["components"];
+    assert_eq!(components[0]["type"], "header");
+    assert_eq!(components[0]["parameters"][0]["type"], "image");
+    let uploads = mock.uploads.lock().unwrap();
+    assert_eq!(uploads.len(), 1);
+    assert!(uploads[0].windows(2).any(|bytes| bytes == [0xff, 0xd8]));
+}
+
+#[sqlx::test]
+async fn ready_card_fills_the_customer_receipt_and_measurement_fields(pool: PgPool) {
+    let (invoice, orders, _, pickup) = test_support::invoice(&pool, 1, false).await;
+    test_support::finish_stages(&pool, orders[0], pickup).await;
+    crate::features::orders::readiness::confirm(&pool, invoice, None, "staff", true)
+        .await
+        .unwrap();
+    let (name, measurement): (String, String) = sqlx::query_as(
+        "SELECT c.name, readable_measurement_id(c.customer_number, m.measurement_number)
+           FROM orders o
+           JOIN measurements m ON m.id = o.measurement_id
+           JOIN customers c ON c.id = m.customer_id
+          WHERE o.id = $1",
+    )
+    .bind(orders[0])
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let (url, _mock) = mock_server().await;
+    let state = test_support::state(pool.clone(), Some(url.clone()), Some(url)).await;
+    let source = service::source(&state, invoice, "invoice_ready", None)
+        .await
+        .unwrap();
+    let card = source.card.unwrap();
+    assert_eq!(card.customer, name);
+    assert_eq!(card.measurement, measurement);
+    assert!(card.receipt.starts_with("INV-"));
+    assert!(card.balance.ends_with("BHD"));
+    assert!(!card.date.is_empty());
 }
 
 #[sqlx::test]

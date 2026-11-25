@@ -6,6 +6,7 @@ mod document;
 mod error;
 mod features;
 mod idempotency;
+mod image;
 mod list;
 mod request_log;
 mod seed;

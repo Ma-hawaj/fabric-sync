@@ -53,13 +53,13 @@ function Preview({
     currentDraft.current = value
     setDraft(value)
   }
-  const [pdfPreview, setPdfPreview] = useState<{
+  const [attachmentPreview, setAttachmentPreview] = useState<{
     artifactId: string
     url: string
   } | null>(null)
-  const pdfUrl =
-    pdfPreview?.artifactId === draft?.artifactId
-      ? (pdfPreview?.url ?? null)
+  const attachmentUrl =
+    attachmentPreview?.artifactId === draft?.artifactId
+      ? (attachmentPreview?.url ?? null)
       : null
   const [problem, setProblem] = useState('')
   const {
@@ -84,16 +84,17 @@ function Preview({
       if (currentDraft.current) discard(currentDraft.current.id)
     }
   }, [prepare, discard, invoiceId, kind, requestId, resendOf, repairId])
-  const pdf = useNotificationDocument(draft?.artifactId)
+  const attachment = useNotificationDocument(draft?.artifactId)
+  const isReadyCard = draft?.kind === 'invoice_ready'
   useEffect(() => {
-    if (!pdf.data) {
-      setPdfPreview(null)
+    if (!attachment.data) {
+      setAttachmentPreview(null)
       return
     }
-    const url = URL.createObjectURL(pdf.data)
-    setPdfPreview({ artifactId: draft?.artifactId ?? '', url })
+    const url = URL.createObjectURL(attachment.data)
+    setAttachmentPreview({ artifactId: draft?.artifactId ?? '', url })
     return () => URL.revokeObjectURL(url)
-  }, [pdf.data, draft?.artifactId])
+  }, [attachment.data, draft?.artifactId])
   const handlePreviewError = (error: Error) => {
     setProblem(error.message)
     if ('status' in error && (error.status === 409 || error.status === 404))
@@ -111,7 +112,7 @@ function Preview({
   const ready =
     draft &&
     (!repairId || draft.snapshot.repairId === repairId) &&
-    (!draft.artifactId || pdfUrl) &&
+    (!draft.artifactId || attachmentUrl) &&
     draft.state === 'draft'
   const title =
     kind === 'invoice_updated'
@@ -224,29 +225,52 @@ function Preview({
             </div>
             {draft.artifactId && (
               <div className="space-y-2">
-                {pdf.isLoading && <p>Loading the invoice PDF…</p>}
-                {pdf.isError && (
-                  <p role="alert" className="text-destructive">
-                    Could not load the approved PDF. Refresh the preview to try
-                    again.
+                {attachment.isLoading && (
+                  <p>
+                    {isReadyCard
+                      ? 'Loading the order ready card…'
+                      : 'Loading the invoice PDF…'}
                   </p>
                 )}
-                {pdfUrl && (
-                  <>
-                    <iframe
-                      title="Invoice PDF preview"
-                      src={pdfUrl}
-                      className="h-96 w-full rounded border"
-                    />
-                    <a
-                      href={pdfUrl}
-                      download={`INV-${draft.snapshot.invoiceNumber}.pdf`}
-                      className="text-sm underline"
-                    >
-                      Open or download the full PDF
-                    </a>
-                  </>
+                {attachment.isError && (
+                  <p role="alert" className="text-destructive">
+                    {isReadyCard
+                      ? 'Could not load the approved ready card. Refresh the preview to try again.'
+                      : 'Could not load the approved PDF. Refresh the preview to try again.'}
+                  </p>
                 )}
+                {attachmentUrl &&
+                  (isReadyCard ? (
+                    <>
+                      <img
+                        src={attachmentUrl}
+                        alt="Order ready card"
+                        className="mx-auto max-h-96 w-auto rounded border"
+                      />
+                      <a
+                        href={attachmentUrl}
+                        download="ready-card.jpg"
+                        className="text-sm underline"
+                      >
+                        Open or download the ready card
+                      </a>
+                    </>
+                  ) : (
+                    <>
+                      <iframe
+                        title="Invoice PDF preview"
+                        src={attachmentUrl}
+                        className="h-96 w-full rounded border"
+                      />
+                      <a
+                        href={attachmentUrl}
+                        download={`INV-${draft.snapshot.invoiceNumber}.pdf`}
+                        className="text-sm underline"
+                      >
+                        Open or download the full PDF
+                      </a>
+                    </>
+                  ))}
               </div>
             )}
             {!draft.canSend && (
@@ -288,13 +312,13 @@ function Preview({
             problem ||
             draft?.state === 'stale' ||
             (draft && repairId && draft.snapshot.repairId !== repairId) ||
-            pdf.isError) && (
+            attachment.isError) && (
             <Button
               variant="outline"
               disabled={preparing || send.isPending}
               onClick={() => {
                 setProblem('')
-                if (draft?.artifactId) void pdf.refetch()
+                if (draft?.artifactId) void attachment.refetch()
                 prepare({ invoiceId, kind, requestId, resendOf, repairId })
               }}
             >
