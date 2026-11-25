@@ -142,6 +142,12 @@ def review(path, *, phone=None, min_similarity=0, input_fn=input, output_fn=prin
             first_name = next((r for r in name_candidates if not r.get("measurement_names")), None)
             if first_name is None and not candidates and name_candidates:
                 first_name = name_candidates[0]
+            phone_names = sorted({
+                name
+                for candidate in [*pairs, *names]
+                if norm_phone(candidate.get("phone")) == norm_phone((first_name or (candidates[0] if candidates else {})).get("phone"))
+                for name in [*candidate.get("names", []), *candidate.get("measurement_names", []), *candidate.get("contact_names", [])]
+            }) if (first_name is not None or candidates) else []
             if first_name is not None:
                 row = first_name
                 name_mode = True
@@ -149,10 +155,12 @@ def review(path, *, phone=None, min_similarity=0, input_fn=input, output_fn=prin
                 measured_selection = bool(row.get("measurement_names"))
                 if measured_selection:
                     output_fn(f"\nPhone: {row['phone']} — choose a measured customer for the contacts without measurements.")
-                    if row.get("contact_names"):
-                        output_fn("  Contacts: " + "; ".join(row["contact_names"]))
                 else:
                     output_fn(f"\nPhone: {row['phone']} — choose one name for the contacts without measurements.")
+                if len(phone_names) > len(row.get("names", [])):
+                    output_fn("  All names on this phone: " + " | ".join(phone_names))
+                if row.get("contact_names"):
+                    output_fn("  Contacts: " + "; ".join(row["contact_names"]))
                 for index, name in enumerate(row["names"], 1):
                     suffix = " (has measurements)" if name in row.get("measurement_names", []) else ""
                     output_fn(f"  {index}. {name}{suffix}")
@@ -164,6 +172,8 @@ def review(path, *, phone=None, min_similarity=0, input_fn=input, output_fn=prin
                 name_mode = False
                 current_key = pair_key(row)
                 output_fn(f"\n{len(pairs)} identity comparisons | Phone: {row['phone']} | Similarity: {row['name_similarity']:.0%}")
+                if len(phone_names) > 2:
+                    output_fn("  All names on this phone: " + " | ".join(phone_names))
                 output_fn(f"  1. {row['names'][0]}\n  2. {row['names'][1]}")
                 show_measurements(row, identity, output_fn)
                 answer = input_fn("[s] same person  [d] different people  [k] skip  [v] measurement details  [a] remaining phone pairs different  [u] undo  [q] quit: ").strip().casefold()
