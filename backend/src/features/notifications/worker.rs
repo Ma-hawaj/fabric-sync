@@ -206,7 +206,7 @@ async fn send(
         }
         let header = match artifact.mime_type.as_str() {
             "application/pdf" => "document",
-            "image/png" => "image",
+            "image/jpeg" => "image",
             _ => return Err(failure("Invalid attachment type", false, false)),
         };
         let part = reqwest::multipart::Part::bytes(artifact.content)
