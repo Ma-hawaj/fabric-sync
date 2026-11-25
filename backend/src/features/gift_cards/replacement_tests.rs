@@ -263,9 +263,14 @@ async fn edits_and_returns_restore_value_to_the_current_replacement(pool: PgPool
         .unwrap();
     let mut payload = purchase(product, branch, &original, 33.0);
     payload["products"][0]["originalItemId"] = json!(edit.products[0].original_item_id);
-    invoices::service::update_invoice(&state, created.id, serde_json::from_value(payload).unwrap())
-        .await
-        .unwrap();
+    invoices::service::update_invoice(
+        &state,
+        created.id,
+        serde_json::from_value(payload).unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
     assert_eq!(
         service::get_gift_card_by_code(&state, &current.code)
             .await
@@ -315,7 +320,7 @@ async fn replaced_sale_cannot_be_rebuilt_even_before_any_redemption(pool: PgPool
         .unwrap();
     let result=invoices::service::update_invoice(&state,invoice,serde_json::from_value(json!({
         "expectedVatRate":0.1,"discountUnit":"amount","giftCards":[{"amount":110,"recipientPhone":"33112233"}]
-    })).unwrap()).await;
+    })).unwrap(), "staff").await;
     assert!(
         matches!(result,Err(AppError::BadRequest(message)) if message.contains("already been used"))
     );

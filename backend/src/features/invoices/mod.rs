@@ -1,6 +1,7 @@
 pub(crate) mod designs;
 pub(crate) mod document;
 mod handlers;
+pub(crate) mod history;
 mod routes;
 pub(crate) mod service;
 // Shared with the orders feature: PaymentType for the payments recorded when
@@ -13,6 +14,8 @@ pub use routes::router;
 
 #[cfg(test)]
 mod attribution_tests;
+#[cfg(test)]
+mod history_tests;
 #[cfg(test)]
 mod location_tests;
 #[cfg(test)]

@@ -18,6 +18,7 @@ pub fn router() -> Router<AppState> {
             get(handlers::get_invoice).put(handlers::update_invoice),
         )
         .route("/invoices/:id/edit", get(handlers::get_invoice_for_edit))
+        .route("/invoices/:id/history", get(handlers::invoice_history))
         // The printable document, as a self-contained HTML page. Separate from
         // the JSON above because it is rendered server-side: the same markup a
         // browser prints to PDF today is what an unattended PDF renderer will

@@ -37,9 +37,14 @@ async fn invoice_creator_and_initial_payment_actor_survive_edits(pool: PgPool) {
     );
     payload["createdBy"] = json!("editor-cannot-replace-creator");
     payload["products"][0]["quantity"] = json!(2);
-    service::update_invoice(&state, created.id, serde_json::from_value(payload).unwrap())
-        .await
-        .unwrap();
+    service::update_invoice(
+        &state,
+        created.id,
+        serde_json::from_value(payload).unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
     let after = service::get_invoice(&state, created.id).await.unwrap();
     assert_eq!(after.created_by, before.created_by);
     assert_eq!(after.payments[0].id, before.payments[0].id);

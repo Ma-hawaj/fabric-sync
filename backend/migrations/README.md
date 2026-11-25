@@ -35,6 +35,10 @@ SQLx applies the files in version order:
 4. `0004_list_indexes.sql` adds indexes used by list queries and joins, including
    gift-card sale and return-line lookups, and the unique index allowing one
    closure per garment.
+5. `0005_invoice_edit_history.sql` adds `invoice_edit_events`, a field-level
+   audit trail of invoice creation and edits (actor, timestamp, before/after
+   totals and a JSON diff). Payments, collections, returns and refunds stay in
+   their own ledgers and are merged into the history read, not duplicated here.
 
 The core schema defines readable customer IDs (`C-6216`) and permanent
 per-customer measurement IDs (`C-6216-001`) alongside their UUID keys.

@@ -70,17 +70,29 @@ pub async fn get_invoice_for_edit(
     ))
 }
 
-/// A full rebuild from a fresh copy of the create input. Refused once the
-/// invoice is paid, collected, or in production — see service::update_invoice.
+/// A full rebuild from a fresh copy of the create input. Production records are
+/// carried onto the rebuilt lines; collected orders and returns/refunds still
+/// block the edit — see service::update_invoice.
 pub async fn update_invoice(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthenticatedUser>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(invoice_id): Path<Uuid>,
     Json(input): Json<CreateInvoiceInput>,
 ) -> Result<Json<CreatedInvoice>, AppError> {
+    let actor = user.subject().unwrap_or("staff");
     Ok(Json(
-        service::update_invoice(&state, invoice_id, input).await?,
+        service::update_invoice(&state, invoice_id, input, actor).await?,
     ))
+}
+
+/// The invoice's chronological history: creation, edits with field diffs, and
+/// the payment/collection/return/refund ledger events.
+pub async fn invoice_history(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthenticatedUser>,
+    Path(invoice_id): Path<Uuid>,
+) -> Result<Json<Vec<super::history::InvoiceHistoryEntry>>, AppError> {
+    Ok(Json(service::invoice_history(&state, invoice_id).await?))
 }
 
 pub async fn collect_invoice(

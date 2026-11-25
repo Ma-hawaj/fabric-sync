@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id AS order_id, order_number, collected_at AS \"collected_at!\"\n        FROM orders WHERE invoice_id = $1 AND status = 'collected' ORDER BY collected_at, id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "order_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "order_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "collected_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "c44f7dd75fe643577d39d1f5530d1db2e14a6e0bed5752996448d99f147b1280"
+}

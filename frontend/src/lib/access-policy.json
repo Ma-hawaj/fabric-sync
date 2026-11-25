@@ -161,6 +161,11 @@
   },
   {
     "method": "GET",
+    "path": "/invoices/:id/history",
+    "roles": ["sales"]
+  },
+  {
+    "method": "GET",
     "path": "/invoices/:id/document",
     "roles": ["sales"]
   },

@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT a.id, a.order_id, a.stage_id, a.assignee_id, a.assignee_name, a.assigned_at\n        FROM order_stage_assignments a JOIN orders o ON o.id = a.order_id\n        WHERE o.invoice_id = $1 ORDER BY a.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "order_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "stage_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "assignee_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "assignee_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "assigned_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8925dd875fa63a93b3ce9af79045190cbb695e49ed0ae90b2dd15e7d9f9f8fee"
+}

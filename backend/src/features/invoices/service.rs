@@ -1466,7 +1466,7 @@ mod tests {
         // A higher material tier changes the garment price, keeping both fees intact.
         input.customers[0].orders[0].material_amount = 4.01;
         input.customers[0].measurement.chest = Some(100.0);
-        let updated = update_invoice(&state, created.id, input.clone())
+        let updated = update_invoice(&state, created.id, input.clone(), "staff")
             .await
             .unwrap();
         assert_eq!(updated.total_price, 50.9);
@@ -1476,7 +1476,7 @@ mod tests {
         .execute(&db)
         .await
         .unwrap();
-        let updated = update_invoice(&state, created.id, input.clone())
+        let updated = update_invoice(&state, created.id, input.clone(), "staff")
             .await
             .unwrap();
         assert_eq!(updated.total_price, 52.7);
@@ -1525,14 +1525,14 @@ mod tests {
 
         input.customers[0].orders[1].is_urgent = true;
         assert_eq!(
-            update_invoice(&state, created.id, input.clone())
+            update_invoice(&state, created.id, input.clone(), "staff")
                 .await
                 .unwrap()
                 .total_price,
             57.7
         );
         input.customers[0].orders[0].is_urgent = false;
-        let mixed = update_invoice(&state, created.id, input.clone())
+        let mixed = update_invoice(&state, created.id, input.clone(), "staff")
             .await
             .unwrap();
         assert_eq!(mixed.total_price, 52.7);
@@ -1548,7 +1548,7 @@ mod tests {
             order.urgent_charge = 0.0;
         }
         assert_eq!(
-            update_invoice(&state, created.id, input)
+            update_invoice(&state, created.id, input, "staff")
                 .await
                 .unwrap()
                 .total_price,
@@ -1624,6 +1624,7 @@ mod tests {
             delivery_charge: 3.0,
             collection_method: "delivery".into(),
             vat_rate: 0.1,
+            total_price: 93.0,
             invoice_date: chrono::Utc::now(),
         };
         resolve_delivery_charge(&mut invoice, Some(7.0), Some(&saved)).unwrap();
@@ -2132,12 +2133,16 @@ async fn resolve_measurement(
     }
 }
 
+/// Writes the rebuilt garment lines, returning each new order id paired with
+/// the original id the client sent (when the line was kept). The pairing lets
+/// an edit carry production records and audit identity onto the rebuilt rows.
 async fn write_customer_orders(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
     measurement_id: Uuid,
     orders: &[CreateOrderInput],
-) -> Result<(), AppError> {
+) -> Result<Vec<(Uuid, Option<Uuid>)>, AppError> {
+    let mut written = Vec::with_capacity(orders.len());
     for order in orders {
         if !repository::is_production_location(tx, order.production_location_id).await? {
             return Err(AppError::BadRequest(
@@ -2173,7 +2178,7 @@ async fn write_customer_orders(
             }
         }
 
-        repository::insert_order(
+        let new_id = repository::insert_order(
             tx,
             invoice_id,
             measurement_id,
@@ -2181,16 +2186,18 @@ async fn write_customer_orders(
             round2(order.urgent_charge),
         )
         .await?;
+        written.push((new_id, order.original_order_id));
     }
 
-    Ok(())
+    Ok(written)
 }
 
 async fn write_material_lines(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
     materials: &[CreateMaterialLineInput],
-) -> Result<(), AppError> {
+) -> Result<Vec<(Uuid, Option<Uuid>)>, AppError> {
+    let mut written = Vec::with_capacity(materials.len());
     for line in materials {
         if !repository::is_stock_location(tx, line.branch_id).await? {
             return Err(AppError::BadRequest(
@@ -2211,16 +2218,20 @@ async fn write_material_lines(
                 "not enough material in stock at the selected location".into(),
             ));
         }
-        repository::insert_material_item(tx, invoice_id, line, material_line_total(line)).await?;
+        let new_id =
+            repository::insert_material_item(tx, invoice_id, line, material_line_total(line))
+                .await?;
+        written.push((new_id, line.original_item_id));
     }
-    Ok(())
+    Ok(written)
 }
 
 async fn write_product_lines(
     tx: &mut sqlx::PgTransaction<'_>,
     invoice_id: Uuid,
     products: &[CreateProductLineInput],
-) -> Result<(), AppError> {
+) -> Result<Vec<(Uuid, Option<Uuid>)>, AppError> {
+    let mut written = Vec::with_capacity(products.len());
     for line in products {
         // The decrement is guarded in SQL, so `None` means the location either
         // never stocked this product or no longer holds enough of it. Reading
@@ -2245,7 +2256,7 @@ async fn write_product_lines(
             )));
         };
 
-        repository::insert_product_item(
+        let new_id = repository::insert_product_item(
             tx,
             invoice_id,
             line,
@@ -2253,9 +2264,10 @@ async fn write_product_lines(
             product_line_total(line),
         )
         .await?;
+        written.push((new_id, line.original_item_id));
     }
 
-    Ok(())
+    Ok(written)
 }
 
 /// Issue paid cards and their sale lines atomically, retaining allowed codes on invoice edits.
@@ -2410,11 +2422,12 @@ pub async fn create_invoice(
         let customer_id = resolve_customer_id(&mut tx, customer).await?;
         let measurement_id =
             resolve_measurement(&mut tx, customer_id, &customer.measurement, &[]).await?;
-        write_customer_orders(&mut tx, invoice_id, measurement_id, &customer.orders).await?;
+        let _ =
+            write_customer_orders(&mut tx, invoice_id, measurement_id, &customer.orders).await?;
     }
 
-    write_product_lines(&mut tx, invoice_id, &input.products).await?;
-    write_material_lines(&mut tx, invoice_id, &input.materials).await?;
+    let _ = write_product_lines(&mut tx, invoice_id, &input.products).await?;
+    let _ = write_material_lines(&mut tx, invoice_id, &input.materials).await?;
 
     let gift_cards = write_gift_card_sales(
         &mut tx,
@@ -2437,6 +2450,17 @@ pub async fn create_invoice(
 
     let totals = compute_totals(&input, vat_rate, prepaid_amount);
     repository::update_tax_snapshot(&mut tx, invoice_id, totals.taxable, totals.vat).await?;
+
+    repository::insert_edit_event(
+        &mut tx,
+        invoice_id,
+        "created",
+        Some(actor),
+        &[],
+        None,
+        Some(totals.total),
+    )
+    .await?;
 
     crate::features::notifications::repository::request_notification(
         &mut tx, invoice_id, "invoice", None,
@@ -2482,6 +2506,78 @@ pub async fn get_invoice_for_edit(
         .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))
 }
 
+/// The invoice's chronological history: creation, field-level edits, and the
+/// payments, collections, returns and refunds already recorded in their own
+/// ledgers. Edit diffs come from `invoice_edit_events`; the money events are
+/// merged from the existing tables rather than duplicated.
+pub async fn invoice_history(
+    state: &AppState,
+    invoice_id: Uuid,
+) -> Result<Vec<super::history::InvoiceHistoryEntry>, AppError> {
+    use super::history::InvoiceHistoryEntry;
+
+    let mut tx = state.db().begin().await?;
+    let Some((created_at, created_by)) = repository::invoice_created(&mut tx, invoice_id).await?
+    else {
+        return Err(AppError::NotFound(format!(
+            "invoice {invoice_id} not found"
+        )));
+    };
+    let mut entries = vec![InvoiceHistoryEntry::Created {
+        at: created_at,
+        actor: created_by,
+    }];
+
+    for event in repository::list_edit_events(&mut tx, invoice_id).await? {
+        if event.event_type == "edited" {
+            entries.push(InvoiceHistoryEntry::Edited {
+                id: event.id,
+                at: event.occurred_at,
+                actor: event.actor,
+                changes: event.changes.0,
+                total_before: event.total_before,
+                total_after: event.total_after,
+            });
+        }
+    }
+    for payment in repository::list_payments(state, invoice_id).await? {
+        entries.push(super::history::payment_entry(payment));
+    }
+    for order in repository::collected_orders(&mut tx, invoice_id).await? {
+        entries.push(InvoiceHistoryEntry::Collection {
+            order_id: order.order_id,
+            order_number: order.order_number,
+            at: order.collected_at,
+        });
+    }
+    for record in returns_repository::history(&mut tx, invoice_id).await? {
+        entries.push(InvoiceHistoryEntry::Return {
+            id: record.id,
+            at: record.created_at,
+            actor: record.created_by,
+            return_kind: record.kind,
+            reason: record.reason,
+            amount: record.amount,
+            lines: record.lines.0,
+        });
+    }
+    for refund in returns_repository::refunds(&mut tx, invoice_id).await? {
+        entries.push(InvoiceHistoryEntry::Refund {
+            id: refund.id,
+            at: refund.created_at,
+            actor: refund.created_by,
+            reason: refund.reason,
+            amount: refund.amount,
+            payment_type: refund.payment_type,
+            gift_card_code: refund.gift_card_code,
+        });
+    }
+    tx.commit().await?;
+
+    entries.sort_by_key(|entry| entry.occurred_at());
+    Ok(entries)
+}
+
 /// Rebuilds an invoice from a fresh copy of the create input: the old lines
 /// are torn down (stock restored, tender paid back, sold cards deleted) and
 /// the new lines go through the same writers as creation.
@@ -2490,13 +2586,16 @@ pub async fn get_invoice_for_edit(
 /// carrying an advance stays editable. What is checked instead is that the
 /// money already taken still fits the rebuilt total.
 ///
-/// Refused once goods or work have moved past the draft stage — a collected
-/// order, or any recorded stage/assignee/repair — since there is no longer
-/// an untouched sale to rebuild.
+/// Production is no longer a hard stop: stage progress, assignments, repairs,
+/// readiness and the garment's quotable number are carried onto the rebuilt
+/// rows. Removing a garment that already has production records is refused,
+/// and a collected order still blocks the whole edit. Every successful edit
+/// records a field-level diff in the invoice's history.
 pub async fn update_invoice(
     state: &AppState,
     invoice_id: Uuid,
     mut input: CreateInvoiceInput,
+    actor: &str,
 ) -> Result<CreatedInvoice, AppError> {
     // Anything the form sends back for the ledger is ignored: payments are
     // taken through the collect and payments endpoints, never smuggled in
@@ -2556,10 +2655,41 @@ pub async fn update_invoice(
         ));
     }
 
-    if repository::invoice_has_production_activity(&mut tx, invoice_id).await? {
-        return Err(AppError::BadRequest(
-            "this invoice has production activity and cannot be edited".to_string(),
-        ));
+    // Capture the production/readiness facts and the pre-edit snapshot before
+    // anything is torn down, so they can be carried onto the rebuilt rows and
+    // diffed for the history entry.
+    let lifecycle = repository::order_lifecycle(&mut tx, invoice_id).await?;
+    let stage_rows = repository::stage_progress_rows(&mut tx, invoice_id).await?;
+    let assignment_rows = repository::assignment_rows(&mut tx, invoice_id).await?;
+    let repair_rows = repository::repair_rows(&mut tx, invoice_id).await?;
+    let payment_links = repository::order_payment_links(&mut tx, invoice_id).await?;
+    let before = repository::fetch_invoice_edit_conn(&mut *tx, invoice_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
+
+    // A garment that already has work recorded (or a payment tied to it) cannot
+    // be dropped by an edit — its history would be orphaned. Kept garments are
+    // matched by the original id the form sends back.
+    let kept_order_ids: HashSet<Uuid> = input
+        .customers
+        .iter()
+        .flat_map(|customer| customer.orders.iter())
+        .filter_map(|order| order.original_order_id)
+        .collect();
+    let payment_order_ids: HashSet<Uuid> = payment_links
+        .iter()
+        .map(|(_, order_id)| *order_id)
+        .collect();
+    for row in &lifecycle {
+        if kept_order_ids.contains(&row.order_id) {
+            continue;
+        }
+        if row.has_production || payment_order_ids.contains(&row.order_id) {
+            return Err(AppError::BadRequest(format!(
+                "garment #{} already has production records and cannot be removed",
+                row.order_number
+            )));
+        }
     }
 
     // Everything the rebuild is about to tear down.
@@ -2631,7 +2761,12 @@ pub async fn update_invoice(
     }
 
     // Rebuild order and retail lines, retaining all measurement history.
-    // Sold gift cards go once the spent-check above has cleared them.
+    // Production rows reference orders without ON DELETE, so they are lifted
+    // off first and re-inserted against the rebuilt rows below. Sold gift cards
+    // go once the spent-check above has cleared them.
+    repository::delete_stage_progress(&mut tx, invoice_id).await?;
+    repository::delete_assignments(&mut tx, invoice_id).await?;
+    repository::delete_repairs(&mut tx, invoice_id).await?;
     repository::delete_redemptions(&mut tx, invoice_id).await?;
     repository::delete_orders(&mut tx, invoice_id).await?;
     repository::delete_items(&mut tx, invoice_id).await?;
@@ -2643,6 +2778,7 @@ pub async fn update_invoice(
     // Measurements are customer history, including records created before
     // this invoice. Reuse unchanged snapshots, append changed values, and
     // retain records even when their customer block has been removed.
+    let mut order_identity: HashMap<Uuid, Uuid> = HashMap::new();
     for customer in &input.customers {
         let customer_id = resolve_customer_id(&mut tx, customer).await?;
         let old_ids: Vec<Uuid> = measurement_refs
@@ -2652,11 +2788,63 @@ pub async fn update_invoice(
             .collect();
         let measurement_id =
             resolve_measurement(&mut tx, customer_id, &customer.measurement, &old_ids).await?;
-        write_customer_orders(&mut tx, invoice_id, measurement_id, &customer.orders).await?;
+        for (new_id, original_id) in
+            write_customer_orders(&mut tx, invoice_id, measurement_id, &customer.orders).await?
+        {
+            if let Some(original_id) = original_id {
+                order_identity.insert(new_id, original_id);
+            }
+        }
     }
 
-    write_product_lines(&mut tx, invoice_id, &input.products).await?;
-    write_material_lines(&mut tx, invoice_id, &input.materials).await?;
+    let mut item_identity: HashMap<Uuid, Uuid> = HashMap::new();
+    for (new_id, original_id) in write_product_lines(&mut tx, invoice_id, &input.products).await? {
+        if let Some(original_id) = original_id {
+            item_identity.insert(new_id, original_id);
+        }
+    }
+    for (new_id, original_id) in write_material_lines(&mut tx, invoice_id, &input.materials).await?
+    {
+        if let Some(original_id) = original_id {
+            item_identity.insert(new_id, original_id);
+        }
+    }
+
+    // Carry production records and lifecycle facts onto the kept garments. The
+    // rows are restored while the rebuilt order is still pending, then the
+    // saved readiness state is reapplied last so the readiness triggers do not
+    // immediately reset it.
+    let lifecycle_by_old: HashMap<Uuid, &repository::OrderLifecycle> =
+        lifecycle.iter().map(|row| (row.order_id, row)).collect();
+    let old_to_new: HashMap<Uuid, Uuid> = order_identity
+        .iter()
+        .map(|(new_id, old_id)| (*old_id, *new_id))
+        .collect();
+    for (new_id, old_id) in &order_identity {
+        for row in &stage_rows {
+            if row.order_id == *old_id {
+                repository::restore_stage_progress(&mut tx, row, *new_id).await?;
+            }
+        }
+        for row in &assignment_rows {
+            if row.order_id == *old_id {
+                repository::restore_assignment(&mut tx, row, *new_id).await?;
+            }
+        }
+        for row in &repair_rows {
+            if row.order_id == *old_id {
+                repository::restore_repair(&mut tx, row, *new_id).await?;
+            }
+        }
+        if let Some(saved) = lifecycle_by_old.get(old_id) {
+            repository::carry_order_lifecycle(&mut tx, *new_id, saved).await?;
+        }
+    }
+    for (payment_id, old_order_id) in &payment_links {
+        if let Some(new_id) = old_to_new.get(old_order_id) {
+            repository::remap_payment_order(&mut tx, *payment_id, *new_id).await?;
+        }
+    }
 
     // Only this invoice's previously issued codes can survive an edit.
     for card in &mut input.gift_cards {
@@ -2701,6 +2889,25 @@ pub async fn update_invoice(
     )
     .await?;
 
+    // Record the field-level diff between the captured pre-edit state and the
+    // rebuilt state. Rebuilt rows carry new ids, so the identity maps fold them
+    // back to the original ids the diff matches lines on.
+    let after = repository::fetch_invoice_edit_conn(&mut *tx, invoice_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("invoice {invoice_id} not found")))?;
+    let changes =
+        super::history::diff_invoice_edits(&before, &after, &order_identity, &item_identity);
+    repository::insert_edit_event(
+        &mut tx,
+        invoice_id,
+        "edited",
+        Some(actor),
+        &changes,
+        Some(locked.total_price),
+        Some(totals.total),
+    )
+    .await?;
+
     crate::features::notifications::repository::request_notification(
         &mut tx, invoice_id, "invoice", None,
     )
@@ -2716,6 +2923,7 @@ pub async fn update_invoice(
         product_lines = input.products.len(),
         gift_cards_sold = input.gift_cards.len(),
         gift_cards_redeemed = input.gift_card_redemptions.len(),
+        changed_fields = changes.len(),
         "invoice updated"
     );
 

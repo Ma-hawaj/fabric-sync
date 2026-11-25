@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT o.id AS order_id, o.order_number, o.status, o.ready_at, o.ready_by,\n               o.readiness_version, o.ready_location_id,\n               (o.status = 'ready'\n                OR EXISTS(SELECT 1 FROM order_stage_progress p WHERE p.order_id = o.id)\n                OR EXISTS(SELECT 1 FROM order_stage_assignments a WHERE a.order_id = o.id)\n                OR EXISTS(SELECT 1 FROM order_repairs r WHERE r.order_id = o.id)) AS \"has_production!\"\n        FROM orders o WHERE o.invoice_id = $1 ORDER BY o.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "order_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "order_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "ready_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "ready_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "readiness_version",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "ready_location_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 7,
+        "name": "has_production!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "36227250480ad1a42de75e2c302de74aa16ed038bf0bf2197bb7c183fa80baac"
+}
