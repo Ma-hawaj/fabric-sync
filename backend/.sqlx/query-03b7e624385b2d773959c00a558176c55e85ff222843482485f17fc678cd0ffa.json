@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT r.id, r.order_id, r.reason, r.reported_on, r.charge::float8 AS \"charge!\",\n               r.status, r.completed_at, r.received_at,\n               r.received_amount::float8 AS \"received_amount!\",\n               r.received_payment_type, r.fixed_measurement_id, r.notes\n        FROM order_repairs r JOIN orders o ON o.id = r.order_id\n        WHERE o.invoice_id = $1 ORDER BY r.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "order_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "reported_on",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 4,
+        "name": "charge!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "completed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "received_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "received_amount!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 9,
+        "name": "received_payment_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "fixed_measurement_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 11,
+        "name": "notes",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      true,
+      true,
+      null,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "03b7e624385b2d773959c00a558176c55e85ff222843482485f17fc678cd0ffa"
+}

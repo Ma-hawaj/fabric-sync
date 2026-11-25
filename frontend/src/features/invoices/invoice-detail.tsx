@@ -31,6 +31,7 @@ import { toast } from 'sonner'
 import { CollectInvoiceDialog } from './components/collect-invoice-dialog'
 import { RecordPaymentDialog } from './components/record-payment-dialog'
 import { InvoicePaymentHistory } from './components/invoice-payment-history'
+import { InvoiceHistory } from './components/invoice-history'
 import { InvoicePriceSummary } from './components/invoice-price-summary'
 import {
   ReturnsPanel,
@@ -460,6 +461,8 @@ export function InvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           </div>
         </section>
       )}
+
+      <InvoiceHistory invoiceId={detail.id} />
     </div>
   )
 }

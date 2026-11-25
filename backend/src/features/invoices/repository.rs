@@ -1,3 +1,4 @@
+use chrono::{DateTime, NaiveDate, Utc};
 use uuid::Uuid;
 
 use crate::{
@@ -5,6 +6,8 @@ use crate::{
     list::{self, ColumnDef, ColumnKind, ListParams, ListSpec},
     state::AppState,
 };
+
+use super::history::FieldChange;
 
 use super::types::{
     CreateInvoiceInput, CreateMaterialLineInput, CreateOrderInput, CreateProductLineInput,
@@ -647,6 +650,7 @@ pub struct LockedInvoice {
     pub delivery_charge: f64,
     pub collection_method: String,
     pub vat_rate: f64,
+    pub total_price: f64,
     /// The server-set creation date. Gift card expiry on an edit is checked
     /// against this — the date the sale happened — not the editable target.
     pub invoice_date: chrono::DateTime<chrono::Utc>,
@@ -658,7 +662,8 @@ pub async fn lock_invoice(
 ) -> Result<Option<LockedInvoice>, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT invoice_date, vat_rate::float8 AS "vat_rate!", delivery_charge::float8 AS "delivery_charge!", collection_method
+        SELECT invoice_date, vat_rate::float8 AS "vat_rate!", delivery_charge::float8 AS "delivery_charge!", collection_method,
+               total_price::float8 AS "total_price!"
         FROM invoices
         WHERE id = $1
         FOR UPDATE
@@ -672,6 +677,7 @@ pub async fn lock_invoice(
         delivery_charge: row.delivery_charge,
         collection_method: row.collection_method,
         vat_rate: row.vat_rate,
+        total_price: row.total_price,
         invoice_date: row.invoice_date,
     }))
 }
@@ -882,8 +888,8 @@ pub async fn insert_order(
     measurement_id: Uuid,
     order: &CreateOrderInput,
     urgent_charge: f64,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
+) -> Result<Uuid, sqlx::Error> {
+    let row = sqlx::query!(
         r#"
         INSERT INTO orders (
             measurement_id, material_id, material_amount, invoice_id, price,
@@ -891,6 +897,7 @@ pub async fn insert_order(
             production_branch_id, material_source, customer_material_description, base_price, is_urgent, urgent_charge, material_stock_branch_id
         )
         VALUES ($1, $2, $3::float8, $4, $5::float8, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::float8, $18, $19::float8, $20)
+        RETURNING id
         "#,
         measurement_id,
         order.material_id,
@@ -916,10 +923,10 @@ pub async fn insert_order(
         urgent_charge,
         order.material_location_id,
     )
-    .execute(&mut **tx)
+    .fetch_one(&mut **tx)
     .await?;
 
-    Ok(())
+    Ok(row.id)
 }
 
 // `description` is stored rather than joined at read time so a line keeps the
@@ -930,14 +937,15 @@ pub async fn insert_product_item(
     line: &CreateProductLineInput,
     description: &str,
     line_total: f64,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
+) -> Result<Uuid, sqlx::Error> {
+    let row = sqlx::query!(
         r#"
         INSERT INTO invoice_items (
             invoice_id, kind, product_id, branch_id,
             description, quantity, unit_price, line_total
         )
         VALUES ($1, 'product', $2, $3, $4, $5::float8, $6::float8, $7::float8)
+        RETURNING id
         "#,
         invoice_id,
         line.product_id,
@@ -947,10 +955,10 @@ pub async fn insert_product_item(
         line.unit_price,
         line_total,
     )
-    .execute(&mut **tx)
+    .fetch_one(&mut **tx)
     .await?;
 
-    Ok(())
+    Ok(row.id)
 }
 
 pub async fn insert_gift_card_item(
@@ -1018,6 +1026,16 @@ pub async fn fetch_invoice_edit(
     state: &AppState,
     invoice_id: Uuid,
 ) -> Result<Option<InvoiceEdit>, sqlx::Error> {
+    let mut conn = state.db().acquire().await?;
+    fetch_invoice_edit_conn(&mut conn, invoice_id).await
+}
+
+/// The same read inside an open transaction, so an edit can capture the state
+/// it is about to tear down without seeing another writer's changes.
+pub(crate) async fn fetch_invoice_edit_conn(
+    conn: &mut sqlx::PgConnection,
+    invoice_id: Uuid,
+) -> Result<Option<InvoiceEdit>, sqlx::Error> {
     let Some(header) = sqlx::query!(
         r#"
         SELECT
@@ -1041,7 +1059,7 @@ pub async fn fetch_invoice_edit(
         "#,
         invoice_id,
     )
-    .fetch_optional(state.db())
+    .fetch_optional(&mut *conn)
     .await?
     else {
         return Ok(None);
@@ -1126,7 +1144,7 @@ pub async fn fetch_invoice_edit(
         "#,
         invoice_id,
     )
-    .fetch_all(state.db())
+    .fetch_all(&mut *conn)
     .await?;
 
     // Grouped by (customer, measurement) the way the form's customer blocks
@@ -1239,7 +1257,7 @@ pub async fn fetch_invoice_edit(
         "#,
         invoice_id,
     )
-    .fetch_all(state.db())
+    .fetch_all(&mut *conn)
     .await?;
 
     let gift_rows = sqlx::query!(
@@ -1252,7 +1270,7 @@ pub async fn fetch_invoice_edit(
         "#,
         invoice_id,
     )
-    .fetch_all(state.db())
+    .fetch_all(&mut *conn)
     .await?;
 
     let redemption_rows = sqlx::query!(
@@ -1266,13 +1284,23 @@ pub async fn fetch_invoice_edit(
         "#,
         invoice_id,
     )
-    .fetch_all(state.db())
+    .fetch_all(&mut *conn)
     .await?;
 
-    // An invoice carrying payments cannot be edited at all, so this is empty
-    // whenever the form actually opens — it is here so the form can map an
+    // The ledger is untouched by edits; it rides along so the form can map an
     // untouched ledger back to its payments input.
-    let payments = list_payments(state, invoice_id).await?;
+    let payments = sqlx::query_as!(
+        InvoicePayment,
+        r#"
+        SELECT id, amount::float8 AS "amount!", payment_type, paid_at, order_id, recorded_by
+        FROM invoice_payments
+        WHERE invoice_id = $1
+        ORDER BY paid_at, id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(&mut *conn)
+    .await?;
 
     Ok(Some(InvoiceEdit {
         issuing_branch_id: header.issuing_branch_id,
@@ -1292,7 +1320,7 @@ pub async fn fetch_invoice_edit(
         payments,
         customer_id: header.customer_id,
         customers,
-        materials: material_lines(state.db(), invoice_id).await?,
+        materials: material_lines(&mut *conn, invoice_id).await?,
         products: product_rows
             .into_iter()
             .map(|row| InvoiceEditProductLine {
@@ -1337,35 +1365,6 @@ pub async fn invoice_has_collected_orders(
         SELECT EXISTS(
             SELECT 1 FROM orders
             WHERE invoice_id = $1 AND status = 'collected'
-        ) AS "exists!"
-        "#,
-        invoice_id,
-    )
-    .fetch_one(&mut **tx)
-    .await?)
-}
-
-/// True once production has touched any order on the invoice: a recorded
-/// stage, an assignee, or a repair. Editing lines under that would rewrite
-/// history the shop floor already acted on.
-pub async fn invoice_has_production_activity(
-    tx: &mut sqlx::PgTransaction<'_>,
-    invoice_id: Uuid,
-) -> Result<bool, sqlx::Error> {
-    Ok(sqlx::query_scalar!(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM order_stage_progress p
-            JOIN orders o ON o.id = p.order_id
-            WHERE o.invoice_id = $1
-        ) OR EXISTS(
-            SELECT 1 FROM order_stage_assignments a
-            JOIN orders o ON o.id = a.order_id
-            WHERE o.invoice_id = $1
-        ) OR EXISTS(
-            SELECT 1 FROM order_repairs r
-            JOIN orders o ON o.id = r.order_id
-            WHERE o.invoice_id = $1
         ) AS "exists!"
         "#,
         invoice_id,
@@ -1722,19 +1721,20 @@ pub async fn insert_material_item(
     invoice_id: Uuid,
     line: &CreateMaterialLineInput,
     line_total: f64,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
+) -> Result<Uuid, sqlx::Error> {
+    let row = sqlx::query!(
         r#"INSERT INTO invoice_items
             (invoice_id, kind, material_id, branch_id, description, unit, quantity, unit_price, line_total)
         SELECT $1, 'material', id, $3, name, unit, $4::float8, $5::float8, $6::float8
-        FROM materials WHERE id = $2"#,
+        FROM materials WHERE id = $2
+        RETURNING id"#,
         invoice_id, line.material_id, line.branch_id, line.quantity, line.unit_price, line_total,
-    ).execute(&mut **tx).await?;
-    Ok(())
+    ).fetch_optional(&mut **tx).await?;
+    row.map(|row| row.id).ok_or(sqlx::Error::RowNotFound)
 }
 
 async fn material_lines(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     invoice_id: Uuid,
 ) -> Result<Vec<InvoiceEditMaterialLine>, sqlx::Error> {
     sqlx::query_as!(InvoiceEditMaterialLine,
@@ -1746,7 +1746,7 @@ async fn material_lines(
         LEFT JOIN material_stock ms ON ms.material_id = ii.material_id AND ms.branch_id = ii.branch_id
         WHERE ii.invoice_id = $1 AND ii.kind = 'material' ORDER BY ii.id"#,
         invoice_id,
-    ).fetch_all(pool).await
+    ).fetch_all(&mut *conn).await
 }
 
 pub struct OldMaterialLine {
@@ -1812,4 +1812,406 @@ pub async fn original_item_ids(
     .into_iter()
     .map(|row| (row.id, row.kind))
     .collect())
+}
+
+/// The lifecycle facts an edit must carry onto a rebuilt order: its quotable
+/// number, readiness state, and whether any production work has touched it.
+pub struct OrderLifecycle {
+    pub order_id: Uuid,
+    pub order_number: i64,
+    pub status: String,
+    pub ready_at: Option<DateTime<Utc>>,
+    pub ready_by: Option<String>,
+    pub readiness_version: i64,
+    pub ready_location_id: Option<Uuid>,
+    pub has_production: bool,
+}
+
+pub async fn order_lifecycle(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<OrderLifecycle>, sqlx::Error> {
+    sqlx::query_as!(
+        OrderLifecycle,
+        r#"
+        SELECT o.id AS order_id, o.order_number, o.status, o.ready_at, o.ready_by,
+               o.readiness_version, o.ready_location_id,
+               (o.status = 'ready'
+                OR EXISTS(SELECT 1 FROM order_stage_progress p WHERE p.order_id = o.id)
+                OR EXISTS(SELECT 1 FROM order_stage_assignments a WHERE a.order_id = o.id)
+                OR EXISTS(SELECT 1 FROM order_repairs r WHERE r.order_id = o.id)) AS "has_production!"
+        FROM orders o WHERE o.invoice_id = $1 ORDER BY o.id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+pub struct StageProgressRow {
+    pub id: Uuid,
+    pub order_id: Uuid,
+    pub stage_id: Uuid,
+    pub status: String,
+    pub completed_at: DateTime<Utc>,
+    pub location_id: Option<Uuid>,
+    pub notes: Option<String>,
+}
+
+pub async fn stage_progress_rows(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<StageProgressRow>, sqlx::Error> {
+    sqlx::query_as!(
+        StageProgressRow,
+        r#"
+        SELECT p.id, p.order_id, p.stage_id, p.status, p.completed_at, p.location_id, p.notes
+        FROM order_stage_progress p JOIN orders o ON o.id = p.order_id
+        WHERE o.invoice_id = $1 ORDER BY p.id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+pub struct AssignmentRow {
+    pub id: Uuid,
+    pub order_id: Uuid,
+    pub stage_id: Uuid,
+    pub assignee_id: String,
+    pub assignee_name: String,
+    pub assigned_at: DateTime<Utc>,
+}
+
+pub async fn assignment_rows(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<AssignmentRow>, sqlx::Error> {
+    sqlx::query_as!(
+        AssignmentRow,
+        r#"
+        SELECT a.id, a.order_id, a.stage_id, a.assignee_id, a.assignee_name, a.assigned_at
+        FROM order_stage_assignments a JOIN orders o ON o.id = a.order_id
+        WHERE o.invoice_id = $1 ORDER BY a.id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+pub struct RepairRow {
+    pub id: Uuid,
+    pub order_id: Uuid,
+    pub reason: String,
+    pub reported_on: NaiveDate,
+    pub charge: f64,
+    pub status: String,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub received_at: Option<DateTime<Utc>>,
+    pub received_amount: f64,
+    pub received_payment_type: Option<String>,
+    pub fixed_measurement_id: Option<Uuid>,
+    pub notes: Option<String>,
+}
+
+pub async fn repair_rows(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<RepairRow>, sqlx::Error> {
+    sqlx::query_as!(
+        RepairRow,
+        r#"
+        SELECT r.id, r.order_id, r.reason, r.reported_on, r.charge::float8 AS "charge!",
+               r.status, r.completed_at, r.received_at,
+               r.received_amount::float8 AS "received_amount!",
+               r.received_payment_type, r.fixed_measurement_id, r.notes
+        FROM order_repairs r JOIN orders o ON o.id = r.order_id
+        WHERE o.invoice_id = $1 ORDER BY r.id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+/// Payments tied to a specific garment (per-pickup collections). Advances and
+/// till payments carry no order and are unaffected by the rebuild.
+pub async fn order_payment_links(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<(Uuid, Uuid)>, sqlx::Error> {
+    Ok(sqlx::query!(
+        r#"
+        SELECT p.id AS payment_id, p.order_id AS "order_id!"
+        FROM invoice_payments p JOIN orders o ON o.id = p.order_id
+        WHERE o.invoice_id = $1 AND p.order_id IS NOT NULL
+        "#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await?
+    .into_iter()
+    .map(|row| (row.payment_id, row.order_id))
+    .collect())
+}
+
+pub async fn delete_stage_progress(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        DELETE FROM order_stage_progress p USING orders o
+        WHERE p.order_id = o.id AND o.invoice_id = $1
+        "#,
+        invoice_id,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+pub async fn delete_assignments(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        DELETE FROM order_stage_assignments a USING orders o
+        WHERE a.order_id = o.id AND o.invoice_id = $1
+        "#,
+        invoice_id,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+pub async fn delete_repairs(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        DELETE FROM order_repairs r USING orders o
+        WHERE r.order_id = o.id AND o.invoice_id = $1
+        "#,
+        invoice_id,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+pub async fn restore_stage_progress(
+    tx: &mut sqlx::PgTransaction<'_>,
+    row: &StageProgressRow,
+    order_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO order_stage_progress (id, order_id, stage_id, status, completed_at, location_id, notes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        "#,
+        row.id,
+        order_id,
+        row.stage_id,
+        row.status,
+        row.completed_at,
+        row.location_id,
+        row.notes,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+pub async fn restore_assignment(
+    tx: &mut sqlx::PgTransaction<'_>,
+    row: &AssignmentRow,
+    order_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO order_stage_assignments (id, order_id, stage_id, assignee_id, assignee_name, assigned_at)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        "#,
+        row.id,
+        order_id,
+        row.stage_id,
+        row.assignee_id,
+        row.assignee_name,
+        row.assigned_at,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+pub async fn restore_repair(
+    tx: &mut sqlx::PgTransaction<'_>,
+    row: &RepairRow,
+    order_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        INSERT INTO order_repairs (
+            id, order_id, reason, reported_on, charge, status, completed_at,
+            received_at, received_amount, received_payment_type, fixed_measurement_id, notes
+        )
+        VALUES ($1, $2, $3, $4, $5::float8, $6, $7, $8, $9::float8, $10, $11, $12)
+        "#,
+        row.id,
+        order_id,
+        row.reason,
+        row.reported_on,
+        row.charge,
+        row.status,
+        row.completed_at,
+        row.received_at,
+        row.received_amount,
+        row.received_payment_type,
+        row.fixed_measurement_id,
+        row.notes,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Reapply a garment's quotable number and readiness state to its rebuilt row.
+/// Done after production rows are restored so the readiness triggers do not
+/// immediately reset a carried `ready` state back to pending.
+pub async fn carry_order_lifecycle(
+    tx: &mut sqlx::PgTransaction<'_>,
+    order_id: Uuid,
+    lifecycle: &OrderLifecycle,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE orders
+        SET order_number = $2, status = $3, ready_at = $4, ready_by = $5,
+            readiness_version = $6, ready_location_id = $7
+        WHERE id = $1
+        "#,
+        order_id,
+        lifecycle.order_number,
+        lifecycle.status,
+        lifecycle.ready_at,
+        lifecycle.ready_by,
+        lifecycle.readiness_version,
+        lifecycle.ready_location_id,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+pub async fn remap_payment_order(
+    tx: &mut sqlx::PgTransaction<'_>,
+    payment_id: Uuid,
+    order_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "UPDATE invoice_payments SET order_id = $2 WHERE id = $1",
+        payment_id,
+        order_id,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// One recorded creation or edit, with the field-level diff it produced.
+#[derive(sqlx::FromRow)]
+pub struct InvoiceEditEvent {
+    pub id: Uuid,
+    pub event_type: String,
+    pub occurred_at: DateTime<Utc>,
+    pub actor: Option<String>,
+    pub changes: sqlx::types::Json<Vec<FieldChange>>,
+    pub total_before: Option<f64>,
+    pub total_after: Option<f64>,
+}
+
+pub async fn insert_edit_event(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+    event_type: &str,
+    actor: Option<&str>,
+    changes: &[FieldChange],
+    total_before: Option<f64>,
+    total_after: Option<f64>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO invoice_edit_events (invoice_id, event_type, actor, changes, total_before, total_after)
+        VALUES ($1, $2, $3, $4, $5::float8, $6::float8)
+        "#,
+    )
+    .bind(invoice_id)
+    .bind(event_type)
+    .bind(actor)
+    .bind(sqlx::types::Json(changes))
+    .bind(total_before)
+    .bind(total_after)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+pub async fn list_edit_events(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<InvoiceEditEvent>, sqlx::Error> {
+    sqlx::query_as!(
+        InvoiceEditEvent,
+        r#"
+        SELECT id, event_type, occurred_at, actor,
+               changes AS "changes!: sqlx::types::Json<Vec<FieldChange>>",
+               total_before::float8 AS "total_before?",
+               total_after::float8 AS "total_after?"
+        FROM invoice_edit_events WHERE invoice_id = $1 ORDER BY occurred_at, id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+pub async fn invoice_created(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Option<(DateTime<Utc>, Option<String>)>, sqlx::Error> {
+    Ok(sqlx::query!(
+        "SELECT created_at, created_by FROM invoices WHERE id = $1",
+        invoice_id,
+    )
+    .fetch_optional(&mut **tx)
+    .await?
+    .map(|row| (row.created_at, row.created_by)))
+}
+
+pub struct CollectedOrder {
+    pub order_id: Uuid,
+    pub order_number: i64,
+    pub collected_at: DateTime<Utc>,
+}
+
+pub async fn collected_orders(
+    tx: &mut sqlx::PgTransaction<'_>,
+    invoice_id: Uuid,
+) -> Result<Vec<CollectedOrder>, sqlx::Error> {
+    sqlx::query_as!(
+        CollectedOrder,
+        r#"
+        SELECT id AS order_id, order_number, collected_at AS "collected_at!"
+        FROM orders WHERE invoice_id = $1 AND status = 'collected' ORDER BY collected_at, id
+        "#,
+        invoice_id,
+    )
+    .fetch_all(&mut **tx)
+    .await
 }
