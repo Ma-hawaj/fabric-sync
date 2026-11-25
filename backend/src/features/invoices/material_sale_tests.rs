@@ -155,7 +155,7 @@ async fn material_sales_database() {
     );
     assert_eq!(stock(&pool, material, branch).await, 7.5);
     assert!(
-        service::update_invoice(&state, created.id, sale(material, branch, 11.0))
+        service::update_invoice(&state, created.id, sale(material, branch, 11.0), "staff")
             .await
             .is_err()
     );
@@ -169,7 +169,7 @@ async fn material_sales_database() {
         27.5
     );
 
-    service::update_invoice(&state, created.id, sale(material, other, 3.0))
+    service::update_invoice(&state, created.id, sale(material, other, 3.0), "staff")
         .await
         .unwrap();
     assert_eq!(stock(&pool, material, branch).await, 10.0);
@@ -244,7 +244,7 @@ async fn material_sales_database() {
     // Removing every material line returns the stock; the invoice still needs
     // a line of another kind, here a gift card.
     let replacement: CreateInvoiceInput = serde_json::from_value(json!({ "expectedVatRate": 0.1, "discountUnit": "amount", "giftCards": [{ "amount": 10, "recipientPhone": "+97333112233" }] })).unwrap();
-    service::update_invoice(&state, created.id, replacement)
+    service::update_invoice(&state, created.id, replacement, "staff")
         .await
         .unwrap();
     assert_eq!(stock(&pool, material, other).await, 10.0);

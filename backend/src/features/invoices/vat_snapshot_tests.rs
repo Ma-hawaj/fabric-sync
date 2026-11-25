@@ -130,7 +130,7 @@ async fn issued_tax_and_unchanged_charges_survive_rate_and_catalog_changes(pool:
     // Forged monetary input cannot replace prices preserved from the database.
     payload["customers"][0]["orders"][0]["price"] = json!(1);
     payload["customers"][0]["orders"][0]["urgentCharge"] = json!(1);
-    service::update_invoice(&changed_state, created.id, input(payload.clone()))
+    service::update_invoice(&changed_state, created.id, input(payload.clone()), "staff")
         .await
         .unwrap();
     let after = service::get_invoice(&changed_state, created.id)
@@ -165,7 +165,7 @@ async fn issued_tax_and_unchanged_charges_survive_rate_and_catalog_changes(pool:
         .await
         .unwrap();
     payload["customers"][0]["orders"][0]["materialAmount"] = json!(4.5);
-    service::update_invoice(&changed_state, created.id, input(payload))
+    service::update_invoice(&changed_state, created.id, input(payload), "staff")
         .await
         .unwrap();
     let after = service::get_invoice(&changed_state, created.id)
@@ -208,7 +208,7 @@ async fn stale_rate_and_invalid_original_references_leave_invoice_and_stock_unto
     let mut stale = payload.clone();
     stale["expectedVatRate"] = json!(0.15);
     assert!(matches!(
-        service::update_invoice(&changed_state, created.id, input(stale)).await,
+        service::update_invoice(&changed_state, created.id, input(stale), "staff").await,
         Err(AppError::Conflict(_))
     ));
     let mut duplicate = payload.clone();
@@ -218,7 +218,7 @@ async fn stale_rate_and_invalid_original_references_leave_invoice_and_stock_unto
         .unwrap()
         .push(first);
     assert!(matches!(
-        service::update_invoice(&changed_state, created.id, input(duplicate)).await,
+        service::update_invoice(&changed_state, created.id, input(duplicate), "staff").await,
         Err(AppError::BadRequest(_))
     ));
     // A genuine line on another invoice cannot be used as this invoice's saved price.
@@ -237,7 +237,7 @@ async fn stale_rate_and_invalid_original_references_leave_invoice_and_stock_unto
     payload["customers"][0]["orders"][0]["originalOrderId"] =
         json!(second_edit.customers[0].orders[0].original_order_id);
     assert!(matches!(
-        service::update_invoice(&changed_state, created.id, input(payload)).await,
+        service::update_invoice(&changed_state, created.id, input(payload), "staff").await,
         Err(AppError::BadRequest(_))
     ));
     assert_eq!(stock(&pool, material).await, 94.0);

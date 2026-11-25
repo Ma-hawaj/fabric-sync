@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO invoice_items\n            (invoice_id, kind, material_id, branch_id, description, unit, quantity, unit_price, line_total)\n        SELECT $1, 'material', id, $3, name, unit, $4::float8, $5::float8, $6::float8\n        FROM materials WHERE id = $2\n        RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Float8",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9589ab551029bbc764ef5e4e4e67e629fdfccccf2521c860a3d82b12a9c6619f"
+}

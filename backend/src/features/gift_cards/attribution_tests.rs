@@ -136,10 +136,14 @@ async fn invoice_cards_resolve_the_original_invoice_creator_after_edits(pool: Pg
         .await
         .unwrap();
     assert_eq!(before.issued_by.as_deref(), Some("invoice-issuer"));
-    let edited =
-        invoices::update_invoice(&state, created.id, serde_json::from_value(payload).unwrap())
-            .await
-            .unwrap();
+    let edited = invoices::update_invoice(
+        &state,
+        created.id,
+        serde_json::from_value(payload).unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
     let after = service::get_gift_card_by_code(&state, &edited.gift_cards[0].code)
         .await
         .unwrap();

@@ -55,10 +55,14 @@ async fn imported_production_does_not_imply_a_stock_allocation_or_restore_stock(
         "orders":[{"originalOrderId":orders[0],"materialId":material,"materialAmount":3,
             "materialLocationId":warehouse,"productionLocationId":workshop}]
     }]});
-    let updated =
-        service::update_invoice(&state, invoice, serde_json::from_value(payload).unwrap())
-            .await
-            .unwrap();
+    let updated = service::update_invoice(
+        &state,
+        invoice,
+        serde_json::from_value(payload).unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
     assert_eq!(updated.total_price, 100.0);
     assert_eq!(quantity(&db, material, workshop).await, 10.0);
     assert_eq!(quantity(&db, material, warehouse).await, 17.0);
@@ -90,6 +94,7 @@ async fn unknown_material_edits_preserve_prices_and_stock_and_reject_repricing(d
         &state,
         invoice,
         serde_json::from_value(payload.clone()).unwrap(),
+        "staff",
     )
     .await
     .unwrap();
@@ -108,7 +113,7 @@ async fn unknown_material_edits_preserve_prices_and_stock_and_reject_repricing(d
     payload["customers"][0]["orders"][0]["originalOrderId"] = json!(saved.original_order_id);
     payload["customers"][0]["orders"][0]["materialAmount"] = json!(4);
     assert!(matches!(
-        service::update_invoice(&state, invoice, serde_json::from_value(payload).unwrap()).await,
+        service::update_invoice(&state, invoice, serde_json::from_value(payload).unwrap(), "staff").await,
         Err(AppError::BadRequest(message)) if message.contains("choose the actual material")
     ));
     let edit = service::get_invoice_for_edit(&state, invoice)
@@ -188,6 +193,7 @@ async fn warehouse_stock_and_production_only_workshop_stay_independent_through_e
         &state,
         created.id,
         serde_json::from_value(payload.clone()).unwrap(),
+        "staff",
     )
     .await
     .unwrap();
@@ -216,9 +222,14 @@ async fn warehouse_stock_and_production_only_workshop_stay_independent_through_e
         .unwrap();
     payload["customers"][0]["orders"][0]["originalOrderId"] = json!(line.original_order_id);
     payload["customers"][0]["orders"][0]["materialLocationId"] = json!(other_warehouse);
-    service::update_invoice(&state, created.id, serde_json::from_value(payload).unwrap())
-        .await
-        .unwrap();
+    service::update_invoice(
+        &state,
+        created.id,
+        serde_json::from_value(payload).unwrap(),
+        "staff",
+    )
+    .await
+    .unwrap();
     assert_eq!(quantity(&db, material, warehouse).await, 10.0);
     assert_eq!(quantity(&db, material, other_warehouse).await, 2.0);
 }

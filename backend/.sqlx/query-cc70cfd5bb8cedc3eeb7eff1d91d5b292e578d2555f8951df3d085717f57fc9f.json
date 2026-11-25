@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM order_stage_assignments a USING orders o\n        WHERE a.order_id = o.id AND o.invoice_id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc70cfd5bb8cedc3eeb7eff1d91d5b292e578d2555f8951df3d085717f57fc9f"
+}

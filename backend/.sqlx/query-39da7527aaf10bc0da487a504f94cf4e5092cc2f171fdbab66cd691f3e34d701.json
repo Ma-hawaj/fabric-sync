@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM order_stage_progress p USING orders o\n        WHERE p.order_id = o.id AND o.invoice_id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "39da7527aaf10bc0da487a504f94cf4e5092cc2f171fdbab66cd691f3e34d701"
+}

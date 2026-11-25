@@ -419,7 +419,7 @@ async fn invoice_create_and_explicit_edit_record_their_own_notification_actions(
 
     input.gift_cards[0].code = created.gift_cards[0].code.clone();
     input.gift_cards[0].amount = 30.0;
-    crate::features::invoices::service::update_invoice(&state, created.id, input)
+    crate::features::invoices::service::update_invoice(&state, created.id, input, "staff")
         .await
         .unwrap();
     assert_ne!(

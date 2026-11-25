@@ -129,7 +129,7 @@ async fn issue_partial_redemption_and_final_redemption_tax_value_exactly_once(po
         .unwrap();
     let mut edited = partial_payload;
     edited["products"][0]["originalItemId"] = json!(edit.products[0].original_item_id);
-    service::update_invoice(&state, partial.id, input(edited))
+    service::update_invoice(&state, partial.id, input(edited), "staff")
         .await
         .unwrap();
     assert_eq!(
@@ -231,7 +231,7 @@ async fn uninvoiced_credit_settles_the_purchase_without_removing_vat(pool: PgPoo
         .unwrap();
     assert!(!edit.gift_card_redemptions[0].taxed_at_issue);
     payload["products"][0]["originalItemId"] = json!(edit.products[0].original_item_id);
-    service::update_invoice(&state, created.id, input(payload))
+    service::update_invoice(&state, created.id, input(payload), "staff")
         .await
         .unwrap();
     let edited = service::get_invoice(&state, created.id).await.unwrap();
@@ -330,7 +330,7 @@ async fn mixed_paid_and_uninvoiced_cards_exclude_only_prepaid_value(pool: PgPool
     // paid redemption retains its prepaid treatment during the rebuild.
     payload["products"][0]["originalItemId"] = json!(edit.products[0].original_item_id);
     payload["giftCardRedemptions"].as_array_mut().unwrap().pop();
-    service::update_invoice(&state, created.id, input(payload))
+    service::update_invoice(&state, created.id, input(payload), "staff")
         .await
         .unwrap();
     let edited = service::get_invoice(&state, created.id).await.unwrap();

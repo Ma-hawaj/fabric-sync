@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, event_type, occurred_at, actor,\n               changes AS \"changes!: sqlx::types::Json<Vec<FieldChange>>\",\n               total_before::float8 AS \"total_before?\",\n               total_after::float8 AS \"total_after?\"\n        FROM invoice_edit_events WHERE invoice_id = $1 ORDER BY occurred_at, id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "occurred_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "actor",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "changes!: sqlx::types::Json<Vec<FieldChange>>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "total_before?",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "total_after?",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "8119a213736379f95a71af361a50d502fe93c78f0f6fc6986ed57f63f6bdb709"
+}

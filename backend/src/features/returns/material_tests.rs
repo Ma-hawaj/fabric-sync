@@ -152,9 +152,11 @@ async fn mixed_material_and_product_returns_allocate_discount_and_restock_fracti
         51.75
     );
     let input: CreateInvoiceInput = serde_json::from_value(json!({"expectedVatRate":0.1,"discountUnit":"amount","materials":[{"materialId":sale.material,"branchId":sale.origin,"quantity":1,"unitPrice":11}]})).unwrap();
-    assert!(invoices::update_invoice(&sale.state, sale.invoice, input)
-        .await
-        .is_err());
+    assert!(
+        invoices::update_invoice(&sale.state, sale.invoice, input, "staff")
+            .await
+            .is_err()
+    );
 }
 
 #[sqlx::test]

@@ -987,6 +987,7 @@ async fn invoice_sales_generate_codes_and_keep_them_on_edit_until_delivery(pool:
             &state,
             invoice.id,
             serde_json::from_value(changed.clone()).unwrap(),
+            "staff",
         )
         .await
         .unwrap();
@@ -1004,6 +1005,7 @@ async fn invoice_sales_generate_codes_and_keep_them_on_edit_until_delivery(pool:
         &state,
         invoice.id,
         serde_json::from_value(changed).unwrap(),
+        "staff",
     )
     .await
     .unwrap_err();
@@ -1041,6 +1043,7 @@ async fn invoice_edits_generate_new_codes_for_foreign_or_invalid_submissions(poo
         &state,
         invoice.id,
         serde_json::from_value(sale).unwrap(),
+        "staff",
     )
     .await
     .unwrap();
