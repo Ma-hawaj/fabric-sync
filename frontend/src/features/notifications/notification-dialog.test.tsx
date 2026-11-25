@@ -103,12 +103,15 @@ describe('notification preview and approval', () => {
       return { data: draft }
     })
   })
-  it('prepares a repair pickup notice without an invoice PDF or an automatic send', async () => {
+  it('prepares a repair pickup notice with a ready card and no automatic send', async () => {
     draft.kind = 'invoice_ready'
-    draft.artifactId = null
+    draft.artifactId = 'card-1'
     draft.snapshot.repairId = 'repair-1'
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: new Blob(['jpeg'], { type: 'image/jpeg' }),
+    })
     mount('invoice_ready', vi.fn(), 'repair-1')
-    await screen.findByText('Repair ready for pickup — notify customer')
+    await screen.findByAltText('Order ready card')
     await waitFor(() =>
       expect(apiClient.post).toHaveBeenCalledWith(
         '/invoices/invoice-1/notifications',
@@ -118,7 +121,12 @@ describe('notification preview and approval', () => {
         }),
       ),
     )
-    expect(apiClient.get).not.toHaveBeenCalled()
+    expect(apiClient.get).toHaveBeenCalledWith('/documents/card-1/content', {
+      responseType: 'blob',
+    })
+    expect(
+      screen.getByRole('link', { name: 'Open or download the ready card' }),
+    ).toHaveProperty('download', 'ready-card.jpg')
     expect(
       vi
         .mocked(apiClient.post)
