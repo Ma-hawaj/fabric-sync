@@ -59,9 +59,6 @@ fn blockers(order: &ReadyOrder, stages: &[Stage], has_repair: bool) -> Vec<Strin
     let transfer = order.production_branch_id.is_some()
         && order.branch_id.is_some()
         && order.production_branch_id != order.branch_id;
-    if transfer && !stages.iter().any(|s| s.requires_delivery) {
-        errors.push("Record delivery to the pickup branch".into());
-    }
     for stage in stages {
         if stage.requires_delivery {
             if transfer && (stage.status != "done" || stage.location_id != order.branch_id) {
