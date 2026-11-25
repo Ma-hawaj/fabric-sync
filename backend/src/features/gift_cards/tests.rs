@@ -382,8 +382,8 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
     assert!(preview.body.contains("50.000 BHD"));
     assert!(preview
         .image_data_url
-        .starts_with("data:image/png;base64,iVBOR"));
-    let preview_png = preview.image.png.clone();
+        .starts_with("data:image/jpeg;base64,/9j/"));
+    let preview_image = preview.image.bytes.clone();
     worker::tick(&state).await.unwrap();
     assert!(mock.messages.lock().unwrap().is_empty());
     assert!(mock.uploads.lock().unwrap().is_empty());
@@ -427,16 +427,16 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
     let uploads = mock.uploads.lock().unwrap().clone();
     assert_eq!(uploads.len(), 1);
     assert!(uploads[0]
-        .windows(preview_png.len())
-        .any(|bytes| bytes == preview_png));
-    assert!(String::from_utf8_lossy(&uploads[0]).contains("image/png"));
+        .windows(preview_image.len())
+        .any(|bytes| bytes == preview_image));
+    assert!(String::from_utf8_lossy(&uploads[0]).contains("image/jpeg"));
     let stored: Vec<u8> =
         sqlx::query_scalar("SELECT content FROM document_artifacts WHERE gift_card_id=$1")
             .bind(card.id)
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(stored, preview_png);
+    assert_eq!(stored, preview_image);
     assert_eq!(
         repository::get_gift_card(&state, card.id)
             .await
@@ -754,8 +754,8 @@ async fn retries_known_failures_but_never_replays_an_unknown_submission(pool: Pg
     assert_eq!(outcomes, ["retry_scheduled", "uncertain"]);
     for upload in mock.uploads.lock().unwrap().iter() {
         assert!(upload
-            .windows(preview.image.png.len())
-            .any(|bytes| bytes == preview.image.png));
+            .windows(preview.image.bytes.len())
+            .any(|bytes| bytes == preview.image.bytes));
     }
     assert_eq!(
         repository::get_gift_card(&state, card.id)
@@ -851,8 +851,8 @@ async fn image_download_works_without_whatsapp_setup(pool: PgPool) {
         .await
         .unwrap();
     let image = image::get(&state, card.id).await.unwrap();
-    assert!(image.png.starts_with(b"\x89PNG\r\n\x1a\n"));
-    assert_eq!(image.filename, format!("gift-card-{}.png", card.id));
+    assert!(image.bytes.starts_with(&[0xFF, 0xD8, 0xFF]));
+    assert_eq!(image.filename, format!("gift-card-{}.jpg", card.id));
     let sends: i64 = sqlx::query_scalar("SELECT count(*) FROM notifications")
         .fetch_one(&pool)
         .await
