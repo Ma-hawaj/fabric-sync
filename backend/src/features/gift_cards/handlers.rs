@@ -33,7 +33,7 @@ pub async fn download_image(
                 "private, no-store".into(),
             ),
         ],
-        image.png,
+        image.bytes,
     ))
 }
 

@@ -1,17 +1,22 @@
-use std::sync::{Arc, OnceLock};
+use std::{
+    io::Cursor,
+    sync::{Arc, OnceLock},
+};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use chrono::NaiveDate;
+use image::codecs::jpeg::JpegEncoder;
 use minijinja::{context, AutoEscape, Environment};
 use resvg::{tiny_skia, usvg};
 
 use super::{repository, types::GiftCard};
 use crate::{document, error::AppError, features::notifications::service::hash, state::AppState};
 
-pub const MIME: &str = "image/png";
+pub const MIME: &str = "image/jpeg";
 pub const WIDTH: u32 = 1080;
 pub const HEIGHT: u32 = 1920;
 pub const MAX_BYTES: usize = 5 * 1024 * 1024;
+const JPEG_QUALITY: u8 = 85;
 const TEMPLATE: &str = include_str!("../../../templates/gift-card.svg");
 const BUNDLED_ARTWORK: &[u8] = include_bytes!("../../../assets/gift-card/artwork.png");
 
@@ -32,39 +37,66 @@ struct Artwork {
 }
 
 impl Artwork {
-    fn from_png(bytes: &[u8]) -> Result<Self, AppError> {
-        tiny_skia::Pixmap::decode_png(bytes).map_err(|_| {
-            AppError::Image("The gift card artwork must be a valid PNG file.".into())
+    fn from_image(bytes: &[u8]) -> Result<Self, AppError> {
+        let image = image::load_from_memory(bytes).map_err(|_| {
+            AppError::Image("The gift card artwork must be a valid image file.".into())
         })?;
         Ok(Self {
-            data_url: format!("data:image/png;base64,{}", STANDARD.encode(bytes)),
+            data_url: Self::data_url(&Self::rgb_over_white(&image))?,
         })
+    }
+
+    fn rgb_over_white(image: &image::DynamicImage) -> image::RgbImage {
+        let rgba = image.to_rgba8();
+        let mut rgb = image::RgbImage::new(rgba.width(), rgba.height());
+        for (dest, src) in rgb.pixels_mut().zip(rgba.pixels()) {
+            let [r, g, b, a] = src.0;
+            let alpha = a as u16;
+            let inv = 255 - alpha;
+            dest.0 = [
+                ((r as u16 * alpha + 255 * inv) / 255) as u8,
+                ((g as u16 * alpha + 255 * inv) / 255) as u8,
+                ((b as u16 * alpha + 255 * inv) / 255) as u8,
+            ];
+        }
+        rgb
+    }
+
+    fn data_url(rgb: &image::RgbImage) -> Result<String, AppError> {
+        let mut bytes = Cursor::new(Vec::new());
+        JpegEncoder::new_with_quality(&mut bytes, JPEG_QUALITY)
+            .encode_image(rgb)
+            .map_err(|e| AppError::Image(e.to_string()))?;
+        Ok(format!(
+            "data:{MIME};base64,{}",
+            STANDARD.encode(bytes.into_inner())
+        ))
     }
 
     fn load(configured_path: Option<&str>) -> Result<Self, AppError> {
         match configured_path {
-            None => Self::from_png(BUNDLED_ARTWORK),
+            None => Self::from_image(BUNDLED_ARTWORK),
             Some(path) => {
                 let bytes = std::fs::read(path).map_err(|error| {
                     AppError::Image(format!(
                         "Could not read gift card artwork at {path}: {error}"
                     ))
                 })?;
-                Self::from_png(&bytes)
+                Self::from_image(&bytes)
             }
         }
     }
 }
 
 pub struct GiftCardImage {
-    pub png: Vec<u8>,
+    pub bytes: Vec<u8>,
     pub filename: String,
     pub sha256: String,
 }
 
 impl GiftCardImage {
     pub fn data_url(&self) -> String {
-        format!("data:{MIME};base64,{}", STANDARD.encode(&self.png))
+        format!("data:{MIME};base64,{}", STANDARD.encode(&self.bytes))
     }
 }
 
@@ -161,18 +193,23 @@ fn render_svg(card: &GiftCard, svg: &str) -> Result<GiftCardImage, AppError> {
         tiny_skia::Transform::identity(),
         &mut pixmap.as_mut(),
     );
-    let png = pixmap
-        .encode_png()
+    let rgba = image::RgbaImage::from_raw(WIDTH, HEIGHT, pixmap.data().to_vec())
+        .ok_or_else(|| AppError::Image("Could not encode the gift card image.".into()))?;
+    let rgb = image::DynamicImage::ImageRgba8(rgba).to_rgb8();
+    let mut bytes = Cursor::new(Vec::new());
+    JpegEncoder::new_with_quality(&mut bytes, JPEG_QUALITY)
+        .encode_image(&rgb)
         .map_err(|e| AppError::Image(e.to_string()))?;
-    if png.len() > MAX_BYTES {
+    let bytes = bytes.into_inner();
+    if bytes.len() > MAX_BYTES {
         return Err(AppError::Image(
             "The gift card image exceeds the WhatsApp image size limit.".into(),
         ));
     }
     Ok(GiftCardImage {
-        sha256: hash(&png),
-        png,
-        filename: format!("gift-card-{}.png", card.id),
+        sha256: hash(&bytes),
+        bytes,
+        filename: format!("gift-card-{}.jpg", card.id),
     })
 }
 
@@ -231,15 +268,15 @@ mod tests {
     }
 
     #[test]
-    fn png_is_deterministic_and_readable_without_system_fonts() {
+    fn jpeg_is_deterministic_and_readable_without_system_fonts() {
         let card = card();
         let first = render(&card, today(), &artwork()).unwrap();
         let second = render(&card, today(), &artwork()).unwrap();
-        let decoded = tiny_skia::Pixmap::decode_png(&first.png).unwrap();
-        assert_eq!((decoded.width(), decoded.height()), (WIDTH, HEIGHT));
-        assert!(first.png.len() < MAX_BYTES);
-        assert_eq!(first.png, second.png);
-        assert_eq!(first.sha256, hash(&first.png));
+        let decoded = image::load_from_memory(&first.bytes).unwrap().to_rgb8();
+        assert_eq!(decoded.dimensions(), (WIDTH, HEIGHT));
+        assert!(first.bytes.len() < MAX_BYTES);
+        assert_eq!(first.bytes, second.bytes);
+        assert_eq!(first.sha256, hash(&first.bytes));
         let source = svg(&card, today(), &artwork()).unwrap();
         assert!(source.contains(">Premium</text>"));
         assert!(!source.contains("50.000"));
@@ -247,7 +284,7 @@ mod tests {
         assert!(source.contains(&card.code));
         assert!(source.contains("31-12-2026"));
         if let Ok(output) = std::env::var("GIFT_CARD_IMAGE_TEST_OUTPUT") {
-            std::fs::write(output, &first.png).unwrap();
+            std::fs::write(output, &first.bytes).unwrap();
         }
     }
 
@@ -283,7 +320,14 @@ mod tests {
         card.balance = 50.0;
         let mut changed_pixels = tiny_skia::Pixmap::new(WIDTH, HEIGHT).unwrap();
         changed_pixels.fill(tiny_skia::Color::WHITE);
-        let changed_artwork = Artwork::from_png(&changed_pixels.encode_png().unwrap()).unwrap();
+        let mut bytes = Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(
+            image::RgbaImage::from_raw(WIDTH, HEIGHT, changed_pixels.data().to_vec()).unwrap(),
+        )
+        .to_rgb8()
+        .write_to(&mut bytes, image::ImageFormat::Png)
+        .unwrap();
+        let changed_artwork = Artwork::from_image(&bytes.into_inner()).unwrap();
         assert_ne!(
             original,
             render(&card, today(), &changed_artwork).unwrap().sha256
@@ -356,16 +400,22 @@ mod tests {
     }
 
     #[test]
-    fn fixed_png_preserves_artwork_and_fits_variable_fields() {
+    fn fixed_artwork_preserves_pixels_and_fits_variable_fields() {
         let mut original = tiny_skia::Pixmap::new(WIDTH, HEIGHT).unwrap();
         original.fill(tiny_skia::Color::from_rgba8(241, 235, 225, 255));
         let png = original.encode_png().unwrap();
-        let artwork = Artwork::from_png(&png).unwrap();
+        let artwork = Artwork::from_image(&png).unwrap();
         let embedded = artwork
             .data_url
-            .strip_prefix("data:image/png;base64,")
+            .strip_prefix("data:image/jpeg;base64,")
             .unwrap();
-        assert_eq!(STANDARD.decode(embedded).unwrap(), png);
+        let embedded = image::load_from_memory(&STANDARD.decode(embedded).unwrap())
+            .unwrap()
+            .to_rgb8();
+        for (x, y) in [(0, 0), (1079, 1919), (540, 960)] {
+            let px = embedded.get_pixel(x, y).0;
+            assert!(px[0] > 220 && px[1] > 210 && px[2] > 200, "{px:?}");
+        }
 
         let mut card = card();
         card.initial_amount = 35.0;
@@ -406,7 +456,7 @@ mod tests {
             }
         }
         let rendered = render_svg(&card, &source).unwrap();
-        let decoded = tiny_skia::Pixmap::decode_png(&rendered.png).unwrap();
+        let decoded = image::load_from_memory(&rendered.bytes).unwrap().to_rgb8();
         for (x, y) in [
             (0, 0),
             (1079, 1919),
@@ -415,19 +465,29 @@ mod tests {
             (540, 1560),
             (540, 1810),
         ] {
-            assert_eq!(
-                decoded.pixel(x, y),
-                original.pixel(x, y),
-                "Artwork changed at {x},{y}"
+            let px = decoded.get_pixel(x, y).0;
+            let expected = original.pixel(x, y).unwrap();
+            assert!(
+                px[0].abs_diff(expected.red()) < 8
+                    && px[1].abs_diff(expected.green()) < 8
+                    && px[2].abs_diff(expected.blue()) < 8,
+                "Artwork changed at {x},{y}: {px:?} vs {expected:?}"
             );
         }
     }
 
     #[test]
-    fn fixed_png_omits_recipient_details_and_labels_unusable_cards() {
+    fn fixed_artwork_omits_recipient_details_and_labels_unusable_cards() {
         let mut pixels = tiny_skia::Pixmap::new(9, 16).unwrap();
         pixels.fill(tiny_skia::Color::WHITE);
-        let artwork = Artwork::from_png(&pixels.encode_png().unwrap()).unwrap();
+        let mut bytes = Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(
+            image::RgbaImage::from_raw(9, 16, pixels.data().to_vec()).unwrap(),
+        )
+        .to_rgb8()
+        .write_to(&mut bytes, image::ImageFormat::Png)
+        .unwrap();
+        let artwork = Artwork::from_image(&bytes.into_inner()).unwrap();
         let mut card = card();
         let with_recipient = svg(&card, today(), &artwork).unwrap();
         assert!(!with_recipient.contains("أحمد المنصوري"));
@@ -450,9 +510,9 @@ mod tests {
 
     #[test]
     fn configured_artwork_errors_are_reported() {
-        assert!(Artwork::from_png(b"not a PNG").is_err());
+        assert!(Artwork::from_image(b"not an image").is_err());
         let missing =
-            std::env::temp_dir().join(format!("missing-gift-card-{}.png", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("missing-gift-card-{}.jpg", uuid::Uuid::new_v4()));
         assert!(Artwork::load(Some(missing.to_str().unwrap())).is_err());
     }
 }

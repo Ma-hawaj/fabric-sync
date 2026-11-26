@@ -37,16 +37,16 @@ CREATE TABLE document_artifacts (
     gift_card_id UUID REFERENCES gift_cards(id),
     source_hash TEXT NOT NULL,
     filename TEXT NOT NULL,
-    mime_type TEXT NOT NULL DEFAULT 'application/pdf' CHECK (mime_type IN ('application/pdf', 'image/png')),
+    mime_type TEXT NOT NULL DEFAULT 'application/pdf' CHECK (mime_type IN ('application/pdf', 'image/jpeg')),
     sha256 TEXT NOT NULL,
     byte_length BIGINT NOT NULL CHECK (byte_length > 0),
     content BYTEA NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (num_nonnulls(invoice_id, gift_card_id) = 1),
     CHECK ((invoice_id IS NOT NULL AND mime_type = 'application/pdf')
-        OR (gift_card_id IS NOT NULL AND mime_type = 'image/png')),
-    CHECK (mime_type <> 'image/png' OR byte_length <= 5242880),
-    CHECK (mime_type <> 'image/png' OR sha256 ~ '^[0-9a-f]{64}$'),
+        OR (gift_card_id IS NOT NULL AND mime_type = 'image/jpeg')),
+    CHECK (mime_type <> 'image/jpeg' OR byte_length <= 5242880),
+    CHECK (mime_type <> 'image/jpeg' OR sha256 ~ '^[0-9a-f]{64}$'),
     UNIQUE (invoice_id, source_hash)
 );
 

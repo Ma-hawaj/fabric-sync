@@ -8,8 +8,8 @@ in the uploaded RAR archive. The extracted bytes are preserved unchanged:
 
 The image includes the logo, fade, Arabic and English wording, labels, seal, and
 footer. It is embedded in the backend binary and used by default in every
-working directory. There is one artwork rendering path: the PNG plus variable
-overlays in `backend/templates/gift-card.svg`.
+working directory. There is one artwork rendering path: the bundled PNG plus variable
+overlays in `backend/templates/gift-card.svg`, rendered to a 1080 × 1920 JPEG.
 
 Only balance/currency or a denomination name, the full card code, expiry,
 and unusable-card status are rendered on top. Cards originally issued for 20
@@ -17,10 +17,10 @@ show Bronze, 30 show Silver, and 40 or more show Premium in place of the
 numeric amount. The tier follows the original amount after redemption. Other
 amounts continue to show the remaining numeric balance. The complete source image is
 fitted to a 1080 × 1920 output with no crop, mask, additional fade, or fixed-text
-replacement. The gift card's static company branding comes from the PNG;
+replacement. The gift card's static company branding comes from the artwork;
 `COMPANY_*` settings still govern invoices and notification messages.
 
-`GIFT_CARD_ARTWORK_PATH` may select a different local PNG, with a read-only
+`GIFT_CARD_ARTWORK_PATH` may select a different local image, with a read-only
 volume mount when needed in a container. A configured missing or invalid file
 reports an error. Blank uses the bundled artwork. Updating the bundled PNG
 requires a rebuild; changing a mounted replacement affects new previews and

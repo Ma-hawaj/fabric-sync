@@ -594,7 +594,7 @@ pub async fn store_image(
     content: &[u8],
 ) -> Result<Uuid, AppError> {
     // Each approval freezes its own image; retries reuse that attachment.
-    Ok(sqlx::query_scalar("INSERT INTO document_artifacts(gift_card_id,source_hash,filename,mime_type,sha256,byte_length,content) VALUES($1,$2,$3,'image/png',$4,$5,$6) RETURNING id")
+    Ok(sqlx::query_scalar("INSERT INTO document_artifacts(gift_card_id,source_hash,filename,mime_type,sha256,byte_length,content) VALUES($1,$2,$3,'image/jpeg',$4,$5,$6) RETURNING id")
         .bind(card).bind(source_hash).bind(filename).bind(sha256).bind(content.len() as i64).bind(content).fetch_one(conn).await?)
 }
 

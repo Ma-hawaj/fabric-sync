@@ -152,7 +152,7 @@ pub async fn approve(
         &current.source_hash,
         &current.image.filename,
         &current.image.sha256,
-        &current.image.png,
+        &current.image.bytes,
     )
     .await?;
     let snapshot = Snapshot {
