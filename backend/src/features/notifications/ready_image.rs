@@ -124,7 +124,7 @@ fn fit_size(env: &Environment<'_>, text: &str) -> f64 {
     }
     let measured = env
         .render_str(
-            r#"<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="2486"><text id="value" font-family="DejaVu Sans" font-size="{{ size }}">{{ text }}</text></svg>"#,
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="2486"><text id="value" font-family="Space Grotesk" font-weight="500" font-size="{{ size }}">{{ text }}</text></svg>"#,
             context! { text => text, size => BASE_SIZE },
         )
         .unwrap_or_default();
@@ -273,6 +273,8 @@ mod tests {
         assert!(source.contains("C-6216-001"));
         assert!(source.contains("12.500 BHD"));
         assert!(source.contains("25-11-2026"));
+        assert!(source.contains("font-family=\"Space Grotesk\""));
+        assert!(source.contains("text-anchor=\"middle\""));
     }
 
     #[test]
