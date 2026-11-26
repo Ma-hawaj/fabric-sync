@@ -38,6 +38,7 @@ const paymentTypeLabels: Record<
   benefit: 'Benefit',
   cash: 'Cash',
   card: 'Card',
+  coupon: 'Coupon',
 }
 
 export function getOrderColumns(

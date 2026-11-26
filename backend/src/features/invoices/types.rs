@@ -50,6 +50,7 @@ pub enum PaymentType {
     Benefit,
     Cash,
     Card,
+    Coupon,
 }
 
 impl PaymentType {
@@ -58,6 +59,7 @@ impl PaymentType {
             Self::Benefit => "benefit",
             Self::Cash => "cash",
             Self::Card => "card",
+            Self::Coupon => "coupon",
         }
     }
 }
@@ -780,4 +782,19 @@ pub struct SavedOrderPricing {
     pub base_price: f64,
     pub price: f64,
     pub urgent_charge: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PaymentType;
+
+    #[test]
+    fn coupon_payment_type_round_trips_as_lowercase() {
+        let json = serde_json::to_string(&PaymentType::Coupon).unwrap();
+        assert_eq!(json, "\"coupon\"");
+        assert_eq!(
+            serde_json::from_str::<PaymentType>(&json).unwrap().as_str(),
+            "coupon"
+        );
+    }
 }

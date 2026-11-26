@@ -38,6 +38,7 @@ const paymentTypeOptions: { value: PaymentType; label: string }[] = [
   { value: 'benefit', label: 'Benefit' },
   { value: 'cash', label: 'Cash' },
   { value: 'card', label: 'Card' },
+  { value: 'coupon', label: 'Coupon' },
 ]
 
 interface RecordPaymentDialogProps {

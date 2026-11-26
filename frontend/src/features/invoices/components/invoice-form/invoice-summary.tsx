@@ -57,6 +57,7 @@ const PAYMENT_TYPE_OPTIONS: { value: PaymentType; label: string }[] = [
   { value: 'benefit', label: 'Benefit' },
   { value: 'cash', label: 'Cash' },
   { value: 'card', label: 'Card' },
+  { value: 'coupon', label: 'Coupon' },
 ]
 
 /** Preview gross totals and tender, excluding only verified prepaid value from new VAT. */

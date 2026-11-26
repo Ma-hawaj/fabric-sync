@@ -1,7 +1,7 @@
 import type { ReadinessFields } from '@/features/notifications/readiness-controls'
 
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
-export type PaymentType = 'benefit' | 'cash' | 'card'
+export type PaymentType = 'benefit' | 'cash' | 'card' | 'coupon'
 
 export interface InvoiceCustomer {
   name: string

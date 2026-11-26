@@ -2,7 +2,7 @@ import type { Measurement } from '@/features/customers/types/customers'
 
 export type OrderStatus = 'pending' | 'ready' | 'collected'
 export type InvoicePaymentStatus = 'unpaid' | 'partial' | 'paid'
-export type PaymentType = 'benefit' | 'cash' | 'card'
+export type PaymentType = 'benefit' | 'cash' | 'card' | 'coupon'
 
 /** `pending` is the absence of a recorded action, not a stored value. */
 export type OrderStageStatus = 'pending' | 'done' | 'skipped'

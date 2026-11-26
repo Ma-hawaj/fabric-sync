@@ -5,7 +5,7 @@ import type { MeasurementDraft } from '@/features/customers/types/measurement-fo
 export type CollectionMethod = 'delivery' | 'pickup'
 
 export type CustomerMode = 'existing' | 'new'
-export type PaymentType = 'benefit' | 'cash' | 'card'
+export type PaymentType = 'benefit' | 'cash' | 'card' | 'coupon'
 // A flat amount in the business currency, or a percentage of the subtotal —
 // deliberately not tied to a specific currency code (see lib/currency.ts).
 export type DiscountUnit = 'amount' | 'percent'

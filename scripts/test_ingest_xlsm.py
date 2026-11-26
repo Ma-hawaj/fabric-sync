@@ -21,8 +21,8 @@ from ingest_xlsm import (
     Report, apply_customer_identity, canon_key, choose_branch, customer_display,
     invoice_customer_key, legacy_customer_numbers, measurement_customer_key,
     measurement_signature, measurement_values_signature, MEASUREMENT_MATCH_COLS,
-    consolidate_existing_measurements, parse_measurement, perform_insert, read_workbook,
-    report_measurement_consolidation,
+    consolidate_existing_measurements, norm_payment_type, parse_measurement,
+    perform_insert, read_workbook, report_measurement_consolidation,
 )
 
 
@@ -114,6 +114,18 @@ class InvoiceInsertTests(unittest.TestCase):
                 self.assertEqual(params[-3:],
                                  (Decimal("0.10"), Decimal(net), Decimal(vat)))
                 self.assertEqual(sum(params[-2:]), params[2])
+
+
+class PaymentTypeTests(unittest.TestCase):
+    def test_coupon_is_a_recorded_payment_method(self):
+        for value in ["Coupon", " coupon ", "COUPON"]:
+            with self.subTest(value=value):
+                self.assertEqual(norm_payment_type(value), "coupon")
+
+    def test_mixed_payment_takes_the_first_known_method(self):
+        self.assertEqual(norm_payment_type("Coupon / Cash"), "coupon")
+        self.assertEqual(norm_payment_type("card/coupon"), "card")
+        self.assertIsNone(norm_payment_type("gift"))
 
 
 class ParseMeasurementTests(unittest.TestCase):
