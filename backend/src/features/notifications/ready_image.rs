@@ -12,8 +12,9 @@ const TEMPLATE: &str = include_str!("../../../templates/ready-card.svg");
 const BUNDLED_ARTWORK: &[u8] = include_bytes!("../../../assets/ready/artwork.jpeg");
 const CARD_VERSION: &str = "ready-card-v1";
 const BASE_SIZE: f64 = 40.0;
+const NAME_SIZE: f64 = 48.0;
 const MAX_TEXT_WIDTH: f64 = 320.0;
-const BASELINES: [i32; 5] = [928, 1090, 1236, 1394, 1554];
+const BASELINES: [i32; 5] = [916, 1078, 1224, 1382, 1542];
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ReadyCard {
@@ -118,14 +119,14 @@ fn environment() -> Result<Environment<'static>, AppError> {
     Ok(env)
 }
 
-fn fit_size(env: &Environment<'_>, text: &str) -> f64 {
+fn fit_size(env: &Environment<'_>, text: &str, base: f64) -> f64 {
     if text.is_empty() {
-        return BASE_SIZE;
+        return base;
     }
     let measured = env
         .render_str(
             r#"<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="2486"><text id="value" font-family="Space Grotesk" font-weight="500" font-size="{{ size }}">{{ text }}</text></svg>"#,
-            context! { text => text, size => BASE_SIZE },
+            context! { text => text, size => base },
         )
         .unwrap_or_default();
     let width = usvg::Tree::from_str(
@@ -141,24 +142,24 @@ fn fit_size(env: &Environment<'_>, text: &str) -> f64 {
             .map(|node| node.abs_bounding_box().width())
     })
     .unwrap_or(1.0);
-    BASE_SIZE * (MAX_TEXT_WIDTH / f64::from(width).max(1.0)).min(1.0)
+    base * (MAX_TEXT_WIDTH / f64::from(width).max(1.0)).min(1.0)
 }
 
 fn fields(env: &Environment<'_>, card: &ReadyCard) -> Vec<TextField> {
     [
-        ("customer", &card.customer),
-        ("receipt", &card.receipt),
-        ("measurement", &card.measurement),
-        ("balance", &card.balance),
-        ("date", &card.date),
+        ("customer", &card.customer, NAME_SIZE),
+        ("receipt", &card.receipt, BASE_SIZE),
+        ("measurement", &card.measurement, BASE_SIZE),
+        ("balance", &card.balance, BASE_SIZE),
+        ("date", &card.date, BASE_SIZE),
     ]
     .into_iter()
     .zip(BASELINES)
-    .map(|((name, text), y)| TextField {
+    .map(|((name, text, base), y)| TextField {
         name,
         text: text.clone(),
         y,
-        size: fit_size(env, text),
+        size: fit_size(env, text, base),
     })
     .collect()
 }
@@ -258,8 +259,9 @@ mod tests {
         for field in &values {
             assert!(!field.text.is_empty());
             assert!(field.y > 900 && field.y < 1600);
-            assert!(field.size <= BASE_SIZE);
+            assert!(field.size <= NAME_SIZE);
         }
+        assert!(values[0].size > values[1].size);
         let source = env
             .get_template("ready-card.svg")
             .unwrap()
@@ -295,7 +297,7 @@ mod tests {
             },
         )[0];
         assert_eq!(empty.text, "");
-        assert_eq!(empty.size, BASE_SIZE);
+        assert_eq!(empty.size, NAME_SIZE);
     }
 
     #[test]
