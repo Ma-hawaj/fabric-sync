@@ -4,6 +4,6 @@
   <image id="artwork" x="0" y="0" width="1080" height="2486" href="{{ background }}" preserveAspectRatio="xMidYMid meet"/>
 
   {% for field in fields %}
-  <text class="{{ field.name }}" x="898" y="{{ field.y }}" text-anchor="end" font-family="DejaVu Sans" font-size="{{ field.size }}" fill="#1a1a1a">{{ field.text }}</text>
+  <text class="{{ field.name }}" x="264" y="{{ field.y }}" text-anchor="start" font-family="DejaVu Sans" font-size="{{ field.size }}" fill="#1a1a1a">{{ field.text }}</text>
   {% endfor %}
 </svg>

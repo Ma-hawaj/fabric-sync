@@ -11,9 +11,9 @@ pub const HEIGHT: u32 = 2486;
 const TEMPLATE: &str = include_str!("../../../templates/ready-card.svg");
 const BUNDLED_ARTWORK: &[u8] = include_bytes!("../../../assets/ready/artwork.jpeg");
 const CARD_VERSION: &str = "ready-card-v1";
-const BASE_SIZE: f64 = 24.0;
-const MAX_TEXT_WIDTH: f64 = 600.0;
-const BASELINES: [i32; 5] = [934, 1096, 1242, 1400, 1560];
+const BASE_SIZE: f64 = 40.0;
+const MAX_TEXT_WIDTH: f64 = 320.0;
+const BASELINES: [i32; 5] = [928, 1090, 1236, 1394, 1554];
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ReadyCard {
