@@ -1203,8 +1203,22 @@ def legacy_customer_numbers(workbook: dict, report: Report) -> tuple[dict, int]:
             key = next(iter(owners))
         candidates[key].add(no)
 
-    numbers = {key: max(values) for key, values in candidates.items()}
+    identity = workbook.get("customer_identity") or CustomerIdentity([], canon_key)
+    explicit = getattr(identity, "customer_numbers", {})
+    numbers = {}
     for key, values in candidates.items():
+        if key in explicit:
+            chosen = explicit[key]
+            if chosen not in reserved:
+                report.anomaly("customers: explicit measurement number not in workbook (automatic ID used)",
+                               f"{key} -> {chosen}")
+            else:
+                numbers[key] = chosen
+                if chosen != max(values):
+                    report.anomaly("customers: explicit measurement number selected",
+                                   f"{key}: {sorted(values)} -> C-{chosen}")
+                continue
+        numbers[key] = max(values)
         if len(values) > 1:
             report.anomaly("customers: highest measurement number selected",
                            f"{key}: {sorted(values)} -> C-{numbers[key]}")
