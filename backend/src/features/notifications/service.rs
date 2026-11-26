@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -20,6 +20,7 @@ pub(crate) struct Source {
     pub html: String,
     pub artifact_hash: String,
     pub card: Option<ready_image::ReadyCard>,
+    pub card_artwork: Option<Arc<Vec<u8>>>,
     pub recipients: Vec<Destination>,
 }
 
@@ -105,7 +106,12 @@ pub(crate) async fn source(
             "The WhatsApp template contains an unconfigured parameter.".into(),
         ));
     }
-    let card = if kind == "invoice_ready" {
+    let artwork = if kind == "invoice_ready" {
+        Some(Arc::new(ready_image::artwork_bytes(state)?))
+    } else {
+        None
+    };
+    let card = if artwork.is_some() {
         let entries = repository::ready_card_customers(state.db(), invoice_id).await?;
         let date = crate::document::format_date(
             &detail.date.with_timezone(&state.timezone()?).date_naive(),
@@ -123,12 +129,12 @@ pub(crate) async fn source(
     } else {
         None
     };
-    let card_fingerprint = match &card {
-        Some(card) => Some(ready_image::fingerprint(
+    let card_fingerprint = match (&card, &artwork) {
+        (Some(card), Some(artwork)) => Some(ready_image::fingerprint(
             card,
-            &ready_image::artwork_sha(state)?,
+            &ready_image::artwork_sha(artwork),
         )?),
-        None => None,
+        _ => None,
     };
     let source_hash = hash(&serde_json::to_vec(&json!({"detail":detail,"html":html,"customers":customers,"revision":revision,"kind":if kind == "invoice_ready" { "ready" } else { "document" },"template":template_name,"body":body_template,"language":config.language,"profile":config.renderer_profile,"card":card_fingerprint})).map_err(|e| AppError::Config(e.to_string()))?);
     let artifact_hash = hash(format!("{}\n{}", config.renderer_profile, html).as_bytes());
@@ -152,6 +158,7 @@ pub(crate) async fn source(
         html,
         artifact_hash,
         card,
+        card_artwork: artwork,
         recipients,
     })
 }
@@ -201,6 +208,7 @@ async fn repair_source(
             "The WhatsApp template contains an unconfigured parameter.".into(),
         ));
     }
+    let artwork = Arc::new(ready_image::artwork_bytes(state)?);
     let card = ready_image::ReadyCard::new(
         vec![repair.name.clone()],
         repair.measurement.clone().into_iter().collect(),
@@ -208,7 +216,7 @@ async fn repair_source(
         format!("{} BHD", crate::document::format_amount(repair.balance)),
         crate::document::format_date(&completed_at.with_timezone(&state.timezone()?).date_naive()),
     );
-    let card_fingerprint = ready_image::fingerprint(&card, &ready_image::artwork_sha(state)?)?;
+    let card_fingerprint = ready_image::fingerprint(&card, &ready_image::artwork_sha(&artwork))?;
     let source_hash = hash(&serde_json::to_vec(&json!({"repairId":repair_id,"repair":repair,"revision":revision,"template":config.ready_template,"body":config.ready_body,"language":config.language,"card":card_fingerprint})).map_err(|e| AppError::Config(e.to_string()))?);
     if repository::revision(state.db(), invoice_id).await?.0 != revision {
         return Err(AppError::Conflict(
@@ -230,6 +238,7 @@ async fn repair_source(
         html: String::new(),
         artifact_hash: String::new(),
         card: Some(card),
+        card_artwork: Some(artwork),
         recipients,
     })
 }
@@ -252,11 +261,14 @@ pub(crate) async fn ready_artifact(
         .card
         .as_ref()
         .ok_or_else(|| AppError::BadRequest("This notification has no ready card.".into()))?;
+    let artwork = source.card_artwork.as_ref().ok_or_else(|| {
+        AppError::BadRequest("This notification has no ready card artwork.".into())
+    })?;
     let artifact_hash = format!("card:{}", source.snapshot.source_hash);
     if let Some(id) = repository::artifact_id(state.db(), invoice_id, &artifact_hash).await? {
         return Ok(id);
     }
-    let image = ready_image::for_card(state, card).await?;
+    let image = ready_image::for_card(card, Arc::clone(artwork)).await?;
     repository::store_invoice_image(
         state.db(),
         invoice_id,

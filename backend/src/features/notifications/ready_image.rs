@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use minijinja::{context, AutoEscape, Environment};
 use resvg::{tiny_skia, usvg};
 use serde::Serialize;
@@ -70,7 +72,7 @@ pub fn fingerprint(card: &ReadyCard, artwork_sha: &str) -> Result<String, AppErr
     .map_err(|error| AppError::Image(error.to_string()))
 }
 
-fn artwork_bytes(state: &AppState) -> Result<Vec<u8>, AppError> {
+pub fn artwork_bytes(state: &AppState) -> Result<Vec<u8>, AppError> {
     match state.ready_artwork_path() {
         None => Ok(BUNDLED_ARTWORK.to_vec()),
         Some(path) => std::fs::read(path).map_err(|error| {
@@ -81,8 +83,8 @@ fn artwork_bytes(state: &AppState) -> Result<Vec<u8>, AppError> {
     }
 }
 
-pub fn artwork_sha(state: &AppState) -> Result<String, AppError> {
-    Ok(hash(&artwork_bytes(state)?))
+pub fn artwork_sha(bytes: &[u8]) -> String {
+    hash(bytes)
 }
 
 struct Artwork {
@@ -97,10 +99,6 @@ impl Artwork {
                 "The ready card artwork must be a valid image file.",
             )?,
         })
-    }
-
-    fn load(state: &AppState) -> Result<Self, AppError> {
-        Self::from_bytes(&artwork_bytes(state)?)
     }
 }
 
@@ -206,12 +204,14 @@ fn render(card: &ReadyCard, artwork: &Artwork) -> Result<ReadyImage, AppError> {
     })
 }
 
-pub async fn for_card(state: &AppState, card: &ReadyCard) -> Result<ReadyImage, AppError> {
+pub async fn for_card(card: &ReadyCard, artwork: Arc<Vec<u8>>) -> Result<ReadyImage, AppError> {
     let card = card.clone();
-    let artwork = Artwork::load(state)?;
-    tokio::task::spawn_blocking(move || render(&card, &artwork))
-        .await
-        .map_err(|error| AppError::Image(error.to_string()))?
+    tokio::task::spawn_blocking(move || {
+        let artwork = Artwork::from_bytes(&artwork)?;
+        render(&card, &artwork)
+    })
+    .await
+    .map_err(|error| AppError::Image(error.to_string()))?
 }
 
 #[cfg(test)]
