@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="2486" viewBox="0 0 1080 2486">
+  <!-- The complete designer JPEG is authoritative for all fixed artwork, labels and branding. -->
+  <rect width="1080" height="2486" fill="#fff"/>
+  <image id="artwork" x="0" y="0" width="1080" height="2486" href="{{ background }}" preserveAspectRatio="xMidYMid meet"/>
+
+  {% for field in fields %}
+  <text class="{{ field.name }}" x="430" y="{{ field.y }}" text-anchor="middle" font-family="Space Grotesk" font-weight="500" font-size="{{ field.size }}" fill="#1a1a1a">{{ field.text }}</text>
+  {% endfor %}
+</svg>

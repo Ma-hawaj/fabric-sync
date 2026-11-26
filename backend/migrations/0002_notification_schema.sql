@@ -43,7 +43,7 @@ CREATE TABLE document_artifacts (
     content BYTEA NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (num_nonnulls(invoice_id, gift_card_id) = 1),
-    CHECK ((invoice_id IS NOT NULL AND mime_type = 'application/pdf')
+    CHECK ((invoice_id IS NOT NULL AND mime_type IN ('application/pdf', 'image/jpeg'))
         OR (gift_card_id IS NOT NULL AND mime_type = 'image/jpeg')),
     CHECK (mime_type <> 'image/jpeg' OR byte_length <= 5242880),
     CHECK (mime_type <> 'image/jpeg' OR sha256 ~ '^[0-9a-f]{64}$'),

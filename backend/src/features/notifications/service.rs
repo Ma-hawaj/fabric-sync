@@ -1,11 +1,11 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
-use super::{phone, repository, types::*};
+use super::{phone, ready_image, repository, types::*};
 use crate::{error::AppError, features::invoices, state::AppState};
 
 const MAX_PDF_BYTES: usize = 20 * 1024 * 1024;
@@ -19,6 +19,8 @@ pub(crate) struct Source {
     pub snapshot: Snapshot,
     pub html: String,
     pub artifact_hash: String,
+    pub card: Option<ready_image::ReadyCard>,
+    pub card_artwork: Option<Arc<Vec<u8>>>,
     pub recipients: Vec<Destination>,
 }
 
@@ -72,12 +74,12 @@ pub(crate) async fn source(
             &config.ready_template,
             &config.ready_body,
             vec![
-                reference,
+                reference.clone(),
                 detail
                     .branch_name
                     .clone()
                     .ok_or_else(|| AppError::BadRequest("Choose a pickup branch first.".into()))?,
-                balance,
+                balance.clone(),
             ],
         )
     } else {
@@ -85,13 +87,13 @@ pub(crate) async fn source(
             &config.invoice_template,
             &config.invoice_body,
             vec![
-                reference,
+                reference.clone(),
                 state.invoice_branding().name_en.clone(),
                 format!(
                     "{} BHD",
                     crate::document::format_amount(detail.totals.total)
                 ),
-                balance,
+                balance.clone(),
             ],
         )
     };
@@ -104,7 +106,37 @@ pub(crate) async fn source(
             "The WhatsApp template contains an unconfigured parameter.".into(),
         ));
     }
-    let source_hash = hash(&serde_json::to_vec(&json!({"detail":detail,"html":html,"customers":customers,"revision":revision,"kind":if kind == "invoice_ready" { "ready" } else { "document" },"template":template_name,"body":body_template,"language":config.language,"profile":config.renderer_profile})).map_err(|e| AppError::Config(e.to_string()))?);
+    let artwork = if kind == "invoice_ready" {
+        Some(Arc::new(ready_image::artwork_bytes(state)?))
+    } else {
+        None
+    };
+    let card = if artwork.is_some() {
+        let entries = repository::ready_card_customers(state.db(), invoice_id).await?;
+        let date = crate::document::format_date(
+            &detail.date.with_timezone(&state.timezone()?).date_naive(),
+        );
+        Some(ready_image::ReadyCard::new(
+            entries.iter().map(|entry| entry.name.clone()).collect(),
+            entries
+                .iter()
+                .filter_map(|entry| entry.measurement.clone())
+                .collect(),
+            reference.clone(),
+            balance.clone(),
+            date,
+        ))
+    } else {
+        None
+    };
+    let card_fingerprint = match (&card, &artwork) {
+        (Some(card), Some(artwork)) => Some(ready_image::fingerprint(
+            card,
+            &ready_image::artwork_sha(artwork),
+        )?),
+        _ => None,
+    };
+    let source_hash = hash(&serde_json::to_vec(&json!({"detail":detail,"html":html,"customers":customers,"revision":revision,"kind":if kind == "invoice_ready" { "ready" } else { "document" },"template":template_name,"body":body_template,"language":config.language,"profile":config.renderer_profile,"card":card_fingerprint})).map_err(|e| AppError::Config(e.to_string()))?);
     let artifact_hash = hash(format!("{}\n{}", config.renderer_profile, html).as_bytes());
     if repository::revision(state.db(), invoice_id).await?.0 != revision {
         return Err(AppError::Conflict(
@@ -125,6 +157,8 @@ pub(crate) async fn source(
         },
         html,
         artifact_hash,
+        card,
+        card_artwork: artwork,
         recipients,
     })
 }
@@ -141,7 +175,7 @@ async fn repair_source(
             "This repair is not ready for pickup. Refresh its status first.".into(),
         ));
     }
-    repair
+    let completed_at = repair
         .completed_at
         .ok_or_else(|| AppError::Conflict("The repair has no completion date.".into()))?;
     let config = state.notifications();
@@ -174,7 +208,16 @@ async fn repair_source(
             "The WhatsApp template contains an unconfigured parameter.".into(),
         ));
     }
-    let source_hash = hash(&serde_json::to_vec(&json!({"repairId":repair_id,"repair":repair,"revision":revision,"template":config.ready_template,"body":config.ready_body,"language":config.language})).map_err(|e| AppError::Config(e.to_string()))?);
+    let artwork = Arc::new(ready_image::artwork_bytes(state)?);
+    let card = ready_image::ReadyCard::new(
+        vec![repair.name.clone()],
+        repair.measurement.clone().into_iter().collect(),
+        format!("ORD-{}", repair.order_number),
+        format!("{} BHD", crate::document::format_amount(repair.balance)),
+        crate::document::format_date(&completed_at.with_timezone(&state.timezone()?).date_naive()),
+    );
+    let card_fingerprint = ready_image::fingerprint(&card, &ready_image::artwork_sha(&artwork))?;
+    let source_hash = hash(&serde_json::to_vec(&json!({"repairId":repair_id,"repair":repair,"revision":revision,"template":config.ready_template,"body":config.ready_body,"language":config.language,"card":card_fingerprint})).map_err(|e| AppError::Config(e.to_string()))?);
     if repository::revision(state.db(), invoice_id).await?.0 != revision {
         return Err(AppError::Conflict(
             "The repair changed while preparing the preview. Please refresh.".into(),
@@ -194,6 +237,8 @@ async fn repair_source(
         },
         html: String::new(),
         artifact_hash: String::new(),
+        card: Some(card),
+        card_artwork: Some(artwork),
         recipients,
     })
 }
@@ -205,6 +250,34 @@ pub(crate) fn http_client() -> Result<reqwest::Client, AppError> {
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| AppError::External(e.to_string()))
+}
+
+pub(crate) async fn ready_artifact(
+    state: &AppState,
+    invoice_id: Uuid,
+    source: &Source,
+) -> Result<Uuid, AppError> {
+    let card = source
+        .card
+        .as_ref()
+        .ok_or_else(|| AppError::BadRequest("This notification has no ready card.".into()))?;
+    let artwork = source.card_artwork.as_ref().ok_or_else(|| {
+        AppError::BadRequest("This notification has no ready card artwork.".into())
+    })?;
+    let artifact_hash = format!("card:{}", source.snapshot.source_hash);
+    if let Some(id) = repository::artifact_id(state.db(), invoice_id, &artifact_hash).await? {
+        return Ok(id);
+    }
+    let image = ready_image::for_card(card, Arc::clone(artwork)).await?;
+    repository::store_invoice_image(
+        state.db(),
+        invoice_id,
+        &artifact_hash,
+        &image.filename,
+        &image.sha256,
+        &image.bytes,
+    )
+    .await
 }
 
 pub(crate) async fn artifact(
@@ -346,7 +419,7 @@ pub async fn prepare(
         }
     }
     let artifact_id = if input.kind == "invoice_ready" {
-        None
+        Some(ready_artifact(state, invoice_id, &source).await?)
     } else {
         Some(artifact(state, invoice_id, &source).await?)
     };

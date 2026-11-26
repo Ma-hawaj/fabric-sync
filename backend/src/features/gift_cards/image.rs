@@ -1,22 +1,17 @@
-use std::{
-    io::Cursor,
-    sync::{Arc, OnceLock},
-};
-
 use base64::{engine::general_purpose::STANDARD, Engine};
 use chrono::NaiveDate;
-use image::codecs::jpeg::JpegEncoder;
 use minijinja::{context, AutoEscape, Environment};
 use resvg::{tiny_skia, usvg};
 
 use super::{repository, types::GiftCard};
-use crate::{document, error::AppError, features::notifications::service::hash, state::AppState};
+use crate::{
+    document, error::AppError, features::notifications::service::hash, image as rendering,
+    state::AppState,
+};
 
-pub const MIME: &str = "image/jpeg";
+pub(crate) use crate::image::{MAX_BYTES, MIME};
 pub const WIDTH: u32 = 1080;
 pub const HEIGHT: u32 = 1920;
-pub const MAX_BYTES: usize = 5 * 1024 * 1024;
-const JPEG_QUALITY: u8 = 85;
 const TEMPLATE: &str = include_str!("../../../templates/gift-card.svg");
 const BUNDLED_ARTWORK: &[u8] = include_bytes!("../../../assets/gift-card/artwork.png");
 
@@ -38,39 +33,12 @@ struct Artwork {
 
 impl Artwork {
     fn from_image(bytes: &[u8]) -> Result<Self, AppError> {
-        let image = image::load_from_memory(bytes).map_err(|_| {
-            AppError::Image("The gift card artwork must be a valid image file.".into())
-        })?;
         Ok(Self {
-            data_url: Self::data_url(&Self::rgb_over_white(&image))?,
+            data_url: rendering::jpeg_data_url(
+                bytes,
+                "The gift card artwork must be a valid image file.",
+            )?,
         })
-    }
-
-    fn rgb_over_white(image: &image::DynamicImage) -> image::RgbImage {
-        let rgba = image.to_rgba8();
-        let mut rgb = image::RgbImage::new(rgba.width(), rgba.height());
-        for (dest, src) in rgb.pixels_mut().zip(rgba.pixels()) {
-            let [r, g, b, a] = src.0;
-            let alpha = a as u16;
-            let inv = 255 - alpha;
-            dest.0 = [
-                ((r as u16 * alpha + 255 * inv) / 255) as u8,
-                ((g as u16 * alpha + 255 * inv) / 255) as u8,
-                ((b as u16 * alpha + 255 * inv) / 255) as u8,
-            ];
-        }
-        rgb
-    }
-
-    fn data_url(rgb: &image::RgbImage) -> Result<String, AppError> {
-        let mut bytes = Cursor::new(Vec::new());
-        JpegEncoder::new_with_quality(&mut bytes, JPEG_QUALITY)
-            .encode_image(rgb)
-            .map_err(|e| AppError::Image(e.to_string()))?;
-        Ok(format!(
-            "data:{MIME};base64,{}",
-            STANDARD.encode(bytes.into_inner())
-        ))
     }
 
     fn load(configured_path: Option<&str>) -> Result<Self, AppError> {
@@ -98,27 +66,6 @@ impl GiftCardImage {
     pub fn data_url(&self) -> String {
         format!("data:{MIME};base64,{}", STANDARD.encode(&self.bytes))
     }
-}
-
-fn fonts() -> Arc<usvg::fontdb::Database> {
-    static FONTS: OnceLock<Arc<usvg::fontdb::Database>> = OnceLock::new();
-    FONTS
-        .get_or_init(|| {
-            let mut db = usvg::fontdb::Database::new();
-            for data in [
-                include_bytes!("../../../assets/fonts/DejaVuSans.ttf").as_slice(),
-                include_bytes!("../../../assets/fonts/DejaVuSans-Bold.ttf").as_slice(),
-                include_bytes!("../../../assets/fonts/DejaVuSansMono.ttf").as_slice(),
-                include_bytes!("../../../assets/fonts/thmanyahserifdisplay-Bold.otf").as_slice(),
-                include_bytes!("../../../assets/fonts/SpaceGrotesk-Medium.otf").as_slice(),
-            ] {
-                db.load_font_data(data.to_vec());
-            }
-            db.set_sans_serif_family("DejaVu Sans");
-            db.set_monospace_family("DejaVu Sans Mono");
-            Arc::new(db)
-        })
-        .clone()
 }
 
 fn svg(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<String, AppError> {
@@ -154,7 +101,7 @@ fn svg(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<String, AppE
     let code_tree = usvg::Tree::from_str(
         &code_measurement,
         &usvg::Options {
-            fontdb: fonts(),
+            fontdb: rendering::fonts(),
             ..Default::default()
         },
     )
@@ -182,7 +129,7 @@ fn render(card: &GiftCard, on: NaiveDate, artwork: &Artwork) -> Result<GiftCardI
 
 fn render_svg(card: &GiftCard, svg: &str) -> Result<GiftCardImage, AppError> {
     let options = usvg::Options {
-        fontdb: fonts(),
+        fontdb: rendering::fonts(),
         ..Default::default()
     };
     let tree = usvg::Tree::from_str(svg, &options).map_err(|e| AppError::Image(e.to_string()))?;
@@ -196,11 +143,7 @@ fn render_svg(card: &GiftCard, svg: &str) -> Result<GiftCardImage, AppError> {
     let rgba = image::RgbaImage::from_raw(WIDTH, HEIGHT, pixmap.data().to_vec())
         .ok_or_else(|| AppError::Image("Could not encode the gift card image.".into()))?;
     let rgb = image::DynamicImage::ImageRgba8(rgba).to_rgb8();
-    let mut bytes = Cursor::new(Vec::new());
-    JpegEncoder::new_with_quality(&mut bytes, JPEG_QUALITY)
-        .encode_image(&rgb)
-        .map_err(|e| AppError::Image(e.to_string()))?;
-    let bytes = bytes.into_inner();
+    let bytes = rendering::encode_jpeg(&rgb)?;
     if bytes.len() > MAX_BYTES {
         return Err(AppError::Image(
             "The gift card image exceeds the WhatsApp image size limit.".into(),
@@ -237,6 +180,7 @@ pub async fn get(state: &AppState, id: uuid::Uuid) -> Result<GiftCardImage, AppE
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     fn artwork() -> Artwork {
         Artwork::load(None).unwrap()
@@ -345,7 +289,7 @@ mod tests {
     fn design_fonts_are_available_without_system_fonts() {
         use usvg::fontdb::{Family, Query, Weight};
 
-        let db = fonts();
+        let db = rendering::fonts();
         for (family, weight) in [("thmanyah serif display", 700), ("Space Grotesk", 500)] {
             let id = db
                 .query(&Query {
@@ -378,7 +322,7 @@ mod tests {
             let tree = usvg::Tree::from_str(
                 &source,
                 &usvg::Options {
-                    fontdb: fonts(),
+                    fontdb: rendering::fonts(),
                     ..Default::default()
                 },
             )
@@ -431,7 +375,7 @@ mod tests {
         let tree = usvg::Tree::from_str(
             &source,
             &usvg::Options {
-                fontdb: fonts(),
+                fontdb: rendering::fonts(),
                 ..Default::default()
             },
         )

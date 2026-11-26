@@ -139,10 +139,10 @@ pub async fn content(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, AppError> {
-    let (filename, bytes) = repository::artifact_content(state.db(), id).await?;
+    let (filename, mime_type, bytes) = repository::artifact_content(state.db(), id).await?;
     Ok((
         [
-            (header::CONTENT_TYPE, "application/pdf".to_string()),
+            (header::CONTENT_TYPE, mime_type),
             (
                 header::CONTENT_DISPOSITION,
                 format!("inline; filename=\"{filename}\""),
