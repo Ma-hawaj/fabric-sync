@@ -377,9 +377,9 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
     .unwrap()
     .unwrap();
     let preview = delivery::preview(&state, card.id).await.unwrap();
-    assert!(preview.body.contains(&card.code));
-    assert!(preview.body.contains("Gift Recipient"));
-    assert!(preview.body.contains("50.000 BHD"));
+    assert!(preview.body.contains("gift card"));
+    assert!(!preview.body.contains(&card.code));
+    assert!(!preview.body.contains("{{"));
     assert!(preview
         .image_data_url
         .starts_with("data:image/jpeg;base64,/9j/"));
@@ -421,8 +421,11 @@ async fn preview_is_read_only_and_approval_is_idempotent_with_delivery_callbacks
         json!({"type":"header","parameters":[{"type":"image","image":{"id":"gift-media-test"}}]})
     );
     assert_eq!(
-        messages[0]["template"]["components"][1]["parameters"][2]["text"],
-        card.code
+        messages[0]["template"]["components"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
     );
     let uploads = mock.uploads.lock().unwrap().clone();
     assert_eq!(uploads.len(), 1);
@@ -609,7 +612,7 @@ async fn expired_gift_card_claims_finish_the_shared_audit_without_replaying(pool
 }
 
 #[sqlx::test]
-async fn unconfigured_queued_parameter_does_not_block_later_deliveries(pool: PgPool) {
+async fn changed_queued_card_does_not_block_later_deliveries(pool: PgPool) {
     assert_invalid_preview_does_not_block_queue(pool, false).await;
 }
 
@@ -629,17 +632,18 @@ async fn assert_invalid_preview_does_not_block_queue(pool: PgPool, invalid_phone
             .await
             .unwrap();
     }
-    let (corrupt, expected_error) = if invalid_phone {
+    let (corrupt, expected_status, expected_error) = if invalid_phone {
         (
             "UPDATE gift_cards SET recipient_phone='invalid' WHERE id=$1",
+            "failed",
             "Enter a valid recipient phone number.",
         )
     } else {
-        // A changed recipient value can leave an unresolved template token,
-        // just like a template configuration changed after approval.
+        // The code is on the image, so changing it invalidates the frozen preview.
         (
-            "UPDATE gift_cards SET bought_for='{{6}}' WHERE id=$1",
-            "The gift card template contains an unconfigured parameter.",
+            "UPDATE gift_cards SET code='GC-CHANGED-0001' WHERE id=$1",
+            "cancelled",
+            "The notification or recipient changed. Prepare and approve a fresh preview.",
         )
     };
     sqlx::query(corrupt)
@@ -655,7 +659,7 @@ async fn assert_invalid_preview_does_not_block_queue(pool: PgPool, invalid_phone
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(failed.delivery_status.as_deref(), Some("failed"));
+    assert_eq!(failed.delivery_status.as_deref(), Some(expected_status));
     assert_eq!(failed.delivery_error.as_deref(), Some(expected_error));
     assert!(mock.uploads.lock().unwrap().is_empty());
     assert!(mock.messages.lock().unwrap().is_empty());
@@ -668,7 +672,14 @@ async fn assert_invalid_preview_does_not_block_queue(pool: PgPool, invalid_phone
     assert_eq!(delivered.delivery_status.as_deref(), Some("accepted"));
     let messages = mock.messages.lock().unwrap();
     assert_eq!(messages.len(), 1);
-    assert!(messages[0].to_string().contains(&valid.code));
+    assert!(!messages[0].to_string().contains(&valid.code));
+    assert!(
+        messages[0]["template"]["components"]
+            .as_array()
+            .unwrap()
+            .len()
+            == 1
+    );
     assert_eq!(mock.uploads.lock().unwrap().len(), 1);
 }
 
@@ -906,7 +917,7 @@ async fn invoice_creation_returns_cards_ready_for_individual_delivery(pool: PgPo
         let preview = delivery::preview(&state, card.id).await.unwrap();
         assert_eq!(preview.bought_for.as_deref(), Some(recipient));
         assert_eq!(preview.mobile, phone);
-        assert!(preview.body.contains(&card.code));
+        assert!(!preview.body.contains(&card.code));
     }
     worker::tick(&state).await.unwrap();
     assert!(mock.messages.lock().unwrap().is_empty());
@@ -924,7 +935,7 @@ async fn invoice_creation_returns_cards_ready_for_individual_delivery(pool: PgPo
     let messages = mock.messages.lock().unwrap();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0]["to"], "97333112233");
-    assert!(messages[0].to_string().contains(&first.code));
+    assert!(!messages[0].to_string().contains(&first.code));
     assert_eq!(mock.uploads.lock().unwrap().len(), 1);
 }
 
