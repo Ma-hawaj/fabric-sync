@@ -118,7 +118,7 @@ class InvoiceInsertTests(unittest.TestCase):
 
 class PaymentTypeTests(unittest.TestCase):
     def test_coupon_is_a_recorded_payment_method(self):
-        for value in ["Coupon", " coupon ", "COUPON"]:
+        for value in ["Coupon", " coupon ", "COUPON", "Coupen", "COUPEN"]:
             with self.subTest(value=value):
                 self.assertEqual(norm_payment_type(value), "coupon")
 
@@ -131,6 +131,7 @@ class PaymentTypeTests(unittest.TestCase):
         self.assertEqual(norm_payment_type("Coupon / Cash"), "coupon")
         self.assertEqual(norm_payment_type("card/coupon"), "card")
         self.assertEqual(norm_payment_type("Gift/Cash"), "coupon")
+        self.assertEqual(norm_payment_type("COUPEN/BENEFIT"), "coupon")
         self.assertIsNone(norm_payment_type("marketing"))
 
 

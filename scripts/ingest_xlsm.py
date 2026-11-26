@@ -85,9 +85,9 @@ Mapping decisions worth knowing:
   * Every payment lands in invoice_payments: the advance as one row, and for
     done / pending-payment receipts the remainder as a second row, so the
     derived status comes out paid. Payment types map to
-    benefit/cash/card/coupon; gift-card entries such as 'GIFT # 78' count as
-    coupons, and other unrecognized strings map to NULL (unknown method, not a
-    missing payment).
+    benefit/cash/card/coupon; gift-card entries such as 'GIFT # 78' and the
+    'coupen' spelling count as coupons, and other unrecognized strings map to
+    NULL (unknown method, not a missing payment).
   * Cutter/Tailor/Finishing names become order_stage_assignments on the
     cutting/stitching/finishing stages (assignee_id is the name string — there is
     no user directory key for legacy staff, matching the schema's TEXT-not-FK
@@ -452,7 +452,8 @@ def norm_payment_type(value: object) -> str | None:
     """Map a payment cell to benefit/cash/card/coupon, or NULL.
 
     Mixed strings ('card/benefit') take the first listed method; gift-card
-    entries count as coupons, and other unrecognized strings become NULL.
+    entries and the 'coupen' spelling count as coupons, and other unrecognized
+    strings become NULL.
     """
     if value is None:
         return None
@@ -461,9 +462,9 @@ def norm_payment_type(value: object) -> str | None:
         return None
     for token in re.split(r"[/+&]", s):
         token = token.strip()
-        if token in ("benefit", "card", "cash", "coupon"):
+        if token in ("benefit", "card", "cash"):
             return token
-        if token.startswith("gift"):
+        if token in ("coupon", "coupen") or token.startswith("gift"):
             return "coupon"
     return None
 
