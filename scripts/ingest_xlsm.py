@@ -83,19 +83,22 @@ Mapping decisions worth knowing:
     rounding the taxable amount to cents and storing VAT as the remainder.
     Discount is not subtracted again (see invoices/service.rs breakdown).
   * Every payment lands in invoice_payments: the advance as one row, and for
-    done receipts the remainder as a second row, so the derived status comes
-    out paid. Payment types map to benefit/cash/card; the workbook's coupons,
-    gifts and mixed strings map to NULL (unknown method, not a missing
-    payment).
+    done / pending-payment receipts the remainder as a second row, so the
+    derived status comes out paid. Payment types map to benefit/cash/card; the
+    workbook's coupons, gifts and mixed strings map to NULL (unknown method,
+    not a missing payment).
   * Cutter/Tailor/Finishing names become order_stage_assignments on the
     cutting/stitching/finishing stages (assignee_id is the name string — there is
     no user directory key for legacy staff, matching the schema's TEXT-not-FK
-    choice). order_stage_progress is left empty: the workbook records who
-    worked, not when each stage completed, and fabricating checklist rows would
-    poison the derived stage-timing logic. In particular the sheet's Delivery
-    Date is the customer receiving date, not the date the garment moved
-    branches, so it feeds orders.collected_at (and the invoice target date)
-    but never a 'Location delivery' completion timestamp.
+    choice). For done / pending-payment receipts every active production stage
+    is also marked done in order_stage_progress so the checklist reflects a
+    completed garment; collected_at/delivery-date timing is used when present.
+    For other statuses, order_stage_progress is left empty because the workbook
+    records who worked, not when each stage completed. In particular the
+    sheet's Delivery Date is the customer receiving date, not the date the
+    garment moved branches, so it feeds orders.collected_at (and the invoice
+    target date) and is only used as a best-effort completion timestamp for
+    fully done/pending-payment imports.
  * No branch is named in the workbook. Every invoice uses one issuing/pickup branch:
    ``--branch`` if given (created when missing), else the first active
    ``receives_orders`` branch, else a created 'Main Branch'.
@@ -465,7 +468,13 @@ def norm_payment_type(value: object) -> str | None:
 def parse_measurement_numbers(value: object) -> list[int]:
     if value is None:
         return []
-    return [int(x) for x in re.findall(r"\d+", str(value))]
+    numbers: list[int] = []
+    for match in re.finditer(r"(\d+)\s*[=\-]\s*(\d+)|(\d+)", str(value)):
+        if match.group(1):
+            numbers.extend([int(match.group(1))] * max(1, int(match.group(2))))
+        else:
+            numbers.append(int(match.group(3)))
+    return numbers
 
 
 def split_price(total: Decimal, count: int) -> list[Decimal]:
@@ -908,6 +917,11 @@ def load_db_state(conn) -> dict:
         cur.execute("SELECT name, id FROM order_stages")
         stages = {str(name): str(id_) for name, id_ in cur.fetchall()}
         cur.execute(
+            "SELECT id, requires_delivery FROM order_stages "
+            "WHERE is_active ORDER BY sort_order, name"
+        )
+        active_stages = [(str(row[0]), bool(row[1])) for row in cur.fetchall()]
+        cur.execute(
             """
             SELECT id, customer_id, measurement_date,
                 front_height, back_height, chest, waist, hip, shoulder,
@@ -955,6 +969,7 @@ def load_db_state(conn) -> dict:
         "customer_rows": customer_rows,
         "repairs": repairs,
         "stages": stages,
+        "active_stages": active_stages,
         "measurement_sigs": measurement_sigs,
         "measurement_ids": measurement_ids,
         "measurement_duplicates": measurement_duplicates,
@@ -1421,19 +1436,21 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
             report.count("invoices created")
 
             # The ledger is the source of truth for payment status: the
-            # advance as one row, and for done receipts the remainder as a
-            # second row so the invoice derives as paid. Methods may be NULL
-            # (unknown), which the schema allows.
-            if inv["advance"] > 0:
+            # advance as one row, and for done/pending-payment receipts the
+            # remainder as a second row so the invoice derives as paid. Methods
+            # may be NULL (unknown), which the schema allows. Cap advance at
+            # total so overpayments do not create refund due.
+            advance = min(inv["advance"] or Decimal("0"), total)
+            if advance > 0:
                 cur.execute(
                     """
                     INSERT INTO invoice_payments (invoice_id, order_id, amount, payment_type)
                     VALUES (%s, NULL, %s, %s)
                     """,
-                    (invoice_id, inv["advance"], inv["pay1"]),
+                    (invoice_id, advance, inv["pay1"]),
                 )
-            if inv["status"] == "done":
-                remainder = total - (inv["advance"] or Decimal("0"))
+            if inv["status"] in ("done", "pending payment") or inv.get("pay2"):
+                remainder = total - advance
                 if remainder > 0:
                     cur.execute(
                         """
@@ -1459,8 +1476,7 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                     continue
                 if not has_usable_values(src):
                     report.anomaly(
-                        "orders skipped (measurement row has no usable values)", no)
-                    continue
+                        "orders created with empty measurement row (no usable values)", no)
                 owner_key = inv_key
                 src_key = measurement_customer_key(workbook, src, inv)
                 if src_key is not None and src_key in customer_ids:
@@ -1482,7 +1498,11 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                 report.count("orders reusing first measurement (thobs > nos)", fills)
             prices = split_price(total, len(copies))
             collected_at = None
-            if inv["status"] == "done":
+            is_done = inv["status"] in ("done", "pending payment", "pending", "payment", "repairing")
+            is_ready = inv["status"] == "ready"
+            is_not_pay = inv["status"] == "not pay"
+            is_urgent = inv["status"] == "urgent"
+            if is_done or is_ready or is_not_pay or is_urgent:
                 for d in (inv["delivery"], inv["approval"]):
                     if isinstance(d, dt.datetime):
                         collected_at = d
@@ -1495,8 +1515,9 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                     INSERT INTO orders (
                         measurement_id, material_id, material_amount, invoice_id, price, material_source,
                         thobe_type, f_pocket, collar, sleeve, patti, emd, more_details,
-                        status, collected_at, production_branch_id, material_stock_branch_id
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
+                        status, collected_at, ready_at, ready_location_id, is_urgent, urgent_charge,
+                        production_branch_id, material_stock_branch_id
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
                     RETURNING id
                     """,
                     (
@@ -1513,8 +1534,12 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                         design.get("patti"),
                         inv["emd"],
                         design.get("more_details"),
-                        "collected" if inv["status"] == "done" else "pending",
+                        "collected" if is_done or is_not_pay else "ready" if is_ready else "pending",
                         collected_at,
+                        collected_at if is_ready or is_done else None,
+                        branch_id if is_ready else None,
+                        is_urgent,
+                        Decimal("0.01") if is_urgent else Decimal("0"),
                         production_branch_id,
                     ),
                 )
@@ -1536,9 +1561,43 @@ def perform_insert(conn, workbook: dict, branch_id: str, report: Report,
                             """,
                             (order_id, stage_id, person, person),
                         )
+                if is_done or is_ready or is_not_pay:
+                    for stage_id, requires_delivery in state.get("active_stages", []):
+                        cur.execute(
+                            """
+                            INSERT INTO order_stage_progress
+                                (order_id, stage_id, status, completed_at, location_id)
+                            SELECT %s, %s, 'done', COALESCE(%s, now()),
+                                   CASE WHEN %s THEN %s::uuid ELSE NULL END
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM order_stage_progress p
+                                WHERE p.order_id = %s AND p.stage_id = %s
+                            )
+                            """,
+                            (
+                                order_id, stage_id, collected_at, requires_delivery, str(branch_id),
+                                order_id, stage_id,
+                            ),
+                        )
+                    if is_ready:
+                        ready_at = collected_at or dt.datetime.combine(
+                            inv["invoice_date"], dt.time(), tzinfo=dt.timezone.utc
+                        )
+                        cur.execute(
+                            """
+                            UPDATE orders
+                            SET status = 'ready',
+                                ready_at = %s,
+                                ready_location_id = %s,
+                                readiness_version = readiness_version + 1
+                            WHERE id = %s
+                            """,
+                            (ready_at, str(branch_id), order_id),
+                        )
                 # The sheet's Delivery Date is the receiving date, not a stage
                 # completion date (see module docstring): it already feeds
-                # collected_at above, and no progress row is fabricated for it.
+                # collected_at above. Done/pending-payment receipts also mark
+                # the full production checklist complete.
                 steps += 1
         report.count("invoices+orders roundtrips", steps)
         advance_measurement_dates(cur, state, report)
