@@ -316,7 +316,7 @@ export const invoiceFormSchema = z
         },
       ),
     receivingBranch: z.string(),
-    issuingBranch: z.string(),
+    issuingBranch: z.string().min(1, 'Pick the issuing branch.'),
     expectedVatRate: z
       .number()
       .finite()
@@ -358,6 +358,15 @@ export const invoiceFormSchema = z
     redemptions: z.array(redemptionDraftSchema),
   })
   .superRefine((value, ctx) => {
+    // A pickup invoice has to say where the customer collects the order;
+    // delivery uses the customer's address and leaves this branch blank.
+    if (value.collectionMethod === 'pickup' && !value.receivingBranch.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Pick the collection branch.',
+        path: ['receivingBranch'],
+      })
+    }
     value.customers.forEach((customer, customerIndex) => {
       customer.orders.forEach((order, orderIndex) => {
         if (

@@ -28,6 +28,9 @@ export function useUpdateInvoice(invoiceId: string) {
     mutationFn: (values: InvoiceFormValues) => updateInvoice(invoiceId, values),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['customers'] })
+      // The invoice form's customer picker caches whole customer rows,
+      // measurements included — drop them so the next form loads fresh ones.
+      void queryClient.removeQueries({ queryKey: ['invoice-customer'] })
       void queryClient.invalidateQueries({ queryKey: ['invoices'] })
       void queryClient.invalidateQueries({ queryKey: ['orders'] })
       void queryClient.invalidateQueries({ queryKey: ['products'] })
