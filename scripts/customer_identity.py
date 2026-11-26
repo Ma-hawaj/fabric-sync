@@ -85,6 +85,7 @@ class CustomerIdentity:
         self.parents = {}
         self.separate = set()
         self.preferred_names = {}
+        self.customer_numbers = {}
         self.phone_measured = None
         self.phone_defaults = {}
         self.measurement_links = {}
@@ -112,8 +113,18 @@ class CustomerIdentity:
                         raise ValueError("Conflicting preferred names for one phone")
                     self.preferred_names[phone] = chosen
                 continue
+            if decision == "customer_number":
+                key = canonical_key(row.get("name"), row.get("phone"))
+                number = row.get("customer_number", row.get("measurementNo"))
+                if not key or type(number) is not int or number <= 0:
+                    raise ValueError("A customer_number decision needs phone, name, and a positive integer customer_number")
+                resolved = self.base_key(row.get("name"), row.get("phone"))
+                if resolved in self.customer_numbers and self.customer_numbers[resolved] != number:
+                    raise ValueError("Conflicting customer_number decisions for one customer")
+                self.customer_numbers[resolved] = number
+                continue
             if decision not in {"same", "different", "pending"}:
-                raise ValueError("Each decision must be same, different, pending, name, or name_pending")
+                raise ValueError("Each decision must be same, different, pending, name, name_pending, or customer_number")
             names = row.get("names")
             if not isinstance(names, list) or len(names) != 2 or not all(isinstance(n, str) for n in names):
                 raise ValueError("Each identity decision needs exactly two names")
@@ -133,6 +144,16 @@ class CustomerIdentity:
                 if left == right:
                     raise ValueError("Conflicting same/different customer decisions")
                 self.separate.add(frozenset((left, right)))
+        # Re-resolve customer_number keys after aliases are known.
+        resolved_numbers = {}
+        for row in decisions:
+            if isinstance(row, dict) and row.get("decision") == "customer_number":
+                key = self.base_key(row.get("name"), row.get("phone"))
+                number = row.get("customer_number", row.get("measurementNo"))
+                if key in resolved_numbers and resolved_numbers[key] != number:
+                    raise ValueError("Conflicting customer_number decisions for one customer")
+                resolved_numbers[key] = number
+        self.customer_numbers = resolved_numbers
 
     def resolve(self, key):
         """Follow reviewed aliases to the surviving canonical identity."""
