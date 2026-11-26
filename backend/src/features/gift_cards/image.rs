@@ -42,16 +42,35 @@ impl Artwork {
             AppError::Image("The gift card artwork must be a valid image file.".into())
         })?;
         Ok(Self {
-            data_url: Self::data_url(&image.to_rgb8()),
+            data_url: Self::data_url(&Self::rgb_over_white(&image))?,
         })
     }
 
-    fn data_url(rgb: &image::RgbImage) -> String {
+    fn rgb_over_white(image: &image::DynamicImage) -> image::RgbImage {
+        let rgba = image.to_rgba8();
+        let mut rgb = image::RgbImage::new(rgba.width(), rgba.height());
+        for (dest, src) in rgb.pixels_mut().zip(rgba.pixels()) {
+            let [r, g, b, a] = src.0;
+            let alpha = a as u16;
+            let inv = 255 - alpha;
+            dest.0 = [
+                ((r as u16 * alpha + 255 * inv) / 255) as u8,
+                ((g as u16 * alpha + 255 * inv) / 255) as u8,
+                ((b as u16 * alpha + 255 * inv) / 255) as u8,
+            ];
+        }
+        rgb
+    }
+
+    fn data_url(rgb: &image::RgbImage) -> Result<String, AppError> {
         let mut bytes = Cursor::new(Vec::new());
         JpegEncoder::new_with_quality(&mut bytes, JPEG_QUALITY)
             .encode_image(rgb)
-            .expect("in-memory JPEG encoding should not fail");
-        format!("data:{MIME};base64,{}", STANDARD.encode(bytes.into_inner()))
+            .map_err(|e| AppError::Image(e.to_string()))?;
+        Ok(format!(
+            "data:{MIME};base64,{}",
+            STANDARD.encode(bytes.into_inner())
+        ))
     }
 
     fn load(configured_path: Option<&str>) -> Result<Self, AppError> {
