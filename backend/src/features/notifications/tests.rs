@@ -89,6 +89,15 @@ fn send(draft: &Notification) -> SendInput {
     }
 }
 
+#[test]
+fn configured_bodies_must_not_contain_template_variables() {
+    assert!(service::validate_body("Your invoice is attached.", "bad").is_ok());
+    assert!(matches!(
+        service::validate_body("Your invoice {{1}} is attached.", "bad"),
+        Err(AppError::Unavailable(message)) if message == "bad"
+    ));
+}
+
 #[sqlx::test]
 async fn manual_previews_get_a_parent_without_creating_an_unsent_backlog(pool: PgPool) {
     let (invoice, _, _, _) = test_support::invoice(&pool, 1, false).await;
@@ -254,8 +263,8 @@ async fn repair_ready_notifies_only_its_customer_after_approval_even_after_colle
         .await
         .unwrap();
     assert_eq!(draft.snapshot.repair_id, Some(repair));
-    assert!(draft.snapshot.body.contains("repair ORD-"));
-    assert!(draft.snapshot.body.contains("2.500 BHD"));
+    assert!(draft.snapshot.body.contains("ready for pickup"));
+    assert!(!draft.snapshot.body.contains("ORD-"));
     let attachment = repository::attachment(&pool, draft.artifact_id.unwrap())
         .await
         .unwrap();
@@ -505,7 +514,7 @@ async fn selection_changes_version_and_stale_content_cannot_be_approved(pool: Pg
         .await
         .unwrap();
     assert_ne!(draft.artifact_id, refreshed.artifact_id);
-    assert_ne!(draft.snapshot.body, refreshed.snapshot.body);
+    assert_ne!(draft.snapshot.source_hash, refreshed.snapshot.source_hash);
 }
 
 #[sqlx::test]
@@ -715,6 +724,7 @@ async fn ready_notices_upload_a_filled_jpeg_card_as_the_message_header(pool: PgP
     let messages = mock.messages.lock().unwrap();
     assert_eq!(messages.len(), 1);
     let components = &messages[0]["template"]["components"];
+    assert_eq!(components.as_array().unwrap().len(), 1);
     assert_eq!(components[0]["type"], "header");
     assert_eq!(components[0]["parameters"][0]["type"], "image");
     let uploads = mock.uploads.lock().unwrap();

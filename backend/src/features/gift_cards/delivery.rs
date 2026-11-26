@@ -9,7 +9,7 @@ use crate::{
     error::AppError,
     features::notifications::{
         repository as store,
-        service::hash,
+        service::{hash, validate_body},
         types::{Customer, Destination, Snapshot},
     },
     state::AppState,
@@ -26,8 +26,6 @@ pub struct Preview {
     pub image_filename: String,
     pub can_send: bool,
     pub unavailable_reason: Option<String>,
-    #[serde(skip)]
-    pub(super) parameters: Vec<String>,
     #[serde(skip)]
     pub(super) image: image::GiftCardImage,
 }
@@ -50,27 +48,11 @@ async fn preview_card(state: &AppState, card: &GiftCard) -> Result<Preview, AppE
         card.recipient_phone.as_deref().unwrap_or_default(),
         &config.default_region,
     )?;
-    let parameters = vec![
-        card.bought_for
-            .clone()
-            .filter(|v| !v.trim().is_empty())
-            .unwrap_or_else(|| "there".into()),
-        state.invoice_branding().name_en.clone(),
-        card.code.clone(),
-        format!("{} BHD", crate::document::format_amount(card.balance)),
-        card.expires_on
-            .map(|d| d.to_string())
-            .unwrap_or_else(|| "Never".into()),
-    ];
-    let mut body = config.gift_card_body.clone();
-    for (index, parameter) in parameters.iter().enumerate() {
-        body = body.replace(&format!("{{{{{}}}}}", index + 1), parameter);
-    }
-    if body.contains("{{") {
-        return Err(AppError::Unavailable(
-            "The gift card template contains an unconfigured parameter.".into(),
-        ));
-    }
+    validate_body(
+        &config.gift_card_body,
+        "The gift card template must not contain variables.",
+    )?;
+    let body = config.gift_card_body.clone();
     let today = Utc::now().with_timezone(&state.timezone()?).date_naive();
     let unavailable_reason =
         if !card.is_active || card.balance <= 0.0 || card.expires_on.is_some_and(|d| d < today) {
@@ -82,7 +64,7 @@ async fn preview_card(state: &AppState, card: &GiftCard) -> Result<Preview, AppE
         };
     let image = image::for_card(state, card).await?;
     let source_hash = hash(
-        json!({"id":card.id,"mobile":mobile,"parameters":parameters,"body":body,
+        json!({"id":card.id,"mobile":mobile,"body":body,
         "active":card.is_active,"template":config.gift_card_template,"language":config.language,
         "imageSha256":image.sha256})
         .to_string()
@@ -98,7 +80,6 @@ async fn preview_card(state: &AppState, card: &GiftCard) -> Result<Preview, AppE
         image,
         can_send: unavailable_reason.is_none(),
         unavailable_reason,
-        parameters,
     })
 }
 
@@ -163,7 +144,6 @@ pub async fn approve(
         body: current.body,
         template_name: state.notifications().gift_card_template.clone(),
         language: state.notifications().language.clone(),
-        parameters: current.parameters,
         exclusions: vec![],
     };
     let notification = store::insert_send(

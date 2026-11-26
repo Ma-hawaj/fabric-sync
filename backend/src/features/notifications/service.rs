@@ -15,6 +15,13 @@ pub(crate) fn hash(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
+pub(crate) fn validate_body(template: &str, error: &str) -> Result<(), AppError> {
+    if template.contains("{{") {
+        return Err(AppError::Unavailable(error.to_owned()));
+    }
+    Ok(())
+}
+
 pub(crate) struct Source {
     pub snapshot: Snapshot,
     pub html: String,
@@ -69,43 +76,21 @@ pub(crate) async fn source(
         "{} BHD",
         crate::document::format_amount(detail.totals.balance_due)
     );
-    let (template_name, body_template, parameters) = if kind == "invoice_ready" {
-        (
-            &config.ready_template,
-            &config.ready_body,
-            vec![
-                reference.clone(),
-                detail
-                    .branch_name
-                    .clone()
-                    .ok_or_else(|| AppError::BadRequest("Choose a pickup branch first.".into()))?,
-                balance.clone(),
-            ],
-        )
+    let (template_name, body_template) = if kind == "invoice_ready" {
+        // The pickup branch is still required for the delivery-stage rules and
+        // the card, even though the message body has no variables.
+        if detail.branch_name.is_none() {
+            return Err(AppError::BadRequest("Choose a pickup branch first.".into()));
+        }
+        (&config.ready_template, &config.ready_body)
     } else {
-        (
-            &config.invoice_template,
-            &config.invoice_body,
-            vec![
-                reference.clone(),
-                state.invoice_branding().name_en.clone(),
-                format!(
-                    "{} BHD",
-                    crate::document::format_amount(detail.totals.total)
-                ),
-                balance.clone(),
-            ],
-        )
+        (&config.invoice_template, &config.invoice_body)
     };
-    let mut body = body_template.clone();
-    for (index, value) in parameters.iter().enumerate() {
-        body = body.replace(&format!("{{{{{}}}}}", index + 1), value);
-    }
-    if body.contains("{{") {
-        return Err(AppError::Unavailable(
-            "The WhatsApp template contains an unconfigured parameter.".into(),
-        ));
-    }
+    validate_body(
+        body_template,
+        "The WhatsApp template must not contain variables.",
+    )?;
+    let body = body_template.clone();
     let artwork = if kind == "invoice_ready" {
         Some(Arc::new(ready_image::artwork_bytes(state)?))
     } else {
@@ -152,7 +137,6 @@ pub(crate) async fn source(
             body,
             template_name: template_name.clone(),
             language: config.language.clone(),
-            parameters,
             exclusions,
         },
         html,
@@ -188,27 +172,15 @@ async fn repair_source(
         }],
         &config.default_region,
     );
-    let parameters = vec![
-        format!(
-            "INV-{} (repair ORD-{})",
-            repair.invoice_number, repair.order_number
-        ),
-        repair
-            .branch_name
-            .clone()
-            .ok_or_else(|| AppError::BadRequest("Choose a pickup branch first.".into()))?,
-        format!("{} BHD", crate::document::format_amount(repair.balance)),
-    ];
-    let mut body = config.ready_body.clone();
-    for (index, value) in parameters.iter().enumerate() {
-        body = body.replace(&format!("{{{{{}}}}}", index + 1), value);
-    }
-    if body.contains("{{") {
-        return Err(AppError::Unavailable(
-            "The WhatsApp template contains an unconfigured parameter.".into(),
-        ));
+    if repair.branch_name.is_none() {
+        return Err(AppError::BadRequest("Choose a pickup branch first.".into()));
     }
     let artwork = Arc::new(ready_image::artwork_bytes(state)?);
+    validate_body(
+        &config.ready_body,
+        "The WhatsApp template must not contain variables.",
+    )?;
+    let body = config.ready_body.clone();
     let card = ready_image::ReadyCard::new(
         vec![repair.name.clone()],
         repair.measurement.clone().into_iter().collect(),
@@ -232,7 +204,6 @@ async fn repair_source(
             body,
             template_name: config.ready_template.clone(),
             language: config.language.clone(),
-            parameters,
             exclusions,
         },
         html: String::new(),

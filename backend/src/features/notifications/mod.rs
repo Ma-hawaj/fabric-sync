@@ -68,18 +68,15 @@ impl Config {
             language: value("WHATSAPP_TEMPLATE_LANGUAGE", "en_US"),
             invoice_template: value("WHATSAPP_INVOICE_TEMPLATE", "invoice_document_v1"),
             ready_template: value("WHATSAPP_READY_TEMPLATE", "invoice_ready_image_v1"),
-            invoice_body: value(
-                "WHATSAPP_INVOICE_BODY",
-                "Your invoice {{1}} from {{2}} is attached. Total: {{3}}. Balance due: {{4}}.",
-            ),
+            invoice_body: value("WHATSAPP_INVOICE_BODY", "Your invoice is attached."),
             ready_body: value(
                 "WHATSAPP_READY_BODY",
-                "Your order for invoice {{1}} is ready for pickup at {{2}}. Balance due: {{3}}.",
+                "Your order is ready for pickup. The attached card has the details.",
             ),
             gift_card_template: value("WHATSAPP_GIFT_CARD_TEMPLATE", "gift_card_image_v1"),
             gift_card_body: value(
                 "WHATSAPP_GIFT_CARD_BODY",
-                "Hello {{1}}, you have a gift card from {{2}}. Code: {{3}}. Available balance: {{4}}. Expires: {{5}}.",
+                "Your gift card is attached. It includes the code and available balance.",
             ),
             max_attempts: value("NOTIFICATION_MAX_ATTEMPTS", "5")
                 .parse::<i32>()

@@ -33,7 +33,6 @@ pub struct Snapshot {
     pub body: String,
     pub template_name: String,
     pub language: String,
-    pub parameters: Vec<String>,
     pub exclusions: Vec<Destination>,
 }
 

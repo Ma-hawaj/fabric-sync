@@ -190,9 +190,9 @@ async fn send(
     );
     #[cfg(test)]
     let root = config.test_graph_url.clone().unwrap_or(root);
-    let mut components = vec![
-        json!({"type":"body","parameters":notification.snapshot.parameters.iter().map(|value|json!({"type":"text","text":value})).collect::<Vec<_>>()}),
-    ];
+    // Approved templates have no variables: the PDF or card carries the live
+    // values, so only a media header is ever sent.
+    let mut components = Vec::new();
     if let Some(artifact_id) = notification.artifact_id {
         let artifact = repository::attachment(state.db(), artifact_id)
             .await
@@ -235,10 +235,7 @@ async fn send(
         } else {
             json!({"id":media_id})
         };
-        components.insert(
-            0,
-            json!({"type":"header","parameters":[{"type":header,header:media}]}),
-        );
+        components.push(json!({"type":"header","parameters":[{"type":header,header:media}]}));
     }
     repository::request_started(state.db(), job)
         .await
