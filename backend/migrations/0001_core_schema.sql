@@ -255,7 +255,7 @@ CREATE TABLE invoice_payments (
     amount NUMERIC(10, 2) NOT NULL CHECK (amount > 0),
     -- Nullable: the app always records a method, but rows imported without a
     -- recorded method (see scripts/ingest_xlsm.py) keep NULL.
-    payment_type TEXT CHECK (payment_type IN ('benefit', 'cash', 'card')),
+    payment_type TEXT CHECK (payment_type IN ('benefit', 'cash', 'card', 'coupon')),
     paid_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Required by the standalone payment API. Creation/collection/import
     -- writes use their existing transaction guards and leave both NULL.

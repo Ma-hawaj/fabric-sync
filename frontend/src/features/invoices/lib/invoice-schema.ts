@@ -270,7 +270,7 @@ const paymentDraftSchema = z
   .object({
     key: z.string(),
     amount: numberInputSchema,
-    paymentType: z.enum(['benefit', 'cash', 'card', '']),
+    paymentType: z.enum(['benefit', 'cash', 'card', 'coupon', '']),
   })
   .superRefine((payment, ctx) => {
     if (payment.amount === '' && !payment.paymentType) return

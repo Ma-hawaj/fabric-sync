@@ -107,7 +107,7 @@ describe('invoiceCreateFormSchema payments', () => {
     ).toBe(false)
   })
 
-  it.each(['cash', 'card', 'benefit'] as const)(
+  it.each(['cash', 'card', 'benefit', 'coupon'] as const)(
     'accepts a positive %s payment with untouched extra entries',
     (paymentType) => {
       expect(

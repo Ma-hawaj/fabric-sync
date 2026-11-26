@@ -28,6 +28,7 @@ const paymentTypeLabels: Record<
   benefit: 'Benefit',
   cash: 'Cash',
   card: 'Card',
+  coupon: 'Coupon',
 }
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
