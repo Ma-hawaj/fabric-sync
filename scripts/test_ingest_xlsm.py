@@ -122,10 +122,16 @@ class PaymentTypeTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertEqual(norm_payment_type(value), "coupon")
 
+    def test_gift_card_entries_are_coupons(self):
+        for value in ["Gift", "Gift Card", "GIFT # 78", "gift #191"]:
+            with self.subTest(value=value):
+                self.assertEqual(norm_payment_type(value), "coupon")
+
     def test_mixed_payment_takes_the_first_known_method(self):
         self.assertEqual(norm_payment_type("Coupon / Cash"), "coupon")
         self.assertEqual(norm_payment_type("card/coupon"), "card")
-        self.assertIsNone(norm_payment_type("gift"))
+        self.assertEqual(norm_payment_type("Gift/Cash"), "coupon")
+        self.assertIsNone(norm_payment_type("marketing"))
 
 
 class ParseMeasurementTests(unittest.TestCase):
