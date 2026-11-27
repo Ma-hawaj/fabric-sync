@@ -36,9 +36,25 @@ export function DesignOptionsPage() {
     [updateOption],
   )
 
+  const setDefault = React.useCallback(
+    (option: DesignOption) => {
+      const pending = updateOption.mutateAsync({
+        id: option.id,
+        isDefault: true,
+      })
+      toast.promise(pending, {
+        loading: `Setting ${option.label} as the default...`,
+        success: () => `${option.label} is now preselected on new invoices.`,
+        error: 'Could not update this option. Please try again.',
+      })
+    },
+    [updateOption],
+  )
+
   const columns = React.useMemo(
-    () => getDesignOptionColumns(toggleActive, updateOption.isPending),
-    [toggleActive, updateOption.isPending],
+    () =>
+      getDesignOptionColumns(toggleActive, setDefault, updateOption.isPending),
+    [toggleActive, setDefault, updateOption.isPending],
   )
 
   const { table } = useDataTable({

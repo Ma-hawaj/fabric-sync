@@ -3,17 +3,18 @@ import { apiClient } from '@/lib/api'
 import type { DesignOption } from '../types/design-option'
 
 // PATCH accepts any subset of the fields, so this serves both the edit form
-// (which sends all of them) and the list page's activate/deactivate action
-// (which sends only `isActive`). `imageDataUrl` is three-state: omitted leaves
-// the illustration, `null` clears it, a data URL replaces it. There is
-// deliberately no `slug`/`category` — those are the stored identity and can't
-// change after creation.
+// (which sends all of them) and the list page's activate and set-default
+// actions (which send only `isActive` or `isDefault`). `imageDataUrl` is
+// three-state: omitted leaves the illustration, `null` clears it, a data URL
+// replaces it. There is deliberately no `slug`/`category` — those are the
+// stored identity and can't change after creation.
 export interface UpdateDesignOptionInput {
   id: string
   label?: string
   cost?: number
   sortOrder?: number
   isActive?: boolean
+  isDefault?: boolean
   imageDataUrl?: string | null
 }
 

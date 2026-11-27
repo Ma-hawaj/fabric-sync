@@ -65,9 +65,9 @@ function clientForForm() {
   return client
 }
 
-function renderPage() {
+function renderPage(client = clientForForm()) {
   return render(
-    <QueryClientProvider client={clientForForm()}>
+    <QueryClientProvider client={client}>
       <InvoiceFormPage />
     </QueryClientProvider>,
   )
@@ -310,6 +310,51 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
     expect(
       screen.getByText('Please fix the highlighted fields before saving.'),
     ).toBeTruthy()
+  })
+
+  it('preselects catalog defaults for a new invoice', () => {
+    const client = clientForForm()
+    client.setQueryData(['design-options', ''], {
+      data: [
+        {
+          id: 'thob-1',
+          category: 'thob_type',
+          slug: 'saudi',
+          label: 'Saudi thobe',
+          cost: 0,
+          sortOrder: 1,
+          isActive: true,
+          isDefault: true,
+          hasImage: false,
+          imageUrl: '',
+        },
+        {
+          id: 'neck-1',
+          category: 'neck',
+          slug: 'china',
+          label: 'CHINA collar',
+          cost: 0,
+          sortOrder: 1,
+          isActive: true,
+          isDefault: true,
+          hasImage: false,
+          imageUrl: '',
+        },
+      ],
+      page: 1,
+      perPage: 100,
+      total: 2,
+      pageCount: 1,
+    })
+
+    renderPage(client)
+
+    expect(
+      screen.getByRole('button', { name: 'Choose Thob Type' }).textContent,
+    ).toContain('Saudi thobe')
+    expect(
+      screen.getByRole('button', { name: 'Choose Collar' }).textContent,
+    ).toContain('CHINA collar')
   })
 
   it('clears the error on the next submit attempt once the field is fixed', async () => {

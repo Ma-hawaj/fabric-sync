@@ -1,6 +1,7 @@
 import type { ReactFormExtendedApi } from '@tanstack/react-form'
 import { createEmptyMeasurement } from '@/features/customers/types/measurement-form'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
+import type { DesignDefaults } from '../lib/design-slots'
 
 export type CollectionMethod = 'delivery' | 'pickup'
 
@@ -169,16 +170,19 @@ export type InvoiceFormApi = ReactFormExtendedApi<
   any
 >
 
-export function createEmptyOrder(): InvoiceOrderDraft {
+/** New orders start from the catalog's preselected designs, when set. */
+export function createEmptyOrder(
+  defaults: DesignDefaults = {},
+): InvoiceOrderDraft {
   return {
     key: crypto.randomUUID(),
-    thobeType: '',
-    fPocket: '',
-    sPocket: '',
-    collar: '',
-    sleeve: '',
-    patti: '',
-    emd: '',
+    thobeType: defaults.thobeType ?? '',
+    fPocket: defaults.fPocket ?? '',
+    sPocket: defaults.sPocket ?? '',
+    collar: defaults.collar ?? '',
+    sleeve: defaults.sleeve ?? '',
+    patti: defaults.patti ?? '',
+    emd: defaults.emd ?? '',
     moreDetails: '',
     materialSource: 'shop',
     customerMaterialDescription: '',
@@ -192,7 +196,9 @@ export function createEmptyOrder(): InvoiceOrderDraft {
   }
 }
 
-export function createEmptyCustomer(): InvoiceCustomerDraft {
+export function createEmptyCustomer(
+  defaults: DesignDefaults = {},
+): InvoiceCustomerDraft {
   return {
     key: crypto.randomUUID(),
     mode: 'existing',
@@ -201,13 +207,15 @@ export function createEmptyCustomer(): InvoiceCustomerDraft {
     mobileNo: '',
     address: '',
     measurement: createEmptyMeasurement(),
-    orders: [createEmptyOrder()],
+    orders: [createEmptyOrder(defaults)],
   }
 }
 
 // The form page and the schema tests both build from here, so a new field
 // can't be added to InvoiceFormValues without both picking it up.
-export function createEmptyInvoiceForm(): InvoiceFormValues {
+export function createEmptyInvoiceForm(
+  defaults: DesignDefaults = {},
+): InvoiceFormValues {
   return {
     deliveryCharge: '',
     expectedVatRate: '',
@@ -225,7 +233,7 @@ export function createEmptyInvoiceForm(): InvoiceFormValues {
     // Start with one visible entry. Creation needs a completed payment or
     // gift-card redemption; untouched extra entries are omitted on save.
     payments: [createEmptyPayment()],
-    customers: [createEmptyCustomer()],
+    customers: [createEmptyCustomer(defaults)],
     products: [],
     materials: [],
     giftCards: [],

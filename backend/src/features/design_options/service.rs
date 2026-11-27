@@ -232,6 +232,7 @@ pub async fn update_option(
         label.as_deref(),
         input.sort_order,
         input.is_active,
+        input.is_default,
         touch_image,
         image.as_deref(),
         image_mime.as_deref(),
@@ -243,6 +244,7 @@ pub async fn update_option(
     tracing::info!(
         option_id = %option_id,
         is_active = ?input.is_active,
+        is_default = ?input.is_default,
         sort_order = ?input.sort_order,
         "design catalog entry updated"
     );
@@ -275,6 +277,75 @@ pub async fn lookup_map(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[sqlx::test]
+    async fn promoting_a_default_clears_the_previous_choice_in_its_category(pool: sqlx::PgPool) {
+        let state = crate::test_support::state(pool, None, None).await;
+        let first = repository::create_option(&state, "neck", "a", "A", 1, None, "image/webp", 0.0)
+            .await
+            .unwrap();
+        let second =
+            repository::create_option(&state, "neck", "b", "B", 2, None, "image/webp", 0.0)
+                .await
+                .unwrap();
+        let other =
+            repository::create_option(&state, "sleeve", "c", "C", 1, None, "image/webp", 0.0)
+                .await
+                .unwrap();
+
+        for option in [&first, &other, &second] {
+            repository::update_option(
+                &state,
+                option.id,
+                None,
+                None,
+                None,
+                Some(true),
+                false,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        }
+
+        let defaults =
+            sqlx::query!("SELECT slug FROM design_options WHERE is_default ORDER BY slug")
+                .fetch_all(state.db())
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|row| row.slug)
+                .collect::<Vec<_>>();
+        assert_eq!(defaults, vec!["b", "c"]);
+
+        repository::update_option(
+            &state,
+            second.id,
+            None,
+            None,
+            None,
+            Some(false),
+            false,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let defaults =
+            sqlx::query!("SELECT slug FROM design_options WHERE is_default ORDER BY slug")
+                .fetch_all(state.db())
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|row| row.slug)
+                .collect::<Vec<_>>();
+        assert_eq!(defaults, vec!["c"]);
+    }
 
     #[test]
     fn normalized_category_accepts_only_the_seven_slots() {

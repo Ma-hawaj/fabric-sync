@@ -85,6 +85,7 @@ function DesignOptionForm({ existing }: { existing?: DesignOption }) {
             cost: Number(value.cost),
             sortOrder: Number(value.sortOrder),
             isActive: value.isActive,
+            isDefault: value.isDefault,
             ...(value.imageDataUrl !== null
               ? { imageDataUrl: value.imageDataUrl }
               : clearImage
@@ -301,12 +302,37 @@ function DesignOptionForm({ existing }: { existing?: DesignOption }) {
                     id={field.name}
                     options={['Active', 'Retired']}
                     value={field.state.value ? 'Active' : 'Retired'}
-                    onChange={(label) => field.handleChange(label === 'Active')}
+                    onChange={(label) => {
+                      const active = label === 'Active'
+                      field.handleChange(active)
+                      if (!active) form.setFieldValue('isDefault', false)
+                    }}
                     columns={2}
                   />
                   <p className="text-xs text-muted-foreground">
                     Retired options drop out of the picker, except on orders
                     that already used them.
+                  </p>
+                </Field>
+              )}
+            </form.Field>
+          )}
+
+          {existing && form.state.values.isActive && (
+            <form.Field name="isDefault">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor={field.name}>Default choice</FieldLabel>
+                  <SegmentedOptions
+                    id={field.name}
+                    options={['No', 'Yes']}
+                    value={field.state.value ? 'Yes' : 'No'}
+                    onChange={(label) => field.handleChange(label === 'Yes')}
+                    columns={2}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    New invoices preselect this option in its category. Choosing
+                    another option as the default replaces it.
                   </p>
                 </Field>
               )}
