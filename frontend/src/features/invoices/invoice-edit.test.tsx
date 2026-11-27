@@ -72,6 +72,13 @@ const EDIT_FIXTURE: InvoiceEdit = {
 function renderPage(edit: InvoiceEdit = EDIT_FIXTURE) {
   const client = new QueryClient()
   client.setQueryData(['invoices', EDIT_FIXTURE.id, 'edit'], edit)
+  client.setQueryData(['design-options', ''], {
+    data: [],
+    page: 1,
+    perPage: 100,
+    total: 0,
+    pageCount: 1,
+  })
   return render(
     <QueryClientProvider client={client}>
       <InvoiceEditPage invoiceId={EDIT_FIXTURE.id} />

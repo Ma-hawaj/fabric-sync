@@ -71,6 +71,7 @@ function DesignOptionForm({ existing }: { existing?: DesignOption }) {
   // flag to tell "untouched" apart from "cleared" on submit.
   const [clearImage, setClearImage] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
+  const [initialIsDefault] = useState(existing?.isDefault ?? false)
 
   const form = useForm({
     defaultValues: existing
@@ -85,7 +86,9 @@ function DesignOptionForm({ existing }: { existing?: DesignOption }) {
             cost: Number(value.cost),
             sortOrder: Number(value.sortOrder),
             isActive: value.isActive,
-            isDefault: value.isDefault,
+            ...(value.isDefault !== initialIsDefault
+              ? { isDefault: value.isDefault }
+              : {}),
             ...(value.imageDataUrl !== null
               ? { imageDataUrl: value.imageDataUrl }
               : clearImage
@@ -318,25 +321,35 @@ function DesignOptionForm({ existing }: { existing?: DesignOption }) {
             </form.Field>
           )}
 
-          {existing && form.state.values.isActive && (
-            <form.Field name="isDefault">
-              {(field) => (
-                <Field>
-                  <FieldLabel htmlFor={field.name}>Default choice</FieldLabel>
-                  <SegmentedOptions
-                    id={field.name}
-                    options={['No', 'Yes']}
-                    value={field.state.value ? 'Yes' : 'No'}
-                    onChange={(label) => field.handleChange(label === 'Yes')}
-                    columns={2}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    New invoices preselect this option in its category. Choosing
-                    another option as the default replaces it.
-                  </p>
-                </Field>
-              )}
-            </form.Field>
+          {existing && (
+            <form.Subscribe selector={(state) => state.values.isActive}>
+              {(isActive) =>
+                isActive ? (
+                  <form.Field name="isDefault">
+                    {(field) => (
+                      <Field>
+                        <FieldLabel htmlFor={field.name}>
+                          Default choice
+                        </FieldLabel>
+                        <SegmentedOptions
+                          id={field.name}
+                          options={['No', 'Yes']}
+                          value={field.state.value ? 'Yes' : 'No'}
+                          onChange={(label) =>
+                            field.handleChange(label === 'Yes')
+                          }
+                          columns={2}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          New invoices preselect this option in its category.
+                          Choosing another option as the default replaces it.
+                        </p>
+                      </Field>
+                    )}
+                  </form.Field>
+                ) : null
+              }
+            </form.Subscribe>
           )}
         </div>
 

@@ -667,10 +667,29 @@ export function InvoiceForm({
 
 export function InvoiceFormPage() {
   const createInvoice = useCreateInvoice()
-  const { data: designOptions = [], isLoading: designsLoading } =
-    useDesignOptions()
+  const {
+    data: designOptions = [],
+    isLoading: designsLoading,
+    isError: designsError,
+    refetch,
+  } = useDesignOptions()
   // The form reads defaultValues only on mount, so wait for the catalog rather
   // than filling slots afterwards — that would refill a design staff cleared.
+  if (designsError) {
+    return (
+      <div
+        role="alert"
+        className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center text-sm text-destructive"
+      >
+        <p>
+          Design options could not be loaded. Retry before starting an invoice.
+        </p>
+        <Button type="button" variant="outline" onClick={() => void refetch()}>
+          Retry
+        </Button>
+      </div>
+    )
+  }
   if (designsLoading) {
     return (
       <div className="py-10 text-center text-sm text-muted-foreground">

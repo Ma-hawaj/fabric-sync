@@ -10,7 +10,8 @@ import { ApiError } from '@/lib/api'
 export function InvoiceEditPage({ invoiceId }: { invoiceId: string }) {
   const { data: edit, isLoading, isError, error } = useInvoiceEdit(invoiceId)
   const updateInvoice = useUpdateInvoice(invoiceId)
-  const { data: designOptions = [] } = useDesignOptions()
+  const { data: designOptions = [], isLoading: designsLoading } =
+    useDesignOptions()
 
   const mapped = useMemo(
     () => (edit ? mapInvoiceEditToForm(edit) : null),
@@ -27,7 +28,7 @@ export function InvoiceEditPage({ invoiceId }: { invoiceId: string }) {
     )
   }
 
-  if (isLoading || !mapped || !edit) {
+  if (isLoading || designsLoading || !mapped || !edit) {
     return (
       <div className="text-center text-sm text-muted-foreground">
         Loading invoice...
