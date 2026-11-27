@@ -45,6 +45,8 @@ function values(overrides: Partial<InvoiceFormValues> = {}): InvoiceFormValues {
     ...createEmptyInvoiceForm(),
     expectedVatRate: 0.1,
     targetDate: tomorrow,
+    issuingBranch: 'issuer',
+    receivingBranch: 'pickup',
     customers: [],
     ...overrides,
   }
@@ -166,6 +168,36 @@ describe('invoiceFormSchema', () => {
     expect(firstErrorFor(input)).toBeNull()
     input.collectionMethod = 'pickup'
     expect(firstErrorFor(input)).toBeNull()
+  })
+  it('requires the issuing branch', () => {
+    const issue = firstErrorFor(
+      values({
+        issuingBranch: '',
+        products: [validProductLine()],
+        productBranch: 'stock',
+      }),
+    )
+    expect(issue?.path).toEqual(['issuingBranch'])
+    expect(issue?.message).toMatch(/issuing branch/i)
+  })
+  it('requires a collection branch for pickup only', () => {
+    const line = {
+      products: [validProductLine()],
+      productBranch: 'stock',
+    }
+    const issue = firstErrorFor(values({ ...line, receivingBranch: '' }))
+    expect(issue?.path).toEqual(['receivingBranch'])
+    expect(issue?.message).toMatch(/collection branch/i)
+    expect(
+      firstErrorFor(
+        values({
+          ...line,
+          receivingBranch: '',
+          collectionMethod: 'delivery',
+          deliveryCharge: 3,
+        }),
+      ),
+    ).toBeNull()
   })
   it('requires delivery pricing only for delivery invoices', () => {
     const input = values({

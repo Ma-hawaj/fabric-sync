@@ -127,6 +127,8 @@ function renderForm({
         defaultValues={{
           ...createEmptyInvoiceForm(),
           expectedVatRate: 0.1,
+          issuingBranch: 'issuer',
+          receivingBranch: 'pickup',
           customers: [],
           payments: editing
             ? []

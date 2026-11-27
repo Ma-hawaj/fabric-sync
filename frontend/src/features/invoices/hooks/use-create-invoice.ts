@@ -24,6 +24,11 @@ export function useCreateInvoice() {
       // measurement snapshots, so cached customers are stale now — as are
       // the invoice and order lists.
       void queryClient.invalidateQueries({ queryKey: ['customers'] })
+      // The invoice form's customer picker carries its measurement history in
+      // its own cached rows. Drop them so the next invoice form fetches the
+      // customer afresh instead of pre-filling from the pre-save snapshot
+      // while a background refetch is still in flight.
+      void queryClient.removeQueries({ queryKey: ['invoice-customer'] })
       void queryClient.invalidateQueries({ queryKey: ['invoices'] })
       void queryClient.invalidateQueries({ queryKey: ['orders'] })
       // A sale can draw down product stock, issue new cards, and spend the

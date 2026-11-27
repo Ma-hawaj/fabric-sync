@@ -73,8 +73,12 @@ function renderPage(client = clientForForm()) {
   )
 }
 
-function validInvoice(): InvoiceFormValues {
+function validInvoice(
+  overrides: Partial<InvoiceFormValues> = {},
+): InvoiceFormValues {
   const values = createEmptyInvoiceForm()
+  values.issuingBranch = 'issuer'
+  values.receivingBranch = 'pickup'
   values.payments = [
     { ...createEmptyPayment(), amount: 10, paymentType: 'cash' },
   ]
@@ -89,7 +93,7 @@ function validInvoice(): InvoiceFormValues {
     productionLocationId: 'workshop',
     price: 20,
   }
-  return values
+  return { ...values, ...overrides }
 }
 
 function renderInvoice(values = validInvoice(), client = clientForForm()) {
@@ -161,7 +165,10 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
         ],
       }),
     )
-    const values = validInvoice()
+    const values = validInvoice({
+      issuingBranch: '',
+      receivingBranch: '',
+    })
     values.customers[0].orders[0].productionLocationId = ''
     const save = renderInvoice(values, client)
     await waitFor(() =>
@@ -190,6 +197,38 @@ describe('InvoiceFormPage validation (zod + TanStack Form)', () => {
               ],
             }),
           ],
+        }),
+      ),
+    )
+  })
+  it('prefills issuing and collection branches from the default location', async () => {
+    const client = clientForForm()
+    client.setQueryData(['default-location'], {
+      defaultLocation: {
+        id: 'default-branch',
+        name: 'Default branch',
+        isActive: true,
+        receivesOrders: true,
+        holdsStock: true,
+        producesOrders: true,
+      },
+      defaultLocationId: 'default-branch',
+    })
+    const save = renderInvoice(
+      validInvoice({ issuingBranch: '', receivingBranch: '' }),
+      client,
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText<HTMLInputElement>('Collection branch').value,
+      ).toBe('Default branch'),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save invoice' }))
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issuingBranch: 'default-branch',
+          receivingBranch: 'default-branch',
         }),
       ),
     )
