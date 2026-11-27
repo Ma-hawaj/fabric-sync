@@ -3,11 +3,15 @@ import { InvoiceForm } from './invoice-form'
 import { useInvoiceEdit } from './hooks/use-invoice-edit'
 import { useUpdateInvoice } from './hooks/use-update-invoice'
 import { mapInvoiceEditToForm } from './lib/invoice-edit-mapper'
+import { designDefaultsFromOptions } from './lib/design-slots'
+import { useDesignOptions } from '@/features/design-options/hooks/use-design-options'
 import { ApiError } from '@/lib/api'
 
 export function InvoiceEditPage({ invoiceId }: { invoiceId: string }) {
   const { data: edit, isLoading, isError, error } = useInvoiceEdit(invoiceId)
   const updateInvoice = useUpdateInvoice(invoiceId)
+  const { data: designOptions = [], isLoading: designsLoading } =
+    useDesignOptions()
 
   const mapped = useMemo(
     () => (edit ? mapInvoiceEditToForm(edit) : null),
@@ -24,7 +28,7 @@ export function InvoiceEditPage({ invoiceId }: { invoiceId: string }) {
     )
   }
 
-  if (isLoading || !mapped || !edit) {
+  if (isLoading || designsLoading || !mapped || !edit) {
     return (
       <div className="text-center text-sm text-muted-foreground">
         Loading invoice...
@@ -44,6 +48,7 @@ export function InvoiceEditPage({ invoiceId }: { invoiceId: string }) {
       savedVerb="updated"
       mutation={updateInvoice}
       seeds={mapped.seeds}
+      designDefaults={designDefaultsFromOptions(designOptions)}
       editing
       invoiceDate={edit.date}
     />

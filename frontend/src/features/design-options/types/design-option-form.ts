@@ -8,6 +8,8 @@ export interface DesignOptionFormValues {
   cost: number | ''
   sortOrder: number | ''
   isActive: boolean
+  /** Whether new invoices preselect this option in its category. */
+  isDefault: boolean
   /** Data URL preview of the illustration. `null` means none. */
   imageDataUrl: string | null
 }
@@ -20,6 +22,7 @@ export function createEmptyDesignOptionForm(): DesignOptionFormValues {
     cost: 0,
     sortOrder: '',
     isActive: true,
+    isDefault: false,
     imageDataUrl: null,
   }
 }
@@ -35,6 +38,7 @@ export function designOptionToFormValues(
     cost: option.cost,
     sortOrder: option.sortOrder,
     isActive: option.isActive,
+    isDefault: option.isDefault,
     imageDataUrl,
   }
 }

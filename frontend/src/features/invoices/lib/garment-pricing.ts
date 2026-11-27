@@ -2,6 +2,7 @@ import { isMoney } from '@/lib/money'
 import type { DesignOption } from '@/features/design-options/types/design-option'
 import type { InvoiceOrderDraft } from '../types/invoice-form'
 import type { Material } from '../types/materials'
+import { DESIGN_SLOTS } from './design-slots'
 
 export interface UrgentChargeRule {
   amount: number
@@ -34,16 +35,6 @@ export function pricingTier(quantity: number): PricingTier {
       ? 'large'
       : 'normal'
 }
-
-const DESIGN_SLOTS = {
-  thobeType: 'thob_type',
-  fPocket: 'front_pocket',
-  sPocket: 'side_pocket',
-  collar: 'neck',
-  sleeve: 'sleeve',
-  patti: 'patti',
-  emd: 'emd',
-} as const
 
 export interface GarmentPrice {
   tier: PricingTier | null

@@ -1,6 +1,6 @@
 import { PermissionGuard } from '@/components/permission-guard'
 import { Link } from '@tanstack/react-router'
-import { PencilIcon, PowerIcon } from 'lucide-react'
+import { PencilIcon, PowerIcon, StarIcon } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
@@ -24,6 +24,7 @@ function matchesAnySelected(cellValue: string[], filterValue: unknown) {
 
 export const getDesignOptionColumns = (
   onToggleActive: (option: DesignOption) => void,
+  onSetDefault: (option: DesignOption) => void,
   isToggling: boolean,
 ): ColumnDef<DesignOption, any>[] => [
   {
@@ -177,6 +178,33 @@ export const getDesignOptionColumns = (
     },
   },
   {
+    id: 'default',
+    accessorFn: (option) => [option.isDefault ? 'Default' : 'Standard'],
+    size: 104,
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Default" />
+    ),
+    cell: ({ row }) =>
+      row.original.isDefault ? (
+        <Badge variant="default">Default</Badge>
+      ) : (
+        <span className="text-xs text-muted-foreground">Standard</span>
+      ),
+    enableSorting: false,
+    enableColumnFilter: true,
+    filterFn: (row, columnId, filterValue) =>
+      matchesAnySelected(row.getValue<string[]>(columnId), filterValue),
+    meta: {
+      label: 'Default',
+      placeholder: 'Filter default...',
+      variant: 'multiSelect',
+      options: [
+        { label: 'Default', value: 'Default' },
+        { label: 'Standard', value: 'Standard' },
+      ],
+    },
+  },
+  {
     id: 'actions',
     size: 72,
     meta: { label: 'Actions' },
@@ -204,6 +232,16 @@ export const getDesignOptionColumns = (
                 disabled: isToggling,
                 onClick: () => onToggleActive(option),
               },
+              ...(option.isActive && !option.isDefault
+                ? [
+                    {
+                      label: 'Set as default',
+                      icon: StarIcon,
+                      disabled: isToggling,
+                      onClick: () => onSetDefault(option),
+                    },
+                  ]
+                : []),
             ]}
           />
         </PermissionGuard>

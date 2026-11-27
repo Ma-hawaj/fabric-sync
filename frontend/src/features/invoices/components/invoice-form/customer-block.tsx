@@ -23,6 +23,7 @@ import type {
   InvoiceCustomerDraft,
   InvoiceFormApi,
 } from '../../types/invoice-form'
+import type { DesignDefaults } from '../../lib/design-slots'
 import type { MeasurementDraft } from '@/features/customers/types/measurement-form'
 import { OrderBlock } from './order-block'
 import { useInvoiceWorkspace } from './invoice-workspace'
@@ -32,6 +33,8 @@ interface CustomerBlockProps {
   form: InvoiceFormApi
   customerIndex: number
   customerNumber: number
+  /** Catalog defaults for orders added to this invoice. */
+  designDefaults?: DesignDefaults
   /** The picked row, so the summary can label this customer's line items. */
   onCustomerPicked: (customer: Customer | null) => void
   /** The row behind a stored id on an edit form, before anything is re-picked. */
@@ -51,6 +54,7 @@ export function CustomerBlock({
   form,
   customerIndex,
   customerNumber,
+  designDefaults = {},
   onCustomerPicked,
   initialCustomerForId,
   customerLabelForId,
@@ -382,7 +386,7 @@ export function CustomerBlock({
               size="sm"
               type="button"
               onClick={() => {
-                const order = createEmptyOrder()
+                const order = createEmptyOrder(designDefaults)
                 ordersField.pushValue(order)
                 workspace?.setActiveOrderKey(order.key)
               }}

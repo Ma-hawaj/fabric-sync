@@ -22,6 +22,9 @@ pub struct DesignOption {
     /// order matters.
     pub sort_order: i32,
     pub is_active: bool,
+    /// The choice prefilled on a new invoice for this option's category. At
+    /// most one option per category carries this flag (enforced in the schema).
+    pub is_default: bool,
     /// Whether an illustration is stored. The list never carries the bytes —
     /// the picker loads them from `image_url`, and the printed documents look
     /// them up directly.
@@ -48,11 +51,11 @@ pub struct CreateDesignOptionInput {
 }
 
 /// Every field is optional so the same endpoint serves the edit form (which
-/// sends all of them) and the list page's activate/deactivate action (which
-/// sends only `isActive`). `image_data_url` is three-state: absent leaves the
-/// illustration untouched, `null` clears it, a data URL replaces it. There is
-/// deliberately no `slug`/`category` here — those are the stored identity (see
-/// above) and can't change after creation.
+/// sends all of them) and the list page's activate/restore and default actions
+/// (which send only `isActive` or `isDefault`). `image_data_url` is three-state:
+/// absent leaves the illustration untouched, `null` clears it, a data URL
+/// replaces it. There is deliberately no `slug`/`category` here — those are the
+/// stored identity (see above) and can't change after creation.
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateDesignOptionInput {
@@ -60,6 +63,7 @@ pub struct UpdateDesignOptionInput {
     pub label: Option<String>,
     pub sort_order: Option<i32>,
     pub is_active: Option<bool>,
+    pub is_default: Option<bool>,
     #[serde(default)]
     pub image_data_url: Option<Option<String>>,
 }

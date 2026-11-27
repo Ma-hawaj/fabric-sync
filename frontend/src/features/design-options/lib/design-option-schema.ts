@@ -34,5 +34,6 @@ export const designOptionFormSchema = z.object({
   ]),
   cost: moneyInputSchema,
   isActive: z.boolean(),
+  isDefault: z.boolean(),
   imageDataUrl: z.string().nullable(),
 })

@@ -45,6 +45,7 @@ const option = (category: string, cost: number): DesignOption => ({
   cost,
   sortOrder: 1,
   isActive: true,
+  isDefault: false,
   hasImage: false,
   imageUrl: '',
 })

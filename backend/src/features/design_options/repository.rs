@@ -22,6 +22,7 @@ const SPEC: ListSpec = ListSpec {
             cost::float8 AS cost,
             sort_order,
             is_active,
+            is_default,
             (image IS NOT NULL) AS has_image,
             ('/design-options/' || id::text || '/image?v=' || image_version::text) AS image_url
         FROM design_options
@@ -36,6 +37,7 @@ const SPEC: ListSpec = ListSpec {
             ColumnDef::new("sort_order", ColumnKind::Number),
         ),
         ("isActive", ColumnDef::new("is_active", ColumnKind::Bool)),
+        ("isDefault", ColumnDef::new("is_default", ColumnKind::Bool)),
         ("hasImage", ColumnDef::new("has_image", ColumnKind::Bool)),
     ],
     default_order: "category ASC, sort_order ASC, label ASC",
@@ -65,7 +67,7 @@ pub async fn create_option(
         r#"
         INSERT INTO design_options (category, slug, label, sort_order, image, image_mime, cost)
         VALUES ($1, $2, $3, $4, $5, $6, $7::float8)
-        RETURNING id, category, slug, label, sort_order, is_active, cost::float8 AS "cost!",
+        RETURNING id, category, slug, label, sort_order, is_active, is_default, cost::float8 AS "cost!",
             (image IS NOT NULL) AS "has_image!",
             ('/design-options/' || id::text || '/image?v=' || image_version::text) AS "image_url!"
         "#,
@@ -85,6 +87,10 @@ pub async fn create_option(
 // (e.g. just `is_active`) stays a single statement rather than a
 // read-modify-write. The illustration is three-state via `touch_image`: false
 // leaves it alone, true writes `image` (NULL clears it).
+//
+// Promoting an option to default clears the previous default in its category
+// first, in the same transaction: the partial unique index allows only one,
+// and the two writes must never be visible separately.
 #[allow(clippy::too_many_arguments)]
 pub async fn update_option(
     state: &AppState,
@@ -92,24 +98,42 @@ pub async fn update_option(
     label: Option<&str>,
     sort_order: Option<i32>,
     is_active: Option<bool>,
+    is_default: Option<bool>,
     touch_image: bool,
     image: Option<&[u8]>,
     image_mime: Option<&str>,
     cost: Option<f64>,
 ) -> Result<Option<DesignOption>, sqlx::Error> {
-    sqlx::query_as!(
+    let mut tx = state.db().begin().await?;
+    if is_default == Some(true) {
+        sqlx::query!(
+            r#"
+            UPDATE design_options
+            SET is_default = FALSE
+            WHERE category = (SELECT category FROM design_options WHERE id = $1)
+              AND id <> $1
+              AND is_default
+            "#,
+            option_id,
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    let option = sqlx::query_as!(
         DesignOption,
         r#"
         UPDATE design_options
         SET label = COALESCE($2, label),
             sort_order = COALESCE($3, sort_order),
             is_active = COALESCE($4, is_active),
-            image = CASE WHEN $5 THEN $6 ELSE image END,
-            image_mime = CASE WHEN $5 THEN COALESCE($7, image_mime) ELSE image_mime END,
-            image_version = CASE WHEN $5 THEN image_version + 1 ELSE image_version END,
-            cost = COALESCE($8::float8, cost)
+            is_default = COALESCE($5, is_default),
+            image = CASE WHEN $6 THEN $7 ELSE image END,
+            image_mime = CASE WHEN $6 THEN COALESCE($8, image_mime) ELSE image_mime END,
+            image_version = CASE WHEN $6 THEN image_version + 1 ELSE image_version END,
+            cost = COALESCE($9::float8, cost)
         WHERE id = $1
-        RETURNING id, category, slug, label, sort_order, is_active, cost::float8 AS "cost!",
+        RETURNING id, category, slug, label, sort_order, is_active, is_default, cost::float8 AS "cost!",
             (image IS NOT NULL) AS "has_image!",
             ('/design-options/' || id::text || '/image?v=' || image_version::text) AS "image_url!"
         "#,
@@ -117,13 +141,16 @@ pub async fn update_option(
         label,
         sort_order,
         is_active,
+        is_default,
         touch_image,
         image,
         image_mime,
         cost,
     )
-    .fetch_optional(state.db())
-    .await
+    .fetch_optional(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(option)
 }
 
 pub async fn get_image(

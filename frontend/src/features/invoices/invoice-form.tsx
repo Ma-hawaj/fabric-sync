@@ -20,6 +20,9 @@ import type { Customer } from '@/features/customers/types/customers'
 import type { Location } from '@/features/locations/types/location'
 import { STOCK_FILTERS } from '@/features/locations/lib/location-filters'
 import { useInvoiceLocationDefault } from './hooks/use-invoice-location-default'
+import { useDesignOptions } from '@/features/design-options/hooks/use-design-options'
+import { designDefaultsFromOptions } from './lib/design-slots'
+import type { DesignDefaults } from './lib/design-slots'
 import type { Product } from '@/features/products/types/product'
 import { CURRENCY } from '@/lib/currency'
 import { CustomerBlock } from './components/invoice-form/customer-block'
@@ -71,6 +74,8 @@ interface InvoiceFormProps {
   mutation: InvoiceFormMutation
   /** Rows the edit payload rebuilt, so pickers open labelled. */
   seeds?: InvoiceEditSeeds
+  /** Catalog defaults applied to orders added while the form is open. */
+  designDefaults?: DesignDefaults
   /** Edits rebuild lines around the ledger: money is shown, not taken. */
   editing?: boolean
   /**
@@ -90,6 +95,7 @@ export function InvoiceForm({
   savedVerb,
   mutation,
   seeds,
+  designDefaults = {},
   editing = false,
   invoiceDate,
 }: InvoiceFormProps) {
@@ -378,6 +384,7 @@ export function InvoiceForm({
                         form={form as never}
                         customerIndex={index}
                         customerNumber={index + 1}
+                        designDefaults={designDefaults}
                         onCustomerPicked={rememberCustomer}
                         initialCustomerForId={(id) =>
                           seeds?.customers.get(id) ?? null
@@ -541,7 +548,7 @@ export function InvoiceForm({
                   variant="outline"
                   type="button"
                   onClick={() => {
-                    const customer = createEmptyCustomer()
+                    const customer = createEmptyCustomer(designDefaults)
                     form.pushFieldValue('customers', customer)
                     setActiveOrderKey(customer.orders[0].key)
                   }}
@@ -660,15 +667,48 @@ export function InvoiceForm({
 
 export function InvoiceFormPage() {
   const createInvoice = useCreateInvoice()
+  const {
+    data: designOptions = [],
+    isLoading: designsLoading,
+    isError: designsError,
+    refetch,
+  } = useDesignOptions()
+  // The form reads defaultValues only on mount, so wait for the catalog rather
+  // than filling slots afterwards — that would refill a design staff cleared.
+  if (designsError) {
+    return (
+      <div
+        role="alert"
+        className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center text-sm text-destructive"
+      >
+        <p>
+          Design options could not be loaded. Retry before starting an invoice.
+        </p>
+        <Button type="button" variant="outline" onClick={() => void refetch()}>
+          Retry
+        </Button>
+      </div>
+    )
+  }
+  if (designsLoading) {
+    return (
+      <div className="py-10 text-center text-sm text-muted-foreground">
+        Loading design options...
+      </div>
+    )
+  }
+  const designDefaults = designDefaultsFromOptions(designOptions)
   // A plain type annotation (not `satisfies`) so TFormData widens to
   // InvoiceFormValues' union members (e.g. `discount: number | ''`) rather
   // than the narrower literal types inferred from these particular values —
   // the zod schema below expects the wide type.
-  const defaultValues: InvoiceFormValues = createEmptyInvoiceForm()
+  const defaultValues: InvoiceFormValues =
+    createEmptyInvoiceForm(designDefaults)
 
   return (
     <InvoiceForm
       defaultValues={defaultValues}
+      designDefaults={designDefaults}
       title="New Invoice"
       subtitle="Build an invoice for tailoring, materials, products, or gift cards."
       saveVerb="Saving"

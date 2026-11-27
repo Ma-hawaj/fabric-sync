@@ -21,6 +21,8 @@ export interface DesignOption {
   /** Position inside its category picker. Gaps are fine. */
   sortOrder: number
   isActive: boolean
+  /** Prefilled on new invoices; at most one option per category has this. */
+  isDefault: boolean
   hasImage: boolean
   /** Serves the illustration bytes (public — an `<img>` can't send auth). */
   imageUrl: string
